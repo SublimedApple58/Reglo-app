@@ -994,6 +994,11 @@ model AutoscuolaGroupLesson {
   /// Shared follow car ("auto al seguito", category B) for kind="moto". Reserved
   /// at the GROUP level only — never replicated onto participant join rows.
   followVehicleId String?   @db.Uuid
+  /// Moto lesson type for kind="moto": "birilli" (closed-area cone slalom) |
+  /// "strada" (on-road) | null (unset / non-moto). Container-level: the whole
+  /// group rides the same type. Mirrors AutoscuolaAppointment.motoLessonType
+  /// (REG-399). See lib/autoscuole/moto-lesson-type.ts.
+  motoLessonType  String?
   startsAt        DateTime  @db.Timestamp(6)
   endsAt          DateTime? @db.Timestamp(6)
   capacity        Int       @default(3)

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus, Search as SearchIcon, Send, StickyNote, Trash2, X } from "lucide-react";
+import { Plus, Route, Search as SearchIcon, Send, StickyNote, TrafficCone, Trash2, X } from "lucide-react";
 
 import {
   Dialog,
@@ -37,6 +37,7 @@ import {
 } from "@/lib/actions/autoscuole.actions";
 import { inviteToGroupLesson } from "@/lib/actions/autoscuole-availability.actions";
 import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
+import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, motoLessonTypeLabel, asMotoLessonType, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
 import { MOTO_LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
 import { cn } from "@/lib/utils";
 
@@ -60,6 +61,7 @@ type GroupLessonDetail = {
   endsAt: string | null;
   capacity: number;
   kind?: string;
+  motoLessonType?: string | null;
   instructorId: string | null;
   instructorName: string | null;
   vehicleId: string | null;
@@ -228,13 +230,15 @@ export function GroupLessonManageDialog({
   // Moto group: editable fleet + shared follow car (mirrors the mobile sheet).
   const [fleetIds, setFleetIds] = React.useState<string[]>([]);
   const [followId, setFollowId] = React.useState<string>("");
+  // Moto lesson type (birilli/strada), shared by the whole group — optional.
+  const [motoType, setMotoType] = React.useState<MotoLessonType | null>(null);
   const [allVehicles, setAllVehicles] = React.useState<VehicleWithLicense[]>([]);
   // Conferma annullamento inline (niente window.confirm).
   const [confirmCancel, setConfirmCancel] = React.useState(false);
   // Riga dei dettagli attualmente in modifica (pattern Informazioni aziendali:
   // una riga alla volta, editor inline con Salva/Annulla).
   const [editingField, setEditingField] = React.useState<
-    null | "when" | "capacity" | "instructor" | "vehicle" | "fleet" | "follow"
+    null | "when" | "capacity" | "instructor" | "vehicle" | "fleet" | "follow" | "motoType"
   >(null);
 
   // silent = refetch in background senza rimettere il dialog in loading: niente
@@ -259,6 +263,7 @@ export function GroupLessonManageDialog({
           setVehicleId(res.data.vehicleId ?? "");
           setFleetIds((res.data.fleet ?? []).map((f) => f.id));
           setFollowId(res.data.followVehicleId ?? "");
+          setMotoType(asMotoLessonType(res.data.motoLessonType));
         }
       }
       if (elig.success && elig.data) {
@@ -498,7 +503,7 @@ export function GroupLessonManageDialog({
         // Moto group: fleet + shared follow car; no vehicle cascade onto the
         // participants (each keeps its assigned moto).
         ...(isMoto
-          ? { vehicleIds: fleetIds, followVehicleId: followId || null }
+          ? { vehicleIds: fleetIds, followVehicleId: followId || null, motoLessonType: motoType }
           : { vehicleId: vehicleId || null }),
       }),
       "Guida di gruppo aggiornata.",
@@ -517,6 +522,7 @@ export function GroupLessonManageDialog({
     setVehicleId(lesson.vehicleId ?? "");
     setFleetIds((lesson.fleet ?? []).map((f) => f.id));
     setFollowId(lesson.followVehicleId ?? "");
+    setMotoType(asMotoLessonType(lesson.motoLessonType));
     setEditingField(field);
   };
   const saveEditingField = async () => {
@@ -697,6 +703,43 @@ export function GroupLessonManageDialog({
                   </Select>
                   <p className="mt-[7px] text-xs font-medium leading-[1.45] text-[#a3a3a3]">
                     La tua scelta vale sempre: se la togli, la guida resta senza auto al seguito.
+                  </p>
+                  <EditFooter busy={busy} onSave={saveEditingField} onCancel={() => setEditingField(null)} />
+                </DetailRow>
+
+                <DetailRow
+                  label="Tipo guida moto"
+                  value={motoLessonTypeLabel(lesson.motoLessonType) ?? "Non impostato"}
+                  editing={editingField === "motoType"}
+                  onEdit={() => startEditField("motoType")}
+                >
+                  <div className="grid max-w-[320px] grid-cols-2 gap-2">
+                    {MOTO_LESSON_TYPES.map((value) => {
+                      const active = motoType === value;
+                      const Icon = value === "birilli" ? TrafficCone : Route;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setMotoType(active ? null : value)}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors",
+                            active
+                              ? "border-orange-300 bg-orange-50 text-orange-800"
+                              : "border-border/60 bg-white text-foreground hover:bg-gray-50",
+                          )}
+                        >
+                          <Icon className={cn("h-4 w-4 shrink-0", active ? "text-orange-600" : "text-muted-foreground")} />
+                          <span className="flex min-w-0 flex-col">
+                            <span className="text-sm font-medium">{MOTO_LESSON_TYPE_LABELS[value]}</span>
+                            <span className="truncate text-[10px] text-muted-foreground">{MOTO_LESSON_TYPE_HINTS[value]}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-[7px] text-xs font-medium leading-[1.45] text-[#a3a3a3]">
+                    Tocca di nuovo la voce attiva per rimuovere il tipo.
                   </p>
                   <EditFooter busy={busy} onSave={saveEditingField} onCancel={() => setEditingField(null)} />
                 </DetailRow>

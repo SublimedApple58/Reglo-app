@@ -1166,10 +1166,10 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         ? prisma.autoscuolaGroupLesson
             .findMany({
               where: { id: { in: agendaGlIds } },
-              select: { id: true, capacity: true, kind: true },
+              select: { id: true, capacity: true, kind: true, motoLessonType: true },
             })
             .then((rows) => new Map(rows.map((g) => [g.id, g])))
-        : Promise.resolve(new Map<string, { id: string; capacity: number; kind: string }>()),
+        : Promise.resolve(new Map<string, { id: string; capacity: number; kind: string; motoLessonType: string | null }>()),
     ]);
 
     const mappedAppointments = appointments.map((appointment) => {
@@ -1199,6 +1199,12 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           : null,
         groupLessonKind: appointment.groupLessonId
           ? agendaGlInfo.get(appointment.groupLessonId)?.kind ?? null
+          : null,
+        // Container-level moto lesson type (birilli/strada) for the agenda badge
+        // on group-moto cards — the per-appointment motoLessonType stays null on
+        // group seats (only individual lessons set it).
+        groupLessonMotoType: appointment.groupLessonId
+          ? agendaGlInfo.get(appointment.groupLessonId)?.motoLessonType ?? null
           : null,
       };
     });
@@ -1230,6 +1236,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           notes: true,
           capacity: true,
           kind: true,
+          motoLessonType: true,
           instructorId: true,
           vehicleId: true,
           instructor: { select: { id: true, name: true } },
@@ -1270,6 +1277,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           location: null,
           groupLessonCapacity: gl.capacity,
           groupLessonKind: gl.kind,
+          groupLessonMotoType: gl.motoLessonType,
         } as (typeof mappedAppointments)[number]);
       }
     }
@@ -2503,6 +2511,7 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
             ...(gridFlags.get(item.id) ?? {}),
             groupLessonCapacity: gl?.capacity ?? null,
             groupLessonKind: gl?.kind ?? null,
+            groupLessonMotoType: gl?.motoLessonType ?? null,
             groupLessonFilled: gl?.filled ?? null,
           };
         }),
@@ -2541,6 +2550,7 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
           ...(gridFlags.get(item.id) ?? {}),
           groupLessonCapacity: gl?.capacity ?? null,
           groupLessonKind: gl?.kind ?? null,
+          groupLessonMotoType: gl?.motoLessonType ?? null,
           groupLessonFilled: gl?.filled ?? null,
         };
       }),
@@ -8336,7 +8346,7 @@ function groupLessonAttendance(status: string): GroupLessonAttendance {
   return "pending";
 }
 
-type GroupLessonFill = { filled: number; capacity: number; kind: string };
+type GroupLessonFill = { filled: number; capacity: number; kind: string; motoLessonType: string | null };
 /**
  * For a set of appointment groupLessonIds, returns per-group seat fill (enrolled
  * count), capacity and kind — so a student's lesson history can flag "Guida di
@@ -8353,10 +8363,11 @@ async function fetchGroupLessonFill(
       id: true,
       capacity: true,
       kind: true,
+      motoLessonType: true,
       _count: { select: { appointments: { where: { status: { in: GROUP_LESSON_ENROLLED_STATUSES } } } } },
     },
   });
-  return new Map(rows.map((g) => [g.id, { filled: g._count.appointments, capacity: g.capacity, kind: g.kind }]));
+  return new Map(rows.map((g) => [g.id, { filled: g._count.appointments, capacity: g.capacity, kind: g.kind, motoLessonType: g.motoLessonType }]));
 }
 
 const updateStudentGroupLessonOptInSchema = z.object({
@@ -8692,6 +8703,8 @@ const createGroupLessonSchema = z.object({
   vehicleIds: z.array(z.string().uuid()).optional(),
   /** Shared follow car (kind="moto"), category B. */
   followVehicleId: z.string().uuid().optional().nullable(),
+  /** Moto lesson type (kind="moto" only): "birilli" | "strada" | null. */
+  motoLessonType: z.enum(MOTO_LESSON_TYPES).nullable().optional(),
   instructorId: z.string().uuid().optional().nullable(),
   // Free choice by owner/instructor (12 = sanity ceiling). For moto groups the
   // participants may outnumber the fleet (they ride in turns).
@@ -8861,6 +8874,7 @@ export async function createGroupLesson(
             instructorId,
             vehicleId: null,
             followVehicleId: motoFollowVehicleId,
+            motoLessonType: payload.motoLessonType ?? null,
             startsAt,
             endsAt,
             capacity,
@@ -9329,6 +9343,7 @@ export async function getGroupLessonsForAgenda(input?: {
         capacity: true,
         status: true,
         kind: true,
+        motoLessonType: true,
         priceAmount: true,
         notes: true,
         instructorId: true,
@@ -9362,6 +9377,7 @@ export async function getGroupLessonsForAgenda(input?: {
         capacity: l.capacity,
         status: l.status,
         kind: l.kind,
+        motoLessonType: l.motoLessonType,
         priceAmount: Number(l.priceAmount),
         notes: l.notes,
         instructorId: l.instructorId,
@@ -9409,6 +9425,7 @@ export async function getGroupLesson(groupLessonId: string) {
         capacity: true,
         status: true,
         kind: true,
+        motoLessonType: true,
         priceAmount: true,
         notes: true,
         instructorId: true,
@@ -9462,6 +9479,7 @@ export async function getGroupLesson(groupLessonId: string) {
         instructorId: l.instructorId,
         instructorName: l.instructor?.name ?? null,
         kind: l.kind,
+        motoLessonType: l.motoLessonType,
         vehicleId: l.vehicle?.id ?? null,
         vehicleName: l.vehicle?.name ?? null,
         licenseCategory: l.vehicle?.licenseCategory ?? null,
@@ -9651,6 +9669,8 @@ const updateGroupLessonSchema = z.object({
   vehicleIds: z.array(z.string().uuid()).optional(),
   /** Moto group: change the shared follow car (null clears, if not required). */
   followVehicleId: z.string().uuid().nullable().optional(),
+  /** Moto group: change the lesson type ("birilli" | "strada" | null). */
+  motoLessonType: z.enum(MOTO_LESSON_TYPES).nullable().optional(),
   /** Max participants (free, ≤12) — cannot drop below the current enrolled count. */
   capacity: z.number().int().min(1).max(12).optional(),
   /** Instructor operational notes on the group lesson container (null clears). */
@@ -9781,6 +9801,7 @@ export async function updateGroupLesson(
             startsAt, endsAt, instructorId, vehicleId: null, followVehicleId,
             ...(payload.capacity !== undefined ? { capacity } : {}),
             ...(notes !== undefined ? { notes } : {}),
+            ...(payload.motoLessonType !== undefined ? { motoLessonType: payload.motoLessonType } : {}),
           },
         });
         if (payload.vehicleIds !== undefined) {

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Bike, Car, History, Loader2, Megaphone, Plus, Search, Users, X } from "lucide-react";
+import { Bike, Car, History, Loader2, Megaphone, Plus, Route, Search, TrafficCone, Users, X } from "lucide-react";
 
 import { CreateEventPopover } from "@/components/pages/Autoscuole/dialogs/CreateEventPopover";
 import { DatePickerInput } from "@/components/ui/date-picker";
@@ -39,6 +39,7 @@ import {
 } from "@/lib/actions/autoscuole.actions";
 import { inviteToGroupLesson } from "@/lib/actions/autoscuole-availability.actions";
 import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
+import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
 import { vehicleServesLicense, MOTO_LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
 
 type ResourceOption = { id: string; name: string };
@@ -140,6 +141,8 @@ export function GroupLessonCreateDialog({
   // Moto group: the chosen fleet of motos + one shared follow car.
   const [fleetIds, setFleetIds] = React.useState<string[]>([]);
   const [followVehicleId, setFollowVehicleId] = React.useState<string>("");
+  // Moto lesson type (birilli/strada), shared by the whole group — optional.
+  const [motoLessonType, setMotoLessonType] = React.useState<MotoLessonType | null>(null);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [openInvites, setOpenInvites] = React.useState(true);
   const [studentQuery, setStudentQuery] = React.useState("");
@@ -202,6 +205,7 @@ export function GroupLessonCreateDialog({
     setVehicleId("");
     setFleetIds([]);
     setFollowVehicleId("");
+    setMotoLessonType(null);
     setSelectedIds([]);
     setOpenInvites(true);
     setStudentQuery("");
@@ -381,6 +385,7 @@ export function GroupLessonCreateDialog({
               kind: "moto" as const,
               vehicleIds: fleetIds,
               followVehicleId: followVehicleId || undefined,
+              motoLessonType,
               capacity: CAPACITY,
             }
           : {
@@ -518,6 +523,7 @@ export function GroupLessonCreateDialog({
                       onClick={() => {
                         setKind(opt.value);
                         setSelectedIds([]);
+                        if (opt.value !== "moto") setMotoLessonType(null);
                       }}
                       className={cn(
                         "flex items-center gap-2 rounded-2xl border px-3 py-2.5 text-left transition-colors cursor-pointer",
@@ -703,6 +709,37 @@ export function GroupLessonCreateDialog({
                       scegli, ne verrà assegnata una libera alla prima iscrizione.
                     </p>
                   ) : null}
+                </div>
+
+                {/* Tipo guida moto (birilli/strada), condiviso da tutta la guida —
+                    stessa UX del selettore delle guide moto individuali. */}
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-muted-foreground">Tipo guida moto</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {MOTO_LESSON_TYPES.map((value) => {
+                      const active = motoLessonType === value;
+                      const Icon = value === "birilli" ? TrafficCone : Route;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setMotoLessonType(active ? null : value)}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors",
+                            active
+                              ? "border-orange-300 bg-orange-50 text-orange-800"
+                              : "border-border/60 bg-white text-foreground hover:bg-gray-50",
+                          )}
+                        >
+                          <Icon className={cn("h-4 w-4 shrink-0", active ? "text-orange-600" : "text-muted-foreground")} />
+                          <span className="flex min-w-0 flex-col">
+                            <span className="text-sm font-medium">{MOTO_LESSON_TYPE_LABELS[value]}</span>
+                            <span className="truncate text-[10px] text-muted-foreground">{MOTO_LESSON_TYPE_HINTS[value]}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             ) : null}

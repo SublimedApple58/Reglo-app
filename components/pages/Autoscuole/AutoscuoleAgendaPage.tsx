@@ -133,6 +133,9 @@ type AppointmentRow = {
   groupLessonKind?: string | null;
   // Guida moto: "birilli" (area chiusa) | "strada" | null (non-moto / non impostato).
   motoLessonType?: string | null;
+  // Tipo guida moto di una guida di GRUPPO moto (vive sul container, non sul
+  // posto): stesso badge, sorgente diversa da motoLessonType.
+  groupLessonMotoType?: string | null;
   notes?: string | null;
 };
 
@@ -3087,8 +3090,12 @@ export function AutoscuoleAgendaPage({
                           const isGroupLessonInstr = item.type === "group_lesson";
                           const isCompact = height <= 40;
                           const licenseTag = licenseTagFor(item);
-                          const motoTypeLabelInstr = item.type === "group_lesson" ? null : motoLessonTypeLabel(item.motoLessonType);
-                          const MotoTypeIconInstr = item.motoLessonType === "birilli" ? TrafficCone : Route;
+                          // Moto lesson type: individual lessons carry it on the
+                          // appointment; group-moto lessons carry it on the container
+                          // (groupLessonMotoType). Same badge for both.
+                          const effMotoTypeInstr = isGroupLessonInstr ? (item.groupLessonMotoType ?? null) : (item.motoLessonType ?? null);
+                          const motoTypeLabelInstr = motoLessonTypeLabel(effMotoTypeInstr);
+                          const MotoTypeIconInstr = effMotoTypeInstr === "birilli" ? TrafficCone : Route;
                           const noteTextInstr = item.notes?.trim() ?? "";
                           const hasNotesInstr = noteTextInstr.length > 0;
                           // Righe di nota che entrano nello spazio residuo del blocco
@@ -3592,8 +3599,9 @@ export function AutoscuoleAgendaPage({
                       const isGroupLessonDay = item.type === "group_lesson";
                       const isCompact = height <= 56;
                       const licenseTag = licenseTagFor(item);
-                      const motoTypeLabelDay = item.type === "group_lesson" ? null : motoLessonTypeLabel(item.motoLessonType);
-                      const MotoTypeIconDay = item.motoLessonType === "birilli" ? TrafficCone : Route;
+                      const effMotoTypeDay = isGroupLessonDay ? (item.groupLessonMotoType ?? null) : (item.motoLessonType ?? null);
+                      const motoTypeLabelDay = motoLessonTypeLabel(effMotoTypeDay);
+                      const MotoTypeIconDay = effMotoTypeDay === "birilli" ? TrafficCone : Route;
                       const noteTextDay = item.notes?.trim() ?? "";
                       const hasNotesDay = noteTextDay.length > 0;
                       // Righe di nota che entrano nello spazio residuo del blocco
