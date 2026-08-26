@@ -13,11 +13,13 @@ export const dynamic = "force-dynamic";
  * main → Vercel). Works for BOTH iOS and Android.
  *
  * Versions are the marketing/app version (runtimeVersion policy is "appVersion",
- * so app version == runtimeVersion). Current floor: 2.0.0 on both platforms.
+ * so app version == runtimeVersion). Current floor: 2.2.0 on both platforms
+ * (raised from 2.1.0 once 2.2.0 was live on both stores → force every 2.1.0
+ * user to update).
  */
 const MIN_SUPPORTED_VERSION = {
-  ios: "2.1.0",
-  android: "2.1.0",
+  ios: "2.2.0",
+  android: "2.2.0",
 } as const;
 
 export async function GET() {
