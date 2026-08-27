@@ -20,7 +20,7 @@ const moto = (id: string, licenseCategory: string, transmission = "manual"): Fle
 const FLEET: FleetVehicle[] = [moto("m1", "A2"), moto("m2", "A2"), moto("m3", "A")];
 
 describe("assignMotoForStudent", () => {
-  it("picks the first free moto serving the student's license", () => {
+  it("picks a free moto serving the student's license (closest category)", () => {
     const id = assignMotoForStudent({
       fleet: FLEET,
       takenVehicleIds: [],
@@ -81,6 +81,28 @@ describe("assignMotoForStudent", () => {
         student: { licenseCategory: "A2", transmission: "automatic" },
       }),
     ).toBe("a1");
+  });
+
+  it("prefers the closest category over a lower compatible moto earlier in the fleet (REG-412)", () => {
+    // The AM 50cc is listed first and serves an A1 student (AM ≤ A1), but the
+    // fleet also has an A1 moto: the A1 student must get the A1, not the 50cc.
+    const fleet = [moto("am", "AM", "automatic"), moto("a1", "A1", "automatic")];
+    const id = assignMotoForStudent({
+      fleet,
+      takenVehicleIds: [],
+      student: { licenseCategory: "A1", transmission: "automatic" },
+    });
+    expect(id).toBe("a1");
+  });
+
+  it("falls back to the next-highest compatible moto when the exact match is taken", () => {
+    const fleet = [moto("am", "AM", "automatic"), moto("a1", "A1", "automatic")];
+    const id = assignMotoForStudent({
+      fleet,
+      takenVehicleIds: ["a1"],
+      student: { licenseCategory: "A1", transmission: "automatic" },
+    });
+    expect(id).toBe("am");
   });
 });
 
@@ -157,6 +179,27 @@ describe("assignMotosToStudents", () => {
         { studentId: "s1", vehicleId: "m1" },
         { studentId: "s2", vehicleId: "m2" },
         { studentId: "s3", vehicleId: null },
+      ],
+    });
+  });
+
+  it("gives each student their closest category, maximising distinct assignments (REG-412)", () => {
+    // Fleet has an A1 (listed first) and an A moto. An A student added first must
+    // NOT grab the A1 — that would strand the A1 student on the A moto they can't
+    // ride. The A student takes the A, the A1 student takes the A1.
+    const fleet = [moto("a1", "A1"), moto("a", "A")];
+    const res = assignMotosToStudents({
+      fleet,
+      students: [
+        { studentId: "sA", license: { licenseCategory: "A", transmission: "manual" } },
+        { studentId: "sA1", license: { licenseCategory: "A1", transmission: "manual" } },
+      ],
+    });
+    expect(res).toEqual({
+      ok: true,
+      assignments: [
+        { studentId: "sA", vehicleId: "a" },
+        { studentId: "sA1", vehicleId: "a1" },
       ],
     });
   });

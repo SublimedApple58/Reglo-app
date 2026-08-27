@@ -15,7 +15,7 @@
  * `AutoscuolaGroupLesson.followVehicleId`), never on participant join rows.
  */
 
-import { isMotoLicenseCategory, vehicleServesLicense } from "./license";
+import { isMotoLicenseCategory, vehicleServesLicense, MOTO_LICENSE_CATEGORIES } from "./license";
 import { FOLLOW_CAR_CATEGORY, requiresFollowCar, type FollowCarRules } from "./follow-car";
 
 /** A vehicle as seen by the fleet/assignment logic (category + transmission). */
@@ -45,13 +45,21 @@ export type StudentLicense = {
   transmission: string | null;
 };
 
+/** Position of a moto category in the hierarchy (AM<A1<A2<A); -1 if not moto. */
+const motoCategoryRank = (category: string | null): number =>
+  (MOTO_LICENSE_CATEGORIES as readonly string[]).indexOf(category ?? "");
+
 /**
- * Pick a moto from the fleet for a student: the first vehicle that serves their
- * license (category + transmission) and is not already taken by a sibling.
- * Returns the vehicle id, or null when none is FREE. Since 2026-07-06 a null
- * assignment no longer blocks enrolment (students may outnumber motos and ride
- * in turns): eligibility is `eligibleForMotoGroup` (hierarchy-only), the
- * assignment is best-effort.
+ * Pick a moto from the fleet for a student: among the vehicles that serve their
+ * license (category + transmission) and are not already taken by a sibling, the
+ * one whose category is CLOSEST to the student's own — i.e. the HIGHEST
+ * compatible category, since eligibility already guarantees category ≤ student
+ * (moto hierarchy). Fleet order breaks ties between equal categories. So an A1
+ * student is given the fleet's A1 moto rather than a still-compatible AM 50cc
+ * that happened to come first in the list. Returns the vehicle id, or null when
+ * none is FREE. Since 2026-07-06 a null assignment no longer blocks enrolment
+ * (students may outnumber motos and ride in turns): eligibility is
+ * `eligibleForMotoGroup` (hierarchy-only), the assignment is best-effort.
  */
 export const assignMotoForStudent = (args: {
   fleet: FleetVehicle[];
@@ -59,11 +67,18 @@ export const assignMotoForStudent = (args: {
   student: StudentLicense;
 }): string | null => {
   const taken = new Set(args.takenVehicleIds);
+  let bestId: string | null = null;
+  let bestRank = -Infinity;
   for (const moto of args.fleet) {
     if (taken.has(moto.id)) continue;
-    if (vehicleServesLicense(moto, args.student)) return moto.id;
+    if (!vehicleServesLicense(moto, args.student)) continue;
+    const rank = motoCategoryRank(moto.licenseCategory);
+    if (rank > bestRank) {
+      bestRank = rank;
+      bestId = moto.id;
+    }
   }
-  return null;
+  return bestId;
 };
 
 /**
