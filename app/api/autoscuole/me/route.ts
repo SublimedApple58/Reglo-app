@@ -47,6 +47,14 @@ export async function GET() {
     const theoryExamAt = latestCase?.theoryExamAt ?? null;
     const drivingExamAt = latestCase?.drivingExamAt ?? null;
 
+    // REG-410: a student who signed up in autonomy must pick their own license
+    // path at first access. The mobile app shows a blocking gate while this is
+    // true; it clears once they set the license via PATCH .../me/license-path.
+    // Staff-created and every pre-existing student have selfRegistered=false and
+    // are never gated.
+    const needsLicensePath =
+      membership.selfRegistered === true && !membership.licenseCategory;
+
     return NextResponse.json({
       success: true,
       data: {
@@ -58,6 +66,7 @@ export async function GET() {
         drivingExamAt: drivingExamAt ? drivingExamAt.toISOString() : null,
         licenseCategory: membership.licenseCategory ?? null,
         transmission: membership.transmission ?? null,
+        needsLicensePath,
       },
     });
   } catch (error) {
