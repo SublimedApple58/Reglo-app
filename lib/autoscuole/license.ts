@@ -27,6 +27,24 @@ export type LicenseCategory = (typeof LICENSE_CATEGORIES)[number];
 export const TRANSMISSIONS = ["manual", "automatic"] as const;
 export type Transmission = (typeof TRANSMISSIONS)[number];
 
+/**
+ * License paths a student can pick for themselves at first access (REG-410).
+ * A realistic subset of LICENSE_CATEGORIES: the everyday car licence plus the
+ * moto "A" family. Professional/trailer categories (BE/C/CE/D/DE) are set by
+ * staff on the web, not chosen by the student. Order = display order in the gate.
+ */
+export const STUDENT_LICENSE_CATEGORIES = ["B", "AM", "A1", "A2", "A"] as const;
+export type StudentLicenseCategory = (typeof STUDENT_LICENSE_CATEGORIES)[number];
+
+export function isStudentLicenseCategory(
+  value: unknown,
+): value is StudentLicenseCategory {
+  return (
+    typeof value === "string" &&
+    (STUDENT_LICENSE_CATEGORIES as readonly string[]).includes(value)
+  );
+}
+
 export const LICENSE_CATEGORY_LABELS: Record<LicenseCategory, string> = {
   B: "B (auto)",
   BE: "BE (auto + rimorchio)",

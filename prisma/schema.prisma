@@ -317,6 +317,13 @@ model CompanyMember {
   weeklyBookingLimitExempt Boolean                @default(false)
   examPriorityOverride     Boolean?
   assignedInstructorId     String?                @db.Uuid
+  /// True when the student joined the autoscuola in autonomy via the mobile
+  /// sign-up (POST /api/mobile/auth/student-register), as opposed to being added
+  /// manually by staff. Self-registered students must pick their own license path
+  /// at first access (REG-410): the mobile license-path gate shows while
+  /// `selfRegistered && licenseCategory == null`. Default false = never gated
+  /// (covers staff-created students and every pre-existing member).
+  selfRegistered           Boolean                @default(false)
   /// License path the student is pursuing (PRATICA phase). Part of the Vehicles
   /// module: drives category-aware slot matching only when vehiclesEnabled.
   /// Null on non-student members. Values: B | AM | A1 | A2 | A (see lib/autoscuole/license.ts).

@@ -143,17 +143,12 @@ export async function POST(request: Request) {
           // system following titolare-configured rules), so the "Conferma
           // fase" badge in the titolare dashboard does NOT trigger.
           phaseClassifiedAt: new Date(),
-          // Default pursued license: the autoscuola's configured default (moto
-          // schools set it once), falling back to B / manual. The titolare can
-          // still change it per-student when classifying in PRATICA.
-          licenseCategory:
-            (limits as Record<string, unknown> | null)?.defaultLicenseCategory as
-              | string
-              | undefined ?? "B",
-          transmission:
-            (limits as Record<string, unknown> | null)?.defaultTransmission as
-              | string
-              | undefined ?? "manual",
+          // Self sign-up: mark it so the mobile license-path gate (REG-410) can
+          // prompt this student to pick their own percorso patente at first
+          // access. We deliberately leave licenseCategory / transmission NULL
+          // (no default seed) — NULL is what drives the gate; the student sets
+          // them via PATCH /api/autoscuole/me/license-path.
+          selfRegistered: true,
         },
       });
 

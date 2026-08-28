@@ -200,6 +200,15 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Backoffice**: gestione licenze + fasi attive + dialog di risoluzione disattivazione TEORIA (`getQuizSeatsUsage`, `getTeoriaAffectedStudents`, `deactivateTeoriaWithResolution`).
 - → **Student Registration**: `POST /api/mobile/auth/student-register` decide fase + seat in transaction in base a `phasesEnabled` + `autoAssignQuizOnSignup` + seat disponibili.
 
+### Percorso patente — auto-selezione self-registered (REG-410)
+- **Nuovo campo** `CompanyMember.selfRegistered` (default false): `true` **solo** dal self sign-up mobile. Marca chi deve scegliersi il percorso patente al primo accesso.
+- → **Student Registration** (`student-register`): ora setta `selfRegistered:true` e **NON** semina più `licenseCategory`/`transmission` (nascono NULL). Il NULL + il flag pilotano il gate. Fase/seat/`AutoscuolaCase` invariati.
+- → **Student Phase**: ortogonale — il gate mobile precede la home per-fase (AWAITING/TEORIA/PRATICA). `GET /api/autoscuole/me` espone `needsLicensePath` (= `selfRegistered && !licenseCategory`).
+- → **Users Directory / creazione manuale** (`createCompanyUser`, inviti email): NON toccano `selfRegistered` → allievi manuali mai gated (licenza impostata dallo staff).
+- → **Vehicles/License**: `licenseCategory`+`transmission` restano il percorso patente; guidano lo slot-matching solo se `vehiclesEnabled`. `STUDENT_LICENSE_CATEGORIES` (`lib/autoscuole/license.ts`) = sottoinsieme selezionabile dall'allievo (B/AM/A1/A2/A); il cambio (manual/automatic) vale per tutte.
+- → **Endpoint self-set** `PATCH /api/autoscuole/me/license-path`: self-scoped (solo STUDENT + `selfRegistered`), idempotente (no-op se già valorizzata). Non confondere con l'owner-side `updateStudentLicensePath`.
+- → **Mobile**: gate bloccante `LicensePathGateScreen` (montato in `app/(tabs)/_layout.tsx` accanto al phone gate). Vedi `reglo-mobile/docs/features/license-path-gate.md`.
+
 ### Reglo Aula
 - → **Quiz Teoria**: riusa **read-only** `QuizQuestion` + `QuizChapter` (DB) + immagini quiz su R2 per le domande del live (filtro per capitolo). Aula non scrive sulla banca — asset aziendale già centralizzato, non duplicato.
 - → **R2 storage**: pacchetti slide `.rppt` (`aula/templates/`, `aula/{companyId}/`) + immagini slide; stesso bucket del quiz. **Le slide non stanno nel DB.**
