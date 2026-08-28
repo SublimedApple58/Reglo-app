@@ -68,6 +68,11 @@ export function LocationFormDialog({
   const [saving, setSaving] = useState(false);
   const toast = useFeedbackToast();
   const sessionTokenRef = useRef<string>("");
+  // Selezionando un suggerimento impostiamo l'indirizzo COMPLETO: senza questo
+  // flag l'effetto di ricerca (dipendente da `address`) rifarebbe la query e
+  // riaprirebbe la dropdown sopra il tasto Salva (REG-396). Lo alziamo prima di
+  // impostare l'indirizzo da selezione e lo consumiamo una volta nell'effetto.
+  const skipNextSearchRef = useRef(false);
 
   useEffect(() => {
     if (open) {
@@ -84,6 +89,11 @@ export function LocationFormDialog({
 
   useEffect(() => {
     if (!isPrecise) return;
+    if (skipNextSearchRef.current) {
+      skipNextSearchRef.current = false;
+      setSuggestions([]);
+      return;
+    }
     if (!address || address.length < 3) {
       setSuggestions([]);
       return;
@@ -156,6 +166,7 @@ export function LocationFormDialog({
         formattedAddress?: string;
         location?: { latitude?: number; longitude?: number };
       };
+      skipNextSearchRef.current = true;
       setAddress(data.formattedAddress ?? `${suggestion.primaryText}, ${suggestion.secondaryText}`);
       setLatitude(data.location?.latitude ?? null);
       setLongitude(data.location?.longitude ?? null);
@@ -280,6 +291,7 @@ export function LocationFormDialog({
                 <input
                   value={address}
                   onChange={(e) => {
+                    skipNextSearchRef.current = false;
                     setAddress(e.target.value);
                     setPlaceId(null);
                     setLatitude(null);
