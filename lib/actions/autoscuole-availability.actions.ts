@@ -663,6 +663,8 @@ const ensureStudentCanBookFromApp = async ({
         bookingBlockReason: true,
         unpaidBlockClearedAtCount: true,
         studentPhase: true,
+        selfRegistered: true,
+        licenseCategory: true,
       },
     }),
     getCachedCompanyServiceLimits(companyId),
@@ -714,6 +716,20 @@ const ensureStudentCanBookFromApp = async ({
       allowed: false as const,
       message:
         "Le lezioni di guida saranno disponibili dopo l'esame di teoria.",
+    };
+  }
+  // REG-410 — server-side backstop for the license-path gate: a student who
+  // signed up in autonomy MUST have picked their percorso patente before they
+  // can book. This is un-bypassable — it holds in EVERY bookable phase, so an
+  // owner advancing the phase from the web (e.g. AWAITING → PRATICA) never
+  // unlocks booking for a self-registered student with no license. The mobile
+  // gate normally makes them pick first; this guards older app builds / any
+  // client that skips the gate, and closes the null-license data hole.
+  if (studentMembership?.selfRegistered && !studentMembership.licenseCategory) {
+    return {
+      allowed: false as const,
+      message:
+        "Seleziona il tuo percorso patente nell'app prima di prenotare le guide.",
     };
   }
 

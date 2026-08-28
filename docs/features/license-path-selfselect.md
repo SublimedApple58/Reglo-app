@@ -43,9 +43,14 @@ Additivo/retro-compat: i client vecchi lo ignorano. `membership` arriva già com
 - **Idempotente**: se `licenseCategory` è già valorizzata (es. lo staff l'ha impostata nel frattempo) → no-op, risponde `needsLicensePath:false` senza sovrascrivere.
 - Effetto: `updateMany` su `CompanyMember` (companyId+userId+STUDENT) → `licenseCategory` + `transmission`. Nessuna invalidazione cache extra (stesso pattern di `updateStudentLicensePath`).
 
+## Guardia backend booking (server-side backstop, fix 2026-08-28)
+
+Il gate mobile è client-side: un'app su bundle vecchio (rollout OTA in corso) o un client che salta il gate potrebbe prenotare senza percorso patente. Inoltre il titolare può avanzare la fase da web (AWAITING → PRATICA) senza che l'allievo abbia mai scelto. Perciò `ensureStudentCanBookFromApp` (`lib/actions/autoscuole-availability.actions.ts`) ora **blocca la prenotazione** quando `selfRegistered && !licenseCategory`, **in ogni fase prenotabile** (dopo i check AWAITING/TEORIA, quindi copre PRATICA/PATENTATO). Messaggio: *"Seleziona il tuo percorso patente nell'app prima di prenotare le guide."* È **non bypassabile**: cambiare fase da web non sblocca la prenotazione finché la licenza è NULL. Copre tutti i 3 call-site (slot disponibili + richiesta prenotazione). Non tocca gli allievi manuali (`selfRegistered=false`), gestiti dallo staff.
+
 ## Connessioni
 
-- → **Student Phase**: ortogonale alla fase. Il gate mobile è mostrato **prima** della home per-fase (a prescindere da AWAITING/TEORIA/PRATICA). Vedi `features/student-phase.md`.
+- → **Booking Engine / Availability**: `ensureStudentCanBookFromApp` ora rifiuta i self-registered con `licenseCategory` NULL (oltre a AWAITING/TEORIA) → backstop server-side del gate mobile.
+- → **Student Phase**: ortogonale alla fase. Il gate mobile è mostrato **prima** della home per-fase (a prescindere da AWAITING/TEORIA/PRATICA). L'avanzamento fase da web NON sblocca la prenotazione se manca la licenza. Vedi `features/student-phase.md`.
 - → **Vehicles / License**: `licenseCategory`+`transmission` guidano lo slot-matching category-aware solo se `vehiclesEnabled`. Durante la finestra pre-selezione (NULL) il gate blocca comunque l'uso dell'app, quindi nessuna prenotazione avviene con licenza NULL.
 - → **Users Directory / creazione manuale**: `createCompanyUser` e gli inviti **non** settano `selfRegistered` → mai gated (la licenza la mette lo staff). Vedi `features/student-phase.md` §"Creazione account allievo da web".
 - → **Aspetto / Agenda**: la directory allievi bootstrap legge `licenseCategory`/`transmission` per il colore-per-patente; un self sign-up pre-selezione ha licenza NULL finché non sceglie (non ancora in agenda).
