@@ -31,8 +31,6 @@ export type LocationFormDialogProps = {
   onSubmit: (values: LocationFormValues) => Promise<void>;
 };
 
-const PLACES_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-
 type Suggestion = {
   placeId: string;
   primaryText: string;
@@ -85,7 +83,6 @@ export function LocationFormDialog({
   }, [open, mode, initialValue]);
 
   useEffect(() => {
-    if (!PLACES_API_KEY) return;
     if (!isPrecise) return;
     if (!address || address.length < 3) {
       setSuggestions([]);
@@ -95,22 +92,16 @@ export function LocationFormDialog({
     setSearching(true);
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(
-          "https://places.googleapis.com/v1/places:autocomplete",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Goog-Api-Key": PLACES_API_KEY,
-            },
-            body: JSON.stringify({
-              input: address,
-              includedRegionCodes: ["IT"],
-              languageCode: "it",
-              sessionToken: sessionTokenRef.current,
-            }),
-          },
-        );
+        // Proxy server-side (REG-396): la chiave e la chiamata a Google vivono
+        // nel backend, così si evita il blocco CORS del fetch client-side.
+        const res = await fetch("/api/places/autocomplete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            input: address,
+            sessionToken: sessionTokenRef.current,
+          }),
+        });
         if (!res.ok) {
           setSuggestions([]);
           return;
@@ -152,17 +143,10 @@ export function LocationFormDialog({
   }, [address, isPrecise]);
 
   const selectSuggestion = async (suggestion: Suggestion) => {
-    if (!PLACES_API_KEY) return;
     try {
       const res = await fetch(
-        `https://places.googleapis.com/v1/places/${suggestion.placeId}?languageCode=it`,
-        {
-          method: "GET",
-          headers: {
-            "X-Goog-Api-Key": PLACES_API_KEY,
-            "X-Goog-FieldMask": "formattedAddress,location,displayName",
-          },
-        },
+        `/api/places/details?placeId=${encodeURIComponent(suggestion.placeId)}`,
+        { method: "GET" },
       );
       if (!res.ok) {
         toast.error({ description: "Impossibile leggere il luogo selezionato." });
@@ -302,7 +286,6 @@ export function LocationFormDialog({
                     setLongitude(null);
                   }}
                   placeholder="Es. Via Roma 14, Milano"
-                  disabled={!PLACES_API_KEY}
                   className="min-w-0 flex-1 bg-transparent py-[13px] text-[15px] font-medium text-foreground outline-none placeholder:text-[#c1c1c1]"
                 />
                 {searching && <LoadingDots className="shrink-0 scale-[0.6] text-[#a8a8a8]" />}
@@ -329,9 +312,8 @@ export function LocationFormDialog({
               )}
             </div>
             <div className="mt-[9px] text-xs font-medium leading-[1.45] text-[#a3a3a3]">
-              {PLACES_API_KEY
-                ? "Inizia a digitare per cercare l'indirizzo. Verrà mostrato agli allievi nel dettaglio della guida."
-                : "Configura NEXT_PUBLIC_GOOGLE_MAPS_API_KEY per abilitare la ricerca dell'indirizzo."}
+              Inizia a digitare per cercare l&apos;indirizzo. Verrà mostrato agli allievi nel
+              dettaglio della guida.
             </div>
           </>
         )}
