@@ -5458,9 +5458,13 @@ export async function getGroupLessonInvites(
       },
     });
     if (!member || !member.groupLessonsOptIn) return { success: true as const, data: [] };
-    // REG-420 — a student whose bookings are blocked can't self-enrol, so hide
-    // the joinable-groups list (and its home badge) entirely, like discovery off.
-    if (member.bookingBlocked) return { success: true as const, data: [] };
+    // REG-421 — a blocked student STILL sees the joinable groups, but each item
+    // comes back with `bookable: false` so the app shows it disabled (not hidden,
+    // not a generic tap error). We just don't NUDGE them: the home badge
+    // (countOnly) stays empty. The accept path (respondGroupLessonInvite) and the
+    // push broadcast still reject/skip a blocked student — REG-420 unchanged.
+    const bookingBlocked = member.bookingBlocked;
+    if (bookingBlocked && payload.countOnly) return { success: true as const, data: [] };
 
     // Lesson-first discovery: surface EVERY scheduled, future, non-full group
     // lesson the opted-in student can still join — not just lessons that happen
@@ -5581,6 +5585,10 @@ export async function getGroupLessonInvites(
           kind: gl.kind,
           filledSeats: gl.appointments.length,
           openSeats: Math.max(0, gl.capacity - gl.appointments.length),
+          // REG-421 — false only for a blocked student: the card is shown but
+          // disabled. Moto-exact-ineligible groups are filtered out above, so a
+          // returned item is always otherwise joinable.
+          bookable: !bookingBlocked,
           instructorName: gl.instructor?.name ?? null,
           // For a moto group the moto is assigned only at acceptance, so the
           // discovery list has no specific vehicle to show — surface `kind` so
