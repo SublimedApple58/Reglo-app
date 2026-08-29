@@ -84,6 +84,8 @@ export type BookingsTabProps = {
   setGroupLessonsEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   groupLessonsDiscoveryEnabled: boolean;
   setGroupLessonsDiscoveryEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  motoGroupExactCategoryOnly: boolean;
+  setMotoGroupExactCategoryOnly: React.Dispatch<React.SetStateAction<boolean>>;
   // App allievi
   studentNotesEnabled: boolean;
   setStudentNotesEnabled: React.Dispatch<React.SetStateAction<boolean>>;
@@ -468,6 +470,8 @@ export default function BookingsTab({
   setGroupLessonsEnabled,
   groupLessonsDiscoveryEnabled,
   setGroupLessonsDiscoveryEnabled,
+  motoGroupExactCategoryOnly,
+  setMotoGroupExactCategoryOnly,
   instructorPreferenceEnabled,
   setInstructorPreferenceEnabled,
   toast,
@@ -865,6 +869,24 @@ export default function BookingsTab({
               }
               checked={groupLessonsDiscoveryEnabled}
               onToggle={() => setGroupLessonsDiscoveryEnabled((prev) => !prev)}
+            />
+          </div>
+        )}
+
+        {groupLessonsEnabled && (
+          <div className="py-6">
+            <SettingRow
+              title="Guide di gruppo moto: solo moto della categoria esatta"
+              titleExtra={
+                <InfoTooltip text="Vale solo per l'iscrizione autonoma dell'allievo dall'app. L'istruttore da app e il titolare da web possono iscrivere i ragazzi come sempre, senza questo vincolo." />
+              }
+              description={
+                motoGroupExactCategoryOnly
+                  ? "L'allievo può iscriversi da solo a una guida di gruppo moto solo se è libera una moto della sua categoria esatta — mai una inferiore, anche se resterebbero posti liberi."
+                  : "Disattivo — l'allievo può iscriversi anche se resta libera solo una moto di categoria inferiore (guida a rotazione)."
+              }
+              checked={motoGroupExactCategoryOnly}
+              onToggle={() => setMotoGroupExactCategoryOnly((prev) => !prev)}
             />
           </div>
         )}

@@ -94,6 +94,32 @@ export const eligibleForMotoGroup = (args: {
 }): boolean => args.fleet.some((moto) => vehicleServesLicense(moto, args.student));
 
 /**
+ * Stricter eligibility used ONLY for self-booking when the autoscuola turns on
+ * `motoGroupExactCategoryOnly` (REG-419): the student may self-enrol only if a
+ * still-FREE fleet moto of their EXACT license category is available — never a
+ * lower one (no rotation, no "moto a rotazione"). `takenVehicleIds` are the motos
+ * already assigned to current participants. Transmission must still be compatible
+ * (`vehicleServesLicense`, which with equal category reduces to a transmission
+ * match). Does NOT affect the staff enrolment paths. When the fleet has no moto
+ * of the student's own category at all, this is (correctly) never satisfiable.
+ */
+export const hasFreeExactMoto = (args: {
+  fleet: FleetVehicle[];
+  takenVehicleIds: Iterable<string>;
+  student: StudentLicense;
+}): boolean => {
+  const taken = new Set(args.takenVehicleIds);
+  const studentCategory = args.student.licenseCategory;
+  if (!studentCategory) return false;
+  return args.fleet.some(
+    (moto) =>
+      !taken.has(moto.id) &&
+      moto.licenseCategory === studentCategory &&
+      vehicleServesLicense(moto, args.student),
+  );
+};
+
+/**
  * Assign motos to an ordered list of students (e.g. pre-added at creation),
  * best-effort: each student gets a distinct still-free compatible fleet moto
  * when one remains, `vehicleId: null` otherwise (they ride in turns). Fails

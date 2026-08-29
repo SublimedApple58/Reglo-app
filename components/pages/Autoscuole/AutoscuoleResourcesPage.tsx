@@ -472,6 +472,7 @@ export function AutoscuoleResourcesPage({
   const [followCarMotoEnabled, setFollowCarMotoEnabled] = React.useState(false);
   const [groupLessonsEnabled, setGroupLessonsEnabled] = React.useState(false);
   const [groupLessonsDiscoveryEnabled, setGroupLessonsDiscoveryEnabled] = React.useState(true);
+  const [motoGroupExactCategoryOnly, setMotoGroupExactCategoryOnly] = React.useState(false);
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
 
   // ── Instructor cluster panel state
@@ -708,6 +709,7 @@ export function AutoscuoleResourcesPage({
     setFollowCarMotoEnabled(res.data.followCarMotoEnabled === true);
     setGroupLessonsEnabled(res.data.groupLessonsEnabled === true);
     setGroupLessonsDiscoveryEnabled(res.data.groupLessonsDiscoveryEnabled !== false);
+    setMotoGroupExactCategoryOnly(res.data.motoGroupExactCategoryOnly === true);
 
     setAppBookingActors(
       APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
@@ -903,6 +905,11 @@ export function AutoscuoleResourcesPage({
     groupLessonsDiscoveryEnabled,
     setGroupLessonsDiscoveryEnabled,
     (v) => ({ groupLessonsDiscoveryEnabled: v }),
+  );
+  const saveMotoGroupExactCategoryOnly = persistField(
+    motoGroupExactCategoryOnly,
+    setMotoGroupExactCategoryOnly,
+    (v) => ({ motoGroupExactCategoryOnly: v }),
   );
 
   // App allievi
@@ -2248,6 +2255,8 @@ export function AutoscuoleResourcesPage({
             setGroupLessonsEnabled={saveGroupLessonsEnabled}
             groupLessonsDiscoveryEnabled={groupLessonsDiscoveryEnabled}
             setGroupLessonsDiscoveryEnabled={saveGroupLessonsDiscoveryEnabled}
+            motoGroupExactCategoryOnly={motoGroupExactCategoryOnly}
+            setMotoGroupExactCategoryOnly={saveMotoGroupExactCategoryOnly}
             instructorPreferenceEnabled={instructorPreferenceEnabled}
             setInstructorPreferenceEnabled={saveInstructorPreferenceEnabled}
             toast={toast}

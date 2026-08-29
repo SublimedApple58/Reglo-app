@@ -28,7 +28,7 @@ import {
 } from "@/lib/autoscuole/vehicle-resolution";
 import { vehicleServesLicense } from "@/lib/autoscuole/license";
 import { isWithinRestrictedWindow, pickRestrictedWindowSlots } from "@/lib/autoscuole/restricted-window";
-import { assignMotoForStudent, eligibleForMotoGroup, groupMotoFollowCarRequired, type FleetVehicle } from "@/lib/autoscuole/group-moto";
+import { assignMotoForStudent, eligibleForMotoGroup, hasFreeExactMoto, groupMotoFollowCarRequired, type FleetVehicle } from "@/lib/autoscuole/group-moto";
 import { findFreeGroupFollowCar } from "@/lib/autoscuole/group-follow-assign";
 import {
   FOLLOW_CAR_CATEGORY,
@@ -4740,7 +4740,7 @@ export async function broadcastGroupLessonInvite({
       },
       appointments: {
         where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
-        select: { studentId: true },
+        select: { studentId: true, vehicleId: true },
       },
     },
   });
@@ -4773,6 +4773,14 @@ export async function broadcastGroupLessonInvite({
   });
   const vehiclesEnabled =
     (service?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
+  // REG-419 — don't nudge students who couldn't self-join a moto group because
+  // no moto of their exact category is free (keeps the push consistent with the
+  // in-app discovery list + the accept gate).
+  const motoGroupExactCategoryOnly =
+    (service?.limits as Record<string, unknown> | null)?.motoGroupExactCategoryOnly === true;
+  const takenMotoIds = gl.appointments
+    .map((a) => a.vehicleId)
+    .filter((v): v is string => Boolean(v));
   const vehicle: GroupLessonVehicleLicense = gl.vehicle ?? null;
 
   const students = await prisma.companyMember.findMany({
@@ -4811,11 +4819,23 @@ export async function broadcastGroupLessonInvite({
   const eligible = students.filter((student) => {
     const id = student.user.id;
     if (enrolled.has(id)) return false;
+    // REG-420 — never nudge a student whose bookings are blocked (they can't
+    // self-enrol anyway; the accept path and the in-app list both reject them).
+    if (student.bookingBlocked) return false;
     if (gl.kind === "moto") {
       // Moto group: any fleet moto must serve the license (hierarchy-only).
       // Before 2026-07-06 moto groups had NO license filter here (container
       // vehicle is null) — every opted-in student got the push.
       if (vehiclesEnabled && !eligibleForMotoGroup({ fleet: broadcastFleet, student })) return false;
+      // REG-419 exact-category self-booking: skip students with no free moto of
+      // their own category (they couldn't accept the invite anyway).
+      if (
+        vehiclesEnabled &&
+        motoGroupExactCategoryOnly &&
+        !hasFreeExactMoto({ fleet: broadcastFleet, takenVehicleIds: takenMotoIds, student })
+      ) {
+        return false;
+      }
     } else if (vehiclesEnabled && vehicle && !vehicleServesLicense(vehicle, student)) {
       return false;
     }
@@ -4974,7 +4994,13 @@ export async function respondGroupLessonInvite(
 
     const member = await prisma.companyMember.findFirst({
       where: { companyId, autoscuolaRole: "STUDENT", userId: payload.studentId },
-      select: { userId: true, groupLessonsOptIn: true, licenseCategory: true, transmission: true },
+      select: {
+        userId: true,
+        groupLessonsOptIn: true,
+        licenseCategory: true,
+        transmission: true,
+        bookingBlocked: true,
+      },
     });
     if (!member) return { success: false as const, message: "Allievo non valido." };
 
@@ -5002,12 +5028,26 @@ export async function respondGroupLessonInvite(
     if (!member.groupLessonsOptIn) {
       return { success: false as const, message: "Non sei abilitato alle guide di gruppo." };
     }
+    // REG-420 — the owner's manual "blocca prenotazioni" must also stop group
+    // self-enrolment (this path bypassed it, unlike single lessons). Staff add
+    // students via createGroupLesson/addGroupLessonParticipant, which are
+    // unaffected — this only guards the student's own accept.
+    if (member.bookingBlocked) {
+      return {
+        success: false as const,
+        message: "Le tue prenotazioni sono temporaneamente sospese. Contatta la segreteria.",
+      };
+    }
     const service = await prisma.companyService.findFirst({
       where: { companyId, serviceKey: "AUTOSCUOLE" },
       select: { limits: true },
     });
     const vehiclesEnabled =
       (service?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
+    // REG-419 — when ON, self-enrolment into a moto group requires a FREE moto
+    // of the student's EXACT category (checked under the FOR UPDATE tx below).
+    const motoGroupExactCategoryOnly =
+      (service?.limits as Record<string, unknown> | null)?.motoGroupExactCategoryOnly === true;
     const isMoto = gl.kind === "moto";
     const motoFleet: FleetVehicle[] = gl.fleetVehicles.map((f) => f.vehicle);
     if (isMoto) {
@@ -5093,6 +5133,18 @@ export async function respondGroupLessonInvite(
         const taken = activeSeats
           .map((s) => s.vehicleId)
           .filter((v): v is string => Boolean(v));
+        // REG-419 (self-booking only): with the setting on, refuse the seat
+        // unless a moto of the student's EXACT category is still free — no
+        // lower-category fallback / rotation. Checked here, inside FOR UPDATE,
+        // so concurrent accepts can't both claim the last exact moto.
+        if (
+          motoGroupExactCategoryOnly &&
+          !hasFreeExactMoto({ fleet: motoFleet, takenVehicleIds: taken, student: member })
+        ) {
+          throw new Error(
+            "Non ci sono più moto della tua categoria disponibili per questa guida.",
+          );
+        }
         assignedVehicleId = assignMotoForStudent({
           fleet: motoFleet,
           takenVehicleIds: taken,
@@ -5397,9 +5449,18 @@ export async function getGroupLessonInvites(
 
     const member = await prisma.companyMember.findFirst({
       where: { companyId, autoscuolaRole: "STUDENT", userId: payload.studentId },
-      select: { userId: true, groupLessonsOptIn: true, licenseCategory: true, transmission: true },
+      select: {
+        userId: true,
+        groupLessonsOptIn: true,
+        licenseCategory: true,
+        transmission: true,
+        bookingBlocked: true,
+      },
     });
     if (!member || !member.groupLessonsOptIn) return { success: true as const, data: [] };
+    // REG-420 — a student whose bookings are blocked can't self-enrol, so hide
+    // the joinable-groups list (and its home badge) entirely, like discovery off.
+    if (member.bookingBlocked) return { success: true as const, data: [] };
 
     // Lesson-first discovery: surface EVERY scheduled, future, non-full group
     // lesson the opted-in student can still join — not just lessons that happen
@@ -5422,7 +5483,7 @@ export async function getGroupLessonInvites(
           },
           appointments: {
             where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
-            select: { studentId: true },
+            select: { studentId: true, vehicleId: true },
           },
         },
         orderBy: { startsAt: "asc" },
@@ -5461,6 +5522,10 @@ export async function getGroupLessonInvites(
 
     const vehiclesEnabled =
       (service?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
+    // REG-419 — when ON, only surface a moto group the student could actually
+    // self-join, i.e. one with a still-free moto of their EXACT category.
+    const motoGroupExactCategoryOnly =
+      (service?.limits as Record<string, unknown> | null)?.motoGroupExactCategoryOnly === true;
     const declinedLessonIds = new Set(declinedResponses.map((r) => r.invite.groupLessonId));
 
     const eligible = lessons
@@ -5470,14 +5535,22 @@ export async function getGroupLessonInvites(
         if (gl.appointments.some((a) => a.studentId === payload.studentId)) return false;
         if (gl.appointments.length >= gl.capacity) return false;
         if (gl.kind === "moto") {
+          const fleet = gl.fleetVehicles.map((f) => f.vehicle);
           // Moto group: any fleet moto must serve the license (hierarchy-only).
           // Before 2026-07-06 moto groups were listed to EVERY opted-in student
           // (container vehicle is null → the standard check passed everyone).
-          if (
-            vehiclesEnabled &&
-            !eligibleForMotoGroup({ fleet: gl.fleetVehicles.map((f) => f.vehicle), student: member })
-          ) {
+          if (vehiclesEnabled && !eligibleForMotoGroup({ fleet, student: member })) {
             return false;
+          }
+          // Exact-category-only self-booking (REG-419): also require a FREE moto
+          // of the student's own category (taking current riders into account).
+          if (vehiclesEnabled && motoGroupExactCategoryOnly) {
+            const taken = gl.appointments
+              .map((a) => a.vehicleId)
+              .filter((v): v is string => Boolean(v));
+            if (!hasFreeExactMoto({ fleet, takenVehicleIds: taken, student: member })) {
+              return false;
+            }
           }
         } else if (vehiclesEnabled && gl.vehicle && !vehicleServesLicense(gl.vehicle, member)) {
           return false;
