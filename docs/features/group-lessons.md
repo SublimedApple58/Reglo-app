@@ -80,6 +80,16 @@ Visibilità dei gruppi agli allievi. Quando **OFF** l'autoscuola compone i grupp
 - `inviteToGroupLesson` → errore esplicito "visibilità disattivata nelle impostazioni" per lo staff.
 UI: toggle "Gruppi visibili agli allievi" in Prenotazioni e allievi → Guide (visibile solo con guide di gruppo attive). Caso d'uso: Macchiavello (i cui allievi vedevano i gruppi altrui con posti liberi e la cosa non era voluta); Robatto resta col default ON.
 
+### `motoGroupExactCategoryOnly` (REG-419, 2026-08-29 — default **false**)
+Vincola l'**auto-iscrizione dell'allievo** (self-booking dall'app) alle guide di gruppo **moto**: quando **ON**, l'allievo può iscriversi da solo solo se il sistema può assegnargli una moto della **categoria ESATTA** della sua patente — mai una inferiore (niente "moto a rotazione"). Se non c'è più una moto esatta **libera**, non può iscriversi anche se la capienza numerica lo permetterebbe. Quando **OFF** (default) il comportamento è quello storico (eligibilità gerarchica + rotazione).
+
+**Si applica SOLO al self-booking**: `respondGroupLessonInvite` (accept, gate dentro la transazione `FOR UPDATE`), `getGroupLessonInvites` (discovery — nasconde i gruppi senza moto esatta libera) e `broadcastGroupLessonInvite` (recipienti push). Le vie **staff** — `createGroupLesson` (pre-add), `addGroupLessonParticipant` — sono **invariate** a prescindere dal setting.
+
+Helper puro: `hasFreeExactMoto({fleet, takenVehicleIds, student})` in `lib/autoscuole/group-moto.ts` (categoria === quella dell'allievo + transmission compatibile + moto libera; false se l'allievo non ha categoria o se in flotta non c'è la sua categoria). Plumbing setting identico a `groupLessonsDiscoveryEnabled` (schema/type/resolver/update in `autoscuole-settings.actions.ts`, toggle in `tabs/BookingsTab.tsx` + `AutoscuoleResourcesPage.tsx`).
+
+### Blocco prenotazioni allievo esteso ai gruppi (REG-420, 2026-08-29)
+Il flag `CompanyMember.bookingBlocked` (blocco manuale del titolare dal drawer allievo) ora vale **anche per l'iscrizione self-booking alle guide di gruppo**: prima era controllato solo sulle guide singole (`ensureStudentCanBookFromApp`/`getStudentBookingBlockStatus`), quindi un allievo bloccato riusciva a iscriversi ai gruppi. Ora `respondGroupLessonInvite` rifiuta (stesso messaggio delle singole), `getGroupLessonInvites` ritorna lista vuota e `broadcastGroupLessonInvite` esclude i bloccati dai recipienti. Controllo su `bookingBlocked` **raw** (cattura il blocco manuale, che è il caso segnalato; l'auto-blocco-per-debito non viene riconciliato qui, coerente con gli altri check gruppi-adiacenti). **Solo self-booking**: lo staff continua a poter iscrivere un allievo bloccato, come per le singole.
+
 ## Web UI (`components/pages/Autoscuole/`)
 - `tabs/BookingsTab.tsx` (pane unificato "Prenotazioni e allievi", sub-tab Guide) — "Attiva guide di gruppo": enable toggle.
 - `AutoscuoleStudentsPage.tsx` — per-student opt-in toggle row in the drawer (shown when `groupLessonsEnabled`), via `updateStudentGroupLessonOptIn`; `groupLessonsOptIn` flows from `getAutoscuolaStudents*` and the driving register.

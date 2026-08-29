@@ -1,6 +1,7 @@
 import {
   assignMotoForStudent,
   eligibleForMotoGroup,
+  hasFreeExactMoto,
   assignMotosToStudents,
   groupMotoFollowCarRequired,
   instructorCanUseVehicle,
@@ -137,6 +138,45 @@ describe("eligibleForMotoGroup", () => {
       eligibleForMotoGroup({
         fleet: [moto("m1", "A2", "automatic")],
         student: { licenseCategory: "A2", transmission: "manual" },
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("hasFreeExactMoto (REG-419, self-booking exact-category-only)", () => {
+  const A2 = { licenseCategory: "A2", transmission: "manual" };
+
+  it("is true when a free moto of the exact category exists", () => {
+    expect(hasFreeExactMoto({ fleet: FLEET, takenVehicleIds: [], student: A2 })).toBe(true);
+  });
+
+  it("is false once all exact-category motos are taken (no lower fallback)", () => {
+    // Both A2 motos taken; only the A moto is free — an A2 student must NOT
+    // fall back to it (that would be a higher category, not exact), and there
+    // is no lower one either → cannot self-enrol even if capacity remains.
+    expect(
+      hasFreeExactMoto({ fleet: FLEET, takenVehicleIds: ["m1", "m2"], student: A2 }),
+    ).toBe(false);
+  });
+
+  it("never matches a lower category (AM/A1 free, A2 student)", () => {
+    const fleet = [moto("am", "AM"), moto("a1", "A1")];
+    expect(hasFreeExactMoto({ fleet, takenVehicleIds: [], student: A2 })).toBe(false);
+  });
+
+  it("requires a compatible transmission", () => {
+    const fleet = [moto("m1", "A2", "automatic")];
+    expect(
+      hasFreeExactMoto({ fleet, takenVehicleIds: [], student: A2 }),
+    ).toBe(false);
+  });
+
+  it("is false for a student without a license category", () => {
+    expect(
+      hasFreeExactMoto({
+        fleet: FLEET,
+        takenVehicleIds: [],
+        student: { licenseCategory: null, transmission: "manual" },
       }),
     ).toBe(false);
   });

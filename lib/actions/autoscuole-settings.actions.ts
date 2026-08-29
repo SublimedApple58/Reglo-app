@@ -395,6 +395,11 @@ const autoscuolaSettingsPatchSchema = z
     // posti liberi nella lista "Guide di gruppo" (e niente inviti broadcast) —
     // vedono solo i gruppi in cui lo staff li ha inseriti. Default ON.
     groupLessonsDiscoveryEnabled: z.boolean().optional(),
+    // REG-419: se ON, un allievo può auto-iscriversi a una guida di gruppo MOTO
+    // solo se il sistema può assegnargli una moto della categoria ESATTA (non
+    // inferiore). Vincola SOLO il self-booking (istruttore/titolare invariati).
+    // Default OFF.
+    motoGroupExactCategoryOnly: z.boolean().optional(),
     quizEnabled: z.boolean().optional(),
     studentCancellationEnabled: z.boolean().optional(),
     agendaColorCriterion: z.enum(AGENDA_COLOR_CRITERIA).optional(),
@@ -605,6 +610,7 @@ export type AutoscuolaSettingsData = {
   followCarRules: FollowCarRules;
   groupLessonsEnabled: boolean;
   groupLessonsDiscoveryEnabled: boolean;
+  motoGroupExactCategoryOnly: boolean;
   quizEnabled: boolean;
   studentCancellationEnabled: boolean;
   agendaColorCriterion: AgendaColorCriterion;
@@ -970,6 +976,7 @@ const resolveAutoscuolaSettingsData = async (
     followCarRules: parseFollowCarRulesFromLimits(limits),
     groupLessonsEnabled: limits.groupLessonsEnabled === true,
     groupLessonsDiscoveryEnabled: limits.groupLessonsDiscoveryEnabled !== false,
+    motoGroupExactCategoryOnly: limits.motoGroupExactCategoryOnly === true,
     quizEnabled:
       typeof limits.quizEnabled === "boolean"
         ? limits.quizEnabled
@@ -1323,6 +1330,8 @@ export async function updateAutoscuolaSettings(
       payload.groupLessonsEnabled ?? limits.groupLessonsEnabled === true;
     const nextGroupLessonsDiscoveryEnabled =
       payload.groupLessonsDiscoveryEnabled ?? limits.groupLessonsDiscoveryEnabled !== false;
+    const nextMotoGroupExactCategoryOnly =
+      payload.motoGroupExactCategoryOnly ?? limits.motoGroupExactCategoryOnly === true;
     const nextQuizEnabled = payload.quizEnabled ?? previousQuizEnabled;
     const nextStudentCancellationEnabled = payload.studentCancellationEnabled ?? previousStudentCancellationEnabled;
     const nextVoiceFeatureEnabled = previousVoiceFeatureEnabled;
@@ -1537,6 +1546,7 @@ export async function updateAutoscuolaSettings(
       followCarRules: nextFollowCarRules,
       groupLessonsEnabled: nextGroupLessonsEnabled,
       groupLessonsDiscoveryEnabled: nextGroupLessonsDiscoveryEnabled,
+      motoGroupExactCategoryOnly: nextMotoGroupExactCategoryOnly,
       quizEnabled: nextQuizEnabled,
       studentCancellationEnabled: nextStudentCancellationEnabled,
       agendaColorCriterion:
@@ -1665,6 +1675,7 @@ export async function updateAutoscuolaSettings(
         nationalHolidaysDisabled: nextLimits.nationalHolidaysDisabled,
         groupLessonsEnabled: nextGroupLessonsEnabled,
         groupLessonsDiscoveryEnabled: nextGroupLessonsDiscoveryEnabled,
+      motoGroupExactCategoryOnly: nextMotoGroupExactCategoryOnly,
         quizEnabled: nextQuizEnabled,
         studentCancellationEnabled: nextStudentCancellationEnabled,
         agendaColorCriterion: nextLimits.agendaColorCriterion,
