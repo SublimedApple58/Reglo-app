@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeft, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { InlineToggle } from "@/components/ui/inline-toggle";
@@ -42,12 +43,17 @@ export type VehiclesTabProps = {
   vehiclesEnabled: boolean;
   defaultLicenseCategory: string;
   defaultTransmission: string;
+  /** REG-424 — "student_choice" (default): l'allievo self-registered sceglie il
+   *  percorso al primo accesso (gate mobile). "fixed_default": il default sotto
+   *  viene assegnato d'ufficio, niente scelta per l'allievo. */
+  licensePathMode: "fixed_default" | "student_choice";
   followCarMotoEnabled: boolean;
   /** Auto-save: applica e persiste subito il campo modificato. */
   updateVehicleSettings: (patch: {
     vehiclesEnabled?: boolean;
     defaultLicenseCategory?: string;
     defaultTransmission?: string;
+    licensePathMode?: "fixed_default" | "student_choice";
     followCarMotoEnabled?: boolean;
   }) => void;
   openCreateVehicle: () => void;
@@ -95,6 +101,7 @@ export default function VehiclesTab({
   vehiclesEnabled,
   defaultLicenseCategory,
   defaultTransmission,
+  licensePathMode,
   followCarMotoEnabled,
   updateVehicleSettings,
   openCreateVehicle,
@@ -173,47 +180,82 @@ export default function VehiclesTab({
 
       {vehiclesEnabled && (
         <>
-          {/* ── Percorso patente di default (card dal proto) ── */}
-          <div className="mb-5 rounded-[14px] border border-[#dddddd] bg-white px-6 py-5">
-            <div className="text-[15px] font-semibold text-foreground">Percorso patente di default</div>
-            <div className="mt-0.5 text-[13px] font-medium text-[#929292]">
-              Assegnato ai nuovi allievi alla registrazione.
-            </div>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div>
-                <div className="mb-2 text-xs font-semibold text-[#555555]">Categoria</div>
-                <Select
-                  value={defaultLicenseCategory}
-                  onValueChange={(v) => updateVehicleSettings({ defaultLicenseCategory: v })}
-                >
-                  <SelectTrigger className={PROTO_SELECT_TRIGGER}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LICENSE_CATEGORIES.map((cat) => (
-                      <SelectItem key={cat} value={cat}>{LICENSE_CATEGORY_LABELS[cat]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <div className="mb-2 text-xs font-semibold text-[#555555]">Cambio</div>
-                <Select
-                  value={defaultTransmission}
-                  onValueChange={(v) => updateVehicleSettings({ defaultTransmission: v })}
-                >
-                  <SelectTrigger className={PROTO_SELECT_TRIGGER}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TRANSMISSIONS.map((t) => (
-                      <SelectItem key={t} value={t}>{TRANSMISSION_LABELS[t]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          {/* ── Assegnazione percorso patente (REG-424) ── */}
+          <div className="mb-5 flex items-center justify-between gap-4 border-b border-[#eeeeee] py-3.5">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-foreground">Scelta libera del percorso patente</div>
+              <div className="mt-0.5 text-[13px] font-medium leading-normal text-[#929292]">
+                {licensePathMode === "student_choice"
+                  ? "Attivo — chi si registra da solo dall'app sceglie il proprio percorso patente al primo accesso."
+                  : "Disattivo — ai nuovi allievi viene assegnato il percorso patente di default qui sotto. Puoi modificarlo a mano dalla scheda allievo; l'allievo non sceglie."}
               </div>
             </div>
+            <InlineToggle
+              checked={licensePathMode === "student_choice"}
+              onChange={() =>
+                updateVehicleSettings({
+                  licensePathMode:
+                    licensePathMode === "student_choice" ? "fixed_default" : "student_choice",
+                })
+              }
+              size="lg"
+            />
           </div>
+
+          {/* ── Percorso patente di default — visibile SOLO in "patente fissa"
+               (REG-424). Collapse animato height+opacity al cambio toggle. ── */}
+          <AnimatePresence initial={false}>
+            {licensePathMode === "fixed_default" && (
+              <motion.div
+                key="license-default-card"
+                initial={{ height: 0, opacity: 0, overflow: "hidden" }}
+                animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
+                exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+                transition={{ duration: 0.24, ease: [0.25, 0.1, 0.25, 1] }}
+              >
+                <div className="mb-5 rounded-[14px] border border-[#dddddd] bg-white px-6 py-5">
+                  <div className="text-[15px] font-semibold text-foreground">Percorso patente di default</div>
+                  <div className="mt-0.5 text-[13px] font-medium text-[#929292]">
+                    Assegnato a tutti i nuovi allievi alla registrazione (self-registered e aggiunti dallo staff).
+                  </div>
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <div className="mb-2 text-xs font-semibold text-[#555555]">Categoria</div>
+                      <Select
+                        value={defaultLicenseCategory}
+                        onValueChange={(v) => updateVehicleSettings({ defaultLicenseCategory: v })}
+                      >
+                        <SelectTrigger className={PROTO_SELECT_TRIGGER}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LICENSE_CATEGORIES.map((cat) => (
+                            <SelectItem key={cat} value={cat}>{LICENSE_CATEGORY_LABELS[cat]}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <div className="mb-2 text-xs font-semibold text-[#555555]">Cambio</div>
+                      <Select
+                        value={defaultTransmission}
+                        onValueChange={(v) => updateVehicleSettings({ defaultTransmission: v })}
+                      >
+                        <SelectTrigger className={PROTO_SELECT_TRIGGER}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TRANSMISSIONS.map((t) => (
+                            <SelectItem key={t} value={t}>{TRANSMISSION_LABELS[t]}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* ── Auto al seguito (riga flat dal proto) ── */}
           <div className="mb-1 flex items-center justify-between gap-4 border-b border-[#eeeeee] py-3.5">

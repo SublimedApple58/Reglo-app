@@ -117,6 +117,24 @@ export async function POST(request: Request) {
       });
       const decision = decideOnboardingPhase(limits, seatsConsumed);
 
+      // REG-424 — license path mode. "fixed_default": the school assigns the
+      // license centrally, so seed the company default now (the mobile REG-410
+      // gate then never shows — needsLicensePath needs a NULL license — and the
+      // owner changes it by hand if needed). "student_choice" (default): leave it
+      // NULL so the gate prompts the student to pick it themselves.
+      const rawLimits = (limits as Record<string, unknown> | null) ?? null;
+      const licensePathMode =
+        rawLimits?.licensePathMode === "fixed_default" ? "fixed_default" : "student_choice";
+      const seededLicense =
+        licensePathMode === "fixed_default"
+          ? {
+              licenseCategory:
+                (rawLimits?.defaultLicenseCategory as string | undefined) ?? "B",
+              transmission:
+                (rawLimits?.defaultTransmission as string | undefined) ?? "manual",
+            }
+          : {};
+
       const user = await tx.user.create({
         data: {
           name: parsed.name,
@@ -145,10 +163,12 @@ export async function POST(request: Request) {
           phaseClassifiedAt: new Date(),
           // Self sign-up: mark it so the mobile license-path gate (REG-410) can
           // prompt this student to pick their own percorso patente at first
-          // access. We deliberately leave licenseCategory / transmission NULL
-          // (no default seed) — NULL is what drives the gate; the student sets
-          // them via PATCH /api/autoscuole/me/license-path.
+          // access — but only in "student_choice" mode, where licenseCategory /
+          // transmission stay NULL (NULL is what drives the gate). In
+          // "fixed_default" (REG-424) the school default is seeded below, so
+          // needsLicensePath is false and the gate never shows.
           selfRegistered: true,
+          ...seededLicense,
         },
       });
 

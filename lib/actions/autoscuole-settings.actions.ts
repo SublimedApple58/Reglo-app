@@ -379,6 +379,12 @@ const autoscuolaSettingsPatchSchema = z
     // schools onboard new students already on the right category.
     defaultLicenseCategory: z.enum(LICENSE_CATEGORIES).optional(),
     defaultTransmission: z.enum(TRANSMISSIONS).optional(),
+    // REG-424 — how a self-registered student gets their license path.
+    // "student_choice" (default, REG-410): they pick it at first access (mobile
+    // gate). "fixed_default": they're seeded with defaultLicenseCategory/
+    // defaultTransmission at registration (no gate) and the owner changes it by
+    // hand if needed.
+    licensePathMode: z.enum(["fixed_default", "student_choice"]).optional(),
     // "Auto al seguito": single global toggle for ALL moto categories. When on,
     // every moto guida additionally reserves a follow car.
     followCarMotoEnabled: z.boolean().optional(),
@@ -606,6 +612,7 @@ export type AutoscuolaSettingsData = {
   nationalHolidaysDisabled: string[];
   defaultLicenseCategory: string;
   defaultTransmission: string;
+  licensePathMode: "fixed_default" | "student_choice";
   followCarMotoEnabled: boolean;
   followCarRules: FollowCarRules;
   groupLessonsEnabled: boolean;
@@ -972,6 +979,8 @@ const resolveAutoscuolaSettingsData = async (
       typeof limits.defaultTransmission === "string"
         ? limits.defaultTransmission
         : "manual",
+    licensePathMode:
+      limits.licensePathMode === "fixed_default" ? "fixed_default" : "student_choice",
     followCarMotoEnabled: readFollowCarMotoEnabled(limits),
     followCarRules: parseFollowCarRulesFromLimits(limits),
     groupLessonsEnabled: limits.groupLessonsEnabled === true,
@@ -1317,6 +1326,13 @@ export async function updateAutoscuolaSettings(
     const nextDefaultTransmission =
       payload.defaultTransmission ??
       (typeof limits.defaultTransmission === "string" ? limits.defaultTransmission : "manual");
+    // REG-424 — license-path mode + detection of the student_choice → fixed_default
+    // switch (used to backfill existing gate-pending students after persisting).
+    const previousLicensePathMode =
+      limits.licensePathMode === "fixed_default" ? "fixed_default" : "student_choice";
+    const nextLicensePathMode = payload.licensePathMode ?? previousLicensePathMode;
+    const switchedToFixedDefault =
+      previousLicensePathMode !== "fixed_default" && nextLicensePathMode === "fixed_default";
     // Single global follow-car flag. Prefer the new flag; else derive from the
     // legacy per-category payload (any moto on → global on); else keep current.
     const nextFollowCarMotoEnabled =
@@ -1542,6 +1558,7 @@ export async function updateAutoscuolaSettings(
         payload.nationalHolidaysDisabled ?? parseNationalHolidaySettings(limits).disabled,
       defaultLicenseCategory: nextDefaultLicenseCategory,
       defaultTransmission: nextDefaultTransmission,
+      licensePathMode: nextLicensePathMode,
       followCarMotoEnabled: nextFollowCarMotoEnabled,
       followCarRules: nextFollowCarRules,
       groupLessonsEnabled: nextGroupLessonsEnabled,
@@ -1571,6 +1588,25 @@ export async function updateAutoscuolaSettings(
           serviceKey: "AUTOSCUOLE",
           status: "ACTIVE",
           limits: nextLimits,
+        },
+      });
+    }
+
+    // REG-424 — switching student_choice → fixed_default: seed the school default
+    // onto the self-registered students still waiting to pick (licenseCategory
+    // null), so no stale mobile gate lingers and they can book right away. New
+    // self-registrations get the default seeded at signup (student-register).
+    if (switchedToFixedDefault) {
+      await prisma.companyMember.updateMany({
+        where: {
+          companyId: membership.companyId,
+          autoscuolaRole: "STUDENT",
+          selfRegistered: true,
+          licenseCategory: null,
+        },
+        data: {
+          licenseCategory: nextDefaultLicenseCategory,
+          transmission: nextDefaultTransmission,
         },
       });
     }

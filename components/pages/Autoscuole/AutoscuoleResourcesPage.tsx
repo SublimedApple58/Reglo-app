@@ -469,6 +469,9 @@ export function AutoscuoleResourcesPage({
   const [vehiclesEnabled, setVehiclesEnabled] = React.useState(true);
   const [defaultLicenseCategory, setDefaultLicenseCategory] = React.useState<string>("B");
   const [defaultTransmission, setDefaultTransmission] = React.useState<string>("manual");
+  const [licensePathMode, setLicensePathMode] = React.useState<
+    "fixed_default" | "student_choice"
+  >("student_choice");
   const [followCarMotoEnabled, setFollowCarMotoEnabled] = React.useState(false);
   const [groupLessonsEnabled, setGroupLessonsEnabled] = React.useState(false);
   const [groupLessonsDiscoveryEnabled, setGroupLessonsDiscoveryEnabled] = React.useState(true);
@@ -706,6 +709,9 @@ export function AutoscuoleResourcesPage({
     setVehiclesEnabled(res.data.vehiclesEnabled !== false);
     setDefaultLicenseCategory(res.data.defaultLicenseCategory ?? "B");
     setDefaultTransmission(res.data.defaultTransmission ?? "manual");
+    setLicensePathMode(
+      res.data.licensePathMode === "fixed_default" ? "fixed_default" : "student_choice",
+    );
     setFollowCarMotoEnabled(res.data.followCarMotoEnabled === true);
     setGroupLessonsEnabled(res.data.groupLessonsEnabled === true);
     setGroupLessonsDiscoveryEnabled(res.data.groupLessonsDiscoveryEnabled !== false);
@@ -955,12 +961,14 @@ export function AutoscuoleResourcesPage({
     vehiclesEnabled?: boolean;
     defaultLicenseCategory?: string;
     defaultTransmission?: string;
+    licensePathMode?: "fixed_default" | "student_choice";
     followCarMotoEnabled?: boolean;
   }) => {
     const prev = {
       vehiclesEnabled,
       defaultLicenseCategory,
       defaultTransmission,
+      licensePathMode,
       followCarMotoEnabled,
     };
     if (patch.vehiclesEnabled !== undefined) setVehiclesEnabled(patch.vehiclesEnabled);
@@ -968,6 +976,8 @@ export function AutoscuoleResourcesPage({
       setDefaultLicenseCategory(patch.defaultLicenseCategory);
     if (patch.defaultTransmission !== undefined)
       setDefaultTransmission(patch.defaultTransmission);
+    if (patch.licensePathMode !== undefined)
+      setLicensePathMode(patch.licensePathMode);
     if (patch.followCarMotoEnabled !== undefined)
       setFollowCarMotoEnabled(patch.followCarMotoEnabled);
 
@@ -981,6 +991,9 @@ export function AutoscuoleResourcesPage({
       ...(patch.defaultTransmission !== undefined
         ? { defaultTransmission: patch.defaultTransmission as "manual" | "automatic" }
         : {}),
+      ...(patch.licensePathMode !== undefined
+        ? { licensePathMode: patch.licensePathMode }
+        : {}),
       ...(patch.followCarMotoEnabled !== undefined
         ? { followCarMotoEnabled: patch.followCarMotoEnabled }
         : {}),
@@ -989,6 +1002,7 @@ export function AutoscuoleResourcesPage({
       setVehiclesEnabled(prev.vehiclesEnabled);
       setDefaultLicenseCategory(prev.defaultLicenseCategory);
       setDefaultTransmission(prev.defaultTransmission);
+      setLicensePathMode(prev.licensePathMode);
       setFollowCarMotoEnabled(prev.followCarMotoEnabled);
       toast.error({
         description: res.message ?? "Impossibile salvare le impostazioni veicoli.",
@@ -2271,6 +2285,7 @@ export function AutoscuoleResourcesPage({
             vehiclesEnabled={vehiclesEnabled}
             defaultLicenseCategory={defaultLicenseCategory}
             defaultTransmission={defaultTransmission}
+            licensePathMode={licensePathMode}
             followCarMotoEnabled={followCarMotoEnabled}
             updateVehicleSettings={updateVehicleSettings}
             openCreateVehicle={openCreateVehicle}
