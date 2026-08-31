@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ArrowDownAZ, Camera, ChevronLeft, ChevronRight, Download, KeyRound, Ticket, UserPlus, UserRoundPlus, Users } from "lucide-react";
+import { ArrowDownAZ, Camera, ChevronLeft, ChevronRight, Download, KeyRound, MapPin, Ticket, UserPlus, UserRoundPlus, Users } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -54,6 +54,7 @@ import {
   toggleWeeklyBookingLimitExempt,
   setExamPriorityOverride,
   setStudentExamReady,
+  setStudentDefaultLocation,
   setManualPaymentStatus,
   updateStudentGroupLessonOptIn,
   updateStudentPhone,
@@ -68,6 +69,7 @@ import {
   getQuizSeatsContext,
   grantQuizSeat,
 } from "@/lib/actions/autoscuole-settings.actions";
+import { getAutoscuolaLocations } from "@/lib/actions/autoscuola-locations.actions";
 import { StudentMediaSection } from "@/components/pages/Autoscuole/StudentMediaSection";
 import { useUserPhotoUrl, invalidateUserPhoto } from "@/components/ui/user-photo";
 import { ChangeStudentPhaseDialog } from "@/components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog";
@@ -110,6 +112,9 @@ type Student = StudentProfile & {
   transmission?: string | null;
   examReady?: boolean;
   examReadyAt?: string | null;
+  // Luogo di default (REG-392): mostrato nella lista + modificabile nella scheda.
+  defaultLocationId?: string | null;
+  defaultLocationName?: string | null;
   manualUnpaid?: number;
   theoryExamAt?: string | null;
   activeCase: {
@@ -587,6 +592,11 @@ export function AutoscuoleStudentsPage({
   const [exemptSaving, setExemptSaving] = React.useState(false);
   const [examPrioritySaving, setExamPrioritySaving] = React.useState(false);
   const [examReadySaving, setExamReadySaving] = React.useState(false);
+  // Luoghi guida (REG-392): per il selettore "Luogo di default" nella scheda allievo.
+  const [locations, setLocations] = React.useState<
+    Array<{ id: string; name: string; isDefault: boolean; isPrecise: boolean }>
+  >([]);
+  const [defaultLocationSaving, setDefaultLocationSaving] = React.useState(false);
   const registerRequestRef = React.useRef(0);
   const [credits, setCredits] = React.useState<StudentCredits | null>(null);
   const [creditsLoading, setCreditsLoading] = React.useState(false);
@@ -1080,6 +1090,35 @@ export function AutoscuoleStudentsPage({
     [selectedStudentId, blockSaving, toast],
   );
 
+  // Luogo di default allievo (REG-392): imposta/azzera dalla scheda; aggiorna
+  // sia il register aperto sia la riga nella lista.
+  const handleSetDefaultLocation = React.useCallback(
+    async (locationId: string | null) => {
+      if (!selectedStudentId || defaultLocationSaving) return;
+      setDefaultLocationSaving(true);
+      const res = await setStudentDefaultLocation({
+        studentId: selectedStudentId,
+        locationId,
+      });
+      setDefaultLocationSaving(false);
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Errore aggiornamento luogo." });
+        return;
+      }
+      const name = locationId
+        ? locations.find((l) => l.id === locationId)?.name ?? null
+        : null;
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.id === selectedStudentId
+            ? { ...s, defaultLocationId: locationId, defaultLocationName: name }
+            : s,
+        ),
+      );
+    },
+    [selectedStudentId, defaultLocationSaving, locations, toast],
+  );
+
   const handleSetManualPayment = React.useCallback(
     async (appointmentId: string, status: "paid" | "unpaid") => {
       if (paymentSaving) return;
@@ -1256,6 +1295,18 @@ export function AutoscuoleStudentsPage({
   React.useEffect(() => {
     getCompanyInviteCode().then((res) => {
       if (res.success && res.data) setInviteCode(res.data);
+    });
+    getAutoscuolaLocations().then((res) => {
+      if (res.success && Array.isArray(res.data)) {
+        setLocations(
+          res.data.map((l: { id: string; name: string; isDefault?: boolean; isPrecise?: boolean }) => ({
+            id: l.id,
+            name: l.name,
+            isDefault: Boolean(l.isDefault),
+            isPrecise: Boolean(l.isPrecise),
+          })),
+        );
+      }
     });
     getAutoscuolaSettings().then((res) => {
       if (res.success && res.data) {
@@ -1486,11 +1537,23 @@ export function AutoscuoleStudentsPage({
           return (
             <div
               key={student.id}
-              className="grid grid-cols-[2fr_1.5fr_1fr_1fr_110px] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
+              className="grid grid-cols-[2fr_1.5fr_1fr_1.1fr_1fr_110px] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
             >
               {renderNameCell(student, { showDot: true, secondLine })}
               <div className="truncate pr-3 text-[13px] font-medium text-[#6a6a6a]">{student.email || "—"}</div>
               <div className="text-[13px] font-medium text-foreground">{student.phone || "—"}</div>
+              {/* Luogo di default (REG-392): colonna dedicata → righe di altezza
+                  uniforme che ci sia o meno un luogo ("—" quando assente = sede). */}
+              <div className="min-w-0">
+                {student.defaultLocationName ? (
+                  <div className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
+                    <MapPin className="size-3.5 shrink-0 text-[#9a9a9a]" strokeWidth={2} />
+                    <span className="truncate">{student.defaultLocationName}</span>
+                  </div>
+                ) : (
+                  <span className="text-[13px] font-medium text-[#c4c4c4]">—</span>
+                )}
+              </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">
                   {student.summary.completedLessons}/{student.summary.requiredLessons}
@@ -1929,6 +1992,38 @@ export function AutoscuoleStudentsPage({
                 ))}
               </SelectContent>
             </Select>
+          </section>
+        )}
+
+        {/* Luogo di default (REG-392): precompila il Luogo quando si prenota
+            una guida per questo allievo. */}
+        {locations.length > 0 && (
+          <section className="border-b border-[#f2f2f2] py-7">
+            <p className={sectionLabelClass}>Luogo di default</p>
+            <Select
+              value={selectedStudent?.defaultLocationId ?? "__none__"}
+              onValueChange={(value) =>
+                handleSetDefaultLocation(value === "__none__" ? null : value)
+              }
+            >
+              <SelectTrigger className="w-full" disabled={defaultLocationSaving}>
+                <SelectValue placeholder="Sede dell'autoscuola" />
+              </SelectTrigger>
+              <SelectContent className="z-[200]">
+                <SelectItem value="__none__">Sede dell&apos;autoscuola</SelectItem>
+                {locations
+                  .filter((l) => !l.isDefault)
+                  .map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.name}
+                      {loc.isPrecise ? " · Preciso" : " · Generico"}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-2 text-[12px] font-medium leading-normal text-[#929292]">
+              Precompilato nel form di prenotazione guida quando selezioni questo allievo.
+            </p>
           </section>
         )}
 
