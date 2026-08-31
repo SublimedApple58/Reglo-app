@@ -97,7 +97,7 @@ import {
 import { NeverAccessedNudge } from "@/components/pages/Autoscuole/NeverAccessedNudge";
 import { UserPhotoCircle } from "@/components/ui/user-photo";
 
-type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; neverAccessed?: boolean; studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO"; examReady?: boolean; examReadyAt?: string | null };
+type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; neverAccessed?: boolean; studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO"; examReady?: boolean; examReadyAt?: string | null; defaultLocationId?: string | null };
 type ResourceOption = {
   id: string;
   name: string;
@@ -190,6 +190,9 @@ type AgendaBootstrapPayload = {
     // True quando l'allievo non ha mai fatto accesso in app (account creato dal
     // titolare, mai usato → non riceve i promemoria). Guida il badge megafono.
     neverAccessed?: boolean;
+    // Luogo di default dell'allievo (REG-392): precompila il campo Luogo alla
+    // selezione dell'allievo nel form di creazione guida.
+    defaultLocationId?: string | null;
   }>;
   instructors: ResourceOption[];
   vehicles: ResourceOption[];
@@ -4132,10 +4135,21 @@ export function AutoscuoleAgendaPage({
                 const student = students.find((s) => s.id === id);
                 const preferredInstructorId = [student?.assignedInstructorId, student?.lastInstructorId]
                   .find((candidate) => candidate && instructors.some((i) => i.id === candidate)) ?? "";
+                // Luogo di default dell'allievo (REG-392): alla selezione dell'allievo
+                // precompila il campo Luogo col suo default (se ancora esistente),
+                // SOVRASCRIVENDO il valore corrente. Una modifica manuale successiva
+                // resta (questo scatta solo al cambio allievo). Se l'allievo non ha un
+                // default, si torna alla sede.
+                const studentDefaultLocationId =
+                  student?.defaultLocationId &&
+                  agendaLocations.some((l) => l.id === student.defaultLocationId)
+                    ? student.defaultLocationId
+                    : (defaultLocationId ?? "");
                 setForm((prev) => ({
                   ...prev,
                   studentId: id,
                   instructorId: preferredInstructorId || prev.instructorId,
+                  locationId: id ? studentDefaultLocationId : prev.locationId,
                   vehicleId: "",
                   followVehicleId: "",
                   extraMotoVehicleIds: [],

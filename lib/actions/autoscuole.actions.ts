@@ -772,7 +772,12 @@ const listDirectoryStudents = async (companyId: string) => {
       companyId,
       autoscuolaRole: "STUDENT",
     },
-    include: { user: { select: STUDENT_USER_SELECT } },
+    include: {
+      user: { select: STUDENT_USER_SELECT },
+      // Luogo di default (REG-392): serve anche il NOME, non solo l'id — il
+      // form di prenotazione mobile mostra la label del Luogo da questo campo.
+      defaultLocation: { select: { id: true, name: true } },
+    },
     orderBy: { createdAt: "desc" },
     take: 500,
   });
@@ -792,6 +797,10 @@ const listDirectoryStudents = async (companyId: string) => {
     studentPhase: member.studentPhase,
     examReady: member.examReady,
     examReadyAt: member.examReadyAt ? member.examReadyAt.toISOString() : null,
+    // Luogo di default (REG-392): id + NOME → prefill del campo Luogo (label
+    // inclusa) alla selezione dell'allievo nel form di prenotazione.
+    defaultLocationId: member.defaultLocationId ?? null,
+    defaultLocationName: member.defaultLocation?.name ?? null,
   }));
 };
 
@@ -1501,7 +1510,12 @@ export async function getAutoscuolaStudents(search?: string) {
     const companyId = membership.companyId;
     const members = await prisma.companyMember.findMany({
       where: buildStudentSearchWhere(companyId, search),
-      include: { user: { select: STUDENT_USER_SELECT } },
+      include: {
+        user: { select: STUDENT_USER_SELECT },
+        // Luogo di default (REG-392): mostrato nel dettaglio allievo mobile e
+        // usato per il prefill del form di prenotazione.
+        defaultLocation: { select: { id: true, name: true } },
+      },
       orderBy: { createdAt: "desc" },
       take: 500,
     });
@@ -1516,6 +1530,8 @@ export async function getAutoscuolaStudents(search?: string) {
         groupLessonsOptIn: m.groupLessonsOptIn ?? false,
         examReady: m.examReady,
         examReadyAt: m.examReadyAt ? m.examReadyAt.toISOString() : null,
+        defaultLocationId: m.defaultLocationId ?? null,
+        defaultLocationName: m.defaultLocation?.name ?? null,
       })),
     };
   } catch (error) {
@@ -1653,7 +1669,11 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
     const companyId = membership.companyId;
     const members = await prisma.companyMember.findMany({
       where: buildStudentSearchWhere(companyId, search),
-      include: { user: { select: STUDENT_USER_SELECT } },
+      include: {
+        user: { select: STUDENT_USER_SELECT },
+        // Luogo di default (REG-392): mostrato nella lista allievi + scheda.
+        defaultLocation: { select: { id: true, name: true } },
+      },
       orderBy: { createdAt: "desc" },
       take: 500,
     });
@@ -1669,6 +1689,8 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
       groupLessonsOptIn: m.groupLessonsOptIn ?? false,
       examReady: m.examReady,
       examReadyAt: m.examReadyAt ? m.examReadyAt.toISOString() : null,
+      defaultLocationId: m.defaultLocationId ?? null,
+      defaultLocationName: m.defaultLocation?.name ?? null,
     }));
     if (!students.length) return { success: true, data: [] };
 
@@ -10107,6 +10129,68 @@ export async function setStudentExamReady(
       data: {
         examReady: payload.ready,
         examReadyAt: examReadyAt ? examReadyAt.toISOString() : null,
+      },
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Luogo di default per allievo (REG-392)
+// Impostabile da istruttore + titolare (web + mobile), come i toggle vicini.
+// Precompila il campo "luogo" nel form di prenotazione quando si sceglie
+// l'allievo. null = nessun default (il form riparte dalla sede).
+// ---------------------------------------------------------------------------
+
+const setStudentDefaultLocationSchema = z.object({
+  studentId: z.string().uuid(),
+  locationId: z.string().uuid().nullable(),
+});
+
+export async function setStudentDefaultLocation(
+  input: z.infer<typeof setStudentDefaultLocationSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (
+      !isInstructor(membership.autoscuolaRole) &&
+      !isOwner(membership.autoscuolaRole) &&
+      membership.role !== "admin"
+    ) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+    const payload = setStudentDefaultLocationSchema.parse(input);
+
+    // Se non è null, il luogo deve appartenere all'autoscuola e non essere archiviato.
+    let location: { id: string; name: string } | null = null;
+    if (payload.locationId) {
+      location = await prisma.autoscuolaLocation.findFirst({
+        where: {
+          id: payload.locationId,
+          companyId: membership.companyId,
+          archivedAt: null,
+        },
+        select: { id: true, name: true },
+      });
+      if (!location) {
+        return { success: false, message: "Luogo non trovato." };
+      }
+    }
+
+    await prisma.companyMember.updateMany({
+      where: {
+        companyId: membership.companyId,
+        userId: payload.studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      data: { defaultLocationId: payload.locationId },
+    });
+
+    return {
+      success: true,
+      data: {
+        defaultLocation: location,
       },
     };
   } catch (error) {

@@ -287,67 +287,73 @@ model CompanyService {
 }
 
 model CompanyMember {
-  companyId                String                 @db.Uuid
-  userId                   String                 @db.Uuid
-  role                     String                 @default("member")
-  autoscuolaRole           AutoscuolaRole         @default(STUDENT)
-  studentPhase             AutoscuolaStudentPhase @default(PRATICA)
+  companyId                 String                 @db.Uuid
+  userId                    String                 @db.Uuid
+  role                      String                 @default("member")
+  autoscuolaRole            AutoscuolaRole         @default(STUDENT)
+  studentPhase              AutoscuolaStudentPhase @default(PRATICA)
   /// When the student was first granted a quiz license seat by the school owner.
   /// Null = never granted. Once set, the seat is "burnt" for life on this student
   /// (nominal license, non-reassignable). Drives the quiz tab visibility in mobile.
-  quizSeatGrantedAt        DateTime?
+  quizSeatGrantedAt         DateTime?
   /// When the student's phase was explicitly classified by the school owner
   /// (i.e. not the default migration value). Null = still "default migration"
   /// (drives the yellow "Conferma fase" badge in the titolare drawer).
-  phaseClassifiedAt        DateTime?
-  bookingBlocked           Boolean                @default(false)
+  phaseClassifiedAt         DateTime?
+  bookingBlocked            Boolean                @default(false)
   /// Origin of an active booking block, so the unpaid-debt automation knows
   /// which blocks it owns. "manual" = set by the owner (automation never
   /// touches it); "unpaid_threshold" = set by the auto-block automation
   /// (auto-released when the student drops below the threshold). Null = not
   /// blocked, or a legacy manual block (treated as manual for safety).
   /// See lib/autoscuole/unpaid-auto-block.ts.
-  bookingBlockReason       String?
+  bookingBlockReason        String?
   /// Dismissal watermark for the unpaid-debt auto-block: when the owner manually
   /// unblocks a student, we store the unpaid-lesson count at that moment so the
   /// automation won't immediately re-block for the same residual debt. It
   /// re-blocks only if the debt later rises ABOVE this level, or drops below the
   /// threshold and climbs back up. Null = no active dismissal.
   unpaidBlockClearedAtCount Int?
-  weeklyBookingLimitExempt Boolean                @default(false)
-  examPriorityOverride     Boolean?
-  assignedInstructorId     String?                @db.Uuid
+  weeklyBookingLimitExempt  Boolean                @default(false)
+  examPriorityOverride      Boolean?
+  assignedInstructorId      String?                @db.Uuid
   /// True when the student joined the autoscuola in autonomy via the mobile
   /// sign-up (POST /api/mobile/auth/student-register), as opposed to being added
   /// manually by staff. Self-registered students must pick their own license path
   /// at first access (REG-410): the mobile license-path gate shows while
   /// `selfRegistered && licenseCategory == null`. Default false = never gated
   /// (covers staff-created students and every pre-existing member).
-  selfRegistered           Boolean                @default(false)
+  selfRegistered            Boolean                @default(false)
   /// License path the student is pursuing (PRATICA phase). Part of the Vehicles
   /// module: drives category-aware slot matching only when vehiclesEnabled.
   /// Null on non-student members. Values: B | AM | A1 | A2 | A (see lib/autoscuole/license.ts).
-  licenseCategory          String?
+  licenseCategory           String?
   /// Transmission of the pursued license: manual | automatic.
-  transmission             String?
+  transmission              String?
   /// Whether this student may participate in group driving lessons (Guide di gruppo).
   /// Opt-in, default false. Only meaningful when limits.groupLessonsEnabled is on.
-  groupLessonsOptIn        Boolean                @default(false)
+  groupLessonsOptIn         Boolean                @default(false)
   /// Internal "pronto per l'esame" signal set by titolare (web) or istruttore
   /// (mobile) on PRATICA students. NON-binding: does not gate exam/lesson booking,
   /// never exposed to the student app. Only differentiates ready vs not-ready in
   /// the exam-creation pickers. Auto-cleared when the student leaves PRATICA.
-  examReady                Boolean                @default(false)
+  examReady                 Boolean                @default(false)
   /// When examReady was last set to true (drives "pronto da N giorni"). Null when not ready.
-  examReadyAt              DateTime?
+  examReadyAt               DateTime?
   /// User (titolare/istruttore) who marked the student ready. Null when not ready.
-  examReadyBy              String?                @db.Uuid
-  createdAt                DateTime               @default(now()) @db.Timestamp(6)
-  updatedAt                DateTime               @updatedAt
+  examReadyBy               String?                @db.Uuid
+  /// Default driving-lesson location for this student (REG-392). Set by
+  /// instructor/owner from the student detail (web + mobile). When booking a
+  /// lesson for this student, the location field pre-fills to this value. Null =
+  /// no default → the form falls back to the company sede as before.
+  defaultLocationId         String?                @db.Uuid
+  createdAt                 DateTime               @default(now()) @db.Timestamp(6)
+  updatedAt                 DateTime               @updatedAt
 
   company            Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   assignedInstructor AutoscuolaInstructor? @relation("InstructorAssignedStudents", fields: [assignedInstructorId], references: [id], onDelete: SetNull)
+  defaultLocation    AutoscuolaLocation?   @relation("MemberDefaultLocation", fields: [defaultLocationId], references: [id], onDelete: SetNull)
 
   @@id([companyId, userId])
   @@index([userId])
@@ -541,9 +547,10 @@ model AutoscuolaLocation {
   createdAt       DateTime  @default(now()) @db.Timestamp(6)
   updatedAt       DateTime  @updatedAt
 
-  company       Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  createdByUser User?                   @relation("AutoscuolaLocationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  appointments  AutoscuolaAppointment[]
+  company           Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdByUser     User?                   @relation("AutoscuolaLocationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  appointments      AutoscuolaAppointment[]
+  defaultForMembers CompanyMember[]         @relation("MemberDefaultLocation")
 
   @@index([companyId])
   @@index([companyId, archivedAt])
