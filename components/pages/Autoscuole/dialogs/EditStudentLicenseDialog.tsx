@@ -66,9 +66,15 @@ export function EditStudentLicenseDialog({
     }
   }, [open, currentLicenseCategory, currentTransmission]);
 
+  // Compare against the ACTUAL stored values, not the "B"/"manual" display
+  // defaults (REG-422): a student with no license yet has `currentLicenseCategory
+  // = null`. Falling back to "B" here made "B + manual" look unchanged → the Save
+  // button stayed disabled, so B was the ONE category the owner could never set on
+  // a fresh student (every other category differed from the "B" default and saved
+  // fine). A null current means any selection is a real change.
   const unchanged =
-    licenseCategory === (currentLicenseCategory ?? "B") &&
-    transmission === (currentTransmission ?? "manual");
+    licenseCategory === (currentLicenseCategory ?? null) &&
+    transmission === (currentTransmission ?? null);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
