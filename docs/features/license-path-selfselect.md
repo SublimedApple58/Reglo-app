@@ -19,15 +19,21 @@ Tassonomia condivisa: `lib/autoscuole/license.ts` → nuova costante `STUDENT_LI
 |------|------|
 | Schema + migration | `prisma/schema.prisma`, `prisma/migrations/20260828000000_add_company_member_self_registered/` |
 | Tassonomia | `lib/autoscuole/license.ts` (`STUDENT_LICENSE_CATEGORIES`, `isStudentLicenseCategory`) |
-| Marca il self sign-up | `app/api/mobile/auth/student-register/route.ts` (`selfRegistered: true`, **niente** seed di licenza/cambio) |
+| Marca il self sign-up | `app/api/mobile/auth/student-register/route.ts` (`selfRegistered: true`; seed licenza/cambio **solo** in `fixed_default`) |
 | Espone il flag al mobile | `app/api/autoscuole/me/route.ts` (campo `needsLicensePath`) |
 | Endpoint self-set | `app/api/autoscuole/me/license-path/route.ts` (`PATCH`, self-scoped) |
 | Setter owner (invariato) | `lib/actions/autoscuole.actions.ts` → `updateStudentLicensePath` |
+| Setting `licensePathMode` (REG-424) | `lib/actions/autoscuole-settings.actions.ts` (schema/tipo/resolver/merge/backfill) |
+| Toggle UI (REG-424) | `components/pages/Autoscuole/tabs/VehiclesTab.tsx`, `components/pages/Autoscuole/AutoscuoleResourcesPage.tsx` |
 
 ## Comportamento
 
 ### 1. Registrazione self (`student-register`)
-La membership nasce con `selfRegistered: true` e `licenseCategory`/`transmission` **non impostati** (NULL). È stato rimosso il seed che prima li valorizzava dai default azienda (`limits.defaultLicenseCategory`/`defaultTransmission` → fallback `B`/`manual`). Il resto della logica (fase AWAITING/TEORIA/PRATICA, quiz seat, `AutoscuolaCase`) è invariato. Vale anche per chi si registra con **codice istruttore** (self sign-up a tutti gli effetti).
+La membership nasce con `selfRegistered: true`. Il seed della licenza dipende dal setting `licensePathMode` (vedi §"Modalità percorso patente"):
+- **`student_choice`** (default): `licenseCategory`/`transmission` **non impostati** (NULL) → il NULL, con `selfRegistered`, attiva il gate mobile.
+- **`fixed_default`**: `licenseCategory`/`transmission` seminati subito dai default azienda (`limits.defaultLicenseCategory` → fallback `B`, `limits.defaultTransmission` → fallback `manual`) → `needsLicensePath` è `false`, il gate **non** compare.
+
+Il resto della logica (fase AWAITING/TEORIA/PRATICA, quiz seat, `AutoscuolaCase`) è invariato. Vale anche per chi si registra con **codice istruttore** (self sign-up a tutti gli effetti).
 
 ### 2. `GET /api/autoscuole/me`
 Aggiunge al payload:
@@ -46,6 +52,19 @@ Additivo/retro-compat: i client vecchi lo ignorano. `membership` arriva già com
 ## Guardia backend booking (server-side backstop, fix 2026-08-28)
 
 Il gate mobile è client-side: un'app su bundle vecchio (rollout OTA in corso) o un client che salta il gate potrebbe prenotare senza percorso patente. Inoltre il titolare può avanzare la fase da web (AWAITING → PRATICA) senza che l'allievo abbia mai scelto. Perciò `ensureStudentCanBookFromApp` (`lib/actions/autoscuole-availability.actions.ts`) ora **blocca la prenotazione** quando `selfRegistered && !licenseCategory`, **in ogni fase prenotabile** (dopo i check AWAITING/TEORIA, quindi copre PRATICA/PATENTATO). Messaggio: *"Seleziona il tuo percorso patente nell'app prima di prenotare le guide."* È **non bypassabile**: cambiare fase da web non sblocca la prenotazione finché la licenza è NULL. Copre tutti i 3 call-site (slot disponibili + richiesta prenotazione). Non tocca gli allievi manuali (`selfRegistered=false`), gestiti dallo staff.
+
+## Modalità percorso patente (REG-424)
+
+Setting a livello autoscuola `licensePathMode: 'fixed_default' | 'student_choice'` (default **`student_choice`** → zero regressioni, comportamento REG-410 invariato). Vive in `CompanyService.limits` (JSON, no colonna Prisma), stesso plumbing degli altri setting veicoli.
+
+- **`student_choice`**: l'allievo self-registered sceglie il percorso al primo accesso (gate mobile REG-410). È il comportamento storico.
+- **`fixed_default`**: al self sign-up viene assegnato d'ufficio il "Percorso patente di default" (`limits.defaultLicenseCategory`/`defaultTransmission`); il gate mobile **non** compare, il titolare cambia a mano dalla scheda allievo.
+
+**Transizione allievi esistenti**: passando a `fixed_default`, un `updateMany` fa **backfill** dei self-registered con `licenseCategory` NULL → assegna categoria+cambio di default (così non restano appesi al gate in una modalità che non li fa più scegliere). Idempotente, tocca solo `autoscuolaRole=STUDENT, selfRegistered=true, licenseCategory=null`.
+
+**Plumbing** (`lib/actions/autoscuole-settings.actions.ts`): zod schema, tipo `AutoscuolaSettingsData`, resolver di lettura, merge in update, persistenza in `nextLimits`, backfill al passaggio a `fixed_default`.
+
+**UI** (Impostazioni → Veicoli): toggle "Scelta libera del percorso patente" (`VehiclesTab.tsx`, wiring in `AutoscuoleResourcesPage.tsx`). Attivo = `student_choice`. La card "Percorso patente di default" è visibile **solo** in `fixed_default`, con collapse animato height+opacità (`AnimatePresence`/`motion.div`, stesso idioma di `VoiceSettingsPane`). Nessuna migrazione DB, nessuna OTA (comportamento mobile guidato dalla registrazione backend).
 
 ## Connessioni
 
