@@ -1405,6 +1405,128 @@ const GOV_ROWS: Array<{ key: string; settingKey: string; title: string; sub: str
 
 const NOTIF_TIMES = ["08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00"];
 
+// REG-426: opzioni "chi prenota" a livello cluster (include l'ereditarietà
+// dall'autoscuola) e i tre bucket di percorso patente.
+const CLUSTER_ACTOR_OPTIONS: Array<{ v: string; l: string }> = [
+  { v: "default", l: "Default autoscuola" },
+  { v: "students", l: "Solo allievi" },
+  { v: "instructors", l: "Solo istruttori" },
+  { v: "both", l: "Entrambi" },
+];
+
+const CLUSTER_PATH_BUCKETS = [
+  { key: "moto" as const, label: "Percorso moto", cats: "AM · A1 · A2 · A" },
+  { key: "auto" as const, label: "Percorso auto", cats: "B · BE" },
+  { key: "pro" as const, label: "Percorso professionali", cats: "C · CE · D · DE" },
+];
+
+/** "Chi prenota" del cluster: un solo controllo. Il dropdown ha una voce
+ * "Differenzia per percorso…" che, quando scelta, espande il pannello con le
+ * righe moto/auto/professionali. Ogni riga può ereditare («Default autoscuola»)
+ * o forzare un valore. Lo storage è appBookingActors (default cluster, azzerato
+ * in modalità differenzia) + appBookingActorsByPath (override per bucket). */
+function ClusterBookingActorsField({
+  settings,
+  saveMany,
+}: {
+  settings: Record<string, unknown>;
+  saveMany: (patch: Record<string, unknown>) => void;
+}) {
+  const byPath = (settings.appBookingActorsByPath ?? {}) as { moto?: string; auto?: string; pro?: string };
+  const clusterDefault = (settings.appBookingActors as string) ?? "default";
+  const hasOverrides = Boolean(byPath.moto || byPath.auto || byPath.pro);
+  const [perPathMode, setPerPathMode] = React.useState(hasOverrides);
+  // Se gli override arrivano dal server dopo il mount, apri il pannello.
+  React.useEffect(() => {
+    if (hasOverrides) setPerPathMode(true);
+  }, [hasOverrides]);
+
+  const cleanByPath = (next: { moto?: string; auto?: string; pro?: string }) => {
+    const out: Record<string, string> = {};
+    for (const key of ["moto", "auto", "pro"] as const) {
+      if (next[key]) out[key] = next[key]!;
+    }
+    return Object.keys(out).length ? out : undefined;
+  };
+
+  return (
+    <div className="border-t border-[#f0f0f0] py-5">
+      <div className="text-[15px] font-semibold text-[#222222]">Chi prenota</div>
+      <div className="mt-4 w-[240px]">
+        <OptField
+          value={perPathMode ? "per_path" : clusterDefault}
+          onChange={(v) => {
+            if (v === "per_path") {
+              // Entra in modalità differenzia: porta il default corrente nelle
+              // 3 righe (se concreto) e azzera il default cluster, così le righe
+              // «Default autoscuola» ereditano davvero dall'autoscuola.
+              setPerPathMode(true);
+              if (clusterDefault !== "default") {
+                saveMany({
+                  appBookingActors: undefined,
+                  appBookingActorsByPath: { moto: clusterDefault, auto: clusterDefault, pro: clusterDefault },
+                });
+              }
+            } else {
+              setPerPathMode(false);
+              saveMany({
+                appBookingActors: v === "default" ? undefined : v,
+                appBookingActorsByPath: undefined,
+              });
+            }
+          }}
+          options={[...CLUSTER_ACTOR_OPTIONS, { v: "per_path", l: "Differenzia per percorso…" }]}
+        />
+      </div>
+      <AnimatePresence initial={false}>
+        {perPathMode && (
+          <motion.div
+            key="cluster-per-path"
+            initial={{ height: 0, opacity: 0, overflow: "hidden" }}
+            animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
+            exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+            transition={{ duration: 0.24, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            <div className="mt-3 rounded-[14px] border border-[#e2e2e2] bg-white">
+              {CLUSTER_PATH_BUCKETS.map((bucket, i) => (
+                <div
+                  key={bucket.key}
+                  className={cn(
+                    "flex items-center justify-between gap-4 px-4 py-3",
+                    i > 0 && "border-t border-[#f0f0f0]",
+                  )}
+                >
+                  <div className="min-w-0">
+                    <div className="text-[13.5px] font-semibold text-[#222222]">{bucket.label}</div>
+                    <div className="mt-0.5 text-[11.5px] font-medium text-[#a0a0a0]">{bucket.cats}</div>
+                  </div>
+                  <div className="w-[190px] shrink-0">
+                    <OptField
+                      value={byPath[bucket.key] ?? "default"}
+                      onChange={(v) =>
+                        saveMany({
+                          appBookingActorsByPath: cleanByPath({
+                            ...byPath,
+                            [bucket.key]: v === "default" ? undefined : v,
+                          }),
+                        })
+                      }
+                      options={CLUSTER_ACTOR_OPTIONS}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 text-[12px] font-medium leading-normal text-[#929292]">
+              «Default autoscuola» eredita, per quel percorso, il valore impostato dall&apos;autoscuola.
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 function AutonomaTab({
   instructor,
   instructors,
@@ -1489,6 +1611,19 @@ function AutonomaTab({
     const next = { ...settings };
     if (value === undefined) delete next[key];
     else next[key] = value;
+    setSettings(next);
+    void persist({ settings: next }, () => setSettings(prev));
+  };
+
+  /** Salva più chiavi in un colpo solo (il JSON settings viene rimpiazzato
+   * intero: due saveSetting in sequenza si sovrascriverebbero). */
+  const saveMany = (patch: Record<string, unknown>) => {
+    const prev = settings;
+    const next = { ...settings };
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === undefined) delete next[key];
+      else next[key] = value;
+    }
     setSettings(next);
     void persist({ settings: next }, () => setSettings(prev));
   };
@@ -1636,22 +1771,8 @@ function AutonomaTab({
             </div>
           </div>
 
-          {/* Chi prenota */}
-          <div className="border-t border-[#f0f0f0] py-5">
-            <div className="text-[15px] font-semibold text-[#222222]">Chi prenota</div>
-            <div className="mt-4">
-              <OptField
-                value={(settings.appBookingActors as string) ?? "default"}
-                onChange={(v) => saveSetting("appBookingActors", v === "default" ? undefined : v)}
-                options={[
-                  { v: "default", l: "Default autoscuola" },
-                  { v: "students", l: "Solo allievi" },
-                  { v: "instructors", l: "Solo istruttori" },
-                  { v: "both", l: "Entrambi" },
-                ]}
-              />
-            </div>
-          </div>
+          {/* Chi prenota (REG-426: default cluster + differenzia per percorso) */}
+          <ClusterBookingActorsField settings={settings} saveMany={saveMany} />
 
           {/* Modalità prenotazione */}
           <div className="border-t border-[#f0f0f0] py-5">
