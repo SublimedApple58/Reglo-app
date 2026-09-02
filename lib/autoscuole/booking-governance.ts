@@ -78,19 +78,8 @@ export const parseAppBookingActorsByPath = (
 
 /**
  * Resolve the effective actors for a bucket across the cluster → company cascade
- * (REG-426). Precedence is **specificity-first**: a per-path override (at either
- * level) beats a generic default, and within the same specificity the cluster
- * beats the company. So the order is:
- *   cluster per-path → company per-path → cluster default → company default.
- *
- * This is what makes a company per-path rule (e.g. moto = "solo istruttori")
- * actually apply to a student whose autonomous cluster only has a *generic*
- * default (e.g. "entrambi"): the specific company rule wins over the cluster's
- * blanket default. A cluster that wants to override a specific path must set its
- * OWN per-path value (which then wins, being both specific and cluster-level).
- *
- * When no per-path override exists anywhere (the pre-REG-426 world), this reduces
- * to `clusterDefault ?? companyDefault` — identical to the previous behaviour.
+ * (REG-426). At each level a per-path override wins over that level's default;
+ * cluster wins over company. Any level may be undefined (unset → inherit).
  */
 export const resolveAppBookingActorsForBucket = (input: {
   bucket: LicensePathBucket;
@@ -100,8 +89,8 @@ export const resolveAppBookingActorsForBucket = (input: {
   companyByPath?: AppBookingActorsByPath | null;
 }): AppBookingActors =>
   input.clusterByPath?.[input.bucket] ??
-  input.companyByPath?.[input.bucket] ??
   input.clusterDefault ??
+  input.companyByPath?.[input.bucket] ??
   input.companyDefault;
 
 export const isStudentAppBookingEnabled = (
