@@ -44,11 +44,13 @@ import {
 import {
   APP_BOOKING_ACTOR_OPTIONS,
   AppBookingActors,
+  AppBookingActorsByPath,
   DEFAULT_APP_BOOKING_ACTORS,
   DEFAULT_INSTRUCTOR_BOOKING_MODE,
   INSTRUCTOR_BOOKING_MODE_OPTIONS,
   InstructorBookingMode,
   parseBookingGovernanceFromLimits,
+  parseAppBookingActorsByPath,
 } from "@/lib/autoscuole/booking-governance";
 
 const DEFAULT_AVAILABILITY_WEEKS = 4;
@@ -245,6 +247,13 @@ const bookingSlotDurationsSchema = z
   .transform((durations) => Array.from(new Set(durations)).sort((a, b) => a - b));
 
 const appBookingActorsSchema = z.enum(APP_BOOKING_ACTOR_OPTIONS);
+// REG-426: per-license-path override map for "chi prenota". Each bucket optional
+// (unset = inherit the default). Empty object = "no per-path overrides".
+const appBookingActorsByPathSchema = z.object({
+  moto: appBookingActorsSchema.optional(),
+  auto: appBookingActorsSchema.optional(),
+  pro: appBookingActorsSchema.optional(),
+});
 const instructorBookingModeSchema = z.enum(INSTRUCTOR_BOOKING_MODE_OPTIONS);
 const voiceAllowedActionSchema = z.enum(VOICE_ALLOWED_ACTIONS);
 const voiceOfficeHoursSchema = z
@@ -347,6 +356,7 @@ const autoscuolaSettingsPatchSchema = z
     restrictedTimeRangeEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     instructorPreferenceEnabled: z.boolean().optional(),
     appBookingActors: appBookingActorsSchema.optional(),
+    appBookingActorsByPath: appBookingActorsByPathSchema.optional(),
     instructorBookingMode: instructorBookingModeSchema.optional(),
     voiceAssistantEnabled: z.boolean().optional(),
     voiceBookingEnabled: z.boolean().optional(),
@@ -561,6 +571,7 @@ export type AutoscuolaSettingsData = {
   bookingSlotDurations: number[];
   roundedHoursOnly: boolean;
   appBookingActors: AppBookingActors;
+  appBookingActorsByPath: AppBookingActorsByPath;
   instructorBookingMode: InstructorBookingMode;
   swapEnabled: boolean;
   swapNotifyMode: (typeof SWAP_NOTIFY_MODES)[number];
@@ -926,6 +937,7 @@ const resolveAutoscuolaSettingsData = async (
         ? limits.roundedHoursOnly
         : false,
     appBookingActors: bookingGovernance.appBookingActors,
+    appBookingActorsByPath: parseAppBookingActorsByPath(limits.appBookingActorsByPath),
     instructorBookingMode: bookingGovernance.instructorBookingMode,
     swapEnabled,
     swapNotifyMode,
@@ -1289,6 +1301,11 @@ export async function updateAutoscuolaSettings(
       payload.bookingSlotDurations ?? previousBookingSlotDurations;
     const nextAppBookingActors =
       payload.appBookingActors ?? previousBookingGovernance.appBookingActors;
+    // REG-426: per-path override map. A provided payload replaces the whole map
+    // (the UI always sends the full {moto,auto,pro}); otherwise keep the stored one.
+    const nextAppBookingActorsByPath =
+      payload.appBookingActorsByPath ??
+      parseAppBookingActorsByPath((limits as Record<string, unknown>).appBookingActorsByPath);
     const nextInstructorBookingMode =
       payload.instructorBookingMode ??
       (nextAppBookingActors === "instructors" || nextAppBookingActors === "both"
@@ -1499,6 +1516,7 @@ export async function updateAutoscuolaSettings(
       bookingSlotDurations: nextBookingSlotDurations,
       roundedHoursOnly: payload.roundedHoursOnly ?? (limits.roundedHoursOnly === true),
       appBookingActors: nextAppBookingActors,
+      appBookingActorsByPath: nextAppBookingActorsByPath,
       instructorBookingMode: nextInstructorBookingMode,
       swapEnabled: nextSwapEnabled,
       swapNotifyMode: nextSwapNotifyMode,
@@ -1664,6 +1682,7 @@ export async function updateAutoscuolaSettings(
         bookingSlotDurations: nextLimits.bookingSlotDurations,
         roundedHoursOnly: nextLimits.roundedHoursOnly,
         appBookingActors: nextLimits.appBookingActors,
+        appBookingActorsByPath: nextLimits.appBookingActorsByPath,
         instructorBookingMode: nextLimits.instructorBookingMode,
         swapEnabled: nextLimits.swapEnabled,
         swapNotifyMode: nextLimits.swapNotifyMode,

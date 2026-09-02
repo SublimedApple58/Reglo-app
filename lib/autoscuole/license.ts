@@ -92,6 +92,42 @@ export function isMotoLicenseCategory(value: unknown): boolean {
 }
 
 /**
+ * License-path buckets (REG-426) — used to differentiate per-path settings such
+ * as "chi prenota dall'app". Three groups so the professional categories are
+ * NOT hidden under "auto":
+ * - moto: AM · A1 · A2 · A
+ * - auto: B · BE  (everyday car + trailer)
+ * - pro:  C · CE · D · DE  (truck/bus, professional)
+ */
+export const LICENSE_PATH_BUCKETS = ["moto", "auto", "pro"] as const;
+export type LicensePathBucket = (typeof LICENSE_PATH_BUCKETS)[number];
+
+export const LICENSE_PATH_BUCKET_LABELS: Record<LicensePathBucket, string> = {
+  moto: "Percorso moto",
+  auto: "Percorso auto",
+  pro: "Percorso professionali",
+};
+
+/** Short list of the categories in each bucket, for UI captions. */
+export const LICENSE_PATH_BUCKET_CATEGORIES: Record<LicensePathBucket, string> = {
+  moto: "AM · A1 · A2 · A",
+  auto: "B · BE",
+  pro: "C · CE · D · DE",
+};
+
+const PRO_LICENSE_CATEGORIES = new Set<string>(["C", "CE", "D", "DE"]);
+
+/**
+ * Map a license category to its path bucket. Unknown/empty → "auto" (the safe
+ * default: the everyday car path, never accidentally moto or pro).
+ */
+export function licensePathBucket(value: unknown): LicensePathBucket {
+  if (isMotoLicenseCategory(value)) return "moto";
+  if (typeof value === "string" && PRO_LICENSE_CATEGORIES.has(value)) return "pro";
+  return "auto";
+}
+
+/**
  * True when a vehicle of `vehicleCategory` is eligible for a student pursuing
  * `studentCategory`, applying the real-world MOTO HIERARCHY:
  *   AM < A1 < A2 < A

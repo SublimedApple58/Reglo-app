@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { DatePickerInput } from "@/components/ui/date-picker";
 import {
@@ -34,6 +35,9 @@ export type BookingsTabProps = {
   setBookingMinStartDate: (v: string) => void;
   appBookingActors: string;
   setAppBookingActors: (v: string) => void;
+  // REG-426: per-license-path override map ({} = nessun override, vale il default).
+  appBookingActorsByPath: { moto?: string; auto?: string; pro?: string };
+  setAppBookingActorsByPath: (next: { moto?: string; auto?: string; pro?: string }) => void;
   instructorBookingMode: string;
   setInstructorBookingMode: (v: string) => void;
   bookingSlotDurations: number[];
@@ -110,6 +114,12 @@ const APP_BOOKING_ACTOR_OPTIONS = [
   { value: "instructors", label: "Solo istruttori" },
   { value: "both", label: "Entrambi" },
 ] as const;
+// REG-426: license-path buckets for the per-path "chi prenota" override.
+const LICENSE_PATH_BUCKETS = [
+  { key: "moto" as const, label: "Percorso moto", cats: "AM · A1 · A2 · A" },
+  { key: "auto" as const, label: "Percorso auto", cats: "B · BE" },
+  { key: "pro" as const, label: "Percorso professionali", cats: "C · CE · D · DE" },
+];
 const INSTRUCTOR_BOOKING_MODE_OPTIONS = [
   { value: "manual_full", label: "Manuale totale" },
   { value: "manual_engine", label: "Manuale + motore annullamenti" },
@@ -420,6 +430,8 @@ export default function BookingsTab({
   setBookingMinStartDate,
   appBookingActors,
   setAppBookingActors,
+  appBookingActorsByPath,
+  setAppBookingActorsByPath,
   instructorBookingMode,
   setInstructorBookingMode,
   bookingSlotDurations,
@@ -506,40 +518,112 @@ export default function BookingsTab({
       {/* ══ GENERALI ══ */}
       <div className={cn("divide-y divide-[#ebebeb]", subTab !== "generali" && "hidden")}>
         <div className="py-6">
-          <SettingRow
-            title="Chi può prenotare dall'app"
-            description="Scegli chi può prenotare le guide in autonomia: gli allievi dalla loro app, gli istruttori dalla propria, o entrambi."
-            control={
-              <Select value={appBookingActors} onValueChange={setAppBookingActors}>
-                <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[200px]")}>
-                  <SelectValue placeholder="Seleziona" />
-                </SelectTrigger>
-                <SelectContent>
-                  {APP_BOOKING_ACTOR_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            }
-          />
-          {(appBookingActors === "instructors" || appBookingActors === "both") && (
-            <FieldBlock label="Modalità istruttore">
-              <Select value={instructorBookingMode} onValueChange={setInstructorBookingMode}>
-                <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[320px]")}>
-                  <SelectValue placeholder="Seleziona modalità" />
-                </SelectTrigger>
-                <SelectContent>
-                  {INSTRUCTOR_BOOKING_MODE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FieldBlock>
-          )}
+          {/* REG-426: un solo controllo. Il dropdown ha una voce "Differenzia per
+              percorso patente…" che, quando scelta, espande (animato) il pannello
+              con le righe moto/auto/professionali. */}
+          {(() => {
+            const byPath = appBookingActorsByPath ?? {};
+            const perPath = Boolean(byPath.moto || byPath.auto || byPath.pro);
+            // La modalità istruttore serve se gli istruttori sono coinvolti in un
+            // valore qualsiasi (default o uno dei percorsi).
+            const instructorsInvolved = perPath
+              ? [byPath.moto, byPath.auto, byPath.pro].some((v) => v === "instructors" || v === "both")
+              : appBookingActors === "instructors" || appBookingActors === "both";
+            return (
+              <>
+                <SettingRow
+                  title="Chi può prenotare dall'app"
+                  description="Scegli chi può prenotare le guide in autonomia. Con «Differenzia per percorso patente» imposti un valore diverso per moto, auto e professionali."
+                  control={
+                    <Select
+                      value={perPath ? "per_path" : appBookingActors}
+                      onValueChange={(v) => {
+                        if (v === "per_path") {
+                          // Entra in modalità per-percorso: parte da 3 righe tutte
+                          // sul valore attuale, così è un punto di partenza sensato.
+                          setAppBookingActorsByPath({ moto: appBookingActors, auto: appBookingActors, pro: appBookingActors });
+                        } else {
+                          setAppBookingActors(v);
+                          if (perPath) setAppBookingActorsByPath({});
+                        }
+                      }}
+                    >
+                      <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[260px]")}>
+                        <SelectValue placeholder="Seleziona" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {APP_BOOKING_ACTOR_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="per_path">Differenzia per percorso patente…</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  }
+                />
+                <AnimatePresence initial={false}>
+                  {perPath && (
+                    <motion.div
+                      key="per-path-panel"
+                      initial={{ height: 0, opacity: 0, overflow: "hidden" }}
+                      animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
+                      exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+                      transition={{ duration: 0.24, ease: [0.25, 0.1, 0.25, 1] }}
+                    >
+                      <div className="mt-3 rounded-[14px] border border-[#dddddd] bg-white">
+                        {LICENSE_PATH_BUCKETS.map((bucket, i) => (
+                          <div
+                            key={bucket.key}
+                            className={cn(
+                              "flex items-center justify-between gap-4 px-5 py-3.5",
+                              i > 0 && "border-t border-[#f0f0f0]",
+                            )}
+                          >
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-foreground">{bucket.label}</div>
+                              <div className="mt-0.5 text-[12px] font-medium text-[#a0a0a0]">{bucket.cats}</div>
+                            </div>
+                            <Select
+                              value={byPath[bucket.key] ?? appBookingActors}
+                              onValueChange={(v) => setAppBookingActorsByPath({ ...byPath, [bucket.key]: v })}
+                            >
+                              <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[200px]")}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {APP_BOOKING_ACTOR_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                {instructorsInvolved && (
+                  <FieldBlock label="Modalità istruttore">
+                    <Select value={instructorBookingMode} onValueChange={setInstructorBookingMode}>
+                      <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[320px]")}>
+                        <SelectValue placeholder="Seleziona modalità" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {INSTRUCTOR_BOOKING_MODE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FieldBlock>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         <div className="py-6">

@@ -262,6 +262,12 @@ const instructorSettingsSchema = z.object({
   bookingSlotDurations: z.array(z.number().int().min(30).max(120)).optional(),
   roundedHoursOnly: z.boolean().optional(),
   appBookingActors: z.enum(["students", "instructors", "both"]).optional(),
+  // REG-426: per-license-path override of "chi prenota" on the instructor cluster.
+  appBookingActorsByPath: z.object({
+    moto: z.enum(["students", "instructors", "both"]).optional(),
+    auto: z.enum(["students", "instructors", "both"]).optional(),
+    pro: z.enum(["students", "instructors", "both"]).optional(),
+  }).optional(),
   instructorBookingMode: z.enum(["manual_full", "manual_engine"]).optional(),
   studentBookingMode: z.enum(["engine", "free_choice"]).optional(),
   swapEnabled: z.boolean().optional(),
