@@ -162,7 +162,18 @@ export async function GET() {
 const patchSchema = z.object({
   bookingSlotDurations: z.array(z.number().int().min(30).max(120)).optional(),
   roundedHoursOnly: z.boolean().optional(),
-  appBookingActors: z.enum(["students", "instructors", "both"]).optional(),
+  appBookingActors: z.enum(["students", "instructors", "both"]).nullable().optional(),
+  // REG-426: override "chi prenota" per bucket di percorso patente. `null` (o
+  // oggetto vuoto) azzera l'override. Va di pari passo con appBookingActors:null
+  // quando il cluster passa a "Differenzia per percorso".
+  appBookingActorsByPath: z
+    .object({
+      moto: z.enum(["students", "instructors", "both"]).optional(),
+      auto: z.enum(["students", "instructors", "both"]).optional(),
+      pro: z.enum(["students", "instructors", "both"]).optional(),
+    })
+    .nullable()
+    .optional(),
   instructorBookingMode: z.enum(["manual_full", "manual_engine"]).optional(),
   swapEnabled: z.boolean().optional(),
   swapNotifyMode: z.enum(["all", "available_only"]).optional(),
@@ -238,7 +249,11 @@ export async function PATCH(request: Request) {
     }
 
     for (const [key, value] of Object.entries(autonomousPayload)) {
-      if (value !== undefined) {
+      // `null` = azzera il campo (torna al default autoscuola); `undefined` =
+      // non toccare; altrimenti sovrascrivi.
+      if (value === null) {
+        delete (next as Record<string, unknown>)[key];
+      } else if (value !== undefined) {
         (next as Record<string, unknown>)[key] = value;
       }
     }
