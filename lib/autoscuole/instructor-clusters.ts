@@ -2,6 +2,7 @@ import { prisma } from "@/db/prisma";
 import { normalizeBookingSlotDurations } from "@/lib/autoscuole/lesson-policy";
 import type {
   AppBookingActors,
+  AppBookingActorsByPath,
   InstructorBookingMode,
 } from "@/lib/autoscuole/booking-governance";
 import {
@@ -10,13 +11,18 @@ import {
   DEFAULT_APP_BOOKING_ACTORS,
   DEFAULT_INSTRUCTOR_BOOKING_MODE,
   parseBookingGovernanceFromLimits,
+  parseAppBookingActorsByPath,
+  resolveAppBookingActorsForBucket,
 } from "@/lib/autoscuole/booking-governance";
+import { licensePathBucket } from "@/lib/autoscuole/license";
 
 export type InstructorSettings = {
   bookingSlotDurations?: number[];
   roundedHoursOnly?: boolean;
   // Governance prenotazione
   appBookingActors?: AppBookingActors;
+  // REG-426: override "chi prenota" per percorso patente (moto/auto/pro).
+  appBookingActorsByPath?: AppBookingActorsByPath;
   instructorBookingMode?: InstructorBookingMode;
   studentBookingMode?: "engine" | "free_choice";
   // Scambio guide
@@ -103,6 +109,9 @@ export function parseInstructorSettings(raw: unknown): InstructorSettings {
   if (typeof obj.appBookingActors === "string" && (APP_BOOKING_ACTOR_OPTIONS as readonly string[]).includes(obj.appBookingActors)) {
     result.appBookingActors = obj.appBookingActors as AppBookingActors;
   }
+  // REG-426: per-path override map on the cluster.
+  const byPath = parseAppBookingActorsByPath(obj.appBookingActorsByPath);
+  if (Object.keys(byPath).length) result.appBookingActorsByPath = byPath;
   if (typeof obj.instructorBookingMode === "string" && (INSTRUCTOR_BOOKING_MODE_OPTIONS as readonly string[]).includes(obj.instructorBookingMode)) {
     result.instructorBookingMode = obj.instructorBookingMode as InstructorBookingMode;
   }
@@ -172,6 +181,8 @@ export type CompanyBookingDefaults = {
   bookingSlotDurations: number[];
   roundedHoursOnly: boolean;
   appBookingActors: AppBookingActors;
+  // REG-426: per-path override map at company level.
+  appBookingActorsByPath?: AppBookingActorsByPath;
   instructorBookingMode: InstructorBookingMode;
   swapEnabled: boolean;
   swapNotifyMode: "all" | "available_only";
@@ -195,6 +206,7 @@ export function buildCompanyBookingDefaults(limits: Record<string, unknown>): Co
     bookingSlotDurations: normalizeBookingSlotDurations(limits.bookingSlotDurations),
     roundedHoursOnly: limits.roundedHoursOnly === true,
     appBookingActors: governance.appBookingActors,
+    appBookingActorsByPath: parseAppBookingActorsByPath(limits.appBookingActorsByPath),
     instructorBookingMode: governance.instructorBookingMode,
     swapEnabled: limits.swapEnabled === true,
     swapNotifyMode: limits.swapNotifyMode === "available_only" ? "available_only" : "all",
@@ -269,6 +281,8 @@ export async function resolveEffectiveBookingSettings(
   const member = await prisma.companyMember.findFirst({
     where: { companyId, userId: studentId, autoscuolaRole: "STUDENT" },
     select: {
+      // REG-426: the student's license path bucket drives the per-path resolution.
+      licenseCategory: true,
       assignedInstructorId: true,
       assignedInstructor: {
         select: {
@@ -282,6 +296,16 @@ export async function resolveEffectiveBookingSettings(
         },
       },
     },
+  });
+
+  // REG-426: resolve "chi prenota" for the student's license-path bucket. The
+  // company-level per-path override applies even when the student has no
+  // autonomous cluster (below); the cluster override, if any, wins over it.
+  const bucket = licensePathBucket(member?.licenseCategory ?? null);
+  base.appBookingActors = resolveAppBookingActorsForBucket({
+    bucket,
+    companyDefault: defaults.appBookingActors,
+    companyByPath: defaults.appBookingActorsByPath,
   });
 
   if (!member?.assignedInstructorId || !member.assignedInstructor) return base;
@@ -299,7 +323,15 @@ export async function resolveEffectiveBookingSettings(
   // Waterfall: cluster override → company default
   if (settings.bookingSlotDurations?.length) base.bookingSlotDurations = settings.bookingSlotDurations;
   if (typeof settings.roundedHoursOnly === "boolean") base.roundedHoursOnly = settings.roundedHoursOnly;
-  if (settings.appBookingActors !== undefined) base.appBookingActors = settings.appBookingActors;
+  // REG-426: full cluster→company per-path resolution (cluster per-path wins,
+  // then cluster default, then company per-path, then company default).
+  base.appBookingActors = resolveAppBookingActorsForBucket({
+    bucket,
+    clusterDefault: settings.appBookingActors,
+    clusterByPath: settings.appBookingActorsByPath,
+    companyDefault: defaults.appBookingActors,
+    companyByPath: defaults.appBookingActorsByPath,
+  });
   if (settings.instructorBookingMode !== undefined) base.instructorBookingMode = settings.instructorBookingMode;
   if (typeof settings.swapEnabled === "boolean") base.swapEnabled = settings.swapEnabled;
   if (settings.swapNotifyMode !== undefined) base.swapNotifyMode = settings.swapNotifyMode;

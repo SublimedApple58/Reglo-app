@@ -481,6 +481,12 @@ export function AutoscuoleResourcesPage({
   // ── Instructor cluster panel state
   // Task 3: new cluster booking settings
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
+  // REG-426: per-license-path override map ({} = nessun override).
+  const [appBookingActorsByPath, setAppBookingActorsByPath] = React.useState<{
+    moto?: string;
+    auto?: string;
+    pro?: string;
+  }>({});
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
   const [instructors, setInstructors] = React.useState<InstructorDetail[]>([]);
   // Sick leave state
@@ -722,6 +728,9 @@ export function AutoscuoleResourcesPage({
         ? (res.data.appBookingActors as AppBookingActorsValue)
         : "students",
     );
+    setAppBookingActorsByPath(
+      (res.data.appBookingActorsByPath as { moto?: string; auto?: string; pro?: string }) ?? {},
+    );
     setInstructorBookingMode(
       INSTRUCTOR_BOOKING_MODE_OPTIONS.some(
         (option) => option.value === res.data.instructorBookingMode,
@@ -813,6 +822,17 @@ export function AutoscuoleResourcesPage({
     // singolo campo non basta, alleghiamo il valore corrente della select.
     ...(v === "instructors" || v === "both" ? { instructorBookingMode } : {}),
   }));
+  const saveAppBookingActorsByPath = persistField(
+    appBookingActorsByPath,
+    setAppBookingActorsByPath,
+    (v) => ({
+      appBookingActorsByPath: v as {
+        moto?: AppBookingActorsValue;
+        auto?: AppBookingActorsValue;
+        pro?: AppBookingActorsValue;
+      },
+    }),
+  );
   const saveInstructorBookingMode = persistField(
     instructorBookingMode,
     setInstructorBookingMode,
@@ -2219,6 +2239,8 @@ export function AutoscuoleResourcesPage({
             setBookingMinStartDate={saveBookingMinStartDate}
             appBookingActors={appBookingActors}
             setAppBookingActors={(v) => saveAppBookingActors(v as AppBookingActorsValue)}
+            appBookingActorsByPath={appBookingActorsByPath}
+            setAppBookingActorsByPath={(v) => saveAppBookingActorsByPath(v)}
             instructorBookingMode={instructorBookingMode}
             setInstructorBookingMode={(v) => saveInstructorBookingMode(v as InstructorBookingModeValue)}
             bookingSlotDurations={bookingSlotDurations}

@@ -1,4 +1,8 @@
 import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
+import {
+  LICENSE_PATH_BUCKETS,
+  type LicensePathBucket,
+} from "@/lib/autoscuole/license";
 
 export const APP_BOOKING_ACTOR_OPTIONS = [
   "students",
@@ -6,6 +10,13 @@ export const APP_BOOKING_ACTOR_OPTIONS = [
   "both",
 ] as const;
 export type AppBookingActors = (typeof APP_BOOKING_ACTOR_OPTIONS)[number];
+
+/**
+ * Per-license-path override of `appBookingActors` (REG-426). A bucket left unset
+ * inherits the level default. Stored on `limits.appBookingActorsByPath` (company)
+ * and on the cluster settings (`InstructorClusterSettings`).
+ */
+export type AppBookingActorsByPath = Partial<Record<LicensePathBucket, AppBookingActors>>;
 
 export const INSTRUCTOR_BOOKING_MODE_OPTIONS = [
   "manual_full",
@@ -47,6 +58,40 @@ export const parseBookingGovernanceFromLimits = (
     instructorBookingMode,
   };
 };
+
+/**
+ * Parse the per-path override map (REG-426) from a raw JSON value (limits or
+ * cluster settings). Only valid actor values in known buckets are kept.
+ */
+export const parseAppBookingActorsByPath = (
+  raw: unknown,
+): AppBookingActorsByPath => {
+  if (!raw || typeof raw !== "object") return {};
+  const obj = raw as Record<string, unknown>;
+  const out: AppBookingActorsByPath = {};
+  for (const bucket of LICENSE_PATH_BUCKETS) {
+    const v = normalizeString(obj[bucket]);
+    if (APP_BOOKING_ACTOR_SET.has(v)) out[bucket] = v as AppBookingActors;
+  }
+  return out;
+};
+
+/**
+ * Resolve the effective actors for a bucket across the cluster → company cascade
+ * (REG-426). At each level a per-path override wins over that level's default;
+ * cluster wins over company. Any level may be undefined (unset → inherit).
+ */
+export const resolveAppBookingActorsForBucket = (input: {
+  bucket: LicensePathBucket;
+  clusterDefault?: AppBookingActors | null;
+  clusterByPath?: AppBookingActorsByPath | null;
+  companyDefault: AppBookingActors;
+  companyByPath?: AppBookingActorsByPath | null;
+}): AppBookingActors =>
+  input.clusterByPath?.[input.bucket] ??
+  input.clusterDefault ??
+  input.companyByPath?.[input.bucket] ??
+  input.companyDefault;
 
 export const isStudentAppBookingEnabled = (
   governance: BookingGovernanceSettings,
