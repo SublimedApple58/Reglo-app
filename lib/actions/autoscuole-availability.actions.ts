@@ -5479,6 +5479,9 @@ export async function getGroupLessonInvites(
           endsAt: true,
           capacity: true,
           kind: true,
+          // Tipo guida moto (birilli/strada) condiviso dal container: l'allievo
+          // deve vederlo mentre sceglie a quale guida di gruppo moto iscriversi.
+          motoLessonType: true,
           notes: true,
           instructor: { select: { name: true } },
           vehicle: { select: { name: true, licenseCategory: true, transmission: true } },
@@ -5583,6 +5586,10 @@ export async function getGroupLessonInvites(
           endsAt: gl.endsAt!.toISOString(),
           capacity: gl.capacity,
           kind: gl.kind,
+          // Tipo guida moto (birilli/strada) del container — l'allievo lo vede
+          // sulla card invito per scegliere a quale iscriversi (null se non moto
+          // o non impostato).
+          motoLessonType: gl.motoLessonType ?? null,
           filledSeats: gl.appointments.length,
           openSeats: Math.max(0, gl.capacity - gl.appointments.length),
           // REG-421 — false only for a blocked student: the card is shown but

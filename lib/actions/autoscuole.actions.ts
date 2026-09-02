@@ -2452,6 +2452,11 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
           type: true,
           types: true,
           rating: true,
+          // Tipo guida moto individuale (birilli/strada): l'allievo lo vede sulla
+          // card della sua guida moto prenotata in home (light branch usato da
+          // AllievoHomeScreen). Sui gruppi resta null qui — il tipo del gruppo
+          // arriva da groupLessonMotoType (fetchGroupLessonFill).
+          motoLessonType: true,
           startsAt: true,
           endsAt: true,
           status: true,

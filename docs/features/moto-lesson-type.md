@@ -49,6 +49,7 @@ da form, dialog e agenda):
 | `lib/actions/autoscuole.actions.ts` | `createGroupLessonSchema`/`updateGroupLessonSchema.motoLessonType` (`z.enum(MOTO_LESSON_TYPES).nullable().optional()`), persistito nel ramo **moto** di `createGroupLesson`/`updateGroupLesson` (null per gli standard); `getGroupLesson`/`getGroupLessonsForAgenda` lo espongono; bootstrap agenda: `groupLessonMotoType` su righe reali + placeholder `gl-empty:` (mappa `agendaGlInfo` + helper `fetchGroupLessonFill`) |
 | `components/pages/Autoscuole/dialogs/GroupLessonCreateDialog.tsx` | selettore Birilli/Strada in modalità Moto, passato in `createGroupLesson({motoLessonType})`; reset al cambio kind/chiusura |
 | `components/pages/Autoscuole/dialogs/GroupLessonManageDialog.tsx` | riga editor inline "Tipo guida moto" (solo `kind="moto"`), salva via `updateGroupLesson({motoLessonType})`; tap-to-clear |
+| `lib/actions/autoscuole-availability.actions.ts` | `getGroupLessonInvites`: `motoLessonType` nel `select` del gruppo + nella serializzazione dell'invito → l'allievo vede birilli/strada mentre sceglie a quale iscriversi (visibilità allievo) |
 
 ## Comportamento
 - **Creazione** (`AutoscuoleAgendaPage`, popover "Nuovo appuntamento"): il
@@ -67,10 +68,24 @@ da form, dialog e agenda):
   di dettaglio dell'evento compare la riga "Guida moto: Birilli/Strada".
 
 ## Mobile
-Il mobile **non consuma ancora** `motoLessonType`. Il campo passa comunque
-attraverso il bootstrap agenda condiviso (`getAutoscuolaAgendaBootstrapAction`) e
-`getAutoscuolaAppointmentsFiltered` (via `...rest` sui select che lo includono) →
-disponibile quando si vorrà mostrarlo su mobile. Follow-up.
+- **Istruttore/titolare** (REG-406): sceglie il tipo in creazione guida di gruppo
+  moto (`CreateGroupLessonScreen`), lo vede read-only in gestione
+  (`manage-group-lesson.tsx`) e come badge in agenda (`DayItinerary`).
+- **Allievo** (guide di GRUPPO moto): vede il tipo birilli/strada in tre punti —
+  (1) **inviti** (`GroupLessonInvitesScreen`, per scegliere a quale iscriversi):
+  `getGroupLessonInvites` serializza `motoLessonType` → `GroupLessonInvite.motoLessonType`
+  → riga sulla card; (2) **dettaglio** guida di gruppo (`group-lesson-detail.tsx`,
+  da `getGroupLesson().motoLessonType`) → riga "Tipo guida"; (3) **home**
+  (`AllievoHomeScreen`, card guida prenotata, da `AutoscuolaAppointment.groupLessonMotoType`)
+  → chip compatto. Terminologia/icone dal modulo `src/utils/motoLessonType.ts`.
+- **Allievo — guide moto INDIVIDUALI**: vede birilli/strada in due punti — (1)
+  **home** (`AllievoHomeScreen`, chip nel footer della hero card della prossima
+  guida) e (2) **dettaglio** guida (`app/(tabs)/home/lesson-detail.tsx`, riga
+  "Tipo guida"). Richiesto un fix BE: il ramo `light` di
+  `getAutoscuolaAppointmentsFiltered` (usato da `AllievoHomeScreen`, `light:true`)
+  non selezionava `motoLessonType` → aggiunto al `select` (il ramo non-`light`
+  con `include` lo aveva già). Le mini-card orizzontali restano senza (troppo
+  compatte; il tap apre il dettaglio che lo mostra).
 
 ## Connected features
 - [appointments.md](appointments.md) — il campo vive sull'`AutoscuolaAppointment`
