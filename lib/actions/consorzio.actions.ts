@@ -3,6 +3,11 @@
 import { z } from "zod";
 
 import { prisma } from "@/db/prisma";
+import {
+  AUTOSCUOLE_CACHE_SEGMENTS,
+  invalidateAutoscuoleCache,
+} from "@/lib/autoscuole/cache";
+import { CONSORTIUM_LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
 import { requireConsortium } from "@/lib/service-access";
 import { formatError } from "@/lib/utils";
 
@@ -422,6 +427,426 @@ export async function archiveConsorzioAccountingCode(codeId: string) {
       where: { id: row.id },
       data: { archivedAt: new Date() },
     });
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+// ─── Prezzi (Impostazioni → Prenotazioni e allievi → Prezzi) ─
+
+const pricingSchema = z.object({
+  hourlyByCategory: z.record(
+    z.enum(CONSORTIUM_LICENSE_CATEGORIES),
+    z.number().min(0).max(10000).nullable(),
+  ),
+  lateCancellationCutoffHours: z.number().int().min(0).max(336),
+  lateCancellationPenaltyPct: z.number().int().min(0).max(100),
+});
+
+export type ConsorzioPricing = {
+  hourlyByCategory: Partial<Record<string, number>>;
+  lateCancellationCutoffHours: number;
+  lateCancellationPenaltyPct: number;
+};
+
+const DEFAULT_CUTOFF_HOURS = 48;
+const DEFAULT_PENALTY_PCT = 100;
+
+const parsePricingFromLimits = (limits: Record<string, unknown>): ConsorzioPricing => {
+  const raw = (limits.consorzioPricing ?? {}) as Record<string, unknown>;
+  const hourlyRaw = (raw.hourlyByCategory ?? {}) as Record<string, unknown>;
+  const hourlyByCategory: Partial<Record<string, number>> = {};
+  for (const category of CONSORTIUM_LICENSE_CATEGORIES) {
+    const value = hourlyRaw[category];
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+      hourlyByCategory[category] = value;
+    }
+  }
+  return {
+    hourlyByCategory,
+    lateCancellationCutoffHours:
+      typeof raw.lateCancellationCutoffHours === "number"
+        ? raw.lateCancellationCutoffHours
+        : DEFAULT_CUTOFF_HOURS,
+    lateCancellationPenaltyPct:
+      typeof raw.lateCancellationPenaltyPct === "number"
+        ? raw.lateCancellationPenaltyPct
+        : DEFAULT_PENALTY_PCT,
+  };
+};
+
+export async function getConsorzioPricing() {
+  try {
+    const { company } = await requireConsortium();
+    const service = company.services?.find((s) => s.serviceKey === "AUTOSCUOLE");
+    const limits = (service?.limits ?? {}) as Record<string, unknown>;
+    return { success: true as const, data: parsePricingFromLimits(limits) };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+export async function updateConsorzioPricing(input: z.infer<typeof pricingSchema>) {
+  try {
+    const { membership } = await requireConsortium();
+    const payload = pricingSchema.parse(input);
+
+    const service = await prisma.companyService.findFirst({
+      where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
+    });
+    if (!service) {
+      return { success: false as const, message: "Servizio non trovato." };
+    }
+
+    const limits = (service.limits ?? {}) as Record<string, unknown>;
+    const hourlyByCategory: Partial<Record<string, number>> = {};
+    for (const category of CONSORTIUM_LICENSE_CATEGORIES) {
+      const value = payload.hourlyByCategory[category];
+      if (typeof value === "number") hourlyByCategory[category] = value;
+    }
+
+    await prisma.companyService.update({
+      where: { id: service.id },
+      data: {
+        limits: {
+          ...limits,
+          consorzioPricing: {
+            hourlyByCategory,
+            lateCancellationCutoffHours: payload.lateCancellationCutoffHours,
+            lateCancellationPenaltyPct: payload.lateCancellationPenaltyPct,
+          },
+        } as object,
+      },
+    });
+
+    await invalidateAutoscuoleCache({
+      companyId: membership.companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.SETTINGS],
+    });
+
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+// ─── Fatturazione (contabilizzazione guide → autoscuole) ────
+
+const billingMonthSchema = z.object({
+  /** "YYYY-MM" */
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+});
+
+const setBillingFlagsSchema = z.object({
+  appointmentId: z.string().uuid(),
+  settled: z.boolean().optional(),
+  invoiceSent: z.boolean().optional(),
+});
+
+const setAppointmentCodesSchema = z.object({
+  appointmentId: z.string().uuid(),
+  codeIds: z.array(z.string().uuid()),
+});
+
+export type ConsorzioBillingLesson = {
+  appointmentId: string;
+  startsAt: string;
+  durationMinutes: number;
+  studentName: string;
+  licenseCategory: string | null;
+  instructorName: string | null;
+  vehicleName: string | null;
+  codes: Array<{ id: string; code: string }>;
+  price: number;
+  settled: boolean;
+  invoiceSent: boolean;
+};
+
+export type ConsorzioBillingSchoolGroup = {
+  schoolId: string;
+  schoolName: string;
+  schoolCity: string | null;
+  lessons: ConsorzioBillingLesson[];
+  total: number;
+};
+
+const decimalToNumber = (value: unknown): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+/**
+ * Vista Fatturazione di un mese: guide (non annullate) degli allievi del
+ * consorzio raggruppate per autoscuola consorziata. Il prezzo di una guida è
+ * lo snapshot in ConsorzioLessonBilling se esiste (creato al primo toggle
+ * saldata/fatturata), altrimenti è calcolato live = durata/60 × tariffa
+ * corrente della categoria dell'allievo. Così i ritocchi di tariffa si
+ * riflettono sulle guide non ancora certificate, mai su quelle già saldate.
+ */
+export async function getConsorzioBilling(input: z.infer<typeof billingMonthSchema>) {
+  try {
+    const { membership, company } = await requireConsortium();
+    const companyId = membership.companyId;
+    const payload = billingMonthSchema.parse(input);
+
+    const [yearStr, monthStr] = payload.month.split("-");
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    const monthStart = new Date(Date.UTC(year, month - 1, 1));
+    const monthEnd = new Date(Date.UTC(year, month, 1));
+
+    const service = company.services?.find((s) => s.serviceKey === "AUTOSCUOLE");
+    const pricing = parsePricingFromLimits(
+      (service?.limits ?? {}) as Record<string, unknown>,
+    );
+
+    const members = await prisma.companyMember.findMany({
+      where: { companyId, consorzioSchoolId: { not: null }, autoscuolaRole: "STUDENT" },
+      select: {
+        userId: true,
+        consorzioSchoolId: true,
+        licenseCategory: true,
+        user: { select: { name: true } },
+        consorzioAccountingCodes: {
+          select: { code: { select: { id: true, code: true } } },
+        },
+      },
+    });
+    const memberByUserId = new Map(members.map((m) => [m.userId, m]));
+
+    const appointments = members.length
+      ? await prisma.autoscuolaAppointment.findMany({
+          where: {
+            companyId,
+            studentId: { in: members.map((m) => m.userId) },
+            startsAt: { gte: monthStart, lt: monthEnd },
+            status: { not: "cancelled" },
+            type: { notIn: ["esame", "group_lesson"] },
+          },
+          select: {
+            id: true,
+            studentId: true,
+            startsAt: true,
+            endsAt: true,
+            instructor: { select: { name: true } },
+            vehicle: { select: { name: true } },
+            consorzioBilling: {
+              select: { priceAmount: true, settledAt: true, invoiceSentAt: true },
+            },
+            consorzioAccountingCodes: {
+              select: { code: { select: { id: true, code: true } } },
+            },
+          },
+          orderBy: { startsAt: "asc" },
+        })
+      : [];
+
+    const schools = await prisma.consorzioSchool.findMany({
+      where: { consorzioCompanyId: companyId },
+      select: { id: true, name: true, city: true, status: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const lessonsBySchool = new Map<string, ConsorzioBillingLesson[]>();
+    for (const appt of appointments) {
+      const member = appt.studentId ? memberByUserId.get(appt.studentId) : undefined;
+      if (!member?.consorzioSchoolId) continue;
+      const durationMinutes = appt.endsAt
+        ? Math.max(0, Math.round((appt.endsAt.getTime() - appt.startsAt.getTime()) / 60000))
+        : 60;
+      const tariff = member.licenseCategory
+        ? pricing.hourlyByCategory[member.licenseCategory]
+        : undefined;
+      const livePrice =
+        tariff !== undefined ? Math.round(((durationMinutes / 60) * tariff) * 100) / 100 : 0;
+      const billing = appt.consorzioBilling;
+      // Codici della guida: espliciti se presenti, altrimenti i default allievo.
+      const codes = appt.consorzioAccountingCodes.length
+        ? appt.consorzioAccountingCodes.map((link) => link.code)
+        : member.consorzioAccountingCodes.map((link) => link.code);
+
+      const lesson: ConsorzioBillingLesson = {
+        appointmentId: appt.id,
+        startsAt: appt.startsAt.toISOString(),
+        durationMinutes,
+        studentName: member.user.name ?? "—",
+        licenseCategory: member.licenseCategory,
+        instructorName: appt.instructor?.name ?? null,
+        vehicleName: appt.vehicle?.name ?? null,
+        codes,
+        price: billing ? decimalToNumber(billing.priceAmount) : livePrice,
+        settled: Boolean(billing?.settledAt),
+        invoiceSent: Boolean(billing?.invoiceSentAt),
+      };
+      const list = lessonsBySchool.get(member.consorzioSchoolId) ?? [];
+      list.push(lesson);
+      lessonsBySchool.set(member.consorzioSchoolId, list);
+    }
+
+    const groups: ConsorzioBillingSchoolGroup[] = schools
+      .filter((school) => school.status !== "removed" || lessonsBySchool.has(school.id))
+      .map((school) => {
+        const lessons = lessonsBySchool.get(school.id) ?? [];
+        return {
+          schoolId: school.id,
+          schoolName: school.name,
+          schoolCity: school.city,
+          lessons,
+          total: Math.round(lessons.reduce((sum, lesson) => sum + lesson.price, 0) * 100) / 100,
+        };
+      })
+      .filter((group) => group.lessons.length > 0);
+
+    const allLessons = groups.flatMap((group) => group.lessons);
+    const total = Math.round(allLessons.reduce((sum, l) => sum + l.price, 0) * 100) / 100;
+    const settledTotal =
+      Math.round(
+        allLessons.filter((l) => l.settled).reduce((sum, l) => sum + l.price, 0) * 100,
+      ) / 100;
+
+    const codes = await prisma.consorzioAccountingCode.findMany({
+      where: { consorzioCompanyId: companyId, archivedAt: null },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, code: true },
+    });
+
+    return {
+      success: true as const,
+      data: {
+        groups,
+        totals: {
+          total,
+          settled: settledTotal,
+          outstanding: Math.round((total - settledTotal) * 100) / 100,
+        },
+        codes,
+      },
+    };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+/**
+ * Toggle "saldata" / "fattura inviata" su una guida. Al primo toggle la riga
+ * di billing viene creata congelando il prezzo corrente (durata/60 × tariffa).
+ */
+export async function setConsorzioLessonBillingFlags(
+  input: z.infer<typeof setBillingFlagsSchema>,
+) {
+  try {
+    const { membership, company } = await requireConsortium();
+    const companyId = membership.companyId;
+    const payload = setBillingFlagsSchema.parse(input);
+
+    const appointment = await prisma.autoscuolaAppointment.findFirst({
+      where: { id: payload.appointmentId, companyId },
+      select: {
+        id: true,
+        studentId: true,
+        startsAt: true,
+        endsAt: true,
+        consorzioBilling: { select: { id: true } },
+      },
+    });
+    if (!appointment?.studentId) {
+      return { success: false as const, message: "Guida non trovata." };
+    }
+    const member = await prisma.companyMember.findFirst({
+      where: { companyId, userId: appointment.studentId },
+      select: { consorzioSchoolId: true, licenseCategory: true },
+    });
+    if (!member?.consorzioSchoolId) {
+      return { success: false as const, message: "Guida senza autoscuola consorziata." };
+    }
+
+    const flagPatch: { settledAt?: Date | null; invoiceSentAt?: Date | null } = {};
+    if (payload.settled !== undefined) flagPatch.settledAt = payload.settled ? new Date() : null;
+    if (payload.invoiceSent !== undefined) {
+      flagPatch.invoiceSentAt = payload.invoiceSent ? new Date() : null;
+    }
+
+    if (appointment.consorzioBilling) {
+      await prisma.consorzioLessonBilling.update({
+        where: { id: appointment.consorzioBilling.id },
+        data: flagPatch,
+      });
+    } else {
+      const service = company.services?.find((s) => s.serviceKey === "AUTOSCUOLE");
+      const pricing = parsePricingFromLimits(
+        (service?.limits ?? {}) as Record<string, unknown>,
+      );
+      const durationMinutes = appointment.endsAt
+        ? Math.max(
+            0,
+            Math.round(
+              (appointment.endsAt.getTime() - appointment.startsAt.getTime()) / 60000,
+            ),
+          )
+        : 60;
+      const tariff = member.licenseCategory
+        ? pricing.hourlyByCategory[member.licenseCategory]
+        : undefined;
+      const price =
+        tariff !== undefined ? Math.round(((durationMinutes / 60) * tariff) * 100) / 100 : 0;
+      await prisma.consorzioLessonBilling.create({
+        data: {
+          appointmentId: appointment.id,
+          consorzioCompanyId: companyId,
+          schoolId: member.consorzioSchoolId,
+          priceAmount: price,
+          ...flagPatch,
+        },
+      });
+    }
+
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+/** Sostituisce i codici contabili espliciti di una singola guida. */
+export async function setConsorzioAppointmentAccountingCodes(
+  input: z.infer<typeof setAppointmentCodesSchema>,
+) {
+  try {
+    const { membership } = await requireConsortium();
+    const companyId = membership.companyId;
+    const payload = setAppointmentCodesSchema.parse(input);
+
+    const appointment = await prisma.autoscuolaAppointment.findFirst({
+      where: { id: payload.appointmentId, companyId },
+      select: { id: true },
+    });
+    if (!appointment) {
+      return { success: false as const, message: "Guida non trovata." };
+    }
+
+    const validCodes = payload.codeIds.length
+      ? await prisma.consorzioAccountingCode.findMany({
+          where: { id: { in: payload.codeIds }, consorzioCompanyId: companyId },
+          select: { id: true },
+        })
+      : [];
+
+    await prisma.$transaction([
+      prisma.consorzioAppointmentAccountingCode.deleteMany({
+        where: { appointmentId: appointment.id },
+      }),
+      ...(validCodes.length
+        ? [
+            prisma.consorzioAppointmentAccountingCode.createMany({
+              data: validCodes.map((code) => ({
+                codeId: code.id,
+                appointmentId: appointment.id,
+              })),
+            }),
+          ]
+        : []),
+    ]);
+
     return { success: true as const };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
