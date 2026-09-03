@@ -109,7 +109,7 @@ export function ConsorzioPrezziPane() {
                 void persist({ ...pricing, lateCancellationCutoffHours: Number(value) })
               }
             >
-              <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-xl border-[#e6e6e6] bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-none">
+              <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-[12px] border-[#e6e6e6] bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-none">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -129,7 +129,7 @@ export function ConsorzioPrezziPane() {
                 void persist({ ...pricing, lateCancellationPenaltyPct: Number(value) })
               }
             >
-              <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-xl border-[#e6e6e6] bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-none">
+              <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-[12px] border-[#e6e6e6] bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-none">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -181,7 +181,7 @@ export function ConsorzioPrezziPane() {
                       if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                     }}
                     placeholder="—"
-                    className="h-[46px] w-full rounded-xl border-[1.5px] border-[#e2e2e2] bg-white pl-4 pr-[70px] text-[15px] font-semibold text-[#222222] outline-none transition-colors focus:border-[#222222]"
+                    className="h-[46px] w-full rounded-[12px] border-[1.5px] border-[#e2e2e2] bg-white pl-4 pr-[70px] text-[15px] font-semibold text-[#222222] outline-none transition-colors focus:border-[#222222]"
                   />
                   <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-[#a0a0a0]">
                     € / ora

@@ -7,6 +7,7 @@ import { useLocale } from "next-intl";
 import { ChevronLeft, Plus } from "lucide-react";
 
 import { AdminUsersCreateDialog } from "@/components/pages/AdminUsers/AdminUsersCreateDialog";
+import { ConsorzioStudentDrawer } from "@/components/pages/Consorzio/ConsorzioStudentDrawer";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,7 +34,6 @@ import { LoadingDots } from "@/components/ui/loading-dots";
 import {
   getConsorzioSchool,
   listConsorzioAccountingCodes,
-  setConsorzioMemberAccountingCodes,
   setConsorzioSchoolStatus,
   updateConsorzioSchool,
   type ConsorzioSchoolStudent,
@@ -126,10 +126,8 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
   const [removeOpen, setRemoveOpen] = React.useState(false);
   const [addStudentOpen, setAddStudentOpen] = React.useState(false);
 
-  // Editing codici contabili di un allievo esistente.
-  const [codesFor, setCodesFor] = React.useState<ConsorzioSchoolStudent | null>(null);
-  const [codesDraft, setCodesDraft] = React.useState<string[]>([]);
-  const [codesSaving, setCodesSaving] = React.useState(false);
+  // Drawer laterale dettaglio allievo (click sulla riga, come nel prototipo).
+  const [drawerUserId, setDrawerUserId] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     const [schoolRes, codesRes] = await Promise.all([
@@ -194,28 +192,6 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
     toast.success({
       description: status === "suspended" ? "Autoscuola sospesa." : "Autoscuola riattivata.",
     });
-    void load();
-  };
-
-  const openCodesFor = (student: ConsorzioSchoolStudent) => {
-    setCodesFor(student);
-    setCodesDraft(student.codes.map((code) => code.id));
-  };
-
-  const handleSaveCodes = async () => {
-    if (!codesFor) return;
-    setCodesSaving(true);
-    const res = await setConsorzioMemberAccountingCodes({
-      userId: codesFor.userId,
-      codeIds: codesDraft,
-    });
-    setCodesSaving(false);
-    if (!res.success) {
-      toast.error({ description: res.message });
-      return;
-    }
-    toast.success({ description: "Codici aggiornati." });
-    setCodesFor(null);
     void load();
   };
 
@@ -299,7 +275,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
 
       <div className="mt-7 grid gap-4 lg:grid-cols-[625px_minmax(0,1fr)]">
         {/* Dati anagrafici */}
-        <div className="rounded-2xl border border-[#ebebeb] bg-white px-6 py-[22px]">
+        <div className="rounded-[16px] border border-[#ebebeb] bg-white px-6 py-[22px]">
           <div className="flex items-center justify-between">
             <div className="text-[11px] font-bold uppercase tracking-[0.8px] text-[#929292]">
               Dati anagrafici
@@ -392,7 +368,8 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
             {students.map((student) => (
               <div
                 key={student.userId}
-                className="grid grid-cols-[1.6fr_90px_1fr_110px_70px_1.2fr] items-center gap-x-3.5 rounded-[10px] border-b border-[#f2f2f2] px-4 py-3.5"
+                onClick={() => setDrawerUserId(student.userId)}
+                className="grid cursor-pointer grid-cols-[1.6fr_90px_1fr_110px_70px_1.2fr] items-center gap-x-3.5 rounded-[10px] border-b border-[#f2f2f2] px-4 py-3.5 transition-colors hover:bg-[#fafafa]"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1a1a2e] text-[11px] font-bold text-white">
@@ -423,16 +400,9 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
                 <div className="text-right text-[14px] font-semibold text-[#222222]">
                   {student.lessonsCount}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => openCodesFor(student)}
-                  className="flex cursor-pointer flex-wrap items-center gap-1.5"
-                  title="Modifica codici contabili"
-                >
+                <div className="flex flex-wrap items-center gap-1.5">
                   {student.codes.length === 0 ? (
-                    <span className="text-[11.5px] font-semibold text-[#b0b0b0] underline underline-offset-2">
-                      Aggiungi
-                    </span>
+                    <span className="text-[11.5px] font-medium text-[#b0b0b0]">—</span>
                   ) : (
                     student.codes.map((code) => (
                       <span
@@ -444,7 +414,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
                       </span>
                     ))
                   )}
-                </button>
+                </div>
               </div>
             ))}
           </div>
@@ -565,53 +535,12 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
         onCreated={() => void load()}
       />
 
-      {/* Dialog codici contabili allievo */}
-      <Dialog open={codesFor !== null} onOpenChange={(open) => !open && setCodesFor(null)}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Codici contabili</DialogTitle>
-            <DialogDescription>{codesFor?.name}</DialogDescription>
-          </DialogHeader>
-          {codes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Nessun codice definito. I codici si creano dalla sezione Fatturazione.
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {codes.map((code) => {
-                const active = codesDraft.includes(code.id);
-                return (
-                  <button
-                    key={code.id}
-                    type="button"
-                    onClick={() =>
-                      setCodesDraft((prev) =>
-                        active ? prev.filter((id) => id !== code.id) : [...prev, code.id],
-                      )
-                    }
-                    className={
-                      active
-                        ? "cursor-pointer rounded-full bg-[#1a1a2e] px-[11px] py-1.5 text-[12.5px] font-semibold text-white"
-                        : "cursor-pointer rounded-full bg-[#f2f2f2] px-[11px] py-1.5 text-[12.5px] font-semibold text-[#444444] hover:bg-[#e9e9e9]"
-                    }
-                  >
-                    {code.code}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              onClick={() => void handleSaveCodes()}
-              disabled={codesSaving || codes.length === 0}
-              className="w-full sm:w-auto"
-            >
-              {codesSaving ? <LoadingDots /> : "Salva"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Drawer dettaglio allievo (1:1 dal prototipo) */}
+      <ConsorzioStudentDrawer
+        userId={drawerUserId}
+        onClose={() => setDrawerUserId(null)}
+        onChanged={() => void load()}
+      />
     </div>
   );
 }

@@ -81,7 +81,13 @@ const SCHOOLS = [
   },
 ];
 
-const ACCOUNTING_CODES = ["CDC-GUIDE", "FSE-2026", "AZ-LOGIST", "CQC-RINN", "PRIV"];
+const ACCOUNTING_CODES = [
+  { code: "CDC-GUIDE", description: "Centro di costo guide" },
+  { code: "FSE-2026", description: "Finanziamento FSE 2026" },
+  { code: "AZ-LOGIST", description: "Convenzione aziendale logistica" },
+  { code: "CQC-RINN", description: "Rinnovo CQC" },
+  { code: "PRIV", description: "Privati" },
+];
 
 // email → { name, licenseCategory, school (index), codes }
 const STUDENTS = [
@@ -225,15 +231,15 @@ async function main() {
 
   // 7) Codici contabili
   const codeIdByLabel = {};
-  for (const code of ACCOUNTING_CODES) {
+  for (const { code, description } of ACCOUNTING_CODES) {
     const row = await prisma.consorzioAccountingCode.upsert({
       where: { consorzioCompanyId_code: { consorzioCompanyId: company.id, code } },
-      create: { consorzioCompanyId: company.id, code },
-      update: {},
+      create: { consorzioCompanyId: company.id, code, description },
+      update: { description },
     });
     codeIdByLabel[code] = row.id;
   }
-  console.log(`✓ Codici contabili: ${ACCOUNTING_CODES.join(", ")}`);
+  console.log(`✓ Codici contabili: ${ACCOUNTING_CODES.map((c) => c.code).join(", ")}`);
 
   // 8) Allievi (CompanyMember STUDENT taggati con la scuola + codici default)
   for (const student of STUDENTS) {

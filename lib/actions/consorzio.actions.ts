@@ -381,7 +381,7 @@ export async function listConsorzioAccountingCodes() {
     const codes = await prisma.consorzioAccountingCode.findMany({
       where: { consorzioCompanyId: membership.companyId, archivedAt: null },
       orderBy: { createdAt: "asc" },
-      select: { id: true, code: true },
+      select: { id: true, code: true, description: true },
     });
     return { success: true as const, data: { codes } };
   } catch (error) {
@@ -389,13 +389,14 @@ export async function listConsorzioAccountingCodes() {
   }
 }
 
-export async function createConsorzioAccountingCode(code: string) {
+export async function createConsorzioAccountingCode(code: string, description?: string) {
   try {
     const { membership } = await requireConsortium();
     const label = code.trim().toUpperCase();
     if (!label) {
       return { success: false as const, message: "Il codice è vuoto." };
     }
+    const desc = description?.trim() || null;
     const row = await prisma.consorzioAccountingCode.upsert({
       where: {
         consorzioCompanyId_code: {
@@ -403,9 +404,9 @@ export async function createConsorzioAccountingCode(code: string) {
           code: label,
         },
       },
-      create: { consorzioCompanyId: membership.companyId, code: label },
-      // Ri-creare un codice archiviato lo riattiva.
-      update: { archivedAt: null },
+      create: { consorzioCompanyId: membership.companyId, code: label, description: desc },
+      // Ri-creare un codice archiviato lo riattiva (e aggiorna la descrizione).
+      update: { archivedAt: null, ...(desc ? { description: desc } : {}) },
     });
     return { success: true as const, data: { id: row.id, code: row.code } };
   } catch (error) {
@@ -611,6 +612,110 @@ export async function rejectConsorzioGuideRequest(requestId: string) {
       },
     });
     return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+// ─── Drawer dettaglio allievo (dal dettaglio autoscuola) ────
+
+export type ConsorzioStudentDetail = {
+  userId: string;
+  name: string;
+  schoolName: string | null;
+  schoolCity: string | null;
+  licenseCategory: string | null;
+  lessonsCount: number;
+  certifiedMinutes: number;
+  codes: Array<{ id: string; code: string; description: string | null }>;
+  allCodes: Array<{ id: string; code: string; description: string | null }>;
+  lessons: Array<{
+    appointmentId: string;
+    startsAt: string;
+    durationMinutes: number;
+    vehicleName: string | null;
+    instructorName: string | null;
+    certified: boolean;
+  }>;
+};
+
+export async function getConsorzioStudentDetail(userId: string) {
+  try {
+    const { membership } = await requireConsortium();
+    const companyId = membership.companyId;
+
+    const member = await prisma.companyMember.findFirst({
+      where: { companyId, userId, autoscuolaRole: "STUDENT" },
+      select: {
+        userId: true,
+        licenseCategory: true,
+        user: { select: { name: true } },
+        consorzioSchool: { select: { name: true, city: true } },
+        consorzioAccountingCodes: {
+          select: { code: { select: { id: true, code: true, description: true } } },
+        },
+      },
+    });
+    if (!member) {
+      return { success: false as const, message: "Allievo non trovato." };
+    }
+
+    const [appointments, allCodes] = await Promise.all([
+      prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId,
+          studentId: userId,
+          status: { not: "cancelled" },
+          type: { notIn: ["esame", "group_lesson"] },
+        },
+        select: {
+          id: true,
+          startsAt: true,
+          endsAt: true,
+          instructor: { select: { name: true } },
+          vehicle: { select: { name: true } },
+          consorzioBilling: { select: { settledAt: true } },
+        },
+        orderBy: { startsAt: "desc" },
+        take: 30,
+      }),
+      prisma.consorzioAccountingCode.findMany({
+        where: { consorzioCompanyId: companyId, archivedAt: null },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, code: true, description: true },
+      }),
+    ]);
+
+    let certifiedMinutes = 0;
+    const lessons = appointments.map((appt) => {
+      const durationMinutes = appt.endsAt
+        ? Math.max(0, Math.round((appt.endsAt.getTime() - appt.startsAt.getTime()) / 60000))
+        : 60;
+      const certified = Boolean(appt.consorzioBilling?.settledAt);
+      if (certified) certifiedMinutes += durationMinutes;
+      return {
+        appointmentId: appt.id,
+        startsAt: appt.startsAt.toISOString(),
+        durationMinutes,
+        vehicleName: appt.vehicle?.name ?? null,
+        instructorName: appt.instructor?.name ?? null,
+        certified,
+      };
+    });
+
+    const detail: ConsorzioStudentDetail = {
+      userId: member.userId,
+      name: member.user.name ?? "—",
+      schoolName: member.consorzioSchool?.name ?? null,
+      schoolCity: member.consorzioSchool?.city ?? null,
+      licenseCategory: member.licenseCategory,
+      lessonsCount: appointments.length,
+      certifiedMinutes,
+      codes: member.consorzioAccountingCodes.map((link) => link.code),
+      allCodes,
+      lessons,
+    };
+    return { success: true as const, data: detail };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }

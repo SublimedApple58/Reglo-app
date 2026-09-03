@@ -1687,6 +1687,8 @@ model ConsorzioAccountingCode {
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   consorzioCompanyId String    @db.Uuid
   code               String
+  /// Descrizione leggibile (es. "Centro di costo guide") — drawer allievo e picker codici.
+  description        String?
   archivedAt         DateTime? @db.Timestamp(6)
   createdAt          DateTime  @default(now()) @db.Timestamp(6)
 

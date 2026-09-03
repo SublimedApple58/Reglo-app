@@ -113,7 +113,7 @@ export function GuideRequestCard({
             accetta o rifiuta.
           </p>
 
-          <div className="mt-4 rounded-xl border border-[#ededed] px-[13px] py-0.5">
+          <div className="mt-4 rounded-[12px] border border-[#ededed] px-[13px] py-0.5">
             {rows.map(([label, value], index) => (
               <div
                 key={label}
