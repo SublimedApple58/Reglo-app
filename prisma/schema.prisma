@@ -93,6 +93,7 @@ model User {
   autoscuolaVoiceCallbackTasksAssignee AutoscuolaVoiceCallbackTask[]          @relation("AutoscuolaVoiceCallbackAssignee")
   quizSessions                         QuizSession[]
   autoscuolaLocationsCreated           AutoscuolaLocation[]                   @relation("AutoscuolaLocationCreatedBy")
+  consorzioGuideRequests               ConsorzioGuideRequest[]                @relation("ConsorzioGuideRequestStudent")
   supportMessages                      SupportMessage[]
   productFeedback                      ProductFeedback[]
 
@@ -243,6 +244,11 @@ model Company {
   documents                            CompanyDocument[]
   plan                                 CompanyPlan?
   licensePurchases                     CompanyLicensePurchase[]
+  consorzioSchools                     ConsorzioSchool[]                      @relation("ConsorzioSchools")
+  consorzioSchoolLinks                 ConsorzioSchool[]                      @relation("ConsorzioSchoolLinkedCompany")
+  consorzioAccountingCodes             ConsorzioAccountingCode[]              @relation("ConsorzioAccountingCodes")
+  consorzioGuideRequests               ConsorzioGuideRequest[]                @relation("ConsorzioGuideRequests")
+  consorzioLessonBillings              ConsorzioLessonBilling[]               @relation("ConsorzioLessonBillings")
 }
 
 /// In-app notifications shown to the autoscuola owner in the web bell/inbox.
@@ -262,6 +268,10 @@ model AutoscuolaNotification {
   instructorName String?
   lessonType     String?
   readAt         DateTime? @db.Timestamp(6)
+  /// Payload extra per i kind che ne hanno bisogno (es. consortium_guide_request:
+  /// { requestId, schoolName, vehicleName }). I campi snapshot sopra restano la
+  /// via primaria per i kind legacy.
+  meta           Json?
   createdAt      DateTime  @default(now()) @db.Timestamp(6)
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -347,13 +357,18 @@ model CompanyMember {
   /// lesson for this student, the location field pre-fills to this value. Null =
   /// no default → the form falls back to the company sede as before.
   defaultLocationId         String?                @db.Uuid
+  /// Solo membri di una company consorzio: l'autoscuola consorziata di
+  /// appartenenza dell'allievo. Null su tutte le autoscuole normali.
+  consorzioSchoolId         String?                @db.Uuid
   createdAt                 DateTime               @default(now()) @db.Timestamp(6)
   updatedAt                 DateTime               @updatedAt
 
-  company            Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assignedInstructor AutoscuolaInstructor? @relation("InstructorAssignedStudents", fields: [assignedInstructorId], references: [id], onDelete: SetNull)
-  defaultLocation    AutoscuolaLocation?   @relation("MemberDefaultLocation", fields: [defaultLocationId], references: [id], onDelete: SetNull)
+  company                  Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user                     User                            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedInstructor       AutoscuolaInstructor?           @relation("InstructorAssignedStudents", fields: [assignedInstructorId], references: [id], onDelete: SetNull)
+  defaultLocation          AutoscuolaLocation?             @relation("MemberDefaultLocation", fields: [defaultLocationId], references: [id], onDelete: SetNull)
+  consorzioSchool          ConsorzioSchool?                @relation(fields: [consorzioSchoolId], references: [id], onDelete: SetNull)
+  consorzioAccountingCodes ConsorzioMemberAccountingCode[]
 
   @@id([companyId, userId])
   @@index([userId])
@@ -494,22 +509,25 @@ model AutoscuolaAppointment {
   createdAt                    DateTime  @default(now()) @db.Timestamp(6)
   updatedAt                    DateTime  @updatedAt
 
-  company               Company                               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  student               User?                                 @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  case                  AutoscuolaCase?                       @relation(fields: [caseId], references: [id], onDelete: SetNull)
-  slot                  AutoscuolaAvailabilitySlot?           @relation(fields: [slotId], references: [id], onDelete: SetNull)
-  instructor            AutoscuolaInstructor?                 @relation(fields: [instructorId], references: [id], onDelete: SetNull)
-  vehicle               AutoscuolaVehicle?                    @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
-  location              AutoscuolaLocation?                   @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  groupLesson           AutoscuolaGroupLesson?                @relation(fields: [groupLessonId], references: [id], onDelete: Cascade)
-  replacedByAppointment AutoscuolaAppointment?                @relation("AutoscuolaAppointmentReplacement", fields: [replacedByAppointmentId], references: [id], onDelete: SetNull)
-  replacedAppointments  AutoscuolaAppointment[]               @relation("AutoscuolaAppointmentReplacement")
-  payments              AutoscuolaAppointmentPayment[]
-  creditLedger          AutoscuolaStudentLessonCreditLedger[]
-  messageLogs           AutoscuolaMessageLog[]
-  voiceCalls            AutoscuolaVoiceCall[]
-  swapOffers            AutoscuolaSwapOffer[]
-  appointmentVehicles   AutoscuolaAppointmentVehicle[]
+  company                  Company                               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  student                  User?                                 @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  case                     AutoscuolaCase?                       @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  slot                     AutoscuolaAvailabilitySlot?           @relation(fields: [slotId], references: [id], onDelete: SetNull)
+  instructor               AutoscuolaInstructor?                 @relation(fields: [instructorId], references: [id], onDelete: SetNull)
+  vehicle                  AutoscuolaVehicle?                    @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  location                 AutoscuolaLocation?                   @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  groupLesson              AutoscuolaGroupLesson?                @relation(fields: [groupLessonId], references: [id], onDelete: Cascade)
+  replacedByAppointment    AutoscuolaAppointment?                @relation("AutoscuolaAppointmentReplacement", fields: [replacedByAppointmentId], references: [id], onDelete: SetNull)
+  replacedAppointments     AutoscuolaAppointment[]               @relation("AutoscuolaAppointmentReplacement")
+  payments                 AutoscuolaAppointmentPayment[]
+  creditLedger             AutoscuolaStudentLessonCreditLedger[]
+  messageLogs              AutoscuolaMessageLog[]
+  voiceCalls               AutoscuolaVoiceCall[]
+  swapOffers               AutoscuolaSwapOffer[]
+  appointmentVehicles      AutoscuolaAppointmentVehicle[]
+  consorzioAccountingCodes ConsorzioAppointmentAccountingCode[]
+  consorzioGuideRequests   ConsorzioGuideRequest[]
+  consorzioBilling         ConsorzioLessonBilling?
 
   @@index([companyId])
   @@index([studentId])
@@ -755,6 +773,7 @@ model AutoscuolaVehicle {
   poolMembers            AutoscuolaVehiclePoolMember[]
   preferredByInstructors AutoscuolaInstructorPreferredVehicle[]
   appointmentVehicles    AutoscuolaAppointmentVehicle[]
+  consorzioGuideRequests ConsorzioGuideRequest[]
 
   @@index([companyId])
   @@index([companyId, assignedInstructorId])
@@ -1620,4 +1639,150 @@ model AccountDeletionAudit {
   @@index([createdAt])
   @@index([trigger])
   @@index([deletedUserId])
+}
+
+// ── Consorzio ────────────────────────────────────────────────────────────────
+// Un consorzio è una Company in "modalità consorzio" (limits.accountKind =
+// "consorzio" sul servizio AUTOSCUOLE, stesso pattern di secretaryOnly): agenda,
+// istruttori, veicoli e allievi riusano la macchina per-company esistente.
+// I modelli qui sotto aggiungono ciò che è solo-consorzio: le autoscuole
+// consorziate, i codici contabili, le richieste di guida e la contabilizzazione
+// delle guide verso le autoscuole. Vedi docs/features/consorzio.md.
+
+// Autoscuola consorziata: record anagrafico gestito dal consorzio, NON un
+// account Reglo. `linkedCompanyId` è il gancio per la fase "affiliata cliente
+// Reglo" (account reale collegato): oggi resta sempre null.
+model ConsorzioSchool {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  consorzioCompanyId String    @db.Uuid
+  name               String
+  city               String?
+  ownerName          String?
+  address            String?
+  vatNumber          String?
+  phone              String?
+  email              String?
+  /// active | suspended | removed (mai hard delete: le guide fatte restano contabilizzate)
+  status             String    @default("active")
+  joinedAt           DateTime? @db.Timestamp(6)
+  linkedCompanyId    String?   @db.Uuid
+  createdAt          DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt          DateTime  @updatedAt
+
+  consorzioCompany Company  @relation("ConsorzioSchools", fields: [consorzioCompanyId], references: [id], onDelete: Cascade)
+  linkedCompany    Company? @relation("ConsorzioSchoolLinkedCompany", fields: [linkedCompanyId], references: [id], onDelete: SetNull)
+
+  members        CompanyMember[]
+  guideRequests  ConsorzioGuideRequest[]
+  lessonBillings ConsorzioLessonBilling[]
+
+  @@index([consorzioCompanyId, status])
+  @@index([linkedCompanyId])
+}
+
+// Codice contabile del consorzio (etichetta libera, es. "CDC-GUIDE",
+// "FSE-2026"): assegnabile agli allievi (default) e alle singole guide in
+// Fatturazione. Archiviabile, mai cancellato se referenziato.
+model ConsorzioAccountingCode {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  consorzioCompanyId String    @db.Uuid
+  code               String
+  archivedAt         DateTime? @db.Timestamp(6)
+  createdAt          DateTime  @default(now()) @db.Timestamp(6)
+
+  consorzioCompany Company                              @relation("ConsorzioAccountingCodes", fields: [consorzioCompanyId], references: [id], onDelete: Cascade)
+  memberLinks      ConsorzioMemberAccountingCode[]
+  appointmentLinks ConsorzioAppointmentAccountingCode[]
+
+  @@unique([consorzioCompanyId, code])
+  @@index([consorzioCompanyId, archivedAt])
+}
+
+// Codici contabili di default di un allievo del consorzio: copiati sulla guida
+// alla creazione, poi editabili guida per guida.
+model ConsorzioMemberAccountingCode {
+  codeId    String @db.Uuid
+  companyId String @db.Uuid
+  userId    String @db.Uuid
+
+  code   ConsorzioAccountingCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
+  member CompanyMember           @relation(fields: [companyId, userId], references: [companyId, userId], onDelete: Cascade)
+
+  @@id([codeId, companyId, userId])
+  @@index([companyId, userId])
+}
+
+// Codici contabili effettivi di una singola guida (mostrati/filtrabili in
+// Fatturazione). Seed = codici dell'allievo al momento della creazione.
+model ConsorzioAppointmentAccountingCode {
+  codeId        String @db.Uuid
+  appointmentId String @db.Uuid
+
+  code        ConsorzioAccountingCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
+  appointment AutoscuolaAppointment   @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@id([codeId, appointmentId])
+  @@index([appointmentId])
+}
+
+// Richiesta di guida inviata da un'autoscuola consorziata al consorzio.
+// Lifecycle sul modello di AutoscuolaSwapOffer: pending → accepted | rejected |
+// cancelled. All'accettazione viene creato l'AutoscuolaAppointment
+// (bookingSource "consortium_request") e linkato qui. `movedToStartsAt` è
+// valorizzato quando il consorzio accetta su uno slot diverso da quello chiesto
+// (azione "Sposta"). Oggi il sender non esiste ancora (fase affiliate): le
+// richieste nascono solo da seed/backoffice.
+model ConsorzioGuideRequest {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  consorzioCompanyId String    @db.Uuid
+  schoolId           String    @db.Uuid
+  studentUserId      String    @db.Uuid
+  requestedStartsAt  DateTime  @db.Timestamp(6)
+  durationMinutes    Int
+  vehicleId          String?   @db.Uuid
+  /// pending | accepted | rejected | cancelled
+  status             String    @default("pending")
+  appointmentId      String?   @db.Uuid
+  movedToStartsAt    DateTime? @db.Timestamp(6)
+  respondedAt        DateTime? @db.Timestamp(6)
+  respondedByUserId  String?   @db.Uuid
+  note               String?
+  createdAt          DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt          DateTime  @updatedAt
+
+  consorzioCompany Company                @relation("ConsorzioGuideRequests", fields: [consorzioCompanyId], references: [id], onDelete: Cascade)
+  school           ConsorzioSchool        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student          User                   @relation("ConsorzioGuideRequestStudent", fields: [studentUserId], references: [id], onDelete: Cascade)
+  vehicle          AutoscuolaVehicle?     @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  appointment      AutoscuolaAppointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([consorzioCompanyId, status, requestedStartsAt])
+  @@index([schoolId])
+  @@index([appointmentId])
+}
+
+// Contabilizzazione di una guida del consorzio verso l'autoscuola consorziata.
+// Riga creata alla creazione dell'appuntamento (company consorzio) con prezzo
+// snapshot = durata/60 × tariffa oraria della categoria (limits.consorzioPricing).
+// Volutamente SEPARATA da AutoscuolaAppointment.priceAmount, che è cablato ai
+// pagamenti allievo/Stripe. Il prezzo è congelato una volta saldata o fatturata.
+model ConsorzioLessonBilling {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  appointmentId      String    @unique @db.Uuid
+  consorzioCompanyId String    @db.Uuid
+  schoolId           String    @db.Uuid
+  priceAmount        Decimal   @default(0) @db.Decimal(12, 2)
+  /// "Saldata" in Fatturazione
+  settledAt          DateTime? @db.Timestamp(6)
+  /// "Fattura inviata" in Fatturazione
+  invoiceSentAt      DateTime? @db.Timestamp(6)
+  createdAt          DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt          DateTime  @updatedAt
+
+  appointment      AutoscuolaAppointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  consorzioCompany Company               @relation("ConsorzioLessonBillings", fields: [consorzioCompanyId], references: [id], onDelete: Cascade)
+  school           ConsorzioSchool       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([consorzioCompanyId, schoolId])
+  @@index([schoolId, settledAt])
 }
