@@ -1,9 +1,8 @@
 "use client";
 
 import React from "react";
-import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "motion/react";
 
+import { DetailPanel } from "@/components/ui/detail-panel";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   getConsorzioStudentDetail,
@@ -12,13 +11,14 @@ import {
 } from "@/lib/actions/consorzio.actions";
 
 /**
- * Drawer laterale dettaglio allievo (dal dettaglio autoscuola consorziata) —
- * riproduzione 1:1 del prototipo Consorzi.html (HTML estratto): pannello fixed
- * 620px (max 60vw) sotto l'header 84px, bordo sx #DDD + ombra -4/24, slide-in
- * 0.22s; header avatar 50 navy + nome 21/700; stat 3× (border 1.5 #EBEBEB r14);
- * CODICI CONTABILI con righe code/descrizione e picker chip "CODICE · Desc"
- * (assegnati navy op.55, disponibili #F2F2F2); GUIDE CERTIFICATE con badge
- * Certificata/Da certificare. Vedi docs/features/consorzio.md.
+ * Drawer laterale dettaglio allievo (dal dettaglio autoscuola consorziata):
+ * usa il componente CONDIVISO DetailPanel (stesso drawer della sezione Allievi
+ * — 600px, backdrop, slide 220ms, Escape) col contenuto 1:1 dal prototipo
+ * Consorzi.html: header avatar 50 navy + nome 21/700; stat 3× (border 1.5
+ * #EBEBEB r14); CODICI CONTABILI con righe code/descrizione e picker chip
+ * "CODICE · Desc" (assegnati navy op.55, disponibili #F2F2F2); GUIDE
+ * CERTIFICATE con badge Certificata/Da certificare.
+ * Vedi docs/features/consorzio.md.
  */
 
 const formatHours = (minutes: number): string => {
@@ -70,12 +70,9 @@ export function ConsorzioStudentDrawer({
   onChanged?: () => void;
 }) {
   const toast = useFeedbackToast();
-  const [mounted, setMounted] = React.useState(false);
   const [detail, setDetail] = React.useState<ConsorzioStudentDetail | null>(null);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
-
-  React.useEffect(() => setMounted(true), []);
 
   React.useEffect(() => {
     if (!userId) {
@@ -89,15 +86,6 @@ export function ConsorzioStudentDrawer({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
-
-  React.useEffect(() => {
-    if (!userId) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [userId, onClose]);
 
   const saveCodes = async (codeIds: string[]) => {
     if (!userId) return;
@@ -113,22 +101,18 @@ export function ConsorzioStudentDrawer({
     onChanged?.();
   };
 
-  if (!mounted) return null;
-
   const assignedIds = new Set(detail?.codes.map((code) => code.id) ?? []);
 
-  return createPortal(
-    <AnimatePresence>
-      {userId && detail && (
-        <motion.div
-          key="student-drawer"
-          initial={{ x: 620 }}
-          animate={{ x: 0 }}
-          exit={{ x: 640 }}
-          transition={{ duration: 0.22, ease: "easeOut" }}
-          className="fixed bottom-0 right-0 top-[84px] z-50 w-[620px] max-w-[60vw] overflow-y-auto border-l border-[#dddddd] bg-white shadow-[-4px_0_24px_rgba(0,0,0,0.08)] [line-height:normal]"
-          data-testid="student-drawer"
-        >
+  return (
+    <DetailPanel
+      open={Boolean(userId && detail)}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      testId="student-drawer"
+      className="[line-height:normal]"
+    >
+      {detail && (
           <div className="px-[34px] pb-10 pt-[30px]">
             {/* Header */}
             <div className="mb-6 flex items-start justify-between">
@@ -298,9 +282,7 @@ export function ConsorzioStudentDrawer({
               )}
             </div>
           </div>
-        </motion.div>
       )}
-    </AnimatePresence>,
-    document.body,
+    </DetailPanel>
   );
 }
