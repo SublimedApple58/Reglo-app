@@ -31,6 +31,7 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { FadeIn } from "@/components/ui/fade-in";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   getConsorzioSchool,
@@ -285,6 +286,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
   ];
 
   return (
+    <FadeIn>
     <div className="mx-auto w-full max-w-[1184px] pt-3 [line-height:normal]">
       <Link
         href={`/${locale}/user/autoscuole?tab=scuole`}
@@ -610,5 +612,6 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
         onChanged={() => void load()}
       />
     </div>
+    </FadeIn>
   );
 }

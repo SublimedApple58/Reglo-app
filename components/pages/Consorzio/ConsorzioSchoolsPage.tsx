@@ -18,6 +18,7 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { FadeIn } from "@/components/ui/fade-in";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   createConsorzioSchool,
@@ -191,12 +192,15 @@ export function ConsorzioSchoolsPage() {
         {loading ? (
           <SchoolListSkeleton />
         ) : filtered.length === 0 ? (
+          <FadeIn>
           <div className="rounded-3xl border border-dashed border-neutral-200 bg-white/60 p-12 text-center text-sm font-medium text-neutral-500">
             {schools.length === 0
               ? "Nessuna autoscuola consorziata ancora. Aggiungi la prima."
               : "Nessuna autoscuola corrisponde alla ricerca."}
           </div>
+          </FadeIn>
         ) : (
+          <FadeIn>
           <div>
             {/* Griglia del prototipo: 1.6fr 1fr 70px 140px 1fr 92px, gap 28 */}
             <div className="grid grid-cols-[1.6fr_1fr_70px_140px_1fr_92px] gap-x-7 border-b border-[#ebebeb] px-4 pb-2.5">
@@ -255,6 +259,7 @@ export function ConsorzioSchoolsPage() {
               );
             })}
           </div>
+          </FadeIn>
         )}
       </div>
 

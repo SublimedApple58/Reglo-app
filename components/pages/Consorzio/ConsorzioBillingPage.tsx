@@ -16,6 +16,7 @@ import {
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Input } from "@/components/ui/input";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { FadeIn } from "@/components/ui/fade-in";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
@@ -361,6 +362,7 @@ export function ConsorzioBillingPage() {
         <BillingListSkeleton />
       ) : filteredGroups.length === 0 ? (
         /* Placeholder mese vuoto — 1:1 dal prototipo (sfera di cristallo). */
+        <FadeIn>
         <div className="flex flex-col items-center px-6 pb-16 pt-14 text-center">
           <Image
             src="/images/3d/sfera-cristallo-3d.png"
@@ -378,7 +380,9 @@ export function ConsorzioBillingPage() {
             Le guide di {monthLabel(month)} compariranno qui man mano che vengono fatte.
           </p>
         </div>
+        </FadeIn>
       ) : (
+        <FadeIn>
         <div className="divide-y divide-[#ececec] border-t border-[#ececec]">
           {filteredGroups.map((group) => {
             const isOpen = expanded.has(group.schoolId);
@@ -499,6 +503,7 @@ export function ConsorzioBillingPage() {
             );
           })}
         </div>
+        </FadeIn>
       )}
 
       {/* Gestione codici contabili */}

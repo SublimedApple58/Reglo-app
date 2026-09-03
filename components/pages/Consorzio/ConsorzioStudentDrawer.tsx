@@ -3,6 +3,7 @@
 import React from "react";
 
 import { DetailPanel } from "@/components/ui/detail-panel";
+import { FadeIn } from "@/components/ui/fade-in";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
@@ -167,6 +168,7 @@ export function ConsorzioStudentDrawer({
       {!detail ? (
         <DrawerSkeleton />
       ) : (
+        <FadeIn>
           <div className="px-[34px] pb-10 pt-[30px]">
             {/* Header */}
             <div className="mb-6 flex items-start justify-between">
@@ -336,6 +338,7 @@ export function ConsorzioStudentDrawer({
               )}
             </div>
           </div>
+        </FadeIn>
       )}
     </DetailPanel>
   );
