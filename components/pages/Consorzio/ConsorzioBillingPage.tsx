@@ -16,6 +16,7 @@ import {
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Input } from "@/components/ui/input";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
   archiveConsorzioAccountingCode,
@@ -88,6 +89,26 @@ function CodeChip({ code, small }: { code: string; small?: boolean }) {
     >
       {code}
     </span>
+  );
+}
+
+
+/** Skeleton dei gruppi-autoscuola della Fatturazione. */
+function BillingListSkeleton() {
+  return (
+    <div className="divide-y divide-[#ececec] border-t border-[#ececec]">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="flex h-[68px] items-center gap-3.5">
+          <Skeleton className="size-10 shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <Skeleton className="h-3.5 w-48 max-w-full rounded" />
+            <Skeleton className="h-3 w-64 max-w-full rounded" />
+          </div>
+          <Skeleton className="h-4 w-16 rounded" />
+          <Skeleton className="size-4 rounded" />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -337,7 +358,7 @@ export function ConsorzioBillingPage() {
       </div>
 
       {loading ? (
-        <div className="h-64 w-full animate-pulse rounded-3xl bg-white/40" />
+        <BillingListSkeleton />
       ) : filteredGroups.length === 0 ? (
         /* Placeholder mese vuoto — 1:1 dal prototipo (sfera di cristallo). */
         <div className="flex flex-col items-center px-6 pb-16 pt-14 text-center">

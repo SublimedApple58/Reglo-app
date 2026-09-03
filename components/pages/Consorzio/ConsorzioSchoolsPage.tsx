@@ -18,6 +18,7 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   createConsorzioSchool,
   listConsorzioSchools,
@@ -62,6 +63,41 @@ const emptySchoolForm = {
   phone: "",
   email: "",
 };
+
+
+/** Skeleton della griglia autoscuole (stesso pattern di StudentListSkeleton). */
+function SchoolListSkeleton() {
+  return (
+    <div>
+      <div className="grid grid-cols-[1.6fr_1fr_70px_140px_1fr_92px] gap-x-7 border-b border-[#ebebeb] px-4 pb-2.5">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-3 w-16 max-w-full rounded" />
+        ))}
+      </div>
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div
+          key={i}
+          className="grid grid-cols-[1.6fr_1fr_70px_140px_1fr_92px] items-center gap-x-7 border-b border-[#f2f2f2] px-4 py-3.5"
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <Skeleton className="size-9 shrink-0 rounded-full" />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Skeleton className="h-3.5 w-36 max-w-full rounded" />
+              <Skeleton className="h-3 w-24 max-w-full rounded" />
+            </div>
+          </div>
+          <Skeleton className="h-3.5 w-28 max-w-full rounded" />
+          <div className="flex justify-end">
+            <Skeleton className="h-3.5 w-5 rounded" />
+          </div>
+          <Skeleton className="h-3.5 w-14 rounded" />
+          <Skeleton className="h-3.5 w-28 max-w-full rounded" />
+          <Skeleton className="h-[22px] w-[53px] rounded-full" />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function ConsorzioSchoolsPage() {
   const router = useRouter();
@@ -153,7 +189,7 @@ export function ConsorzioSchoolsPage() {
 
       <div className="mt-[22px]">
         {loading ? (
-          <div className="h-64 w-full animate-pulse rounded-3xl bg-white/40" />
+          <SchoolListSkeleton />
         ) : filtered.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-neutral-200 bg-white/60 p-12 text-center text-sm font-medium text-neutral-500">
             {schools.length === 0

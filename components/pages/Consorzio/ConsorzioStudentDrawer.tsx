@@ -3,6 +3,7 @@
 import React from "react";
 
 import { DetailPanel } from "@/components/ui/detail-panel";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   getConsorzioStudentDetail,
@@ -58,6 +59,57 @@ function XIcon({ size, color }: { size: number; color: string }) {
   );
 }
 
+
+/** Skeleton del contenuto drawer mentre carica il dettaglio allievo. */
+function DrawerSkeleton() {
+  return (
+    <div className="px-[34px] pb-10 pt-[30px]">
+      <div className="mb-6 flex items-start justify-between">
+        <div className="flex min-w-0 items-center gap-3.5">
+          <Skeleton className="size-[50px] shrink-0 rounded-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-44 rounded" />
+            <Skeleton className="h-3 w-56 max-w-full rounded" />
+          </div>
+        </div>
+        <Skeleton className="size-[30px] shrink-0 rounded-full" />
+      </div>
+      <div className="mb-[30px] grid grid-cols-3 gap-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="rounded-[14px] border-[1.5px] border-[#ebebeb] p-4">
+            <Skeleton className="h-7 w-10 rounded" />
+            <Skeleton className="mt-2 h-3 w-20 max-w-full rounded" />
+          </div>
+        ))}
+      </div>
+      <Skeleton className="mb-3 h-3 w-32 rounded" />
+      {Array.from({ length: 2 }).map((_, i) => (
+        <div
+          key={i}
+          className="mb-2 flex items-center gap-3 rounded-[12px] border-[1.5px] border-[#ebebeb] px-4 py-[13px]"
+        >
+          <Skeleton className="h-3.5 w-24 rounded" />
+          <Skeleton className="h-3 w-40 max-w-full flex-1 rounded" />
+          <Skeleton className="size-6 shrink-0 rounded-full" />
+        </div>
+      ))}
+      <Skeleton className="mb-3 mt-8 h-3 w-32 rounded" />
+      {Array.from({ length: 2 }).map((_, i) => (
+        <div key={i} className="flex items-center justify-between gap-4 border-b border-[#f0f0f0] py-3 last:border-b-0">
+          <div className="space-y-1.5">
+            <Skeleton className="h-3.5 w-28 rounded" />
+            <Skeleton className="h-3 w-44 max-w-full rounded" />
+          </div>
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-3.5 w-6 rounded" />
+            <Skeleton className="h-[22px] w-20 rounded-full" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ConsorzioStudentDrawer({
   userId,
   onClose,
@@ -105,14 +157,16 @@ export function ConsorzioStudentDrawer({
 
   return (
     <DetailPanel
-      open={Boolean(userId && detail)}
+      open={Boolean(userId)}
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
       testId="student-drawer"
       className="[line-height:normal]"
     >
-      {detail && (
+      {!detail ? (
+        <DrawerSkeleton />
+      ) : (
           <div className="px-[34px] pb-10 pt-[30px]">
             {/* Header */}
             <div className="mb-6 flex items-start justify-between">

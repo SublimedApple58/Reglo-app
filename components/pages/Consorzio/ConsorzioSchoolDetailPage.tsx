@@ -31,6 +31,7 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   getConsorzioSchool,
   listConsorzioAccountingCodes,
@@ -99,6 +100,73 @@ const initialsOf = (name: string): string =>
     .slice(0, 2)
     .map((word) => word[0]?.toUpperCase() ?? "")
     .join("");
+
+
+/** Skeleton dell'intera pagina dettaglio (header, card dati, stat, tabella). */
+function SchoolDetailSkeleton() {
+  return (
+    <div className="mx-auto w-full max-w-[1184px] pt-3">
+      <Skeleton className="h-4 w-36 rounded" />
+      <div className="mt-5 flex items-center gap-4">
+        <Skeleton className="size-14 shrink-0 rounded-full" />
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-72 max-w-full rounded" />
+          <Skeleton className="h-3.5 w-56 max-w-full rounded" />
+        </div>
+      </div>
+      <div className="mt-7 grid gap-4 lg:grid-cols-[625px_minmax(0,1fr)]">
+        <div className="rounded-[16px] border border-[#ebebeb] bg-white px-6 py-[22px]">
+          <Skeleton className="h-3 w-28 rounded" />
+          <div className="mt-4 space-y-0">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between gap-4 border-b border-[#f0f0f0] py-[10px] last:border-b-0"
+              >
+                <Skeleton className="h-3 w-20 rounded" />
+                <Skeleton className="h-3.5 w-40 max-w-full rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 content-start gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-[14px] border border-[#ebebeb] bg-white px-[18px] pb-4 pt-[18px]">
+              <Skeleton className="h-8 w-12 rounded" />
+              <Skeleton className="mt-2 h-3 w-24 max-w-full rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-9">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-5 w-24 rounded" />
+          <Skeleton className="h-10 w-40 rounded-full" />
+        </div>
+        <div className="mt-3">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div
+              key={i}
+              className="grid grid-cols-[1.6fr_90px_1fr_110px_70px_1.2fr] items-center gap-x-3.5 border-b border-[#f2f2f2] px-4 py-3.5"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <Skeleton className="size-8 shrink-0 rounded-full" />
+                <Skeleton className="h-3.5 w-32 max-w-full rounded" />
+              </div>
+              <Skeleton className="h-[25px] w-10 rounded-full" />
+              <Skeleton className="h-3.5 w-24 max-w-full rounded" />
+              <Skeleton className="h-3.5 w-14 rounded" />
+              <div className="flex justify-end">
+                <Skeleton className="h-3.5 w-5 rounded" />
+              </div>
+              <Skeleton className="h-[20px] w-28 max-w-full rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
   const router = useRouter();
@@ -196,7 +264,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
   };
 
   if (loading) {
-    return <div className="h-64 w-full animate-pulse rounded-3xl bg-white/40" />;
+    return <SchoolDetailSkeleton />;
   }
   if (!school) {
     return (
