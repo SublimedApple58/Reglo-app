@@ -48,6 +48,7 @@ import {
   rejectConsorzioGuideRequest,
   type ConsorzioGuideRequestDetail,
 } from "@/lib/actions/consorzio.actions";
+import { GuideRequestCard } from "@/components/pages/Consorzio/GuideRequestCard";
 import { getAutoscuolaLocations } from "@/lib/actions/autoscuola-locations.actions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FadeIn } from "@/components/ui/fade-in";
@@ -4488,92 +4489,36 @@ export function AutoscuoleAgendaPage({
         </div>
       </CreateEventPopover>
 
-      {/* ── Richiesta guida del consorzio (card flottante, dal prototipo) ── */}
-      <CreateEventPopover
+      {/* ── Richiesta guida del consorzio (card 1:1 dal prototipo) ── */}
+      <GuideRequestCard
         open={guideRequest !== null}
         onClose={() => { if (!guideResponding) closeGuideRequest(); }}
-        title="Richiesta di guida"
-        subtitle="Lo slot richiesto è il blocco tratteggiato in agenda: spostalo se serve (clicca un altro slot), poi accetta o rifiuta."
         anchor={popoverAnchor}
-        width={440}
-        footer={
-          <>
-            <button
-              type="button"
-              className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50"
-              disabled={guideResponding}
-              onClick={() => void handleRejectGuideRequest()}
-            >
-              Rifiuta
-            </button>
-            <button
-              type="button"
-              disabled={guideResponding || !guideDraft?.instructorId}
-              onClick={() => void handleAcceptGuideRequest()}
-              className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
-            >
-              {guideResponding ? <LoadingDots className="min-h-5" /> : "Accetta"}
-            </button>
-          </>
+        rows={(() => {
+          if (!guideRequest || !guideDraft) return [];
+          const startDate = buildLocalDateTime(guideDraft.ymd, guideDraft.time);
+          const endDate = new Date(startDate.getTime() + guideRequest.durationMinutes * 60000);
+          const when = `${startDate.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" })}, ${guideDraft.time}–${pad(endDate.getHours())}:${pad(endDate.getMinutes())}`;
+          return [
+            ["Quando", when.charAt(0).toUpperCase() + when.slice(1)],
+            ["Autoscuola", guideRequest.schoolName],
+            ["Veicolo", guideRequest.vehicleName ?? "—"],
+            ["Allievo", guideRequest.studentName],
+          ] as Array<[string, string]>;
+        })()}
+        instructors={instructors.map((instructor) => ({ id: instructor.id, name: instructor.name }))}
+        instructorId={guideDraft?.instructorId ?? ""}
+        onInstructorChange={(value) =>
+          setGuideDraft((prev) => (prev ? { ...prev, instructorId: value } : prev))
         }
-      >
-        {guideRequest && guideDraft && (
-          <div className="space-y-4">
-            <div className="divide-y divide-[#f0f0f0] rounded-xl border border-[#ebebeb]">
-              {(() => {
-                const startDate = buildLocalDateTime(guideDraft.ymd, guideDraft.time);
-                const endDate = new Date(
-                  startDate.getTime() + guideRequest.durationMinutes * 60000,
-                );
-                const when = `${startDate.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" })}, ${guideDraft.time}–${pad(endDate.getHours())}:${pad(endDate.getMinutes())}`;
-                const rows: Array<[string, string]> = [
-                  ["Quando", when.charAt(0).toUpperCase() + when.slice(1)],
-                  ["Autoscuola", guideRequest.schoolName],
-                  ["Veicolo", guideRequest.vehicleName ?? "—"],
-                  ["Allievo", guideRequest.studentName],
-                ];
-                return rows.map(([label, value]) => (
-                  <div key={label} className="flex items-center justify-between gap-4 px-3.5 py-2.5">
-                    <span className="text-[13px] text-muted-foreground">{label}</span>
-                    <span className="text-right text-[13px] font-semibold text-foreground">
-                      {value}
-                    </span>
-                  </div>
-                ));
-              })()}
-            </div>
-            <div>
-              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Istruttore</p>
-              <Select
-                value={guideDraft.instructorId}
-                onValueChange={(value) =>
-                  setGuideDraft((prev) => (prev ? { ...prev, instructorId: value } : prev))
-                }
-              >
-                <SelectTrigger className="cursor-pointer">
-                  <SelectValue placeholder="Scegli l'istruttore" />
-                </SelectTrigger>
-                <SelectContent className="z-[70]">
-                  {instructors.map((instructor) => (
-                    <SelectItem
-                      key={instructor.id}
-                      value={instructor.id}
-                      className="cursor-pointer"
-                    >
-                      {instructor.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {guideRequest.note && (
-              <p className="text-[13px] text-muted-foreground">
-                <span className="font-semibold text-foreground">Nota:</span> {guideRequest.note}
-              </p>
-            )}
-          </div>
-        )}
-      </CreateEventPopover>
+        note={guideRequest?.note}
+        responding={guideResponding}
+        onAccept={() => void handleAcceptGuideRequest()}
+        onReject={() => void handleRejectGuideRequest()}
+        onMoveHint={() =>
+          toast.info({ description: "Clicca uno slot libero in agenda per spostare la richiesta." })
+        }
+      />
 
       {/* ── Recurring Block Delete Confirmation ── */}
       <Dialog open={blockDeleteConfirm !== null} onOpenChange={(open) => { if (!open) setBlockDeleteConfirm(null); }}>

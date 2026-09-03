@@ -249,17 +249,17 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
 
       <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-foreground text-sm font-bold text-white">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#4e4e5c] text-sm font-bold text-white">
             {initialsOf(school.name.replace(/^Autoscuola\s+/i, ""))}
           </div>
           <div>
             <div className="flex items-center gap-2.5">
-              <h1 className="text-[26px] font-semibold tracking-tight text-foreground">
+              <h1 className="text-[28px] font-bold tracking-[-0.3px] text-foreground">
                 {school.name}
               </h1>
               <span
                 className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
-                  suspended ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"
+                  suspended ? "bg-amber-50 text-amber-700" : "bg-[#e4f4e7] text-[#1f6b2a]"
                 }`}
               >
                 {suspended ? "Sospesa" : "Attiva"}

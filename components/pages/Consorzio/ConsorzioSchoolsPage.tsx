@@ -49,7 +49,7 @@ const initialsOf = (name: string): string =>
     .join("");
 
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
-  active: { label: "Attiva", className: "bg-emerald-50 text-emerald-700" },
+  active: { label: "Attiva", className: "bg-[#e4f4e7] text-[#1f6b2a]" },
   suspended: { label: "Sospesa", className: "bg-amber-50 text-amber-700" },
 };
 
@@ -123,7 +123,7 @@ export function ConsorzioSchoolsPage() {
     <div className="w-full">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-[26px] font-semibold tracking-tight text-foreground">
+          <h1 className="text-[28px] font-bold tracking-[-0.3px] text-foreground">
             Autoscuole
           </h1>
           <p className="mt-1 text-sm font-medium text-muted-foreground">
@@ -137,16 +137,17 @@ export function ConsorzioSchoolsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Cerca autoscuola, titolare o città"
-              className="h-11 w-[280px] rounded-full border-border bg-white pl-10"
+              className="h-10 w-[300px] rounded-full border-[#e2e2e2] bg-white pl-10 text-[15px] font-medium"
             />
           </div>
-          <Button
+          <button
+            type="button"
             onClick={() => setAddOpen(true)}
-            className="h-11 rounded-full px-5"
+            className="flex cursor-pointer items-center gap-2 rounded-full bg-[#1a1a2e] px-[18px] py-[11px] text-sm font-semibold text-white transition-colors hover:bg-[#12122a]"
           >
             <Plus className="h-4 w-4" />
             Aggiungi autoscuola
-          </Button>
+          </button>
         </div>
       </div>
 
@@ -187,9 +188,9 @@ export function ConsorzioSchoolsPage() {
                       }
                       className="cursor-pointer border-b border-border/50 transition-colors hover:bg-muted/30"
                     >
-                      <td className="px-3 py-4 first:pl-1">
+                      <td className="px-3 py-3.5 first:pl-1">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground text-[11px] font-bold text-white">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#4e4e5c] text-[12px] font-bold text-white">
                             {initialsOf(school.name)}
                           </div>
                           <div>
@@ -202,21 +203,21 @@ export function ConsorzioSchoolsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 py-4 text-sm text-foreground">
+                      <td className="px-3 py-3.5 text-sm text-foreground">
                         {school.ownerName ?? "—"}
                       </td>
-                      <td className="px-3 py-4 text-sm font-semibold text-foreground">
+                      <td className="px-3 py-3.5 text-sm font-semibold text-foreground">
                         {school.studentsCount}
                       </td>
-                      <td className="px-3 py-4 text-sm text-foreground">
+                      <td className="px-3 py-3.5 text-sm text-foreground">
                         {formatShortDate(school.lastLessonAt)}
                       </td>
-                      <td className="px-3 py-4 text-sm text-foreground">
+                      <td className="px-3 py-3.5 text-sm text-foreground">
                         {school.topVehicleName ?? "—"}
                       </td>
-                      <td className="px-3 py-4">
+                      <td className="px-3 py-3.5">
                         <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${badge.className}`}
+                          className={`inline-flex rounded-full px-2.5 py-1 text-[11.5px] font-bold ${badge.className}`}
                         >
                           {badge.label}
                         </span>

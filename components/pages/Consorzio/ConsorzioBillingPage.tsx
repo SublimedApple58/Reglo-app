@@ -208,7 +208,7 @@ export function ConsorzioBillingPage() {
     <div className="w-full">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-[26px] font-semibold tracking-tight text-foreground">
+          <h1 className="text-[28px] font-bold tracking-[-0.3px] text-foreground">
             Fatturazione
           </h1>
           <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm font-medium text-muted-foreground">
@@ -333,7 +333,7 @@ export function ConsorzioBillingPage() {
                     className="flex w-full cursor-pointer items-center justify-between gap-4 py-4 text-left"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-foreground text-[11px] font-bold text-white">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#4e4e5c] text-[12px] font-bold text-white">
                         {initialsOf(group.schoolName)}
                       </div>
                       <div>
