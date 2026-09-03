@@ -433,6 +433,189 @@ export async function archiveConsorzioAccountingCode(codeId: string) {
   }
 }
 
+// ─── Richieste guida (flusso ricevente) ─────────────────────
+
+const acceptGuideRequestSchema = z.object({
+  requestId: z.string().uuid(),
+  instructorId: z.string().uuid(),
+  /** ISO dello slot scelto: quello richiesto, o un altro se il consorzio ha "spostato". */
+  startsAt: z.string().datetime(),
+});
+
+export type ConsorzioGuideRequestDetail = {
+  id: string;
+  status: string;
+  requestedStartsAt: string;
+  durationMinutes: number;
+  schoolName: string;
+  studentUserId: string;
+  studentName: string;
+  vehicleId: string | null;
+  vehicleName: string | null;
+  note: string | null;
+};
+
+export async function getConsorzioGuideRequest(requestId: string) {
+  try {
+    const { membership } = await requireConsortium();
+    const request = await prisma.consorzioGuideRequest.findFirst({
+      where: { id: requestId, consorzioCompanyId: membership.companyId },
+      include: {
+        school: { select: { name: true } },
+        student: { select: { id: true, name: true } },
+        vehicle: { select: { id: true, name: true } },
+      },
+    });
+    if (!request) {
+      return { success: false as const, message: "Richiesta non trovata." };
+    }
+    const detail: ConsorzioGuideRequestDetail = {
+      id: request.id,
+      status: request.status,
+      requestedStartsAt: request.requestedStartsAt.toISOString(),
+      durationMinutes: request.durationMinutes,
+      schoolName: request.school.name,
+      studentUserId: request.student.id,
+      studentName: request.student.name ?? "—",
+      vehicleId: request.vehicle?.id ?? null,
+      vehicleName: request.vehicle?.name ?? null,
+      note: request.note,
+    };
+    return { success: true as const, data: detail };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+/**
+ * Accetta una richiesta guida: pending → accepted + crea l'AutoscuolaAppointment
+ * (bookingSource "consortium_request") sullo slot scelto con l'istruttore
+ * scelto. Se lo slot differisce da quello richiesto viene tracciato in
+ * `movedToStartsAt` (azione "Sposta"). Controllo conflitti su istruttore e
+ * veicolo. La notifica all'autoscuola richiedente arriverà con la fase
+ * affiliate (oggi nessun destinatario).
+ */
+export async function acceptConsorzioGuideRequest(
+  input: z.infer<typeof acceptGuideRequestSchema>,
+) {
+  try {
+    const { membership } = await requireConsortium();
+    const companyId = membership.companyId;
+    const payload = acceptGuideRequestSchema.parse(input);
+
+    const request = await prisma.consorzioGuideRequest.findFirst({
+      where: { id: payload.requestId, consorzioCompanyId: companyId },
+    });
+    if (!request) {
+      return { success: false as const, message: "Richiesta non trovata." };
+    }
+    if (request.status !== "pending") {
+      return { success: false as const, message: "Richiesta già gestita." };
+    }
+
+    const instructor = await prisma.autoscuolaInstructor.findFirst({
+      where: { id: payload.instructorId, companyId, status: "active" },
+      select: { id: true },
+    });
+    if (!instructor) {
+      return { success: false as const, message: "Istruttore non valido." };
+    }
+
+    const startsAt = new Date(payload.startsAt);
+    const endsAt = new Date(startsAt.getTime() + request.durationMinutes * 60000);
+
+    // Conflitti: guida non annullata sovrapposta con lo stesso istruttore o
+    // lo stesso veicolo → errore, la richiesta resta pending.
+    const conflict = await prisma.autoscuolaAppointment.findFirst({
+      where: {
+        companyId,
+        status: { not: "cancelled" },
+        startsAt: { lt: endsAt },
+        endsAt: { gt: startsAt },
+        OR: [
+          { instructorId: instructor.id },
+          ...(request.vehicleId ? [{ vehicleId: request.vehicleId }] : []),
+        ],
+      },
+      select: { id: true, instructorId: true },
+    });
+    if (conflict) {
+      return {
+        success: false as const,
+        message:
+          conflict.instructorId === instructor.id
+            ? "L'istruttore ha già un impegno in quello slot. Sposta la richiesta o scegli un altro istruttore."
+            : "Il veicolo è già impegnato in quello slot. Sposta la richiesta.",
+      };
+    }
+
+    const moved = startsAt.getTime() !== request.requestedStartsAt.getTime();
+
+    const appointment = await prisma.$transaction(async (tx) => {
+      const created = await tx.autoscuolaAppointment.create({
+        data: {
+          companyId,
+          studentId: request.studentUserId,
+          type: "guida",
+          status: "scheduled",
+          startsAt,
+          endsAt,
+          instructorId: instructor.id,
+          vehicleId: request.vehicleId,
+          bookingSource: "consortium_request",
+        },
+      });
+      await tx.consorzioGuideRequest.update({
+        where: { id: request.id },
+        data: {
+          status: "accepted",
+          appointmentId: created.id,
+          movedToStartsAt: moved ? startsAt : null,
+          respondedAt: new Date(),
+          respondedByUserId: membership.userId,
+        },
+      });
+      return created;
+    });
+
+    await invalidateAutoscuoleCache({
+      companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA],
+    });
+
+    return { success: true as const, data: { appointmentId: appointment.id } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+export async function rejectConsorzioGuideRequest(requestId: string) {
+  try {
+    const { membership } = await requireConsortium();
+    const request = await prisma.consorzioGuideRequest.findFirst({
+      where: { id: requestId, consorzioCompanyId: membership.companyId },
+      select: { id: true, status: true },
+    });
+    if (!request) {
+      return { success: false as const, message: "Richiesta non trovata." };
+    }
+    if (request.status !== "pending") {
+      return { success: false as const, message: "Richiesta già gestita." };
+    }
+    await prisma.consorzioGuideRequest.update({
+      where: { id: request.id },
+      data: {
+        status: "rejected",
+        respondedAt: new Date(),
+        respondedByUserId: membership.userId,
+      },
+    });
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
 // ─── Prezzi (Impostazioni → Prenotazioni e allievi → Prezzi) ─
 
 const pricingSchema = z.object({

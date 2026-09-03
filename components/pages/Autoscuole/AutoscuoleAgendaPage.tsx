@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Plus, SlidersHorizontal, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2, BookOpen, Lock, Printer, TrafficCone, Route } from "lucide-react";
@@ -41,6 +42,12 @@ import {
   updateExamNotes,
   cancelExamEvent,
 } from "@/lib/actions/autoscuole.actions";
+import {
+  acceptConsorzioGuideRequest,
+  getConsorzioGuideRequest,
+  rejectConsorzioGuideRequest,
+  type ConsorzioGuideRequestDetail,
+} from "@/lib/actions/consorzio.actions";
 import { getAutoscuolaLocations } from "@/lib/actions/autoscuola-locations.actions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FadeIn } from "@/components/ui/fade-in";
@@ -988,6 +995,79 @@ export function AutoscuoleAgendaPage({
     const rect = plusBtnRef.current?.getBoundingClientRect();
     setPopoverAnchor(rect ? { x: rect.right, y: rect.bottom + 10 } : null);
   }, []);
+  // Richiesta guida del CONSORZIO (deep-link ?guideRequestId=… dalla campanella):
+  // card flottante + ghost tratteggiato ambra sullo slot richiesto. Il click su
+  // un altro slot della griglia SPOSTA il draft (stessa UX degli altri flussi);
+  // Accetta crea la guida con l'istruttore scelto. Vedi docs/features/consorzio.md.
+  const [guideRequest, setGuideRequest] = React.useState<ConsorzioGuideRequestDetail | null>(null);
+  const [guideDraft, setGuideDraft] = React.useState<{
+    ymd: string;
+    time: string;
+    instructorId: string;
+  } | null>(null);
+  const [guideResponding, setGuideResponding] = React.useState(false);
+  const guideRequestLoadedRef = React.useRef<string | null>(null);
+  const searchParams = useSearchParams();
+  const guideRequestParam = searchParams?.get("guideRequestId") ?? null;
+
+  React.useEffect(() => {
+    if (!guideRequestParam || guideRequestLoadedRef.current === guideRequestParam) return;
+    guideRequestLoadedRef.current = guideRequestParam;
+    void getConsorzioGuideRequest(guideRequestParam).then((res) => {
+      if (!res.success) {
+        toast.error({ description: res.message });
+        return;
+      }
+      if (res.data.status !== "pending") {
+        toast.info({ description: "Questa richiesta è già stata gestita." });
+        return;
+      }
+      const starts = new Date(res.data.requestedStartsAt);
+      setGuideRequest(res.data);
+      setGuideDraft({
+        ymd: formatYmd(starts),
+        time: `${pad(starts.getHours())}:${pad(starts.getMinutes())}`,
+        instructorId: "",
+      });
+      // Naviga alla settimana/giorno della richiesta e scrolla all'orario
+      // (stesso follow della creazione guida).
+      const day = normalizeDay(starts);
+      if (viewMode === "week") {
+        setWeekStart(weekAnchor(day, viewPrefs.weekMode));
+      } else {
+        setDayFocus(day);
+      }
+      setPopoverAnchor({
+        x: Math.max(360, window.innerWidth / 2),
+        y: Math.max(80, Math.min(160, window.innerHeight - 460)),
+      });
+      const startMin = starts.getHours() * 60 + starts.getMinutes() - DAY_START_HOUR * 60;
+      calendarScrollRef.current?.scrollTo({
+        top: Math.max(0, startMin * PIXELS_PER_MINUTE - 140),
+        behavior: "smooth",
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guideRequestParam]);
+
+  // Gli istruttori arrivano col bootstrap: appena disponibili, il draft senza
+  // istruttore prende il primo (il ghost vive nella sua colonna).
+  React.useEffect(() => {
+    if (guideRequest && instructors.length > 0) {
+      setGuideDraft((prev) =>
+        prev && !prev.instructorId ? { ...prev, instructorId: instructors[0].id } : prev,
+      );
+    }
+  }, [guideRequest, instructors]);
+
+  const closeGuideRequest = React.useCallback(() => {
+    setGuideRequest(null);
+    setGuideDraft(null);
+    guideRequestLoadedRef.current = null;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("guideRequestId");
+    window.history.replaceState(null, "", url.toString());
+  }, []);
   const [blockCreating, setBlockCreating] = React.useState(false);
   // Lo stesso dialog "blocco istruttore" serve due eventi: "generic" = Evento
   // bloccante (titolo libero) e "theory" = Lezione teorica (reason forzato
@@ -1312,6 +1392,14 @@ export function AutoscuoleAgendaPage({
       setEditSlotPatch({ date: ymd, time, instructorId: instructorId ?? null, nonce: Date.now() });
       return;
     }
+    // Con una Richiesta guida aperta, il click sulla griglia SPOSTA il ghost
+    // della richiesta (giorno/orario/colonna istruttore) — azione "Sposta".
+    if (guideRequest) {
+      setGuideDraft((prev) =>
+        prev ? { ...prev, ymd, time, instructorId: instructorId ?? prev.instructorId } : prev,
+      );
+      return;
+    }
     setSlotMenu({
       day: normalized,
       ymd,
@@ -1322,7 +1410,7 @@ export function AutoscuoleAgendaPage({
       ghostTop: rect.top + startMin * PIXELS_PER_MINUTE,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createOpen, examDialogOpen, blockDialogOpen, createGroupLessonOpen, editAppointmentTarget]);
+  }, [createOpen, examDialogOpen, blockDialogOpen, createGroupLessonOpen, editAppointmentTarget, guideRequest]);
 
   // Ghost block rendered inside the clicked column while the slot menu is open
   // (neutral look: white + dashed gray border, approved via desktop preview).
@@ -1362,6 +1450,40 @@ export function AutoscuoleAgendaPage({
     );
   };
 
+  // Ghost della Richiesta guida del consorzio: blocco tratteggiato AMBRA
+  // (stato "IN ATTESA" del prototipo) nella colonna dell'istruttore scelto.
+  // Si sposta cliccando un altro slot della griglia (vedi openSlotMenu).
+  const renderGuideRequestGhost = (day: Date, instructorId: string | null) => {
+    if (!guideRequest || !guideDraft || !guideDraft.instructorId) return null;
+    if (guideDraft.ymd !== formatYmd(day) || guideDraft.instructorId !== instructorId) {
+      return null;
+    }
+    const [h, m] = guideDraft.time.split(":").map(Number);
+    const startMin = h * 60 + m - DAY_START_HOUR * 60;
+    const durMin = Math.min(guideRequest.durationMinutes, totalMinutes - startMin);
+    const endTotal = h * 60 + m + durMin;
+    const end = `${pad(Math.floor(endTotal / 60) % 24)}:${pad(endTotal % 60)}`;
+    return (
+      <div
+        className="pointer-events-none absolute left-1 right-1 z-30 overflow-hidden rounded-lg border-[1.5px] border-dashed border-amber-500 bg-amber-50/90 px-2 py-1.5 shadow-[0_6px_22px_rgba(16,24,40,0.14)]"
+        style={{
+          top: startMin * PIXELS_PER_MINUTE,
+          height: Math.max(30, durMin * PIXELS_PER_MINUTE - 2),
+        }}
+      >
+        <div className="text-[9.5px] font-bold uppercase tracking-[0.08em] text-amber-600">
+          In attesa
+        </div>
+        <div className="truncate text-[11px] font-semibold text-foreground">
+          {guideRequest.studentName}
+        </div>
+        <div className="text-[10.5px] tabular-nums text-muted-foreground">
+          {guideDraft.time}–{end}
+        </div>
+      </div>
+    );
+  };
+
   // Sposta il draft attivo su un nuovo slot (click su griglia o drag del ghost).
   const moveDraftTo = React.useCallback((ymd: string, time: string, instructorId: string | null) => {
     if (createOpen) {
@@ -1374,8 +1496,12 @@ export function AutoscuoleAgendaPage({
       setGroupSlotPatch({ date: ymd, time, instructorId, nonce: Date.now() });
     } else if (editAppointmentTarget) {
       setEditSlotPatch({ date: ymd, time, instructorId, nonce: Date.now() });
+    } else if (guideRequest) {
+      setGuideDraft((prev) =>
+        prev ? { ...prev, ymd, time, instructorId: instructorId ?? prev.instructorId } : prev,
+      );
     }
-  }, [createOpen, examDialogOpen, blockDialogOpen, createGroupLessonOpen, editAppointmentTarget]);
+  }, [createOpen, examDialogOpen, blockDialogOpen, createGroupLessonOpen, editAppointmentTarget, guideRequest]);
 
   // Drag del ghost: verticale = orario (scatti di 15'), orizzontale = giorno /
   // colonna istruttore (hit-test su [data-agenda-col-day]).
@@ -1845,6 +1971,47 @@ export function AutoscuoleAgendaPage({
       }
     }
     load({ silent: true });
+  };
+
+  // Accetta/Rifiuta la Richiesta guida del consorzio (card flottante).
+  const handleAcceptGuideRequest = async () => {
+    if (!guideRequest || !guideDraft) return;
+    if (!guideDraft.instructorId) {
+      toast.info({ description: "Scegli l'istruttore per la guida." });
+      return;
+    }
+    const startDate = buildLocalDateTime(guideDraft.ymd, guideDraft.time);
+    if (Number.isNaN(startDate.getTime())) {
+      toast.error({ description: "Slot non valido." });
+      return;
+    }
+    setGuideResponding(true);
+    const res = await acceptConsorzioGuideRequest({
+      requestId: guideRequest.id,
+      instructorId: guideDraft.instructorId,
+      startsAt: startDate.toISOString(),
+    });
+    setGuideResponding(false);
+    if (!res.success) {
+      toast.error({ description: res.message });
+      return;
+    }
+    toast.success({ description: "Richiesta accettata: guida creata in agenda." });
+    closeGuideRequest();
+    load({ silent: true });
+  };
+
+  const handleRejectGuideRequest = async () => {
+    if (!guideRequest) return;
+    setGuideResponding(true);
+    const res = await rejectConsorzioGuideRequest(guideRequest.id);
+    setGuideResponding(false);
+    if (!res.success) {
+      toast.error({ description: res.message });
+      return;
+    }
+    toast.success({ description: "Richiesta rifiutata." });
+    closeGuideRequest();
   };
 
   // Dialogo unico "Annulla guida" (future) / "Rimuovi dallo storico" (passate).
@@ -3040,6 +3207,7 @@ export function AutoscuoleAgendaPage({
                         onClick={(event) => openSlotMenu(event, day, instr.instructorId)}
                       >
                         {renderSlotGhost(day, instr.instructorId)}
+                        {renderGuideRequestGhost(day, instr.instructorId)}
                         {renderDraftGhost(day, instr.instructorId)}
                         {isColumnHoliday && instrIdx === 0 && (
                           <div className="pointer-events-none sticky top-3 z-20 flex justify-center">
@@ -3553,6 +3721,7 @@ export function AutoscuoleAgendaPage({
                     onClick={(event) => openSlotMenu(event, day, instr.id)}
                   >
                     {renderSlotGhost(day, instr.id)}
+                    {renderGuideRequestGhost(day, instr.id)}
                     {renderDraftGhost(day, instr.id)}
                     {/* Availability bands — offset e clip alla finestra oraria visibile
                         (startMinutes è da mezzanotte, la griglia parte da DAY_START_HOUR). */}
@@ -4317,6 +4486,93 @@ export function AutoscuoleAgendaPage({
             />
           </div>
         </div>
+      </CreateEventPopover>
+
+      {/* ── Richiesta guida del consorzio (card flottante, dal prototipo) ── */}
+      <CreateEventPopover
+        open={guideRequest !== null}
+        onClose={() => { if (!guideResponding) closeGuideRequest(); }}
+        title="Richiesta di guida"
+        subtitle="Lo slot richiesto è il blocco tratteggiato in agenda: spostalo se serve (clicca un altro slot), poi accetta o rifiuta."
+        anchor={popoverAnchor}
+        width={440}
+        footer={
+          <>
+            <button
+              type="button"
+              className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50"
+              disabled={guideResponding}
+              onClick={() => void handleRejectGuideRequest()}
+            >
+              Rifiuta
+            </button>
+            <button
+              type="button"
+              disabled={guideResponding || !guideDraft?.instructorId}
+              onClick={() => void handleAcceptGuideRequest()}
+              className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
+            >
+              {guideResponding ? <LoadingDots className="min-h-5" /> : "Accetta"}
+            </button>
+          </>
+        }
+      >
+        {guideRequest && guideDraft && (
+          <div className="space-y-4">
+            <div className="divide-y divide-[#f0f0f0] rounded-xl border border-[#ebebeb]">
+              {(() => {
+                const startDate = buildLocalDateTime(guideDraft.ymd, guideDraft.time);
+                const endDate = new Date(
+                  startDate.getTime() + guideRequest.durationMinutes * 60000,
+                );
+                const when = `${startDate.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" })}, ${guideDraft.time}–${pad(endDate.getHours())}:${pad(endDate.getMinutes())}`;
+                const rows: Array<[string, string]> = [
+                  ["Quando", when.charAt(0).toUpperCase() + when.slice(1)],
+                  ["Autoscuola", guideRequest.schoolName],
+                  ["Veicolo", guideRequest.vehicleName ?? "—"],
+                  ["Allievo", guideRequest.studentName],
+                ];
+                return rows.map(([label, value]) => (
+                  <div key={label} className="flex items-center justify-between gap-4 px-3.5 py-2.5">
+                    <span className="text-[13px] text-muted-foreground">{label}</span>
+                    <span className="text-right text-[13px] font-semibold text-foreground">
+                      {value}
+                    </span>
+                  </div>
+                ));
+              })()}
+            </div>
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Istruttore</p>
+              <Select
+                value={guideDraft.instructorId}
+                onValueChange={(value) =>
+                  setGuideDraft((prev) => (prev ? { ...prev, instructorId: value } : prev))
+                }
+              >
+                <SelectTrigger className="cursor-pointer">
+                  <SelectValue placeholder="Scegli l'istruttore" />
+                </SelectTrigger>
+                <SelectContent className="z-[70]">
+                  {instructors.map((instructor) => (
+                    <SelectItem
+                      key={instructor.id}
+                      value={instructor.id}
+                      className="cursor-pointer"
+                    >
+                      {instructor.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {guideRequest.note && (
+              <p className="text-[13px] text-muted-foreground">
+                <span className="font-semibold text-foreground">Nota:</span> {guideRequest.note}
+              </p>
+            )}
+          </div>
+        )}
       </CreateEventPopover>
 
       {/* ── Recurring Block Delete Confirmation ── */}

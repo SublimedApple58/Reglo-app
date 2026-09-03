@@ -2,8 +2,10 @@
 
 import React from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useLocale } from "next-intl";
 import * as Popover from "@radix-ui/react-popover";
-import { CheckCheck, Trash } from "lucide-react";
+import { CheckCheck, Clock, Trash } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 
@@ -14,6 +16,7 @@ type NotificationItem = {
   startsAt: string | null;
   instructorName: string | null;
   lessonType: string | null;
+  meta: Record<string, unknown> | null;
   read: boolean;
   createdAt: string;
 };
@@ -60,6 +63,8 @@ function initialsOf(name: string | null): string {
 
 export function OwnerNotificationsBell() {
   const toast = useFeedbackToast();
+  const router = useRouter();
+  const locale = useLocale();
   const [items, setItems] = React.useState<NotificationItem[]>([]);
   const [unread, setUnread] = React.useState(0);
   const [open, setOpen] = React.useState(false);
@@ -91,10 +96,17 @@ export function OwnerNotificationsBell() {
         for (const n of next) seenRef.current.add(n.id);
         if (fresh.length) {
           const top = fresh[0];
-          toast.info({
-            title: "Nuovo annullamento",
-            description: `${top.studentName ?? "Un allievo"} ha annullato la guida di ${formatGuida(top.startsAt)}`,
-          });
+          if (top.kind === "consortium_guide_request") {
+            toast.info({
+              title: "Nuova richiesta guida",
+              description: `${String(top.meta?.schoolName ?? "Un'autoscuola")} chiede una guida per ${top.studentName ?? "un allievo"} — ${formatGuida(top.startsAt)}`,
+            });
+          } else {
+            toast.info({
+              title: "Nuovo annullamento",
+              description: `${top.studentName ?? "Un allievo"} ha annullato la guida di ${formatGuida(top.startsAt)}`,
+            });
+          }
         }
       }
     } catch {
@@ -207,11 +219,50 @@ export function OwnerNotificationsBell() {
             </div>
           ) : (
             <div className="max-h-[420px] overflow-y-auto pb-1.5">
-              {items.map((n) => (
-                <div key={n.id} className="relative flex items-center gap-3.5 px-5 py-3">
-                  <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-[#f0f0f0] text-[13px] font-semibold text-[#484848]">
-                    {initialsOf(n.studentName)}
-                  </span>
+              {items.map((n) => {
+                // Kind consorzio: "Richiesta guida" clickabile → agenda col
+                // ghost sullo slot richiesto (primo click-through della bell).
+                if (n.kind === "consortium_guide_request") {
+                  const requestId =
+                    typeof n.meta?.requestId === "string" ? n.meta.requestId : null;
+                  const schoolName =
+                    typeof n.meta?.schoolName === "string" ? n.meta.schoolName : null;
+                  return (
+                    <button
+                      key={n.id}
+                      type="button"
+                      onClick={() => {
+                        if (!requestId) return;
+                        setOpen(false);
+                        router.push(
+                          `/${locale}/user/autoscuole?tab=agenda&guideRequestId=${requestId}`,
+                        );
+                      }}
+                      className="relative flex w-full cursor-pointer items-center gap-3.5 px-5 py-3 text-left transition-colors hover:bg-[#f7f7f7]"
+                    >
+                      <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+                        <Clock className="h-[19px] w-[19px]" strokeWidth={2} />
+                      </span>
+                      <div className="min-w-0 flex-1 pr-4">
+                        <p className="text-[14.5px] leading-[1.4] text-foreground">
+                          <span className="font-semibold">Richiesta guida</span>
+                          {n.studentName ? ` · ${n.studentName}` : ""}
+                        </p>
+                        <p className="mt-0.5 truncate text-[13px] font-medium text-[#717171]">
+                          {[schoolName, formatGuida(n.startsAt)].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                      {!n.read && (
+                        <span className="h-[9px] w-[9px] shrink-0 rounded-full bg-[#c13515]" />
+                      )}
+                    </button>
+                  );
+                }
+                return (
+                  <div key={n.id} className="relative flex items-center gap-3.5 px-5 py-3">
+                    <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-[#f0f0f0] text-[13px] font-semibold text-[#484848]">
+                      {initialsOf(n.studentName)}
+                    </span>
                     <div className="min-w-0 flex-1 pr-4">
                       <p className="text-[14.5px] leading-[1.4] text-foreground">
                         <span className="font-semibold">
@@ -223,11 +274,12 @@ export function OwnerNotificationsBell() {
                         {formatGuida(n.startsAt)} · {relativeTime(n.createdAt)}
                       </p>
                     </div>
-                  {!n.read && (
-                    <span className="h-[9px] w-[9px] shrink-0 rounded-full bg-[#c13515]" />
-                  )}
-                </div>
-              ))}
+                    {!n.read && (
+                      <span className="h-[9px] w-[9px] shrink-0 rounded-full bg-[#c13515]" />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </Popover.Content>

@@ -243,6 +243,51 @@ async function main() {
   }
   console.log(`✓ Allievi: ${STUDENTS.length} (taggati per scuola, con codici default)`);
 
+  // 9) Richiesta guida PENDING + notifica in campanella (demo del flusso
+  //    ricevente: il sender vero arriva con la fase affiliate).
+  const pendingRequest = await prisma.consorzioGuideRequest.findFirst({
+    where: { consorzioCompanyId: company.id, status: "pending" },
+  });
+  if (!pendingRequest) {
+    const rachele = await prisma.user.findFirst({
+      where: { email: "rachele.costa@consorzio.demo" },
+    });
+    const vehicle = await prisma.autoscuolaVehicle.findFirst({
+      where: { companyId: company.id, name: "Iveco Stralis" },
+    });
+    // Prossimo martedì alle 10:00 (ora locale server).
+    const starts = new Date();
+    starts.setDate(starts.getDate() + ((9 - starts.getDay()) % 7 || 7));
+    starts.setHours(10, 0, 0, 0);
+    const request = await prisma.consorzioGuideRequest.create({
+      data: {
+        consorzioCompanyId: company.id,
+        schoolId: schoolIds[1],
+        studentUserId: rachele.id,
+        requestedStartsAt: starts,
+        durationMinutes: 90,
+        vehicleId: vehicle?.id ?? null,
+        status: "pending",
+      },
+    });
+    await prisma.autoscuolaNotification.create({
+      data: {
+        companyId: company.id,
+        kind: "consortium_guide_request",
+        studentName: rachele.name,
+        startsAt: starts,
+        meta: {
+          requestId: request.id,
+          schoolName: SCHOOLS[1].name,
+          vehicleName: vehicle?.name ?? null,
+        },
+      },
+    });
+    console.log(`✓ Richiesta guida pending + notifica (${starts.toISOString()})`);
+  } else {
+    console.log("• Richiesta guida pending già presente");
+  }
+
   console.log("\n─────────────────────────────────────────────");
   console.log("Company:", COMPANY_NAME, `(${company.id})`);
   console.log("Login web →  email:", OWNER_EMAIL, " password:", OWNER_PASSWORD);

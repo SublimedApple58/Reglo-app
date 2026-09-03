@@ -12,6 +12,8 @@ export type AutoscuolaNotificationItem = {
   startsAt: string | null;
   instructorName: string | null;
   lessonType: string | null;
+  /** Payload extra per i kind consorzio (requestId, schoolName, vehicleName). */
+  meta: Record<string, unknown> | null;
   read: boolean;
   /** ISO string of when the notification was created (i.e. the cancellation). */
   createdAt: string;
@@ -46,10 +48,39 @@ export async function listAutoscuolaNotifications(
       startsAt: n.startsAt ? n.startsAt.toISOString() : null,
       instructorName: n.instructorName,
       lessonType: n.lessonType,
+      meta: (n.meta ?? null) as Record<string, unknown> | null,
       read: n.readAt != null,
       createdAt: n.createdAt.toISOString(),
     })),
   };
+}
+
+/**
+ * Notifica in-app "Richiesta guida" per il CONSORZIO: un'autoscuola consorziata
+ * chiede uno slot. Il click nella campanella apre l'agenda con il ghost sullo
+ * slot richiesto (deep-link ?guideRequestId=…). Vedi docs/features/consorzio.md.
+ */
+export async function createConsortiumGuideRequestNotification(input: {
+  companyId: string;
+  requestId: string;
+  studentName: string;
+  schoolName: string;
+  vehicleName: string | null;
+  startsAt: Date;
+}): Promise<void> {
+  await prisma.autoscuolaNotification.create({
+    data: {
+      companyId: input.companyId,
+      kind: "consortium_guide_request",
+      studentName: input.studentName,
+      startsAt: input.startsAt,
+      meta: {
+        requestId: input.requestId,
+        schoolName: input.schoolName,
+        vehicleName: input.vehicleName,
+      },
+    },
+  });
 }
 
 /** Mark every currently-unread notification of a company as read (per-company). */
