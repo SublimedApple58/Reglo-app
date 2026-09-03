@@ -241,7 +241,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
   ];
 
   return (
-    <div className="w-full">
+    <div className="mx-auto w-full max-w-[1184px] pt-3 [line-height:normal]">
       <Link
         href={`/${locale}/user/autoscuole?tab=scuole`}
         className="inline-flex items-center gap-1 text-[13.5px] font-medium text-[#929292] transition-colors hover:text-[#222222]"
@@ -252,7 +252,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
 
       <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#4e4e5c] text-[15px] font-bold text-white">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-[#e6e6e6] bg-white text-[15px] font-bold text-[#444444]">
             {initialsOf(school.name.replace(/^Autoscuola\s+/i, ""))}
           </div>
           <div>
@@ -271,7 +271,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
                 {suspended ? "Sospesa" : "Attiva"}
               </span>
             </div>
-            <p className="mt-1 text-sm font-medium text-[#6a6a6a]">
+            <p className="mt-[6px] text-[14px] font-medium text-[#6a6a6a]">
               {[school.city, joined ? `nel consorzio da ${joined}` : null]
                 .filter(Boolean)
                 .join(" · ")}
@@ -282,14 +282,14 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
           <button
             type="button"
             onClick={() => void handleStatus(suspended ? "active" : "suspended")}
-            className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-[3px] hover:opacity-70"
+            className="cursor-pointer text-[14px] font-semibold text-[#222222] hover:opacity-70"
           >
             {suspended ? "Riattiva" : "Sospendi"}
           </button>
           <button
             type="button"
             onClick={() => setRemoveOpen(true)}
-            className="cursor-pointer text-sm font-semibold underline underline-offset-[3px] hover:opacity-70"
+            className="cursor-pointer text-[14px] font-semibold underline underline-offset-[3px] hover:opacity-70"
             style={{ color: "#B3494F" }}
           >
             Rimuovi dal consorzio
@@ -307,12 +307,12 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
             <button
               type="button"
               onClick={openEdit}
-              className="cursor-pointer text-[13px] font-semibold text-[#222222] underline underline-offset-[3px] hover:opacity-70"
+              className="cursor-pointer text-[13px] font-semibold text-[#222222] hover:opacity-70"
             >
               Modifica
             </button>
           </div>
-          <dl className="mt-1.5">
+          <dl className="mt-4">
             {[
               ["Titolare", school.ownerName],
               ["Sede", school.address],
@@ -323,17 +323,17 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
             ].map(([label, value]) => (
               <div
                 key={label as string}
-                className="flex items-center justify-between gap-4 border-b border-[#f0f0f0] py-[11px] last:border-b-0 last:pb-0"
+                className="flex items-center justify-between gap-4 border-b border-[#f0f0f0] py-[10px] last:border-b-0 last:pb-0"
               >
                 <dt className="text-[13px] font-medium text-[#929292]">{label}</dt>
-                <dd className="text-sm font-semibold text-[#222222]">{value ?? "—"}</dd>
+                <dd className="text-[14px] font-semibold text-[#222222]">{value ?? "—"}</dd>
               </div>
             ))}
           </dl>
         </div>
 
         {/* Stat cards */}
-        <div className="grid grid-cols-2 content-start gap-4">
+        <div className="grid grid-cols-2 content-start gap-3">
           {statCards.map((card) => (
             <div
               key={card.label}
@@ -345,7 +345,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
               >
                 {card.value}
               </div>
-              <div className="mt-1 text-[12px] font-medium text-[#929292]">{card.label}</div>
+              <div className="mt-[3px] text-[12px] font-medium text-[#929292]">{card.label}</div>
             </div>
           ))}
         </div>
@@ -354,13 +354,16 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
       {/* Allievi */}
       <div className="mt-9">
         <div className="flex items-center justify-between">
-          <h2 className="text-[17px] font-bold text-[#222222]">
-            Allievi <span className="font-semibold text-[#929292]">· {students.length}</span>
+          <h2 className="text-[18px] font-bold tracking-[-0.3px] text-[#222222]">
+            Allievi{" "}
+            <span className="text-[15px] font-medium tracking-normal text-[#929292]">
+              · {students.length}
+            </span>
           </h2>
           <button
             type="button"
             onClick={() => setAddStudentOpen(true)}
-            className="flex cursor-pointer items-center gap-1.5 rounded-full border border-[#dddddd] bg-white px-4 py-[9px] text-sm font-semibold text-[#222222] transition-colors hover:bg-[#f7f7f7]"
+            className="flex cursor-pointer items-center gap-1.5 rounded-full border border-[#dddddd] bg-white px-4 py-[9px] text-[14px] font-semibold text-[#222222] transition-colors hover:bg-[#f7f7f7]"
           >
             <Plus className="h-4 w-4" />
             Aggiungi allievo
@@ -372,84 +375,78 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
             Nessun allievo per questa autoscuola.
           </div>
         ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse text-left">
-              <thead>
-                <tr className="border-b border-[#ececec]">
-                  {["Allievo", "Patente", "Istruttore", "Ultima guida", "Guide", "Codici contabili"].map(
-                    (header) => (
-                      <th
-                        key={header}
-                        className="px-4 pb-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#a0a0a0] first:pl-4"
-                      >
-                        {header}
-                      </th>
-                    ),
+          <div className="mt-3">
+            {/* Griglia del prototipo: 1.6fr 90px 1fr 110px 70px 1.2fr, gap 14 */}
+            <div className="grid grid-cols-[1.6fr_90px_1fr_110px_70px_1.2fr] gap-x-3.5 border-b border-[#ebebeb] px-4 pb-2.5">
+              {["Allievo", "Patente", "Istruttore", "Ultima guida", "Guide", "Codici contabili"].map(
+                (header, index) => (
+                  <div
+                    key={header}
+                    className={`text-[11px] font-bold uppercase tracking-[0.7px] text-[#929292] ${index === 4 ? "text-right" : ""}`}
+                  >
+                    {header}
+                  </div>
+                ),
+              )}
+            </div>
+            {students.map((student) => (
+              <div
+                key={student.userId}
+                className="grid grid-cols-[1.6fr_90px_1fr_110px_70px_1.2fr] items-center gap-x-3.5 rounded-[10px] border-b border-[#f2f2f2] px-4 py-3.5"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1a1a2e] text-[11px] font-bold text-white">
+                    {initialsOf(student.name)}
+                  </div>
+                  <span className="truncate text-[14px] font-semibold text-[#222222]">
+                    {student.name}
+                  </span>
+                </div>
+                <div>
+                  {student.licenseCategory ? (
+                    <span
+                      className="inline-flex items-center whitespace-nowrap px-2.5 py-1 text-[12px] font-bold leading-[1.4]"
+                      style={{ background: "#EEF4FF", color: "#2A6FDB", borderRadius: 20 }}
+                    >
+                      {student.licenseCategory}
+                    </span>
+                  ) : (
+                    "—"
                   )}
-                </tr>
-              </thead>
-              <tbody>
-                {students.map((student) => (
-                  <tr key={student.userId} className="border-b border-[#f0f0f0]">
-                    <td className="px-4 py-3.5">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1a1a2e] text-[11px] font-bold text-white">
-                          {initialsOf(student.name)}
-                        </div>
-                        <span className="text-sm font-semibold text-[#222222]">
-                          {student.name}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      {student.licenseCategory ? (
-                        <span
-                          className="inline-flex rounded-[20px] px-2.5 py-1 text-[12px] font-bold"
-                          style={{ background: "#EEF4FF", color: "#2A6FDB" }}
-                        >
-                          {student.licenseCategory}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="px-4 py-3.5 text-[13.5px] font-medium text-[#444444]">
-                      {student.instructorName ?? "—"}
-                    </td>
-                    <td className="px-4 py-3.5 text-[13px] font-medium text-[#6a6a6a]">
-                      {formatShortDate(student.lastLessonAt)}
-                    </td>
-                    <td className="px-4 py-3.5 text-sm font-semibold text-[#222222]">
-                      {student.lessonsCount}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <button
-                        type="button"
-                        onClick={() => openCodesFor(student)}
-                        className="flex cursor-pointer flex-wrap items-center gap-1.5"
-                        title="Modifica codici contabili"
+                </div>
+                <div className="truncate text-[13.5px] font-medium text-[#444444]">
+                  {student.instructorName ?? "—"}
+                </div>
+                <div className="whitespace-nowrap text-[13px] font-medium text-[#6a6a6a]">
+                  {formatShortDate(student.lastLessonAt)}
+                </div>
+                <div className="text-right text-[14px] font-semibold text-[#222222]">
+                  {student.lessonsCount}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openCodesFor(student)}
+                  className="flex cursor-pointer flex-wrap items-center gap-1.5"
+                  title="Modifica codici contabili"
+                >
+                  {student.codes.length === 0 ? (
+                    <span className="text-[11.5px] font-semibold text-[#b0b0b0] underline underline-offset-2">
+                      Aggiungi
+                    </span>
+                  ) : (
+                    student.codes.map((code) => (
+                      <span
+                        key={code.id}
+                        className="inline-flex px-2 py-[3px] text-[11.5px] font-bold"
+                        style={{ background: "#EEF0F6", color: "#1A1A2E", borderRadius: 6 }}
                       >
-                        {student.codes.length === 0 ? (
-                          <span className="text-[11.5px] font-semibold text-[#b0b0b0] underline underline-offset-2">
-                            Aggiungi
-                          </span>
-                        ) : (
-                          student.codes.map((code) => (
-                            <span
-                              key={code.id}
-                              className="inline-flex rounded-md px-2 py-[3px] text-[11.5px] font-bold"
-                              style={{ background: "#EEF0F6", color: "#1A1A2E" }}
-                            >
-                              {code.code}
-                            </span>
-                          ))
-                        )}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        {code.code}
+                      </span>
+                    ))
+                  )}
+                </button>
+              </div>
+            ))}
           </div>
         )}
       </div>

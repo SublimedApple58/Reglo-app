@@ -120,24 +120,24 @@ export function ConsorzioSchoolsPage() {
   };
 
   return (
-    <div className="w-full">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <div className="mx-auto w-full max-w-[1184px] pt-3 [line-height:normal]">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-[28px] font-bold tracking-[-0.3px] text-foreground">
+          <h1 className="text-[28px] font-bold leading-10 tracking-[-0.3px] text-[#222222]">
             Autoscuole
           </h1>
-          <p className="mt-1 text-sm font-medium text-muted-foreground">
+          <p className="mt-[6px] text-[14px] font-medium text-[#6a6a6a]">
             {totalStudents} allievi in guida superiore nelle autoscuole associate
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-10 w-[300px] items-center gap-2 rounded-[50px] border border-[#e2e2e2] bg-white px-3.5">
+            <Search className="h-[15px] w-[15px] shrink-0 text-[#a0a0a0]" />
+            <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Cerca autoscuola, titolare o città"
-              className="h-10 w-[300px] rounded-full border-[#e2e2e2] bg-white pl-10 text-[15px] font-medium"
+              className="w-full border-0 bg-transparent p-0 text-[15px] font-medium text-[#222222] outline-none placeholder:text-[#a0a0a0]"
             />
           </div>
           <button
@@ -151,7 +151,7 @@ export function ConsorzioSchoolsPage() {
         </div>
       </div>
 
-      <div className="mt-8">
+      <div className="mt-[22px]">
         {loading ? (
           <div className="h-64 w-full animate-pulse rounded-3xl bg-white/40" />
         ) : filtered.length === 0 ? (
@@ -161,72 +161,63 @@ export function ConsorzioSchoolsPage() {
               : "Nessuna autoscuola corrisponde alla ricerca."}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] border-collapse text-left">
-              <thead>
-                <tr className="border-b border-border/70">
-                  {["Autoscuola", "Titolare", "Allievi", "Ultima guida", "Mezzo più usato", "Stato"].map(
-                    (header) => (
-                      <th
-                        key={header}
-                        className="px-3 pb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground first:pl-1"
-                      >
-                        {header}
-                      </th>
-                    ),
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((school) => {
-                  const badge = STATUS_BADGE[school.status] ?? STATUS_BADGE.active;
-                  return (
-                    <tr
-                      key={school.id}
-                      onClick={() =>
-                        router.push(`/${locale}/user/autoscuole/scuole/${school.id}`)
-                      }
-                      className="cursor-pointer border-b border-border/50 transition-colors hover:bg-muted/30"
+          <div>
+            {/* Griglia del prototipo: 1.6fr 1fr 70px 140px 1fr 92px, gap 28 */}
+            <div className="grid grid-cols-[1.6fr_1fr_70px_140px_1fr_92px] gap-x-7 border-b border-[#ebebeb] px-4 pb-2.5">
+              {["Autoscuola", "Titolare", "Allievi", "Ultima guida", "Mezzo più usato", "Stato"].map(
+                (header, index) => (
+                  <div
+                    key={header}
+                    className={`text-[11px] font-bold uppercase tracking-[0.7px] text-[#929292] ${index === 2 ? "text-right" : ""}`}
+                  >
+                    {header}
+                  </div>
+                ),
+              )}
+            </div>
+            {filtered.map((school) => {
+              const badge = STATUS_BADGE[school.status] ?? STATUS_BADGE.active;
+              return (
+                <div
+                  key={school.id}
+                  onClick={() => router.push(`/${locale}/user/autoscuole/scuole/${school.id}`)}
+                  className="grid cursor-pointer grid-cols-[1.6fr_1fr_70px_140px_1fr_92px] items-center gap-x-7 rounded-[10px] border-b border-[#f2f2f2] px-4 py-3.5 transition-colors hover:bg-[#fafafa]"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#e6e6e6] bg-white text-[12px] font-bold text-[#444444]">
+                      {initialsOf(school.name)}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-[14px] font-semibold text-[#222222]">
+                        {school.name}
+                      </div>
+                      <div className="mt-px truncate text-[12px] font-medium text-[#929292]">
+                        {school.city ?? "—"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="truncate text-[13.5px] font-medium text-[#444444]">
+                    {school.ownerName ?? "—"}
+                  </div>
+                  <div className="text-right text-[14px] font-semibold text-[#222222]">
+                    {school.studentsCount}
+                  </div>
+                  <div className="whitespace-nowrap text-[13px] font-medium text-[#6a6a6a]">
+                    {formatShortDate(school.lastLessonAt)}
+                  </div>
+                  <div className="truncate text-[13px] font-medium text-[#6a6a6a]">
+                    {school.topVehicleName ?? "—"}
+                  </div>
+                  <div>
+                    <span
+                      className={`inline-flex rounded-[999px] px-2.5 py-1 text-[11.5px] font-bold ${badge.className}`}
                     >
-                      <td className="px-3 py-3.5 first:pl-1">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#4e4e5c] text-[12px] font-bold text-white">
-                            {initialsOf(school.name)}
-                          </div>
-                          <div>
-                            <div className="text-sm font-semibold text-foreground">
-                              {school.name}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {school.city ?? "—"}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3.5 text-sm text-foreground">
-                        {school.ownerName ?? "—"}
-                      </td>
-                      <td className="px-3 py-3.5 text-sm font-semibold text-foreground">
-                        {school.studentsCount}
-                      </td>
-                      <td className="px-3 py-3.5 text-sm text-foreground">
-                        {formatShortDate(school.lastLessonAt)}
-                      </td>
-                      <td className="px-3 py-3.5 text-sm text-foreground">
-                        {school.topVehicleName ?? "—"}
-                      </td>
-                      <td className="px-3 py-3.5">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-[11.5px] font-bold ${badge.className}`}
-                        >
-                          {badge.label}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      {badge.label}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
