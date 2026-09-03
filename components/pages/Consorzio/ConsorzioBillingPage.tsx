@@ -81,10 +81,10 @@ function CodeChip({ code, small }: { code: string; small?: boolean }) {
   return (
     <span
       className={cn(
-        "inline-flex rounded-md font-bold",
+        "inline-flex font-bold",
         small ? "px-[7px] py-[3px] text-[11px]" : "px-2 py-[3px] text-[11.5px]",
       )}
-      style={{ background: "#EEF0F6", color: "#1A1A2E" }}
+      style={{ background: "#EEF0F6", color: "#1A1A2E", borderRadius: 6 }}
     >
       {code}
     </span>
@@ -225,9 +225,9 @@ export function ConsorzioBillingPage() {
   };
 
   return (
-    <div className="w-full">
+    <div className="mx-auto w-full max-w-[1184px] pt-3 [line-height:normal]">
       {/* Header: titolo + totali a sinistra, navigatore mese a destra */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="mb-2 text-[28px] font-bold tracking-[-0.4px] text-[#222222]">
             Fatturazione
@@ -248,7 +248,7 @@ export function ConsorzioBillingPage() {
             </span>
           </p>
         </div>
-        <div className="flex items-center gap-1 pt-2.5">
+        <div className="-mb-1.5 flex items-center gap-1">
           <button
             type="button"
             onClick={() => setMonth((m) => shiftMonth(m, -1))}
@@ -257,7 +257,7 @@ export function ConsorzioBillingPage() {
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <div className="px-1.5 text-[15px] font-semibold text-[#222222]">
+          <div className="px-[6px] text-center text-[15px] font-semibold text-[#222222]">
             {monthLabel(month)}
           </div>
           <button
@@ -272,14 +272,14 @@ export function ConsorzioBillingPage() {
       </div>
 
       {/* Search a sinistra, legenda a destra */}
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#a0a0a0]" />
-          <Input
+      <div className="mt-9 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex h-[39px] w-[320px] items-center gap-2 rounded-[50px] border border-[#e2e2e2] bg-white px-3.5">
+          <Search className="h-[15px] w-[15px] shrink-0 text-[#a0a0a0]" />
+          <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Cerca autoscuola..."
-            className="h-[39px] w-[320px] rounded-full border-[#e2e2e2] bg-white pl-10 text-sm font-medium shadow-none"
+            className="w-full border-0 bg-transparent p-0 text-[14px] font-medium text-[#222222] outline-none placeholder:text-[#a0a0a0]"
           />
         </div>
         <div className="flex items-center gap-4 text-[12.5px] font-medium text-[#6a6a6a]">
@@ -302,7 +302,7 @@ export function ConsorzioBillingPage() {
           type="button"
           onClick={() => setCodeFilter(null)}
           className={cn(
-            "cursor-pointer rounded-full px-[11px] py-1.5 text-[12.5px] font-semibold transition-colors",
+            "cursor-pointer rounded-[999px] px-[11px] py-1.5 text-[12.5px] font-semibold transition-colors",
             codeFilter === null
               ? "bg-[#1a1a2e] text-white"
               : "bg-[#f2f2f2] text-[#444444] hover:bg-[#e9e9e9]",
@@ -316,7 +316,7 @@ export function ConsorzioBillingPage() {
             type="button"
             onClick={() => setCodeFilter((prev) => (prev === code.id ? null : code.id))}
             className={cn(
-              "cursor-pointer rounded-full px-[11px] py-1.5 text-[12.5px] font-semibold transition-colors",
+              "cursor-pointer rounded-[999px] px-[11px] py-1.5 text-[12.5px] font-semibold transition-colors",
               codeFilter === code.id
                 ? "bg-[#1a1a2e] text-white"
                 : "bg-[#f2f2f2] text-[#444444] hover:bg-[#e9e9e9]",
@@ -358,7 +358,7 @@ export function ConsorzioBillingPage() {
           </p>
         </div>
       ) : (
-        <div className="divide-y divide-[#ececec]">
+        <div className="divide-y divide-[#ececec] border-t border-[#ececec]">
           {filteredGroups.map((group) => {
             const isOpen = expanded.has(group.schoolId);
             return (
@@ -368,7 +368,7 @@ export function ConsorzioBillingPage() {
                   onClick={() => toggleExpanded(group.schoolId)}
                   className="flex h-[68px] w-full cursor-pointer items-center gap-3.5 text-left"
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#4e4e5c] text-[12px] font-bold text-white">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#e6e6e6] bg-white text-[12px] font-bold text-[#444444]">
                     {initialsOf(group.schoolName)}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -376,7 +376,7 @@ export function ConsorzioBillingPage() {
                       {group.schoolName}
                     </div>
                     <div className="truncate text-[13px] font-medium text-[#929292]">
-                      {[group.schoolCity, `${group.lessons.length} guide`, `${formatMoney(group.total)} totale`]
+                      {[group.schoolCity, `${group.lessons.length} ${group.lessons.length === 1 ? 'guida' : 'guide'}`, `${formatMoney(group.total)} totale`]
                         .filter(Boolean)
                         .join(" · ")}
                     </div>
@@ -384,12 +384,11 @@ export function ConsorzioBillingPage() {
                   <span className="shrink-0 text-[16px] font-extrabold tracking-[-0.3px] text-[#222222]">
                     {formatMoney(group.total)}
                   </span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 shrink-0 text-[#a0a0a0] transition-transform",
-                      isOpen && "rotate-180",
-                    )}
-                  />
+                  {isOpen ? (
+                    <ChevronDown className="h-4 w-4 shrink-0 text-[#a0a0a0]" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 shrink-0 text-[#a0a0a0]" />
+                  )}
                 </button>
 
                 {isOpen && (
@@ -402,13 +401,13 @@ export function ConsorzioBillingPage() {
                         <span className="w-14 shrink-0 text-[13px] font-medium text-[#929292]">
                           {formatLessonDate(lesson.startsAt)}
                         </span>
-                        <span className="w-[136px] shrink-0 truncate text-sm font-semibold text-[#222222]">
+                        <span className="w-[170px] shrink-0 truncate text-[14px] font-semibold text-[#222222]">
                           {lesson.studentName}
                         </span>
                         {lesson.licenseCategory ? (
                           <span
-                            className="inline-flex shrink-0 rounded-md px-2 py-[3px] text-[11.5px] font-bold"
-                            style={{ background: "#EEF0F6", color: "#1A1A2E" }}
+                            className="inline-flex shrink-0 px-2 py-[3px] text-[11.5px] font-bold"
+                            style={{ background: "#EEF0F6", color: "#1A1A2E", borderRadius: 6 }}
                           >
                             {lesson.licenseCategory}
                           </span>
@@ -440,15 +439,15 @@ export function ConsorzioBillingPage() {
                             ))
                           )}
                         </button>
-                        <span className="w-[74px] shrink-0 text-right text-sm font-bold text-[#222222]">
+                        <span className="w-[60px] shrink-0 text-right text-[14px] font-bold text-[#222222]">
                           {formatMoney(lesson.price)}
                         </span>
-                        <div className="flex shrink-0 items-center gap-1.5">
+                        <div className="flex shrink-0 items-center gap-2">
                           <button
                             type="button"
                             onClick={() => void toggleFlag(lesson, "settled")}
                             title={lesson.settled ? "Saldata — clic per togliere" : "Segna saldata"}
-                            className="h-4 w-4 cursor-pointer rounded-[5px] transition-colors"
+                            className="h-[15px] w-[15px] cursor-pointer rounded-[4px] transition-colors"
                             style={
                               lesson.settled
                                 ? { background: "#1F6B2A" }
@@ -463,7 +462,7 @@ export function ConsorzioBillingPage() {
                                 ? "Fattura inviata — clic per togliere"
                                 : "Segna fattura inviata"
                             }
-                            className="h-4 w-4 cursor-pointer rounded-[5px] transition-colors"
+                            className="h-[15px] w-[15px] cursor-pointer rounded-[4px] transition-colors"
                             style={
                               lesson.invoiceSent
                                 ? { background: "#1A1A2E" }
@@ -558,7 +557,7 @@ export function ConsorzioBillingPage() {
                     )
                   }
                   className={cn(
-                    "cursor-pointer rounded-full px-[11px] py-1.5 text-[12.5px] font-semibold transition-colors",
+                    "cursor-pointer rounded-[999px] px-[11px] py-1.5 text-[12.5px] font-semibold transition-colors",
                     active ? "bg-[#1a1a2e] text-white" : "bg-[#f2f2f2] text-[#444444] hover:bg-[#e9e9e9]",
                   )}
                 >
