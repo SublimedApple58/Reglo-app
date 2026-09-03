@@ -22,9 +22,11 @@ import {
 } from "@/lib/actions/consorzio.actions";
 
 /**
- * Sub-tab "Prezzi" di Prenotazioni e allievi (solo consorzio, dal prototipo):
- * cancellazioni tardive (cutoff + penale) e tariffa oraria per patente.
- * Il prezzo di una guida = durata/60 × tariffa oraria della categoria.
+ * Sub-tab "Prezzi" di Prenotazioni e allievi (solo consorzio) — misure 1:1 dal
+ * prototipo Consorzi.html (computed styles): titoli sezione 15/600, descrizioni
+ * 14/500 #929292, label campo 14/500 #444, select 49px radius 12 bordo #E6E6E6,
+ * badge categoria 30px #EEF0F6 bordo #DCDCE6, input tariffa 230×46 con suffisso
+ * "€ / ora" interno. Prezzo guida = durata/60 × tariffa oraria.
  * Vedi docs/features/consorzio.md.
  */
 
@@ -93,23 +95,21 @@ export function ConsorzioPrezziPane() {
   return (
     <div className="divide-y divide-[#ebebeb]">
       {/* Cancellazioni tardive */}
-      <div className="py-6 first:pt-2">
-        <div className="text-[15px] font-semibold text-foreground">Cancellazioni tardive</div>
-        <p className="mt-0.5 text-[13px] text-muted-foreground">
+      <div className="pb-6 pt-1">
+        <div className="text-[15px] font-semibold text-[#222222]">Cancellazioni tardive</div>
+        <p className="mt-[3px] text-sm font-medium leading-[1.45] text-[#929292]">
           Se l&apos;allievo annulla oltre il cutoff, sulla guida viene applicata la penale.
         </p>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div className="mt-4 grid gap-8 sm:grid-cols-2">
           <div>
-            <div className="mb-2 text-[13px] font-semibold text-foreground">
-              Cutoff annullamento
-            </div>
+            <div className="mb-2 text-sm font-medium text-[#444444]">Cutoff annullamento</div>
             <Select
               value={String(pricing.lateCancellationCutoffHours)}
               onValueChange={(value) =>
                 void persist({ ...pricing, lateCancellationCutoffHours: Number(value) })
               }
             >
-              <SelectTrigger className="cursor-pointer">
+              <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-xl border-[#e6e6e6] bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-none">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -122,14 +122,14 @@ export function ConsorzioPrezziPane() {
             </Select>
           </div>
           <div>
-            <div className="mb-2 text-[13px] font-semibold text-foreground">Penale</div>
+            <div className="mb-2 text-sm font-medium text-[#444444]">Penale</div>
             <Select
               value={String(pricing.lateCancellationPenaltyPct)}
               onValueChange={(value) =>
                 void persist({ ...pricing, lateCancellationPenaltyPct: Number(value) })
               }
             >
-              <SelectTrigger className="cursor-pointer">
+              <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-xl border-[#e6e6e6] bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-none">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -145,28 +145,31 @@ export function ConsorzioPrezziPane() {
       </div>
 
       {/* Tariffa oraria per patente */}
-      <div className="py-6">
-        <div className="text-[15px] font-semibold text-foreground">
+      <div className="pt-6">
+        <div className="text-[15px] font-semibold text-[#222222]">
           Tariffa oraria per patente
         </div>
-        <p className="mt-0.5 max-w-2xl text-[13px] text-muted-foreground">
+        <p className="mt-[3px] max-w-2xl text-sm font-medium leading-[1.45] text-[#929292]">
           Il costo di un&apos;ora di guida per ogni tipo di patente: è il valore che le
           autoscuole consorziate vedono in fattura. Uno slot da 90 minuti costa una
           volta e mezza la tariffa.
         </p>
-        <div className="mt-4 divide-y divide-[#f0f0f0]">
+        <div className="mt-3 divide-y divide-[#f0f0f0]">
           {CONSORTIUM_LICENSE_CATEGORIES.map((category) => {
             const info = CONSORTIUM_LICENSE_INFO[category];
             return (
-              <div key={category} className="flex items-center gap-4 py-4">
-                <span className="inline-flex w-11 shrink-0 justify-center rounded-lg bg-muted px-2 py-1 text-xs font-bold text-foreground">
+              <div key={category} className="flex items-center gap-4 py-3">
+                <span
+                  className="flex h-[30px] min-w-[46px] shrink-0 items-center justify-center rounded-[9px] px-2.5 text-[13px] font-bold"
+                  style={{ background: "#EEF0F6", border: "1px solid #DCDCE6", color: "#1A1A2E" }}
+                >
                   {category}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-foreground">{info.title}</div>
-                  <div className="text-[13px] text-muted-foreground">{info.description}</div>
+                  <div className="text-[15px] font-semibold text-[#222222]">{info.title}</div>
+                  <div className="text-sm font-medium text-[#929292]">{info.description}</div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="relative w-[230px] shrink-0">
                   <input
                     inputMode="decimal"
                     value={drafts[category] ?? ""}
@@ -178,9 +181,11 @@ export function ConsorzioPrezziPane() {
                       if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                     }}
                     placeholder="—"
-                    className="h-10 w-20 rounded-xl border border-border bg-white px-3 text-right text-sm font-semibold text-foreground outline-none focus:border-foreground"
+                    className="h-[46px] w-full rounded-xl border-[1.5px] border-[#e2e2e2] bg-white pl-4 pr-[70px] text-[15px] font-semibold text-[#222222] outline-none transition-colors focus:border-[#222222]"
                   />
-                  <span className="text-[13px] font-medium text-muted-foreground">€ / ora</span>
+                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-[#a0a0a0]">
+                    € / ora
+                  </span>
                 </div>
               </div>
             );

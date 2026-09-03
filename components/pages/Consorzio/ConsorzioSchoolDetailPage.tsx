@@ -40,10 +40,13 @@ import {
 } from "@/lib/actions/consorzio.actions";
 
 /**
- * Dettaglio autoscuola consorziata (dal prototipo): anagrafica con Modifica,
- * stat card (allievi attivi / guide col consorzio / ore certificate / da
- * certificare), azioni Sospendi · Rimuovi dal consorzio, tabella Allievi con
- * codici contabili + "Aggiungi allievo". Vedi docs/features/consorzio.md.
+ * Dettaglio autoscuola consorziata — riproduzione 1:1 del prototipo
+ * Consorzi.html (computed styles estratti): header con avatar 56, nome 28/700
+ * −0.4 + badge pill, azioni Sospendi/Rimuovi sottolineate; card DATI ANAGRAFICI
+ * 16px radius bordo #EBEBEB con righe label 13/valore 14; stat card 14px radius
+ * con numeri 26/700 −0.6 (verde #1F6B2A, ambra); tabella Allievi con righe h61,
+ * avatar 32 navy, badge patente pill azzurra #EEF4FF/#2A6FDB, chip codici
+ * #EEF0F6/#1A1A2E. Vedi docs/features/consorzio.md.
  */
 
 type SchoolData = {
@@ -231,81 +234,85 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
   const suspended = school.status === "suspended";
 
   const statCards = [
-    { value: String(stats?.activeStudents ?? 0), label: "allievi attivi", className: "text-foreground" },
-    { value: String(stats?.lessonsCount ?? 0), label: "guide col consorzio", className: "text-foreground" },
-    { value: formatHours(stats?.certifiedMinutes ?? 0), label: "ore certificate", className: "text-emerald-600" },
-    { value: formatHours(stats?.toCertifyMinutes ?? 0), label: "da certificare", className: "text-amber-500" },
+    { value: String(stats?.activeStudents ?? 0), label: "allievi attivi", color: "#222222" },
+    { value: String(stats?.lessonsCount ?? 0), label: "guide col consorzio", color: "#222222" },
+    { value: formatHours(stats?.certifiedMinutes ?? 0), label: "ore certificate", color: "#1F6B2A" },
+    { value: formatHours(stats?.toCertifyMinutes ?? 0), label: "da certificare", color: "#D97706" },
   ];
 
   return (
     <div className="w-full">
       <Link
         href={`/${locale}/user/autoscuole?tab=scuole`}
-        className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        className="inline-flex items-center gap-1 text-[13.5px] font-medium text-[#929292] transition-colors hover:text-[#222222]"
       >
         <ChevronLeft className="h-4 w-4" />
         Tutte le autoscuole
       </Link>
 
-      <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
+      <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#4e4e5c] text-sm font-bold text-white">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#4e4e5c] text-[15px] font-bold text-white">
             {initialsOf(school.name.replace(/^Autoscuola\s+/i, ""))}
           </div>
           <div>
             <div className="flex items-center gap-2.5">
-              <h1 className="text-[28px] font-bold tracking-[-0.3px] text-foreground">
+              <h1 className="text-[28px] font-bold tracking-[-0.4px] text-[#222222]">
                 {school.name}
               </h1>
               <span
-                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
-                  suspended ? "bg-amber-50 text-amber-700" : "bg-[#e4f4e7] text-[#1f6b2a]"
-                }`}
+                className="inline-flex rounded-full px-2.5 py-1 text-[11.5px] font-bold"
+                style={
+                  suspended
+                    ? { background: "#FCEFC7", color: "#8A6D1A" }
+                    : { background: "#E4F4E7", color: "#1F6B2A" }
+                }
               >
                 {suspended ? "Sospesa" : "Attiva"}
               </span>
             </div>
-            <p className="mt-0.5 text-sm font-medium text-muted-foreground">
+            <p className="mt-1 text-sm font-medium text-[#6a6a6a]">
               {[school.city, joined ? `nel consorzio da ${joined}` : null]
                 .filter(Boolean)
                 .join(" · ")}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-5 pt-2">
+        <div className="flex items-center gap-5 pt-3">
           <button
             type="button"
             onClick={() => void handleStatus(suspended ? "active" : "suspended")}
-            className="cursor-pointer text-sm font-semibold text-foreground underline underline-offset-4 hover:opacity-70"
+            className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-[3px] hover:opacity-70"
           >
             {suspended ? "Riattiva" : "Sospendi"}
           </button>
           <button
             type="button"
             onClick={() => setRemoveOpen(true)}
-            className="cursor-pointer text-sm font-semibold text-[#c13515] underline underline-offset-4 hover:opacity-70"
+            className="cursor-pointer text-sm font-semibold underline underline-offset-[3px] hover:opacity-70"
+            style={{ color: "#B3494F" }}
           >
             Rimuovi dal consorzio
           </button>
         </div>
       </div>
 
-      <div className="mt-8 grid gap-5 lg:grid-cols-[1fr_360px]">
+      <div className="mt-7 grid gap-4 lg:grid-cols-[625px_minmax(0,1fr)]">
         {/* Dati anagrafici */}
-        <div className="rounded-3xl border border-border/70 bg-white p-6">
+        <div className="rounded-2xl border border-[#ebebeb] bg-white px-6 py-[22px]">
           <div className="flex items-center justify-between">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <div className="text-[11px] font-bold uppercase tracking-[0.8px] text-[#929292]">
               Dati anagrafici
             </div>
             <button
               type="button"
               onClick={openEdit}
-              className="cursor-pointer text-sm font-semibold text-foreground underline underline-offset-4 hover:opacity-70"
+              className="cursor-pointer text-[13px] font-semibold text-[#222222] underline underline-offset-[3px] hover:opacity-70"
             >
               Modifica
             </button>
           </div>
-          <dl className="mt-3">
+          <dl className="mt-1.5">
             {[
               ["Titolare", school.ownerName],
               ["Sede", school.address],
@@ -316,10 +323,10 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
             ].map(([label, value]) => (
               <div
                 key={label as string}
-                className="flex items-center justify-between gap-4 border-b border-border/50 py-3 last:border-b-0"
+                className="flex items-center justify-between gap-4 border-b border-[#f0f0f0] py-[11px] last:border-b-0 last:pb-0"
               >
-                <dt className="text-sm text-muted-foreground">{label}</dt>
-                <dd className="text-sm font-semibold text-foreground">{value ?? "—"}</dd>
+                <dt className="text-[13px] font-medium text-[#929292]">{label}</dt>
+                <dd className="text-sm font-semibold text-[#222222]">{value ?? "—"}</dd>
               </div>
             ))}
           </dl>
@@ -330,33 +337,34 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
           {statCards.map((card) => (
             <div
               key={card.label}
-              className="rounded-3xl border border-border/70 bg-white p-5"
+              className="rounded-[14px] border border-[#ebebeb] bg-white px-[18px] pb-4 pt-[18px]"
             >
-              <div className={`text-[28px] font-semibold tracking-tight ${card.className}`}>
+              <div
+                className="text-[26px] font-bold leading-8 tracking-[-0.6px]"
+                style={{ color: card.color }}
+              >
                 {card.value}
               </div>
-              <div className="mt-0.5 text-[13px] font-medium text-muted-foreground">
-                {card.label}
-              </div>
+              <div className="mt-1 text-[12px] font-medium text-[#929292]">{card.label}</div>
             </div>
           ))}
         </div>
       </div>
 
       {/* Allievi */}
-      <div className="mt-10">
+      <div className="mt-9">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground">
-            Allievi <span className="text-muted-foreground">· {students.length}</span>
+          <h2 className="text-[17px] font-bold text-[#222222]">
+            Allievi <span className="font-semibold text-[#929292]">· {students.length}</span>
           </h2>
-          <Button
-            variant="outline"
+          <button
+            type="button"
             onClick={() => setAddStudentOpen(true)}
-            className="rounded-full"
+            className="flex cursor-pointer items-center gap-1.5 rounded-full border border-[#dddddd] bg-white px-4 py-[9px] text-sm font-semibold text-[#222222] transition-colors hover:bg-[#f7f7f7]"
           >
             <Plus className="h-4 w-4" />
             Aggiungi allievo
-          </Button>
+          </button>
         </div>
 
         {students.length === 0 ? (
@@ -364,15 +372,15 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
             Nessun allievo per questa autoscuola.
           </div>
         ) : (
-          <div className="mt-4 overflow-x-auto">
+          <div className="mt-3 overflow-x-auto">
             <table className="w-full min-w-[720px] border-collapse text-left">
               <thead>
-                <tr className="border-b border-border/70">
+                <tr className="border-b border-[#ececec]">
                   {["Allievo", "Patente", "Istruttore", "Ultima guida", "Guide", "Codici contabili"].map(
                     (header) => (
                       <th
                         key={header}
-                        className="px-3 pb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground first:pl-1"
+                        className="px-4 pb-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#a0a0a0] first:pl-4"
                       >
                         {header}
                       </th>
@@ -382,36 +390,39 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
               </thead>
               <tbody>
                 {students.map((student) => (
-                  <tr key={student.userId} className="border-b border-border/50">
-                    <td className="px-3 py-4 first:pl-1">
+                  <tr key={student.userId} className="border-b border-[#f0f0f0]">
+                    <td className="px-4 py-3.5">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-bold text-foreground">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1a1a2e] text-[11px] font-bold text-white">
                           {initialsOf(student.name)}
                         </div>
-                        <span className="text-sm font-semibold text-foreground">
+                        <span className="text-sm font-semibold text-[#222222]">
                           {student.name}
                         </span>
                       </div>
                     </td>
-                    <td className="px-3 py-4">
+                    <td className="px-4 py-3.5">
                       {student.licenseCategory ? (
-                        <span className="inline-flex rounded-md bg-sky-50 px-2 py-0.5 text-xs font-bold text-sky-700">
+                        <span
+                          className="inline-flex rounded-[20px] px-2.5 py-1 text-[12px] font-bold"
+                          style={{ background: "#EEF4FF", color: "#2A6FDB" }}
+                        >
                           {student.licenseCategory}
                         </span>
                       ) : (
                         "—"
                       )}
                     </td>
-                    <td className="px-3 py-4 text-sm text-foreground">
+                    <td className="px-4 py-3.5 text-[13.5px] font-medium text-[#444444]">
                       {student.instructorName ?? "—"}
                     </td>
-                    <td className="px-3 py-4 text-sm text-foreground">
+                    <td className="px-4 py-3.5 text-[13px] font-medium text-[#6a6a6a]">
                       {formatShortDate(student.lastLessonAt)}
                     </td>
-                    <td className="px-3 py-4 text-sm font-semibold text-foreground">
+                    <td className="px-4 py-3.5 text-sm font-semibold text-[#222222]">
                       {student.lessonsCount}
                     </td>
-                    <td className="px-3 py-4">
+                    <td className="px-4 py-3.5">
                       <button
                         type="button"
                         onClick={() => openCodesFor(student)}
@@ -419,14 +430,15 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
                         title="Modifica codici contabili"
                       >
                         {student.codes.length === 0 ? (
-                          <span className="text-xs font-medium text-muted-foreground underline underline-offset-4">
+                          <span className="text-[11.5px] font-semibold text-[#b0b0b0] underline underline-offset-2">
                             Aggiungi
                           </span>
                         ) : (
                           student.codes.map((code) => (
                             <span
                               key={code.id}
-                              className="inline-flex rounded-md bg-muted px-2 py-0.5 text-xs font-semibold text-foreground"
+                              className="inline-flex rounded-md px-2 py-[3px] text-[11.5px] font-bold"
+                              style={{ background: "#EEF0F6", color: "#1A1A2E" }}
                             >
                               {code.code}
                             </span>
@@ -582,8 +594,8 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
                     }
                     className={
                       active
-                        ? "cursor-pointer rounded-full bg-foreground px-3 py-1 text-xs font-semibold text-white"
-                        : "cursor-pointer rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted"
+                        ? "cursor-pointer rounded-full bg-[#1a1a2e] px-[11px] py-1.5 text-[12.5px] font-semibold text-white"
+                        : "cursor-pointer rounded-full bg-[#f2f2f2] px-[11px] py-1.5 text-[12.5px] font-semibold text-[#444444] hover:bg-[#e9e9e9]"
                     }
                   >
                     {code.code}

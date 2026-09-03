@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 import { ChevronDown, ChevronLeft, ChevronRight, Plus, Search, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -27,11 +28,13 @@ import {
 } from "@/lib/actions/consorzio.actions";
 
 /**
- * Sezione "Fatturazione" del consorzio (?tab=fatturazione, dal prototipo):
- * contabilizzazione mensile delle guide verso le autoscuole consorziate.
- * Navigatore mese · totali · ricerca · filtro per codice contabile · gruppi
- * per autoscuola espandibili · toggle Saldata / Fattura inviata per guida.
- * Vedi docs/features/consorzio.md.
+ * Sezione "Fatturazione" del consorzio (?tab=fatturazione) — riproduzione 1:1
+ * del prototipo Consorzi.html (computed styles estratti): titolo 28/700 −0.4,
+ * totali 14.5, navigatore mese con frecce circolari 30px, search pill 320×39,
+ * chip codici 12.5/600 (attivo navy, inattivo #F2F2F2), gruppi scuola h68 con
+ * avatar 40, righe guida h44 (badge patente e chip codici #EEF0F6/#1A1A2E,
+ * quadratini saldata/fattura 16px), placeholder mese futuro con sfera di
+ * cristallo. Vedi docs/features/consorzio.md.
  */
 
 const monthKey = (date: Date): string =>
@@ -53,6 +56,8 @@ const shiftMonth = (key: string, delta: number): string => {
   return monthKey(new Date(date.getUTCFullYear(), date.getUTCMonth(), 1));
 };
 
+const isFutureMonth = (key: string): boolean => key > monthKey(new Date());
+
 const formatMoney = (value: number): string =>
   `€ ${value.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -70,6 +75,21 @@ const initialsOf = (name: string): string =>
     .slice(0, 2)
     .map((word) => word[0]?.toUpperCase() ?? "")
     .join("");
+
+/** Chip codice contabile (navy su #EEF0F6, radius 6 — dal prototipo). */
+function CodeChip({ code, small }: { code: string; small?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-md font-bold",
+        small ? "px-[7px] py-[3px] text-[11px]" : "px-2 py-[3px] text-[11.5px]",
+      )}
+      style={{ background: "#EEF0F6", color: "#1A1A2E" }}
+    >
+      {code}
+    </span>
+  );
+}
 
 export function ConsorzioBillingPage() {
   const toast = useFeedbackToast();
@@ -206,45 +226,44 @@ export function ConsorzioBillingPage() {
 
   return (
     <div className="w-full">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      {/* Header: titolo + totali a sinistra, navigatore mese a destra */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-[28px] font-bold tracking-[-0.3px] text-foreground">
+          <h1 className="mb-2 text-[28px] font-bold tracking-[-0.4px] text-[#222222]">
             Fatturazione
           </h1>
-          <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm font-medium text-muted-foreground">
+          <p className="flex flex-wrap items-center gap-x-2.5 text-[14.5px] font-medium text-[#6a6a6a]">
             <span>
-              Totale <span className="font-semibold text-foreground">{formatMoney(totals.total)}</span>
+              Totale <span className="font-bold text-[#222222]">{formatMoney(totals.total)}</span>
             </span>
-            <span>·</span>
+            <span className="text-[#d8d8d8]">·</span>
             <span>
               Saldato{" "}
-              <span className="font-semibold text-emerald-600">{formatMoney(totals.settled)}</span>
+              <span className="font-bold text-[#1f6b2a]">{formatMoney(totals.settled)}</span>
             </span>
-            <span>·</span>
+            <span className="text-[#d8d8d8]">·</span>
             <span>
               Da incassare{" "}
-              <span className="font-semibold text-foreground">
-                {formatMoney(totals.outstanding)}
-              </span>
+              <span className="font-bold text-[#222222]">{formatMoney(totals.outstanding)}</span>
             </span>
           </p>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 pt-2.5">
           <button
             type="button"
             onClick={() => setMonth((m) => shiftMonth(m, -1))}
-            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-muted"
+            className="flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-full text-[#555555] transition-colors hover:bg-[#f2f2f2]"
             aria-label="Mese precedente"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <div className="min-w-[150px] text-center text-[15px] font-semibold text-foreground">
+          <div className="px-1.5 text-[15px] font-semibold text-[#222222]">
             {monthLabel(month)}
           </div>
           <button
             type="button"
             onClick={() => setMonth((m) => shiftMonth(m, 1))}
-            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-muted"
+            className="flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-full text-[#555555] transition-colors hover:bg-[#f2f2f2]"
             aria-label="Mese successivo"
           >
             <ChevronRight className="h-4 w-4" />
@@ -252,38 +271,41 @@ export function ConsorzioBillingPage() {
         </div>
       </div>
 
+      {/* Search a sinistra, legenda a destra */}
       <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#a0a0a0]" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Cerca autoscuola..."
-            className="h-11 w-[260px] rounded-full border-border bg-white pl-10"
+            className="h-[39px] w-[320px] rounded-full border-[#e2e2e2] bg-white pl-10 text-sm font-medium shadow-none"
           />
         </div>
-        <div className="flex items-center gap-4 text-xs font-medium text-muted-foreground">
+        <div className="flex items-center gap-4 text-[12.5px] font-medium text-[#6a6a6a]">
           <span className="flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded-[4px] bg-emerald-600" /> Saldata
+            <span className="h-3 w-3 rounded-[3px]" style={{ background: "#1F6B2A" }} /> Saldata
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded-[4px] bg-foreground" /> Fattura inviata
+            <span className="h-3 w-3 rounded-[3px]" style={{ background: "#1A1A2E" }} /> Fattura
+            inviata
           </span>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <span className="mr-1 text-[13px] font-medium text-muted-foreground">
+      {/* Filtro per codice contabile */}
+      <div className="mb-6 mt-3.5 flex flex-wrap items-center gap-2">
+        <span className="mr-0.5 text-[12.5px] font-semibold text-[#929292]">
           Codice contabile
         </span>
         <button
           type="button"
           onClick={() => setCodeFilter(null)}
           className={cn(
-            "cursor-pointer rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors",
+            "cursor-pointer rounded-full px-[11px] py-1.5 text-[12.5px] font-semibold transition-colors",
             codeFilter === null
-              ? "bg-foreground text-white"
-              : "border border-border bg-white text-muted-foreground hover:text-foreground",
+              ? "bg-[#1a1a2e] text-white"
+              : "bg-[#f2f2f2] text-[#444444] hover:bg-[#e9e9e9]",
           )}
         >
           Tutti
@@ -294,10 +316,10 @@ export function ConsorzioBillingPage() {
             type="button"
             onClick={() => setCodeFilter((prev) => (prev === code.id ? null : code.id))}
             className={cn(
-              "cursor-pointer rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors",
+              "cursor-pointer rounded-full px-[11px] py-1.5 text-[12.5px] font-semibold transition-colors",
               codeFilter === code.id
-                ? "bg-foreground text-white"
-                : "border border-border bg-white text-muted-foreground hover:text-foreground",
+                ? "bg-[#1a1a2e] text-white"
+                : "bg-[#f2f2f2] text-[#444444] hover:bg-[#e9e9e9]",
             )}
           >
             {code.code}
@@ -306,151 +328,158 @@ export function ConsorzioBillingPage() {
         <button
           type="button"
           onClick={() => setCodesManagerOpen(true)}
-          className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+          className="flex h-[27px] w-[27px] cursor-pointer items-center justify-center rounded-full border border-dashed border-[#c8c8c8] text-[#929292] transition-colors hover:border-[#222222] hover:text-[#222222]"
           aria-label="Gestisci codici contabili"
           title="Gestisci codici contabili"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      <div className="mt-6">
-        {loading ? (
-          <div className="h-64 w-full animate-pulse rounded-3xl bg-white/40" />
-        ) : filteredGroups.length === 0 ? (
-          <div className="rounded-3xl border border-dashed border-neutral-200 bg-white/60 p-12 text-center text-sm font-medium text-neutral-500">
-            Nessuna guida da contabilizzare in {monthLabel(month).toLowerCase()}.
+      {loading ? (
+        <div className="h-64 w-full animate-pulse rounded-3xl bg-white/40" />
+      ) : filteredGroups.length === 0 ? (
+        /* Placeholder mese vuoto — 1:1 dal prototipo (sfera di cristallo). */
+        <div className="flex flex-col items-center px-6 pb-16 pt-14 text-center">
+          <Image
+            src="/images/3d/sfera-cristallo-3d.png"
+            alt=""
+            width={200}
+            height={200}
+            className="mb-[26px] block h-[200px] w-[200px] object-contain"
+          />
+          <div className="mb-2 text-[22px] font-bold tracking-[-0.4px] text-[#222222]">
+            {isFutureMonth(month)
+              ? "Non riusciamo ANCORA a vedere nel futuro"
+              : `Nessuna guida a ${monthLabel(month).toLowerCase()}`}
           </div>
-        ) : (
-          <div className="divide-y divide-border/60">
-            {filteredGroups.map((group) => {
-              const isOpen = expanded.has(group.schoolId);
-              return (
-                <div key={group.schoolId}>
-                  <button
-                    type="button"
-                    onClick={() => toggleExpanded(group.schoolId)}
-                    className="flex w-full cursor-pointer items-center justify-between gap-4 py-4 text-left"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#4e4e5c] text-[12px] font-bold text-white">
-                        {initialsOf(group.schoolName)}
-                      </div>
-                      <div>
-                        <div className="text-[15px] font-semibold text-foreground">
-                          {group.schoolName}
-                        </div>
-                        <div className="text-[13px] text-muted-foreground">
-                          {[group.schoolCity, `${group.lessons.length} guide`, `${formatMoney(group.total)} totale`]
+          <p className="max-w-[380px] text-[14.5px] font-medium leading-[1.55] text-[#6a6a6a]">
+            Le guide di {monthLabel(month)} compariranno qui man mano che vengono fatte.
+          </p>
+        </div>
+      ) : (
+        <div className="divide-y divide-[#ececec]">
+          {filteredGroups.map((group) => {
+            const isOpen = expanded.has(group.schoolId);
+            return (
+              <div key={group.schoolId}>
+                <button
+                  type="button"
+                  onClick={() => toggleExpanded(group.schoolId)}
+                  className="flex h-[68px] w-full cursor-pointer items-center gap-3.5 text-left"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#4e4e5c] text-[12px] font-bold text-white">
+                    {initialsOf(group.schoolName)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[15.5px] font-semibold text-[#222222]">
+                      {group.schoolName}
+                    </div>
+                    <div className="truncate text-[13px] font-medium text-[#929292]">
+                      {[group.schoolCity, `${group.lessons.length} guide`, `${formatMoney(group.total)} totale`]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-[16px] font-extrabold tracking-[-0.3px] text-[#222222]">
+                    {formatMoney(group.total)}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 shrink-0 text-[#a0a0a0] transition-transform",
+                      isOpen && "rotate-180",
+                    )}
+                  />
+                </button>
+
+                {isOpen && (
+                  <div className="pb-3 pl-[54px]">
+                    {group.lessons.map((lesson) => (
+                      <div
+                        key={lesson.appointmentId}
+                        className="flex h-11 items-center gap-3.5"
+                      >
+                        <span className="w-14 shrink-0 text-[13px] font-medium text-[#929292]">
+                          {formatLessonDate(lesson.startsAt)}
+                        </span>
+                        <span className="w-[136px] shrink-0 truncate text-sm font-semibold text-[#222222]">
+                          {lesson.studentName}
+                        </span>
+                        {lesson.licenseCategory ? (
+                          <span
+                            className="inline-flex shrink-0 rounded-md px-2 py-[3px] text-[11.5px] font-bold"
+                            style={{ background: "#EEF0F6", color: "#1A1A2E" }}
+                          >
+                            {lesson.licenseCategory}
+                          </span>
+                        ) : (
+                          <span className="w-8 shrink-0" />
+                        )}
+                        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#929292]">
+                          {[
+                            `${lesson.durationMinutes} min`,
+                            lesson.instructorName,
+                            lesson.vehicleName,
+                          ]
                             .filter(Boolean)
                             .join(" · ")}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[15px] font-semibold text-foreground">
-                        {formatMoney(group.total)}
-                      </span>
-                      <ChevronDown
-                        className={cn(
-                          "h-4 w-4 text-muted-foreground transition-transform",
-                          isOpen && "rotate-180",
-                        )}
-                      />
-                    </div>
-                  </button>
-
-                  {isOpen && (
-                    <div className="pb-4 pl-[52px]">
-                      {group.lessons.map((lesson) => (
-                        <div
-                          key={lesson.appointmentId}
-                          className="flex items-center gap-3 border-t border-border/40 py-3 first:border-t-0"
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => openLessonCodes(lesson)}
+                          className="flex shrink-0 cursor-pointer flex-wrap items-center gap-1.5"
+                          title="Modifica codici della guida"
                         >
-                          <span className="w-12 shrink-0 text-[13px] font-medium text-muted-foreground">
-                            {formatLessonDate(lesson.startsAt)}
-                          </span>
-                          <span className="w-40 shrink-0 truncate text-sm font-semibold text-foreground">
-                            {lesson.studentName}
-                          </span>
-                          {lesson.licenseCategory ? (
-                            <span className="inline-flex shrink-0 rounded-md bg-sky-50 px-2 py-0.5 text-xs font-bold text-sky-700">
-                              {lesson.licenseCategory}
+                          {lesson.codes.length === 0 ? (
+                            <span className="text-[11.5px] font-semibold text-[#b0b0b0] underline underline-offset-2">
+                              Codici
                             </span>
                           ) : (
-                            <span className="w-8 shrink-0" />
+                            lesson.codes.map((code) => (
+                              <CodeChip key={code.id} code={code.code} small />
+                            ))
                           )}
-                          <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
-                            {[
-                              `${lesson.durationMinutes} min`,
-                              lesson.instructorName,
-                              lesson.vehicleName,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </span>
+                        </button>
+                        <span className="w-[74px] shrink-0 text-right text-sm font-bold text-[#222222]">
+                          {formatMoney(lesson.price)}
+                        </span>
+                        <div className="flex shrink-0 items-center gap-1.5">
                           <button
                             type="button"
-                            onClick={() => openLessonCodes(lesson)}
-                            className="flex shrink-0 cursor-pointer flex-wrap items-center gap-1.5"
-                            title="Modifica codici della guida"
-                          >
-                            {lesson.codes.length === 0 ? (
-                              <span className="text-xs font-medium text-muted-foreground underline underline-offset-4">
-                                Codici
-                              </span>
-                            ) : (
-                              lesson.codes.map((code) => (
-                                <span
-                                  key={code.id}
-                                  className="inline-flex rounded-md bg-muted px-2 py-0.5 text-xs font-semibold text-foreground"
-                                >
-                                  {code.code}
-                                </span>
-                              ))
-                            )}
-                          </button>
-                          <span className="w-20 shrink-0 text-right text-sm font-semibold text-foreground">
-                            {formatMoney(lesson.price)}
-                          </span>
-                          <div className="flex shrink-0 items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => void toggleFlag(lesson, "settled")}
-                              title={lesson.settled ? "Saldata — clic per togliere" : "Segna saldata"}
-                              className={cn(
-                                "h-5 w-5 cursor-pointer rounded-md border transition-colors",
-                                lesson.settled
-                                  ? "border-emerald-600 bg-emerald-600"
-                                  : "border-border bg-white hover:border-emerald-600",
-                              )}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => void toggleFlag(lesson, "invoiceSent")}
-                              title={
-                                lesson.invoiceSent
-                                  ? "Fattura inviata — clic per togliere"
-                                  : "Segna fattura inviata"
-                              }
-                              className={cn(
-                                "h-5 w-5 cursor-pointer rounded-md border transition-colors",
-                                lesson.invoiceSent
-                                  ? "border-foreground bg-foreground"
-                                  : "border-border bg-white hover:border-foreground",
-                              )}
-                            />
-                          </div>
+                            onClick={() => void toggleFlag(lesson, "settled")}
+                            title={lesson.settled ? "Saldata — clic per togliere" : "Segna saldata"}
+                            className="h-4 w-4 cursor-pointer rounded-[5px] transition-colors"
+                            style={
+                              lesson.settled
+                                ? { background: "#1F6B2A" }
+                                : { border: "1.5px solid #D9D9D9", background: "#fff" }
+                            }
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void toggleFlag(lesson, "invoiceSent")}
+                            title={
+                              lesson.invoiceSent
+                                ? "Fattura inviata — clic per togliere"
+                                : "Segna fattura inviata"
+                            }
+                            className="h-4 w-4 cursor-pointer rounded-[5px] transition-colors"
+                            style={
+                              lesson.invoiceSent
+                                ? { background: "#1A1A2E" }
+                                : { border: "1.5px solid #D9D9D9", background: "#fff" }
+                            }
+                          />
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Gestione codici contabili */}
       <Dialog open={codesManagerOpen} onOpenChange={setCodesManagerOpen}>
@@ -528,11 +557,10 @@ export function ConsorzioBillingPage() {
                       active ? prev.filter((id) => id !== code.id) : [...prev, code.id],
                     )
                   }
-                  className={
-                    active
-                      ? "cursor-pointer rounded-full bg-foreground px-3 py-1 text-xs font-semibold text-white"
-                      : "cursor-pointer rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted"
-                  }
+                  className={cn(
+                    "cursor-pointer rounded-full px-[11px] py-1.5 text-[12.5px] font-semibold transition-colors",
+                    active ? "bg-[#1a1a2e] text-white" : "bg-[#f2f2f2] text-[#444444] hover:bg-[#e9e9e9]",
+                  )}
                 >
                   {code.code}
                 </button>
