@@ -45,6 +45,15 @@ type Props = {
   description?: string;
   /** Chiamata dopo una creazione andata a buon fine (es. refresh lista istruttori). */
   onCreated?: () => void;
+  /**
+   * Company consorzio — "Aggiungi allievo" dal dettaglio autoscuola consorziata:
+   * aggancia il nuovo allievo alla scuola e mostra il picker dei codici
+   * contabili di default. Vedi docs/features/consorzio.md.
+   */
+  consorzioSchoolId?: string;
+  accountingCodes?: Array<{ id: string; code: string }>;
+  /** Precompila la categoria patente (es. "C" per gli allievi del consorzio). */
+  defaultLicenseCategory?: string;
 };
 
 const NO_INSTRUCTOR = "__none__";
@@ -66,14 +75,19 @@ export function AdminUsersCreateDialog({
   title,
   description,
   onCreated,
+  consorzioSchoolId,
+  accountingCodes,
+  defaultLicenseCategory,
 }: Props): React.ReactElement {
   const company = useAtomValue(companyAtom);
   const toast = useFeedbackToast();
   const [form, setForm] = React.useState({
     ...defaultForm,
+    ...(defaultLicenseCategory ? { licenseCategory: defaultLicenseCategory } : {}),
     ...(fixedAutoscuolaRole ? { autoscuolaRole: fixedAutoscuolaRole } : {}),
   });
   const [loading, setLoading] = React.useState(false);
+  const [selectedCodeIds, setSelectedCodeIds] = React.useState<string[]>([]);
 
   React.useEffect(() => {
     if (open && fixedAutoscuolaRole) {
@@ -104,6 +118,9 @@ export function AdminUsersCreateDialog({
         );
       }
     });
+    // Con una categoria imposta dal chiamante (consorzio) il default
+    // dell'autoscuola non deve sovrascriverla.
+    if (defaultLicenseCategory) return;
     getAutoscuolaSettings().then((res) => {
       if (res.success && res.data) {
         setForm((p) => ({
@@ -113,7 +130,7 @@ export function AdminUsersCreateDialog({
         }));
       }
     });
-  }, [open, isAutoscuola]);
+  }, [open, isAutoscuola, defaultLicenseCategory]);
 
   const isStudent = isAutoscuola && form.autoscuolaRole === "STUDENT";
 
@@ -135,6 +152,9 @@ export function AdminUsersCreateDialog({
               transmission: form.transmission,
               assignedInstructorId:
                 form.assignedInstructorId === NO_INSTRUCTOR ? null : form.assignedInstructorId,
+              ...(consorzioSchoolId
+                ? { consorzioSchoolId, accountingCodeIds: selectedCodeIds }
+                : {}),
             }
           : {}),
       });
@@ -144,8 +164,10 @@ export function AdminUsersCreateDialog({
       toast.success({ title: "Utente creato", description: res.message });
       setForm({
         ...defaultForm,
+        ...(defaultLicenseCategory ? { licenseCategory: defaultLicenseCategory } : {}),
         ...(fixedAutoscuolaRole ? { autoscuolaRole: fixedAutoscuolaRole } : {}),
       });
+      setSelectedCodeIds([]);
       onOpenChange(false);
       onCreated?.();
     } catch (error) {
@@ -255,6 +277,36 @@ export function AdminUsersCreateDialog({
                   </Select>
                 </div>
               </div>
+              {consorzioSchoolId && (accountingCodes?.length ?? 0) > 0 && (
+                <div className="space-y-2">
+                  <Label>Codici contabili (facoltativi)</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {accountingCodes!.map((code) => {
+                      const active = selectedCodeIds.includes(code.id);
+                      return (
+                        <button
+                          key={code.id}
+                          type="button"
+                          onClick={() =>
+                            setSelectedCodeIds((prev) =>
+                              active
+                                ? prev.filter((id) => id !== code.id)
+                                : [...prev, code.id],
+                            )
+                          }
+                          className={
+                            active
+                              ? "cursor-pointer rounded-full bg-foreground px-3 py-1 text-xs font-semibold text-white"
+                              : "cursor-pointer rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted"
+                          }
+                        >
+                          {code.code}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               {autonomousInstructors.length > 0 && (
                 <div className="space-y-2">
                   <Label>Istruttore assegnato (facoltativo)</Label>

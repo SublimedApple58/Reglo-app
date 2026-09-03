@@ -585,6 +585,10 @@ export async function createCompanyUser(input: {
   // grantQuizSeat); AWAITING/TEORIA are valid only if the school has the
   // TEORIA phase enabled. Omitted → PRATICA (schema default).
   studentPhase?: 'AWAITING' | 'TEORIA' | 'PRATICA';
+  // Solo company consorzio: autoscuola consorziata di appartenenza + codici
+  // contabili di default dell'allievo. Ignorati per gli altri ruoli.
+  consorzioSchoolId?: string;
+  accountingCodeIds?: string[];
 }) {
   try {
     const session = await auth();
@@ -609,7 +613,9 @@ export async function createCompanyUser(input: {
       studentPhase?: 'AWAITING' | 'TEORIA' | 'PRATICA';
       quizSeatGrantedAt?: Date;
       phaseClassifiedAt?: Date;
+      consorzioSchoolId?: string;
     } | null = null;
+    let accountingCodeIds: string[] = [];
     if (input.autoscuolaRole === 'STUDENT') {
       const service = await prisma.companyService.findFirst({
         where: { companyId: input.companyId, serviceKey: 'AUTOSCUOLE', status: 'ACTIVE' },
@@ -644,6 +650,24 @@ export async function createCompanyUser(input: {
             : 'manual',
         assignedInstructorId,
       };
+
+      // Company consorzio: aggancia l'allievo alla sua autoscuola consorziata
+      // e prepara i codici contabili di default.
+      if (input.consorzioSchoolId) {
+        const school = await prisma.consorzioSchool.findFirst({
+          where: { id: input.consorzioSchoolId, consorzioCompanyId: input.companyId },
+          select: { id: true },
+        });
+        if (!school) throw new Error('Autoscuola consorziata non valida.');
+        studentFields.consorzioSchoolId = school.id;
+      }
+      if (input.accountingCodeIds?.length) {
+        const codes = await prisma.consorzioAccountingCode.findMany({
+          where: { id: { in: input.accountingCodeIds }, consorzioCompanyId: input.companyId },
+          select: { id: true },
+        });
+        accountingCodeIds = codes.map((code) => code.id);
+      }
 
       if (input.studentPhase && input.studentPhase !== 'PRATICA') {
         const phasesEnabledRaw = Array.isArray(limits?.phasesEnabled)
@@ -718,6 +742,17 @@ export async function createCompanyUser(input: {
             userId: user.id,
             name: input.name.trim(),
           },
+        });
+      }
+
+      // Codici contabili di default dell'allievo (solo consorzio).
+      if (accountingCodeIds.length) {
+        await tx.consorzioMemberAccountingCode.createMany({
+          data: accountingCodeIds.map((codeId) => ({
+            codeId,
+            companyId: input.companyId,
+            userId: user.id,
+          })),
         });
       }
     });
