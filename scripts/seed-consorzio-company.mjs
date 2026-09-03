@@ -36,9 +36,11 @@ const CONSORZIO_LIMITS = {
   },
 };
 
+// L'agenda mostra solo istruttori con USER collegato + membership INSTRUCTOR
+// (vedi listAutoscuolaInstructorsReadOnly): servono account veri.
 const INSTRUCTORS = [
-  { name: "Angelo Mastro" },
-  { name: "Sergio Ravera" },
+  { name: "Angelo Mastro", email: "angelo.mastro@consorzio.demo" },
+  { name: "Sergio Ravera", email: "sergio.ravera@consorzio.demo" },
 ];
 
 const VEHICLES = [
@@ -144,16 +146,47 @@ async function main() {
     console.log("• CompanyService AUTOSCUOLE aggiornato (consorzio)");
   }
 
-  // 4) Istruttori
+  // 4) Istruttori (user + membership INSTRUCTOR + record AutoscuolaInstructor)
   for (const instructor of INSTRUCTORS) {
+    let user = await prisma.user.findFirst({ where: { email: instructor.email } });
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email: instructor.email,
+          name: instructor.name,
+          password: hashPassword(OWNER_PASSWORD),
+        },
+      });
+    }
+    await prisma.companyMember.upsert({
+      where: { companyId_userId: { companyId: company.id, userId: user.id } },
+      create: {
+        companyId: company.id,
+        userId: user.id,
+        role: "member",
+        autoscuolaRole: "INSTRUCTOR",
+      },
+      update: { autoscuolaRole: "INSTRUCTOR" },
+    });
     const existing = await prisma.autoscuolaInstructor.findFirst({
       where: { companyId: company.id, name: instructor.name },
     });
     if (!existing) {
       await prisma.autoscuolaInstructor.create({
-        data: { companyId: company.id, name: instructor.name, status: "active" },
+        data: {
+          companyId: company.id,
+          userId: user.id,
+          name: instructor.name,
+          status: "active",
+        },
       });
       console.log(`✓ Istruttore creato: ${instructor.name}`);
+    } else if (!existing.userId) {
+      await prisma.autoscuolaInstructor.update({
+        where: { id: existing.id },
+        data: { userId: user.id },
+      });
+      console.log(`✓ Istruttore collegato all'account: ${instructor.name}`);
     }
   }
 
@@ -286,6 +319,42 @@ async function main() {
     console.log(`✓ Richiesta guida pending + notifica (${starts.toISOString()})`);
   } else {
     console.log("• Richiesta guida pending già presente");
+  }
+
+  // 10) Una guida già fatta nel mese corrente (demo Fatturazione: Yuri, C,
+  //     60 min → tariffa C). Idempotente per bookingSource+studente.
+  const yuri = await prisma.user.findFirst({
+    where: { email: "yuri.parodi@consorzio.demo" },
+  });
+  const demoLesson = await prisma.autoscuolaAppointment.findFirst({
+    where: { companyId: company.id, studentId: yuri.id, type: "guida" },
+  });
+  if (!demoLesson) {
+    const instructor = await prisma.autoscuolaInstructor.findFirst({
+      where: { companyId: company.id, name: "Angelo Mastro" },
+    });
+    const stralis = await prisma.autoscuolaVehicle.findFirst({
+      where: { companyId: company.id, name: "Iveco Stralis" },
+    });
+    const starts = new Date();
+    starts.setDate(2);
+    starts.setHours(10, 0, 0, 0);
+    await prisma.autoscuolaAppointment.create({
+      data: {
+        companyId: company.id,
+        studentId: yuri.id,
+        type: "guida",
+        status: "completed",
+        startsAt: starts,
+        endsAt: new Date(starts.getTime() + 60 * 60000),
+        instructorId: instructor?.id ?? null,
+        vehicleId: stralis?.id ?? null,
+        bookingSource: "staff_owner",
+      },
+    });
+    console.log("✓ Guida demo (Yuri, C, 60 min) per la Fatturazione");
+  } else {
+    console.log("• Guida demo già presente");
   }
 
   console.log("\n─────────────────────────────────────────────");

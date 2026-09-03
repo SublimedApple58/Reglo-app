@@ -292,6 +292,14 @@ respondToSwapOffer(accept) → adjustStudentLessonCredits(swap_consume) for take
                            → invalidateAutoscuoleCache(PAYMENTS)
 ```
 
+### Account Consorzio
+- → **Appointments**: l'accettazione di una `ConsorzioGuideRequest` crea un `AutoscuolaAppointment` normale (`bookingSource: "consortium_request"`); la Fatturazione legge le guide non annullate del mese (esclusi esami/gruppi). Nessun punto di creazione appuntamento è stato modificato (prezzo lazy, vedi `features/consorzio.md`).
+- → **Owner notifications**: nuovo kind `consortium_guide_request` con `meta Json` + PRIMO click-through della campanella (`?tab=agenda&guideRequestId=…`). I kind legacy restano inerti.
+- → **Vehicles / License engine**: `LICENSE_CATEGORIES` estesa con C1/C1E/D1/D1E/CQC/ADR (bucket `pro`, self-match stretto, moto-logic intatta). I picker UI passano da `LicenseCategorySelectItems` (mode-aware): toccando la taxonomy verificare ENTRAMBE le liste (`AUTOSCUOLA_` e `CONSORTIUM_LICENSE_CATEGORIES`) e che il mobile non riceva categorie nuove.
+- → **Solo Segretaria**: `accountKind` e `secretaryOnly` sono mutuamente esclusivi (enforced nel backoffice).
+- → **Users Directory**: `createCompanyUser` accetta `consorzioSchoolId` + `accountingCodeIds` (solo STUDENT di company consorzio).
+- → **Settings/Cache**: `consorzioPricing` vive in `CompanyService.limits` (cache Redis SETTINGS: gli update passano da `invalidateAutoscuoleCache`).
+
 ### Background Job (every 1 min)
 ```
 autoscuole-reminders.ts → communications.ts →

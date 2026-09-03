@@ -32,6 +32,7 @@
 | Penalties | [penalties.md](features/penalties.md) | `payments.ts`, `communications.ts` |
 | Voice AI | [voice-ai.md](features/voice-ai.md) | `voice.ts`, `voice-webhook.ts` |
 | Solo Segretaria (secretary-only) | [secretary-only.md](features/secretary-only.md) | `lib/services.ts` (`secretaryOnly`, `isSecretaryOnly`), `AutoscuoleNav.tsx`, `AutoscuoleTabsPage.tsx`, `AutoscuoleResourcesPage.tsx`, `AutoscuoleShell.tsx`, `BackofficeCompaniesPage.tsx` |
+| Account Consorzio (autoscuole consorziate, prezzi, fatturazione, richieste guida) | [consorzio.md](features/consorzio.md) | `lib/services.ts` (`accountKind`, `isConsortium`), `lib/service-access.ts` (`requireConsortium`), `lib/actions/consorzio.actions.ts`, `components/pages/Consorzio/*`, `AutoscuoleAgendaPage.tsx` (ghost richiesta), `OwnerNotificationsBell.tsx` (click-through), modelli `Consorzio*` |
 | Quiz Teoria | [quiz-theory.md](features/quiz-theory.md) | `autoscuole-quiz.actions.ts`, `quiz-engine.ts` |
 | Password Reset (mobile) | [password-reset.md](features/password-reset.md) | `lib/auth/password-reset.ts`, `lib/mobile-auth-payload.ts`, `app/api/mobile/auth/password-reset/*` |
 | Student Phase + Quiz Seats | [student-phase.md](features/student-phase.md) | `autoscuole.actions.ts` (`updateStudentPhase`), `autoscuole-settings.actions.ts` (`grantQuizSeat`, `setAutoAssignQuizOnSignup`, `getQuizSeatsContext`), `backoffice.actions.ts` (`getQuizSeatsUsage`, `deactivateTeoriaWithResolution`), `theory-reminders.ts` |
