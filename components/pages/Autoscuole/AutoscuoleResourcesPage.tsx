@@ -8,6 +8,7 @@ import { useAtomValue } from "jotai";
 import { Plus, ChevronLeft, ChevronRight, X, type LucideIcon } from "lucide-react";
 
 import { companyAtom } from "@/atoms/company.store";
+import { LicenseCategorySelectItems } from "./LicenseCategorySelectItems";
 import { isSecretaryOnly } from "@/lib/services";
 
 import {
@@ -1679,9 +1680,7 @@ export function AutoscuoleResourcesPage({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {LICENSE_CATEGORIES.map((cat) => (
-                  <SelectItem key={cat} value={cat}>{LICENSE_CATEGORY_LABELS[cat]}</SelectItem>
-                ))}
+                <LicenseCategorySelectItems />
               </SelectContent>
             </Select>
           </div>
@@ -2388,9 +2387,7 @@ export function AutoscuoleResourcesPage({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {LICENSE_CATEGORIES.map((cat) => (
-                      <SelectItem key={cat} value={cat}>{LICENSE_CATEGORY_LABELS[cat]}</SelectItem>
-                    ))}
+                    <LicenseCategorySelectItems />
                   </SelectContent>
                 </Select>
               </div>

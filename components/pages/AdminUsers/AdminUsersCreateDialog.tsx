@@ -26,6 +26,7 @@ import { createCompanyUser } from "@/lib/actions/user.actions";
 import { getAutoscuolaInstructors } from "@/lib/actions/autoscuole.actions";
 import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
 import { companyAtom } from "@/atoms/company.store";
+import { LicenseCategorySelectItems } from "@/components/pages/Autoscuole/LicenseCategorySelectItems";
 import {
   LICENSE_CATEGORIES,
   LICENSE_CATEGORY_LABELS,
@@ -231,11 +232,7 @@ export function AdminUsersCreateDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {LICENSE_CATEGORIES.map((cat) => (
-                        <SelectItem key={cat} value={cat} className="cursor-pointer">
-                          {LICENSE_CATEGORY_LABELS[cat]}
-                        </SelectItem>
-                      ))}
+                      <LicenseCategorySelectItems className="cursor-pointer" />
                     </SelectContent>
                   </Select>
                 </div>

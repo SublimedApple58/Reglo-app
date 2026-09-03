@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
+import { LicenseCategorySelectItems } from "../LicenseCategorySelectItems";
 import {
   LICENSE_CATEGORIES,
   LICENSE_CATEGORY_LABELS,
@@ -229,9 +230,7 @@ export default function VehiclesTab({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {LICENSE_CATEGORIES.map((cat) => (
-                            <SelectItem key={cat} value={cat}>{LICENSE_CATEGORY_LABELS[cat]}</SelectItem>
-                          ))}
+                          <LicenseCategorySelectItems />
                         </SelectContent>
                       </Select>
                     </div>

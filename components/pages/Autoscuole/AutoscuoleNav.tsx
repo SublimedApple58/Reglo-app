@@ -7,7 +7,7 @@ import { useLocale } from "next-intl";
 import { useAtomValue } from "jotai";
 
 import { companyAtom } from "@/atoms/company.store";
-import { isSecretaryOnly } from "@/lib/services";
+import { isConsortium, isSecretaryOnly } from "@/lib/services";
 import { cn } from "@/lib/utils";
 
 /**
@@ -23,6 +23,13 @@ const navItems = [
   { label: "Rinnovi", tab: "rinnovi", icon: "/images/nav/rinnovi-3d.png" },
 ] as const;
 
+// Modalità consorzio: stessa shell, tab dedicate (l'agenda è identica).
+const consortiumNavItems = [
+  { label: "Agenda", tab: "agenda", icon: "/images/nav/agenda-3d.png" },
+  { label: "Autoscuole", tab: "scuole", icon: "/images/nav/autoscuole-3d.png" },
+  { label: "Fatturazione", tab: "fatturazione", icon: "/images/nav/fatturazione-3d.png" },
+] as const;
+
 export function AutoscuoleNav() {
   const pathname = usePathname() ?? "";
   const searchParams = useSearchParams();
@@ -34,10 +41,14 @@ export function AutoscuoleNav() {
   const isOnAutoscuolePage = pathname === basePath;
 
   // Modalità "solo Segretaria": mostra unicamente la tab Segretaria.
+  // Modalità consorzio: Agenda | Autoscuole | Fatturazione.
   const secretaryOnly = isSecretaryOnly(company?.services ?? null);
+  const consortium = isConsortium(company?.services ?? null);
   const items = secretaryOnly
     ? navItems.filter((item) => item.tab === "voice")
-    : navItems;
+    : consortium
+      ? consortiumNavItems
+      : navItems;
 
   return (
     <nav className="flex h-full items-stretch justify-center overflow-x-auto [scrollbar-width:none]">

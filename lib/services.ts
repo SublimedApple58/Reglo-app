@@ -101,6 +101,27 @@ export type ServiceLimits = {
    * Vedi docs/features/secretary-only.md.
    */
   secretaryOnly?: boolean;
+  /**
+   * Tipo di account della company sul servizio AUTOSCUOLE. Assente = autoscuola
+   * normale. "consorzio" = consorzio di autoscuole (mezzi pesanti condivisi):
+   * la web app mostra Agenda | Autoscuole | Fatturazione e le impostazioni
+   * consorzio (Prezzi). Mutuamente esclusivo con `secretaryOnly`.
+   * Vedi docs/features/consorzio.md.
+   */
+  accountKind?: "consorzio";
+  /**
+   * Prezzi del consorzio verso le autoscuole consorziate (solo accountKind
+   * "consorzio"). `hourlyByCategory` = tariffa oraria in € per categoria
+   * (prezzo guida = durata/60 × tariffa). Cancellazioni tardive: oltre il
+   * cutoff si applica la penale in % del prezzo della guida.
+   */
+  consorzioPricing?: {
+    hourlyByCategory?: Partial<Record<string, number>>;
+    /** Default 48 */
+    lateCancellationCutoffHours?: number;
+    /** Default 100 */
+    lateCancellationPenaltyPct?: number;
+  };
 };
 
 export type CompanyServiceInfo = {
@@ -156,3 +177,13 @@ export const getServiceLimits = (
 export const isSecretaryOnly = (
   services: CompanyServiceInfo[] | null | undefined,
 ): boolean => getServiceLimits(services, "AUTOSCUOLE").secretaryOnly === true;
+
+/**
+ * true se la company è un CONSORZIO di autoscuole (limits.accountKind =
+ * "consorzio"). Guida il gating della web app: nav a 3 tab (Agenda |
+ * Autoscuole | Fatturazione), impostazioni con il sub-tab Prezzi, niente
+ * aree solo-autoscuola. Vedi docs/features/consorzio.md.
+ */
+export const isConsortium = (
+  services: CompanyServiceInfo[] | null | undefined,
+): boolean => getServiceLimits(services, "AUTOSCUOLE").accountKind === "consorzio";

@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { LicenseCategorySelectItems } from "../LicenseCategorySelectItems";
 import { updateStudentLicensePath } from "@/lib/actions/autoscuole.actions";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
@@ -119,11 +120,7 @@ export function EditStudentLicenseDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="z-[300]">
-                  {LICENSE_CATEGORIES.map((cat) => (
-                    <SelectItem key={cat} value={cat} className="cursor-pointer">
-                      {LICENSE_CATEGORY_LABELS[cat]}
-                    </SelectItem>
-                  ))}
+                  <LicenseCategorySelectItems className="cursor-pointer" />
                 </SelectContent>
               </Select>
             </div>

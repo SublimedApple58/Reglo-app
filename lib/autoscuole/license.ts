@@ -14,9 +14,15 @@ export const LICENSE_CATEGORIES = [
   "B",
   "BE",
   "C",
+  "C1",
+  "C1E",
   "CE",
   "D",
+  "D1",
+  "D1E",
   "DE",
+  "CQC",
+  "ADR",
   "AM",
   "A1",
   "A2",
@@ -49,14 +55,94 @@ export const LICENSE_CATEGORY_LABELS: Record<LicenseCategory, string> = {
   B: "B (auto)",
   BE: "BE (auto + rimorchio)",
   C: "C (camion)",
+  C1: "C1 (camion fino a 7,5 t)",
+  C1E: "C1E (C1 + rimorchio)",
   CE: "CE (camion + rimorchio)",
   D: "D (autobus)",
+  D1: "D1 (minibus)",
+  D1E: "D1E (D1 + rimorchio)",
   DE: "DE (autobus + rimorchio)",
+  CQC: "CQC (qualificazione)",
+  ADR: "ADR (merci pericolose)",
   AM: "AM (ciclomotore)",
   A1: "A1 (125)",
   A2: "A2 (media)",
   A: "A (moto)",
 };
+
+/**
+ * Categorie usate dal CONSORZIO (patenti superiori + qualificazioni): pilotano
+ * i picker allievi/veicoli del consorzio e la tabella tariffe in Impostazioni →
+ * Prenotazioni e allievi → Prezzi. CQC e ADR non sono patenti ma qualificazioni:
+ * le modelliamo come pseudo-categorie per non introdurre una seconda dimensione
+ * su allievi/veicoli/tariffe. I picker delle autoscuole normali e del mobile
+ * restano su B/BE + moto: le categorie superiori NON devono comparire lì.
+ * Ordine = ordine di visualizzazione nella tabella Prezzi (dal prototipo).
+ */
+export const CONSORTIUM_LICENSE_CATEGORIES = [
+  "C",
+  "CE",
+  "D",
+  "DE",
+  "C1",
+  "D1",
+  "CQC",
+  "ADR",
+] as const satisfies readonly LicenseCategory[];
+export type ConsortiumLicenseCategory =
+  (typeof CONSORTIUM_LICENSE_CATEGORIES)[number];
+
+/** Titolo + descrizione per la tabella "Tariffa oraria per patente" (dal prototipo). */
+export const CONSORTIUM_LICENSE_INFO: Record<
+  ConsortiumLicenseCategory,
+  { title: string; description: string }
+> = {
+  C: { title: "Autocarro oltre 3,5 t", description: "Veicoli merci sopra le 3,5 tonnellate." },
+  CE: { title: "Autoarticolato e autotreno", description: "Motrice con semirimorchio o rimorchio." },
+  D: { title: "Autobus", description: "Trasporto persone oltre 8 posti." },
+  DE: { title: "Autobus con rimorchio", description: "Autobus con rimorchio oltre 750 kg." },
+  C1: { title: "Autocarro fino a 7,5 t", description: "Veicoli merci tra 3,5 e 7,5 tonnellate." },
+  D1: { title: "Minibus fino a 16 posti", description: "Trasporto persone fino a 16 passeggeri." },
+  CQC: { title: "Carta di qualificazione", description: "Corsi CQC merci e persone." },
+  ADR: { title: "Trasporto merci pericolose", description: "Abilitazione ADR, base e specializzazioni." },
+};
+
+export function isConsortiumLicenseCategory(
+  value: unknown,
+): value is ConsortiumLicenseCategory {
+  return (
+    typeof value === "string" &&
+    (CONSORTIUM_LICENSE_CATEGORIES as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * Le categorie storiche pre-consorzio (B/BE + superiori "piene" + moto): i
+ * picker delle autoscuole normali restano su questa lista per non far comparire
+ * all'improvviso C1/CQC/ADR fuori dal contesto consorzio.
+ */
+export const AUTOSCUOLA_LICENSE_CATEGORIES = [
+  "B",
+  "BE",
+  "C",
+  "CE",
+  "D",
+  "DE",
+  "AM",
+  "A1",
+  "A2",
+  "A",
+] as const satisfies readonly LicenseCategory[];
+
+/**
+ * Lista categorie per i picker UI in base alla modalità della company:
+ * consorzio → superiori + qualificazioni; autoscuola → lista storica.
+ */
+export function licenseCategoriesForMode(
+  consortium: boolean,
+): readonly LicenseCategory[] {
+  return consortium ? CONSORTIUM_LICENSE_CATEGORIES : AUTOSCUOLA_LICENSE_CATEGORIES;
+}
 
 export const TRANSMISSION_LABELS: Record<Transmission, string> = {
   manual: "Manuale",
@@ -115,7 +201,18 @@ export const LICENSE_PATH_BUCKET_CATEGORIES: Record<LicensePathBucket, string> =
   pro: "C · CE · D · DE",
 };
 
-const PRO_LICENSE_CATEGORIES = new Set<string>(["C", "CE", "D", "DE"]);
+const PRO_LICENSE_CATEGORIES = new Set<string>([
+  "C",
+  "C1",
+  "C1E",
+  "CE",
+  "D",
+  "D1",
+  "D1E",
+  "DE",
+  "CQC",
+  "ADR",
+]);
 
 /**
  * Map a license category to its path bucket. Unknown/empty → "auto" (the safe
