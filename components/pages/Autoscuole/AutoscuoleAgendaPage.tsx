@@ -3332,7 +3332,7 @@ export function AutoscuoleAgendaPage({
                     const tint = tintFor(instr.instructorId, idx);
                     const initials = instr.instructorName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
                     return (
-                      <div key={`${day.toISOString()}-${instr.instructorId}`} className={cn("flex flex-col items-center gap-0.5 py-1.5 border-l", idx === 0 ? "border-[#dddddd]" : "border-[#f0f0f0]")}>
+                      <div key={`${day.toISOString()}-${instr.instructorId}`} className={cn("flex min-w-0 flex-col items-center gap-0.5 py-1.5 border-l", idx === 0 ? "border-[#dddddd]" : "border-[#f0f0f0]")}>
                         {columnsByVehicle ? (
                           <div className="flex size-5 items-center justify-center rounded-full bg-[#f0f0f0]">
                             <Truck className="size-3 text-[#6a6a6a]" strokeWidth={1.8} />
@@ -3342,9 +3342,15 @@ export function AutoscuoleAgendaPage({
                             <div className={cn("flex size-5 items-center justify-center rounded-full text-[8px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>{initials}</div>
                           </UserPhotoCircle>
                         )}
-                        <span className="text-[9px] font-medium text-muted-foreground truncate max-w-full px-0.5">
-                          {columnsByVehicle ? instr.instructorName : instr.instructorName.split(" ")[0]}
-                        </span>
+                        {/* w-0 + min-w-full: l'etichetta NON contribuisce alla larghezza
+                            intrinseca della traccia — l'header è una griglia separata dal
+                            corpo (sincronizzata solo nello scroll) e i nomi veicolo lunghi
+                            la disallineavano dalle colonne reali (bug QA Tiziano 07/09). */}
+                        <div className="w-0 min-w-full px-0.5">
+                          <span className="block truncate text-center text-[9px] font-medium text-muted-foreground">
+                            {columnsByVehicle ? instr.instructorName : instr.instructorName.split(" ")[0]}
+                          </span>
+                        </div>
                       </div>
                     );
                   })
@@ -3882,7 +3888,7 @@ export function AutoscuoleAgendaPage({
                 return (
                   <div
                     key={instr.id}
-                    className="flex h-16 flex-col items-center justify-center gap-1 border-l border-[#eeeeee]"
+                    className="flex h-16 min-w-0 flex-col items-center justify-center gap-1 border-l border-[#eeeeee]"
                   >
                     {columnsByVehicle ? (
                       <div className="flex size-8 items-center justify-center rounded-full bg-[#f0f0f0]">
@@ -3895,7 +3901,11 @@ export function AutoscuoleAgendaPage({
                         </div>
                       </UserPhotoCircle>
                     )}
-                    <span className="max-w-[90%] truncate text-[12px] font-medium text-[#444444]">{instr.name}</span>
+                    {/* w-0 + min-w-full: vedi commento gemello nella vista settimana
+                        (i nomi veicolo lunghi non devono allargare la traccia). */}
+                    <div className="w-0 min-w-full px-1">
+                      <span className="block truncate text-center text-[12px] font-medium text-[#444444]">{instr.name}</span>
+                    </div>
                   </div>
                 );
               }) : (
