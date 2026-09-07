@@ -1035,6 +1035,29 @@ export function AutoscuoleAgendaPage({
   // Dialog "Proponi un altro orario" (azione Sposta, prototipo).
   const [proposeSlotOpen, setProposeSlotOpen] = React.useState(false);
   const [proposeSubmitting, setProposeSubmitting] = React.useState(false);
+  // Snapshot del draft all'apertura del dialog: i campi editano il draft LIVE
+  // (il ghost si aggiorna mentre scegli), ma se si chiude SENZA "Proponi
+  // orario" si torna allo stato di prima — altrimenti si potrebbe accettare
+  // uno slot che l'autoscuola non ha mai chiesto (bug QA Tiziano 07/09).
+  const proposeDraftSnapshotRef = React.useRef<{
+    ymd: string;
+    time: string;
+    instructorId: string;
+    durationMinutes: number;
+    vehicleId: string | null;
+  } | null>(null);
+  const openProposeSlot = React.useCallback(() => {
+    proposeDraftSnapshotRef.current = guideDraft ? { ...guideDraft } : null;
+    setProposeSlotOpen(true);
+  }, [guideDraft]);
+  const cancelProposeSlot = React.useCallback(() => {
+    const snapshot = proposeDraftSnapshotRef.current;
+    if (snapshot) {
+      setGuideDraft((prev) => (prev ? { ...snapshot } : prev));
+    }
+    proposeDraftSnapshotRef.current = null;
+    setProposeSlotOpen(false);
+  }, []);
   const guideRequestLoadedRef = React.useRef<string | null>(null);
   const searchParams = useSearchParams();
   const guideRequestParam = searchParams?.get("guideRequestId") ?? null;
@@ -1098,6 +1121,7 @@ export function AutoscuoleAgendaPage({
     setGuideRequest(null);
     setGuideDraft(null);
     setProposeSlotOpen(false);
+    proposeDraftSnapshotRef.current = null;
     guideRequestLoadedRef.current = null;
     const url = new URL(window.location.href);
     url.searchParams.delete("guideRequestId");
@@ -2137,6 +2161,8 @@ export function AutoscuoleAgendaPage({
       toast.error({ description: res.message });
       return;
     }
+    // Proposta inviata: lo slot del draft ORA è legittimo, niente ripristino.
+    proposeDraftSnapshotRef.current = null;
     setProposeSlotOpen(false);
     toast.success({
       description: "Proposta inviata all'autoscuola: riceverai la conferma.",
@@ -4755,7 +4781,7 @@ export function AutoscuoleAgendaPage({
         responding={guideResponding}
         onAccept={() => void handleAcceptGuideRequest()}
         onReject={() => void handleRejectGuideRequest()}
-        onMoveHint={() => setProposeSlotOpen(true)}
+        onMoveHint={openProposeSlot}
       />
 
       {/* ── Dialog "Proponi un altro orario" (azione Sposta, prototipo):
@@ -4763,7 +4789,7 @@ export function AutoscuoleAgendaPage({
           controproposta all'autoscuola. ── */}
       <ProposeSlotDialog
         open={proposeSlotOpen && guideRequest !== null && guideDraft !== null}
-        onClose={() => { if (!proposeSubmitting) setProposeSlotOpen(false); }}
+        onClose={() => { if (!proposeSubmitting) cancelProposeSlot(); }}
         ymd={guideDraft?.ymd ?? ""}
         time={guideDraft?.time ?? "09:00"}
         durationMinutes={guideDraft?.durationMinutes ?? 60}
