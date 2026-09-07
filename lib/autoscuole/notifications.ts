@@ -83,6 +83,37 @@ export async function createConsortiumGuideRequestNotification(input: {
   });
 }
 
+/**
+ * Aggiorna la notifica "Richiesta guida" quando il consorzio accetta/rifiuta:
+ * la riga in campanella cambia stato in "Guida accettata"/"Guida rifiutata"
+ * (icona verde/rossa nel prototipo) invece di restare una richiesta pendente.
+ * La marca anche come letta: l'esito è un'azione del titolare stesso, non un
+ * nuovo evento da notificare. `startsAt` (solo accettata) riallinea l'orario
+ * mostrato allo slot effettivo quando la richiesta è stata spostata.
+ */
+export async function resolveConsortiumGuideRequestNotification(input: {
+  companyId: string;
+  requestId: string;
+  outcome: "accepted" | "rejected";
+  startsAt?: Date;
+}): Promise<void> {
+  await prisma.autoscuolaNotification.updateMany({
+    where: {
+      companyId: input.companyId,
+      kind: "consortium_guide_request",
+      meta: { path: ["requestId"], equals: input.requestId },
+    },
+    data: {
+      kind:
+        input.outcome === "accepted"
+          ? "consortium_guide_accepted"
+          : "consortium_guide_rejected",
+      ...(input.startsAt ? { startsAt: input.startsAt } : {}),
+      readAt: new Date(),
+    },
+  });
+}
+
 /** Mark every currently-unread notification of a company as read (per-company). */
 export async function markAutoscuolaNotificationsRead(
   companyId: string,

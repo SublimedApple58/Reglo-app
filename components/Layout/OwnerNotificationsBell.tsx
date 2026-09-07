@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
 import * as Popover from "@radix-ui/react-popover";
-import { CheckCheck, Clock, Trash } from "lucide-react";
+import { Check, CheckCheck, Clock, Trash, X } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 
@@ -147,7 +147,15 @@ export function OwnerNotificationsBell() {
   if (hidden) return null;
 
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        // Refetch all'apertura: senza, un'azione appena compiuta (es. accetta/
+        // rifiuta richiesta consorzio) resterebbe stantia fino al poll dei 25s.
+        if (next) void fetchNotifications();
+      }}
+    >
       <Popover.Trigger asChild>
         <button
           type="button"
@@ -256,6 +264,48 @@ export function OwnerNotificationsBell() {
                         <span className="h-[9px] w-[9px] shrink-0 rounded-full bg-[#c13515]" />
                       )}
                     </button>
+                  );
+                }
+                // Kind consorzio risolti: la richiesta accettata/rifiutata resta
+                // in inbox come esito, con icona verde/rossa (prototipo).
+                if (
+                  n.kind === "consortium_guide_accepted" ||
+                  n.kind === "consortium_guide_rejected"
+                ) {
+                  const accepted = n.kind === "consortium_guide_accepted";
+                  const schoolName =
+                    typeof n.meta?.schoolName === "string" ? n.meta.schoolName : null;
+                  return (
+                    <div key={n.id} className="relative flex items-center gap-3.5 px-5 py-3">
+                      <span
+                        className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full"
+                        style={
+                          accepted
+                            ? { background: "#E4F4E7", border: "1px solid #5BA863", color: "#1F6B2A" }
+                            : { background: "#FDECEC", border: "1px solid #D98A8A", color: "#B3494F" }
+                        }
+                      >
+                        {accepted ? (
+                          <Check className="h-[19px] w-[19px]" strokeWidth={2.2} />
+                        ) : (
+                          <X className="h-[18px] w-[18px]" strokeWidth={2.2} />
+                        )}
+                      </span>
+                      <div className="min-w-0 flex-1 pr-4">
+                        <p className="text-[14.5px] leading-[1.4] text-foreground">
+                          <span className="font-semibold">
+                            {accepted ? "Guida accettata" : "Guida rifiutata"}
+                          </span>
+                          {n.studentName ? ` · ${n.studentName}` : ""}
+                        </p>
+                        <p className="mt-0.5 truncate text-[13px] font-medium text-[#717171]">
+                          {[schoolName, formatGuida(n.startsAt)].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                      {!n.read && (
+                        <span className="h-[9px] w-[9px] shrink-0 rounded-full bg-[#c13515]" />
+                      )}
+                    </div>
                   );
                 }
                 return (

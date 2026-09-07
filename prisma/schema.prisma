@@ -764,16 +764,17 @@ model AutoscuolaVehicle {
   createdAt                     DateTime @default(now()) @db.Timestamp(6)
   updatedAt                     DateTime @updatedAt
 
-  company                Company                                @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  appointments           AutoscuolaAppointment[]
-  groupLessons           AutoscuolaGroupLesson[]                @relation("GroupLessonVehicle")
-  groupLessonsAsFollow   AutoscuolaGroupLesson[]                @relation("GroupLessonFollowVehicle")
-  groupLessonFleets      AutoscuolaGroupLessonVehicle[]
-  assignedInstructor     AutoscuolaInstructor?                  @relation("InstructorExclusiveVehicles", fields: [assignedInstructorId], references: [id], onDelete: SetNull)
-  poolMembers            AutoscuolaVehiclePoolMember[]
-  preferredByInstructors AutoscuolaInstructorPreferredVehicle[]
-  appointmentVehicles    AutoscuolaAppointmentVehicle[]
-  consorzioGuideRequests ConsorzioGuideRequest[]
+  company                        Company                                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  appointments                   AutoscuolaAppointment[]
+  groupLessons                   AutoscuolaGroupLesson[]                @relation("GroupLessonVehicle")
+  groupLessonsAsFollow           AutoscuolaGroupLesson[]                @relation("GroupLessonFollowVehicle")
+  groupLessonFleets              AutoscuolaGroupLessonVehicle[]
+  assignedInstructor             AutoscuolaInstructor?                  @relation("InstructorExclusiveVehicles", fields: [assignedInstructorId], references: [id], onDelete: SetNull)
+  poolMembers                    AutoscuolaVehiclePoolMember[]
+  preferredByInstructors         AutoscuolaInstructorPreferredVehicle[]
+  appointmentVehicles            AutoscuolaAppointmentVehicle[]
+  consorzioGuideRequests         ConsorzioGuideRequest[]
+  consorzioGuideRequestProposals ConsorzioGuideRequest[]                @relation("ConsorzioGuideRequestProposedVehicle")
 
   @@index([companyId])
   @@index([companyId, assignedInstructorId])
@@ -1735,27 +1736,37 @@ model ConsorzioAppointmentAccountingCode {
 // (azione "Sposta"). Oggi il sender non esiste ancora (fase affiliate): le
 // richieste nascono solo da seed/backoffice.
 model ConsorzioGuideRequest {
-  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  consorzioCompanyId String    @db.Uuid
-  schoolId           String    @db.Uuid
-  studentUserId      String    @db.Uuid
-  requestedStartsAt  DateTime  @db.Timestamp(6)
-  durationMinutes    Int
-  vehicleId          String?   @db.Uuid
+  id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  consorzioCompanyId      String    @db.Uuid
+  schoolId                String    @db.Uuid
+  studentUserId           String    @db.Uuid
+  requestedStartsAt       DateTime  @db.Timestamp(6)
+  durationMinutes         Int
+  vehicleId               String?   @db.Uuid
   /// pending | accepted | rejected | cancelled
-  status             String    @default("pending")
-  appointmentId      String?   @db.Uuid
-  movedToStartsAt    DateTime? @db.Timestamp(6)
-  respondedAt        DateTime? @db.Timestamp(6)
-  respondedByUserId  String?   @db.Uuid
-  note               String?
-  createdAt          DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt          DateTime  @updatedAt
+  status                  String    @default("pending")
+  appointmentId           String?   @db.Uuid
+  movedToStartsAt         DateTime? @db.Timestamp(6)
+  respondedAt             DateTime? @db.Timestamp(6)
+  respondedByUserId       String?   @db.Uuid
+  note                    String?
+  /// Controproposta del consorzio ("Proponi un altro orario"): slot/durata/mezzo
+  /// proposti all'autoscuola, che dovrà confermare (flusso affiliate — oggi la
+  /// notifica alla scuola è un no-op). La richiesta resta `pending`: il
+  /// consorzio può ancora accettare/rifiutare direttamente.
+  proposedStartsAt        DateTime? @db.Timestamp(6)
+  proposedDurationMinutes Int?
+  proposedVehicleId       String?   @db.Uuid
+  proposedAt              DateTime? @db.Timestamp(6)
+  proposedByUserId        String?   @db.Uuid
+  createdAt               DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt               DateTime  @updatedAt
 
   consorzioCompany Company                @relation("ConsorzioGuideRequests", fields: [consorzioCompanyId], references: [id], onDelete: Cascade)
   school           ConsorzioSchool        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   student          User                   @relation("ConsorzioGuideRequestStudent", fields: [studentUserId], references: [id], onDelete: Cascade)
   vehicle          AutoscuolaVehicle?     @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  proposedVehicle  AutoscuolaVehicle?     @relation("ConsorzioGuideRequestProposedVehicle", fields: [proposedVehicleId], references: [id], onDelete: SetNull)
   appointment      AutoscuolaAppointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
 
   @@index([consorzioCompanyId, status, requestedStartsAt])

@@ -8,6 +8,7 @@ import {
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
 import { CONSORTIUM_LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
+import { resolveConsortiumGuideRequestNotification } from "@/lib/autoscuole/notifications";
 import { requireConsortium } from "@/lib/service-access";
 import { formatError } from "@/lib/utils";
 
@@ -441,6 +442,10 @@ const acceptGuideRequestSchema = z.object({
   instructorId: z.string().uuid(),
   /** ISO dello slot scelto: quello richiesto, o un altro se il consorzio ha "spostato". */
   startsAt: z.string().datetime(),
+  /** Durata scelta nel dialog "Proponi un altro orario"; default = quella richiesta. */
+  durationMinutes: z.number().int().min(15).max(600).optional(),
+  /** Veicolo scelto nel dialog; undefined = quello richiesto, null = "Da assegnare". */
+  vehicleId: z.string().uuid().nullable().optional(),
 });
 
 export type ConsorzioGuideRequestDetail = {
@@ -454,6 +459,10 @@ export type ConsorzioGuideRequestDetail = {
   vehicleId: string | null;
   vehicleName: string | null;
   note: string | null;
+  /** Controproposta già inviata ("Proponi un altro orario"), se presente. */
+  proposedStartsAt: string | null;
+  proposedDurationMinutes: number | null;
+  proposedVehicleId: string | null;
 };
 
 export async function getConsorzioGuideRequest(requestId: string) {
@@ -481,8 +490,74 @@ export async function getConsorzioGuideRequest(requestId: string) {
       vehicleId: request.vehicle?.id ?? null,
       vehicleName: request.vehicle?.name ?? null,
       note: request.note,
+      proposedStartsAt: request.proposedStartsAt?.toISOString() ?? null,
+      proposedDurationMinutes: request.proposedDurationMinutes,
+      proposedVehicleId: request.proposedVehicleId,
     };
     return { success: true as const, data: detail };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const proposeGuideRequestSlotSchema = z.object({
+  requestId: z.string().uuid(),
+  /** ISO dello slot proposto all'autoscuola. */
+  startsAt: z.string().datetime(),
+  durationMinutes: z.number().int().min(15).max(600),
+  /** Veicolo del consorzio proposto; null = "Da assegnare". */
+  vehicleId: z.string().uuid().nullable(),
+});
+
+/**
+ * "Proponi un altro orario" (prototipo): il consorzio invia all'autoscuola una
+ * controproposta di slot/durata/mezzo. La richiesta resta `pending` (il
+ * consorzio può comunque accettare/rifiutare); la conferma dell'autoscuola
+ * arriverà con la fase affiliate — oggi la notifica alla scuola è un no-op
+ * (nessun destinatario). Il ghost tratteggiato in agenda segue la proposta.
+ */
+export async function proposeConsorzioGuideRequestSlot(
+  input: z.infer<typeof proposeGuideRequestSlotSchema>,
+) {
+  try {
+    const { membership } = await requireConsortium();
+    const companyId = membership.companyId;
+    const payload = proposeGuideRequestSlotSchema.parse(input);
+
+    const request = await prisma.consorzioGuideRequest.findFirst({
+      where: { id: payload.requestId, consorzioCompanyId: companyId },
+      select: { id: true, status: true },
+    });
+    if (!request) {
+      return { success: false as const, message: "Richiesta non trovata." };
+    }
+    if (request.status !== "pending") {
+      return { success: false as const, message: "Richiesta già gestita." };
+    }
+
+    if (payload.vehicleId) {
+      const vehicle = await prisma.autoscuolaVehicle.findFirst({
+        where: { id: payload.vehicleId, companyId },
+        select: { id: true },
+      });
+      if (!vehicle) {
+        return { success: false as const, message: "Veicolo non valido." };
+      }
+    }
+
+    await prisma.consorzioGuideRequest.update({
+      where: { id: request.id },
+      data: {
+        proposedStartsAt: new Date(payload.startsAt),
+        proposedDurationMinutes: payload.durationMinutes,
+        proposedVehicleId: payload.vehicleId,
+        proposedAt: new Date(),
+        proposedByUserId: membership.userId,
+      },
+    });
+    // Hook notifica all'autoscuola richiedente: no-op fino alla fase affiliate.
+
+    return { success: true as const };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
@@ -522,8 +597,22 @@ export async function acceptConsorzioGuideRequest(
       return { success: false as const, message: "Istruttore non valido." };
     }
 
+    const durationMinutes = payload.durationMinutes ?? request.durationMinutes;
+    // Veicolo effettivo: quello scelto nel dialog Sposta (null = da assegnare),
+    // altrimenti quello della richiesta originale.
+    const vehicleId =
+      payload.vehicleId !== undefined ? payload.vehicleId : request.vehicleId;
+    if (vehicleId && vehicleId !== request.vehicleId) {
+      const vehicle = await prisma.autoscuolaVehicle.findFirst({
+        where: { id: vehicleId, companyId },
+        select: { id: true },
+      });
+      if (!vehicle) {
+        return { success: false as const, message: "Veicolo non valido." };
+      }
+    }
     const startsAt = new Date(payload.startsAt);
-    const endsAt = new Date(startsAt.getTime() + request.durationMinutes * 60000);
+    const endsAt = new Date(startsAt.getTime() + durationMinutes * 60000);
 
     // Conflitti: guida non annullata sovrapposta con lo stesso istruttore o
     // lo stesso veicolo → errore, la richiesta resta pending.
@@ -535,7 +624,7 @@ export async function acceptConsorzioGuideRequest(
         endsAt: { gt: startsAt },
         OR: [
           { instructorId: instructor.id },
-          ...(request.vehicleId ? [{ vehicleId: request.vehicleId }] : []),
+          ...(vehicleId ? [{ vehicleId }] : []),
         ],
       },
       select: { id: true, instructorId: true },
@@ -562,7 +651,7 @@ export async function acceptConsorzioGuideRequest(
           startsAt,
           endsAt,
           instructorId: instructor.id,
-          vehicleId: request.vehicleId,
+          vehicleId,
           bookingSource: "consortium_request",
         },
       });
@@ -577,6 +666,15 @@ export async function acceptConsorzioGuideRequest(
         },
       });
       return created;
+    });
+
+    // La notifica in campanella diventa "Guida accettata" (icona verde),
+    // allineata allo slot effettivo se la richiesta è stata spostata.
+    await resolveConsortiumGuideRequestNotification({
+      companyId,
+      requestId: request.id,
+      outcome: "accepted",
+      startsAt,
     });
 
     await invalidateAutoscuoleCache({
@@ -610,6 +708,12 @@ export async function rejectConsorzioGuideRequest(requestId: string) {
         respondedAt: new Date(),
         respondedByUserId: membership.userId,
       },
+    });
+    // La notifica in campanella diventa "Guida rifiutata" (icona rossa).
+    await resolveConsortiumGuideRequestNotification({
+      companyId: membership.companyId,
+      requestId: request.id,
+      outcome: "rejected",
     });
     return { success: true as const };
   } catch (error) {
