@@ -7,6 +7,9 @@
  *    in `lib/actions/consorzio.actions.ts`.
  * 2. Con `--fill-to=<n>` crea autoscuole consorziate demo fino ad arrivare a n
  *    (serve a testare la ricerca per codice con volume realistico, ~40).
+ * 3. Con `--students-per-school=<n>` crea allievi demo nelle consorziate che
+ *    non ne hanno (serve al filtro "Autoscuola" dei picker allievo in agenda:
+ *    le opzioni sono le scuole che hanno almeno un allievo).
  *
  * Idempotente: rilanciarlo non duplica né codici né scuole.
  *
@@ -14,7 +17,7 @@
  *     node scripts/backfill-consorzio-school-codes.mjs --fill-to=40
  *
  * Opzioni: --company="<nome>" (default: l'unica company in modalità consorzio),
- *          --fill-to=<n>, --dry-run.
+ *          --fill-to=<n>, --students-per-school=<n>, --dry-run.
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -29,6 +32,7 @@ const has = (name) => process.argv.includes(`--${name}`);
 
 const DRY_RUN = has("dry-run");
 const FILL_TO = Number(arg("fill-to", "0")) || 0;
+const STUDENTS_PER_SCHOOL = Number(arg("students-per-school", "0")) || 0;
 const COMPANY_NAME = arg("company");
 
 /** "Autoscuola Gruppo Andrea Demo" → "AS-ANDREA" (max 12 char, A-Z0-9-). */
@@ -87,6 +91,16 @@ const DEMO_SCHOOLS = [
   ["Autoscuola Struppa", "Genova Struppa"],
   ["Autoscuola Certosa", "Genova Certosa"],
 ];
+
+const STUDENT_FIRST = [
+  "Luca", "Marta", "Simone", "Ilaria", "Matteo", "Federica", "Alberto", "Silvia",
+  "Riccardo", "Valentina", "Stefano", "Martina",
+];
+const STUDENT_LAST = [
+  "Sanguineti", "Traverso", "Bruzzone", "Repetto", "Canepa", "Parodi",
+  "Bertolotto", "Cevasco", "Musso", "Pittaluga", "Ansaldo", "Grondona",
+];
+const STUDENT_CATEGORIES = ["C", "CE", "D", "DE", "C1", "D1", "CQC", "ADR"];
 
 const OWNERS = [
   "Marco Rossi", "Laura Bianchi", "Paolo Ferrari", "Chiara Gallo", "Andrea Costa",
@@ -216,12 +230,63 @@ async function main() {
     }
   }
 
+  // ── 3. Allievi demo nelle consorziate che non ne hanno ──
+  let students = 0;
+  if (STUDENTS_PER_SCHOOL > 0) {
+    const all = await prisma.consorzioSchool.findMany({
+      where: { consorzioCompanyId: companyId, status: { not: "removed" } },
+      select: { id: true, name: true, accountingCodeId: true },
+      orderBy: { createdAt: "asc" },
+    });
+    for (const [schoolIndex, school] of all.entries()) {
+      const existing = await prisma.companyMember.count({
+        where: { companyId, consorzioSchoolId: school.id, autoscuolaRole: "STUDENT" },
+      });
+      for (let i = existing; i < STUDENTS_PER_SCHOOL; i += 1) {
+        const seed = schoolIndex * 7 + i;
+        const name = `${STUDENT_FIRST[seed % STUDENT_FIRST.length]} ${STUDENT_LAST[(seed * 3) % STUDENT_LAST.length]}`;
+        const email = `allievo-${schoolIndex + 1}-${i + 1}@consorzio.demo`;
+        if (DRY_RUN) {
+          console.log(`  · ${school.name}: ${name} <${email}>`);
+          students += 1;
+          continue;
+        }
+        let user = await prisma.user.findFirst({ where: { email } });
+        if (!user) user = await prisma.user.create({ data: { email, name } });
+        await prisma.companyMember.upsert({
+          where: { companyId_userId: { companyId, userId: user.id } },
+          create: {
+            companyId,
+            userId: user.id,
+            role: "member",
+            autoscuolaRole: "STUDENT",
+            studentPhase: "PRATICA",
+            licenseCategory: STUDENT_CATEGORIES[seed % STUDENT_CATEGORIES.length],
+            transmission: "manual",
+            consorzioSchoolId: school.id,
+          },
+          update: { consorzioSchoolId: school.id },
+        });
+        if (school.accountingCodeId) {
+          await prisma.consorzioMemberAccountingCode.createMany({
+            data: [{ companyId, userId: user.id, codeId: school.accountingCodeId }],
+            skipDuplicates: true,
+          });
+        }
+        students += 1;
+      }
+    }
+    console.log(`✓ Allievi demo creati: ${students}`);
+  }
+
   const total = await prisma.consorzioSchool.count({ where: { consorzioCompanyId: companyId } });
   const withCode = await prisma.consorzioSchool.count({
     where: { consorzioCompanyId: companyId, accountingCodeId: { not: null } },
   });
   console.log("─────────────────────────────────────────────");
-  console.log(`Autoscuole consorziate: ${total}  ·  con codice: ${withCode}  ·  nuove: ${created}`);
+  console.log(
+    `Autoscuole consorziate: ${total}  ·  con codice: ${withCode}  ·  nuove: ${created}  ·  allievi demo: ${students}`,
+  );
 }
 
 main()
