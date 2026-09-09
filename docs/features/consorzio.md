@@ -28,6 +28,12 @@ Ogni autoscuola consorziata ha **un** codice contabile (in produzione ~40 in tut
 
 In Fatturazione il vecchio pulsante "+" (dialog di gestione codici) è stato **sostituito da una ricerca per codice**: `ExpandingSearch` (lo stesso componente della sezione Allievi, `components/ui/expanding-search.tsx`); le chip mostrate sono max 12 quando non si cerca (con l'indicatore "+N — cerca per codice"), tutte quelle che matchano quando si cerca. `createConsorzioAccountingCode`/`archiveConsorzioAccountingCode` sono state rimosse: i codici ora nascono dall'anagrafica scuola.
 
+## Filtro "Autoscuola" nei picker allievo dell'agenda
+
+Gli allievi del consorzio sono tutti nella stessa company: con decine di consorziate la lista è lunga, quindi **sopra ogni picker allievo dell'agenda c'è un select "Autoscuola"** che accorcia la lista a quella scuola. `listDirectoryStudents` (`lib/actions/autoscuole.actions.ts`) espone `consorzioSchoolId` + `consorzioSchoolName`; in `AutoscuoleAgendaPage` il componente `SchoolFilterSelect` + `filterStudentsBySchool` sono applicati ai **tre** punti con selezione allievo: form *Nuovo appuntamento* (cambiare autoscuola azzera l'allievo se non è più in lista), dialog *Nuovo esame* e pannello di un *esame esistente* — uno stato per form, così i filtri non si condizionano.
+
+Le opzioni sono ricavate dagli allievi stessi (nessuna fetch in più): compaiono le autoscuole che hanno almeno un allievo, più "Senza autoscuola" se qualche allievo non è taggato. Il select appare solo con `isConsortium` e più di una autoscuola → per le autoscuole normali non cambia nulla.
+
 ## Preavviso minimo richieste di guida
 
 `limits.consorzioPricing.guideRequestMinLeadHours` (default **8 ore**, configurabile in Impostazioni → Prenotazioni e allievi → **Prezzi**, prima sezione "Richieste di guida": 0 = regola disattivata, 2/4/6/8/12/24/48). Regola pura e testata in `lib/consorzio/guide-request-lead.ts` (`guideRequestLeadTimeError`, unit test `tests/unit/consorzio/guide-request-lead.test.ts`).
