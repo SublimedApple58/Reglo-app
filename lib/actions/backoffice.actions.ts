@@ -3,6 +3,10 @@
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
+import {
+  AUTOSCUOLE_CACHE_SEGMENTS,
+  invalidateAutoscuoleCache,
+} from "@/lib/autoscuole/cache";
 import { formatError } from "@/lib/utils";
 import { requireGlobalAdmin } from "@/lib/auth-guard";
 import { signIn } from "@/auth";
@@ -133,6 +137,16 @@ export async function updateCompanyService(input: z.infer<typeof updateCompanySe
           status,
           limits: payload.limits ?? {},
         },
+      });
+    }
+
+    // I limits AUTOSCUOLE stanno dietro la cache Redis SETTINGS (TTL 5 min):
+    // senza invalidazione un flag acceso qui (es. "Consorzio") si vedrebbe
+    // solo al prossimo giro di cache. Vedi docs/architecture/performance-playbook.md.
+    if (payload.serviceKey === "AUTOSCUOLE") {
+      await invalidateAutoscuoleCache({
+        companyId: payload.companyId,
+        segments: [AUTOSCUOLE_CACHE_SEGMENTS.SETTINGS],
       });
     }
 
