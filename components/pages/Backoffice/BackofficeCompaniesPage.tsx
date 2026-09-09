@@ -169,6 +169,7 @@ function AutoscuolaDrawerContent({
   const autoAssignQuizOnSignup = Boolean(limits.autoAssignQuizOnSignup);
   const aulaEnabled = Boolean(limits.aulaEnabled);
   const secretaryOnly = Boolean(limits.secretaryOnly);
+  const isConsortiumMode = limits.accountKind === "consorzio";
 
   const [quizSeatsUsed, setQuizSeatsUsed] = useState<number | null>(null);
   useEffect(() => {
@@ -702,6 +703,32 @@ function AutoscuolaDrawerContent({
             Attenzione: la Segretaria non è ancora attiva su questa autoscuola —
             attivala qui sotto, altrimenti l&apos;utente vedrà la schermata
             &quot;Segretaria non attiva&quot;.
+          </p>
+        )}
+        <label className="mt-2 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border bg-white px-3 py-2.5 hover:bg-gray-50/60">
+          <div>
+            <p className="text-sm font-medium text-foreground">Consorzio</p>
+            <p className="text-xs text-muted-foreground">
+              La company è un consorzio di autoscuole (mezzi pesanti condivisi):
+              la web app mostra Agenda | Autoscuole | Fatturazione e i prezzi
+              verso le consorziate. Incompatibile con &quot;Solo Segretaria&quot;.
+            </p>
+          </div>
+          <Checkbox
+            checked={isConsortiumMode}
+            onCheckedChange={(checked) =>
+              setLimits((prev) => ({
+                ...prev,
+                accountKind: checked ? "consorzio" : undefined,
+                // Modalità mutuamente esclusive
+                secretaryOnly: checked ? false : prev.secretaryOnly,
+              }))
+            }
+          />
+        </label>
+        {isConsortiumMode && secretaryOnly && (
+          <p className="mt-2 text-xs text-amber-600">
+            &quot;Consorzio&quot; e &quot;Solo Segretaria&quot; non possono essere attivi insieme.
           </p>
         )}
       </section>

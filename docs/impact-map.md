@@ -292,6 +292,17 @@ respondToSwapOffer(accept) → adjustStudentLessonCredits(swap_consume) for take
                            → invalidateAutoscuoleCache(PAYMENTS)
 ```
 
+### Account Consorzio
+- → **Appointments**: l'accettazione di una `ConsorzioGuideRequest` crea un `AutoscuolaAppointment` normale (`bookingSource: "consortium_request"`); la Fatturazione legge le guide non annullate del mese (esclusi esami/gruppi). Nessun punto di creazione appuntamento è stato modificato (prezzo lazy, vedi `features/consorzio.md`).
+- → **Owner notifications**: kind `consortium_guide_request` con `meta Json` + PRIMO click-through della campanella (`?tab=agenda&guideRequestId=…`); all'accetta/rifiuta la notifica DIVENTA `consortium_guide_accepted|rejected` (icona verde/rossa, `resolveConsortiumGuideRequestNotification`). La bell ora rifetcha all'apertura del popover (vale per TUTTE le company). I kind legacy restano inerti.
+- → **Agenda (condivisa)**: pref `columnsBy` in `reglo-agenda-view-prefs` + convenzione colonna `veh:<id>` in slotMenu/ghost/drag — attiva SOLO con `isConsortium`; per le autoscuole normali il comportamento è invariato (toggle non renderizzato, colKey = instructorId). Toccando openSlotMenu/moveDraftTo/ghost renderer verificare entrambe le modalità.
+- → **Impostazioni (overlay)**: pane consorzio-only `consorzioBilling` ("Fatturazione e pagamenti", placeholder Reglo × Fatture in Cloud) iniettata nel primo gruppo sidebar via `CONSORZIO_BILLING_PANE`.
+- → **Vehicles / License engine**: `LICENSE_CATEGORIES` estesa con C1/C1E/D1/D1E/CQC/ADR (bucket `pro`, self-match stretto, moto-logic intatta). I picker UI passano da `LicenseCategorySelectItems` (mode-aware): toccando la taxonomy verificare ENTRAMBE le liste (`AUTOSCUOLA_` e `CONSORTIUM_LICENSE_CATEGORIES`) e che il mobile non riceva categorie nuove.
+- → **Solo Segretaria**: `accountKind` e `secretaryOnly` sono mutuamente esclusivi (enforced nel backoffice).
+- → **Users Directory**: `createCompanyUser` accetta `consorzioSchoolId` + `accountingCodeIds` (solo STUDENT di company consorzio) e **eredita il codice contabile della scuola** (`ConsorzioSchool.accountingCodeId`) all'allievo appena creato.
+- → **Codici contabili**: il codice ora nasce dall'anagrafica autoscuola (`syncSchoolAccountingCode`) e si propaga/stacca in blocco su tutti i membri della scuola; la Fatturazione filtra le chip con `ExpandingSearch` (stesso componente della sezione Allievi) al posto del vecchio dialog "+".
+- → **Settings/Cache**: `consorzioPricing` vive in `CompanyService.limits` (cache Redis SETTINGS: gli update passano da `invalidateAutoscuoleCache`) e include `guideRequestMinLeadHours` (preavviso minimo richieste guida, default 8h): regola pura in `lib/consorzio/guide-request-lead.ts`, applicata agli slot scelti dal consorzio (proposta e accettazione con slot spostato).
+
 ### Background Job (every 1 min)
 ```
 autoscuole-reminders.ts → communications.ts →

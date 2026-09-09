@@ -84,6 +84,7 @@ import {
 import { createCompanyUser } from "@/lib/actions/user.actions";
 import { useAtomValue } from "jotai";
 import { companyAtom } from "@/atoms/company.store";
+import { LicenseCategorySelectItems } from "./LicenseCategorySelectItems";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FadeIn } from "@/components/ui/fade-in";
 import { LoadingDots } from "@/components/ui/loading-dots";
@@ -2975,11 +2976,7 @@ export function AutoscuoleStudentsPage({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {LICENSE_CATEGORIES.map((cat) => (
-                      <SelectItem key={cat} value={cat} className="cursor-pointer">
-                        {LICENSE_CATEGORY_LABELS[cat]}
-                      </SelectItem>
-                    ))}
+                    <LicenseCategorySelectItems className="cursor-pointer" />
                   </SelectContent>
                 </Select>
               </div>

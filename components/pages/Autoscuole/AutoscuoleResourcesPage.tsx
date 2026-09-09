@@ -8,11 +8,13 @@ import { useAtomValue } from "jotai";
 import { Plus, ChevronLeft, ChevronRight, X, type LucideIcon } from "lucide-react";
 
 import { companyAtom } from "@/atoms/company.store";
-import { isSecretaryOnly } from "@/lib/services";
+import { LicenseCategorySelectItems } from "./LicenseCategorySelectItems";
+import { isConsortium, isSecretaryOnly } from "@/lib/services";
 
 import {
   BellProtoIcon,
   CalendarProtoIcon,
+  CardProtoIcon,
   CarProtoIcon,
   FoldedMapIcon,
   NotepadProtoIcon,
@@ -22,6 +24,7 @@ import {
   UsersProtoIcon,
   type ProtoIcon,
 } from "@/components/ui/proto-icons";
+import { ConsorzioFatturazionePane } from "@/components/pages/Consorzio/ConsorzioFatturazionePane";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
@@ -291,6 +294,7 @@ type OverrideInfo = {
 type ConfigPane =
   | "business"
   | "locations"
+  | "consorzioBilling"
   | "bookings"
   | "policy"
   | "reminders"
@@ -326,6 +330,15 @@ const CONFIG_PANE_GROUPS: Array<
   [{ key: "voice", label: "Segretaria", icon: PhoneProtoIcon }],
 ];
 
+// Voce "Fatturazione e pagamenti" — SOLO account consorzio (placeholder
+// Reglo × Fatture in Cloud): nel prototipo chiude il primo gruppo della
+// sidebar, dopo "Sede e luoghi". Vedi docs/features/consorzio.md.
+const CONSORZIO_BILLING_PANE = {
+  key: "consorzioBilling" as ConfigPane,
+  label: "Fatturazione e pagamenti",
+  icon: CardProtoIcon,
+};
+
 /**
  * Keep-alive dei pannelli dell'overlay: monta il contenuto al primo accesso
  * (o subito, se `eager`) e poi lo nasconde via CSS invece di smontarlo. Così
@@ -350,6 +363,7 @@ function KeepAlivePane({
 const CONFIG_PANE_TITLES: Record<ConfigPane, string> = {
   business: "Informazioni aziendali",
   locations: "Sede e luoghi",
+  consorzioBilling: "Fatturazione e pagamenti",
   bookings: "Prenotazioni e allievi",
   policy: "Policy tipi guida",
   reminders: "Promemoria e notifiche",
@@ -372,16 +386,25 @@ export function AutoscuoleResourcesPage({
   // Modalità "solo Segretaria": l'overlay Impostazioni mostra solo il pane
   // Segretaria (niente Prenotazioni/Istruttori/Veicoli/…).
   const secretaryOnly = isSecretaryOnly(company?.services ?? null);
-  const paneGroups = secretaryOnly
-    ? [CONFIG_PANE_GROUPS[CONFIG_PANE_GROUPS.length - 1]]
-    : CONFIG_PANE_GROUPS;
+  // Account consorzio: il primo gruppo della sidebar guadagna "Fatturazione e
+  // pagamenti" (placeholder Reglo × Fatture in Cloud), come nel prototipo.
+  const consortium = isConsortium(company?.services ?? null);
+  const paneGroups = React.useMemo(() => {
+    if (secretaryOnly) return [CONFIG_PANE_GROUPS[CONFIG_PANE_GROUPS.length - 1]];
+    if (!consortium) return CONFIG_PANE_GROUPS;
+    return CONFIG_PANE_GROUPS.map((group, index) =>
+      index === 0 ? [...group, CONSORZIO_BILLING_PANE] : group,
+    );
+  }, [secretaryOnly, consortium]);
   const [configTab, setConfigTab] = React.useState<ConfigPane>(() => {
     if (secretaryOnly) return "voice";
     // "students" (Gestione allievi) e "payments" (Fatturazione e pagamenti)
     // sono i vecchi pane ora fusi in "bookings" (link legacy in giro per l'app).
     const raw = searchParams?.get("pane");
     const pane = raw === "students" || raw === "payments" ? "bookings" : raw;
-    return pane && CONFIG_PANE_GROUPS.flat().some((p) => p.key === pane)
+    return pane &&
+      (pane === CONSORZIO_BILLING_PANE.key ||
+        CONFIG_PANE_GROUPS.flat().some((p) => p.key === pane))
       ? (pane as ConfigPane)
       : "bookings";
   });
@@ -1679,9 +1702,7 @@ export function AutoscuoleResourcesPage({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {LICENSE_CATEGORIES.map((cat) => (
-                  <SelectItem key={cat} value={cat}>{LICENSE_CATEGORY_LABELS[cat]}</SelectItem>
-                ))}
+                <LicenseCategorySelectItems />
               </SelectContent>
             </Select>
           </div>
@@ -2215,6 +2236,11 @@ export function AutoscuoleResourcesPage({
         <KeepAlivePane active={configTab === "business"} eager={mountAllPanes}>
           <BusinessInfoPane />
         </KeepAlivePane>
+        {consortium && (
+          <KeepAlivePane active={configTab === "consorzioBilling"}>
+            <ConsorzioFatturazionePane />
+          </KeepAlivePane>
+        )}
         {(["policy", "reminders", "locations"] as const).map((section) => (
           <KeepAlivePane key={section} active={configTab === section} eager={mountAllPanes}>
             {renderSettingsSection(section)}
@@ -2388,9 +2414,7 @@ export function AutoscuoleResourcesPage({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {LICENSE_CATEGORIES.map((cat) => (
-                      <SelectItem key={cat} value={cat}>{LICENSE_CATEGORY_LABELS[cat]}</SelectItem>
-                    ))}
+                    <LicenseCategorySelectItems />
                   </SelectContent>
                 </Select>
               </div>

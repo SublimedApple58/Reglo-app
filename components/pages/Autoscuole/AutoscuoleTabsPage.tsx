@@ -7,7 +7,7 @@ import { useLocale } from "next-intl";
 import { useAtomValue } from "jotai";
 
 import { companyAtom } from "@/atoms/company.store";
-import { isSecretaryOnly } from "@/lib/services";
+import { isConsortium, isSecretaryOnly } from "@/lib/services";
 import { AutoscuoleRinnoviTeaser } from "./AutoscuoleRinnoviTeaser";
 
 const AutoscuoleStudentsPage = dynamic(
@@ -38,13 +38,47 @@ const AutoscuolePaymentsPage = dynamic(
     })),
   { loading: () => <div className="h-40 w-full animate-pulse rounded-3xl bg-white/40" /> },
 );
+const ConsorzioSchoolsPage = dynamic(
+  () =>
+    import("../Consorzio/ConsorzioSchoolsPage").then((module) => ({
+      default: module.ConsorzioSchoolsPage,
+    })),
+  { loading: () => <div className="h-40 w-full animate-pulse rounded-3xl bg-white/40" /> },
+);
+const ConsorzioBillingPage = dynamic(
+  () =>
+    import("../Consorzio/ConsorzioBillingPage").then((module) => ({
+      default: module.ConsorzioBillingPage,
+    })),
+  { loading: () => <div className="h-40 w-full animate-pulse rounded-3xl bg-white/40" /> },
+);
 
 // Redesign 2026-07: la Dashboard è stata ritirata — l'Agenda è la landing
 // (nessun ?tab). Configurazione/Pagamenti vivono nel menu hamburger della
 // shell; "rinnovi" è il teaser della feature in arrivo.
-type AutoscuoleTabKey = "students" | "agenda" | "settings" | "payments" | "rinnovi";
+type AutoscuoleTabKey =
+  | "students"
+  | "agenda"
+  | "settings"
+  | "payments"
+  | "rinnovi"
+  | "scuole"
+  | "fatturazione";
 
-const TAB_KEYS: AutoscuoleTabKey[] = ["students", "agenda", "settings", "payments", "rinnovi"];
+const TAB_KEYS: AutoscuoleTabKey[] = [
+  "students",
+  "agenda",
+  "settings",
+  "payments",
+  "rinnovi",
+  "scuole",
+  "fatturazione",
+];
+
+// Tab esclusive di una modalità: "scuole"/"fatturazione" esistono solo per il
+// consorzio; allievi/segretaria/rinnovi non esistono per il consorzio.
+const CONSORTIUM_ONLY_TABS: AutoscuoleTabKey[] = ["scuole", "fatturazione"];
+const AUTOSCUOLA_ONLY_TABS: AutoscuoleTabKey[] = ["students", "payments", "rinnovi"];
 
 function normalizeTab(value: string | null): AutoscuoleTabKey {
   if (!value) return "agenda";
@@ -58,6 +92,7 @@ export function AutoscuoleTabsPage() {
   const locale = useLocale();
   const company = useAtomValue(companyAtom);
   const secretaryOnly = isSecretaryOnly(company?.services ?? null);
+  const consortium = isConsortium(company?.services ?? null);
 
   const initialTab = React.useMemo(
     () => normalizeTab(searchParams.get("tab")),
@@ -79,6 +114,16 @@ export function AutoscuoleTabsPage() {
     }
   }, [secretaryOnly, activeTab, router, locale]);
 
+  // Le tab valgono solo nella modalità giusta: fuori modalità → Agenda.
+  React.useEffect(() => {
+    const wrongMode = consortium
+      ? AUTOSCUOLA_ONLY_TABS.includes(activeTab)
+      : CONSORTIUM_ONLY_TABS.includes(activeTab);
+    if (wrongMode) {
+      router.replace(`/${locale}/user/autoscuole?tab=agenda`);
+    }
+  }, [consortium, activeTab, router, locale]);
+
   React.useEffect(() => {
     const preloaders: Record<AutoscuoleTabKey, Array<() => Promise<unknown>>> = {
       students: [() => import("./AutoscuoleAgendaPage")],
@@ -89,6 +134,8 @@ export function AutoscuoleTabsPage() {
       settings: [() => import("./AutoscuoleAgendaPage")],
       payments: [() => import("./AutoscuoleAgendaPage")],
       rinnovi: [() => import("./AutoscuoleAgendaPage")],
+      scuole: [() => import("./AutoscuoleAgendaPage")],
+      fatturazione: [() => import("./AutoscuoleAgendaPage")],
     };
 
     const runPrefetch = () => {
@@ -129,6 +176,8 @@ export function AutoscuoleTabsPage() {
       {activeTab === "settings" ? <AutoscuoleResourcesPage tabs={null} /> : null}
       {activeTab === "payments" ? <AutoscuolePaymentsPage tabs={null} /> : null}
       {activeTab === "rinnovi" ? <AutoscuoleRinnoviTeaser /> : null}
+      {activeTab === "scuole" && consortium ? <ConsorzioSchoolsPage /> : null}
+      {activeTab === "fatturazione" && consortium ? <ConsorzioBillingPage /> : null}
     </div>
   );
 }

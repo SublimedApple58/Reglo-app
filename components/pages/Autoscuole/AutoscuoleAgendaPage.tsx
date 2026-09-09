@@ -1,9 +1,14 @@
 "use client";
 
 import React from "react";
+import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus, SlidersHorizontal, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2, BookOpen, Lock, Printer, TrafficCone, Route } from "lucide-react";
+import { useAtomValue } from "jotai";
+import { Plus, SlidersHorizontal, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2, BookOpen, Lock, Printer, TrafficCone, Route, Truck } from "lucide-react";
+
+import { companyAtom } from "@/atoms/company.store";
+import { isConsortium } from "@/lib/services";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -41,6 +46,15 @@ import {
   updateExamNotes,
   cancelExamEvent,
 } from "@/lib/actions/autoscuole.actions";
+import {
+  acceptConsorzioGuideRequest,
+  getConsorzioGuideRequest,
+  proposeConsorzioGuideRequestSlot,
+  rejectConsorzioGuideRequest,
+  type ConsorzioGuideRequestDetail,
+} from "@/lib/actions/consorzio.actions";
+import { GuideRequestCard } from "@/components/pages/Consorzio/GuideRequestCard";
+import { ProposeSlotDialog } from "@/components/pages/Consorzio/ProposeSlotDialog";
 import { getAutoscuolaLocations } from "@/lib/actions/autoscuola-locations.actions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FadeIn } from "@/components/ui/fade-in";
@@ -317,10 +331,15 @@ const AGENDA_VIEW_PREFS_KEY = "reglo-agenda-view-prefs";
 // oggi (es. mercoledì → mer…mar). In entrambi i casi si rispettano i giorni
 // visibili scelti.
 type WeekMode = "classic" | "rolling";
-type AgendaViewPrefs = { days: number[]; startHour: number; endHour: number; weekMode: WeekMode; zoom: number };
+// columnsBy: colonne dell'agenda per ISTRUTTORE (default storico) o per
+// VEICOLO (prototipo consorzio: "le colonne diventano i mezzi del consorzio").
+// Il toggle è visibile SOLO per gli account consorzio; per le autoscuole
+// normali la preferenza resta "instructor" e non c'è UI per cambiarla.
+type ColumnsBy = "instructor" | "vehicle";
+type AgendaViewPrefs = { days: number[]; startHour: number; endHour: number; weekMode: WeekMode; zoom: number; columnsBy: ColumnsBy };
 // days = giorni della settimana visibili, convenzione getDay() (0 = domenica).
 // zoom = moltiplicatore altezza righe orarie (1 = densità base 72px/h), persistito.
-const DEFAULT_VIEW_PREFS: AgendaViewPrefs = { days: [0, 1, 2, 3, 4, 5, 6], startHour: 0, endHour: 24, weekMode: "classic", zoom: 1 };
+const DEFAULT_VIEW_PREFS: AgendaViewPrefs = { days: [0, 1, 2, 3, 4, 5, 6], startHour: 0, endHour: 24, weekMode: "classic", zoom: 1, columnsBy: "instructor" };
 const WEEKDAY_CHIPS: Array<{ dow: number; label: string }> = [
   { dow: 1, label: "Lun" }, { dow: 2, label: "Mar" }, { dow: 3, label: "Mer" },
   { dow: 4, label: "Gio" }, { dow: 5, label: "Ven" }, { dow: 6, label: "Sab" }, { dow: 0, label: "Dom" },
@@ -350,7 +369,8 @@ function readAgendaViewPrefs(): AgendaViewPrefs {
       typeof p.zoom === "number" && Number.isFinite(p.zoom)
         ? clampAgendaZoom(p.zoom)
         : DEFAULT_VIEW_PREFS.zoom;
-    return { days: days.length ? days : DEFAULT_VIEW_PREFS.days, startHour, endHour, weekMode, zoom };
+    const columnsBy: ColumnsBy = p.columnsBy === "vehicle" ? "vehicle" : "instructor";
+    return { days: days.length ? days : DEFAULT_VIEW_PREFS.days, startHour, endHour, weekMode, zoom, columnsBy };
   } catch {
     return DEFAULT_VIEW_PREFS;
   }
@@ -720,6 +740,11 @@ export function AutoscuoleAgendaPage({
   // sono già parametrizzati su queste costanti.
   const [viewPrefs, setViewPrefs] = React.useState<AgendaViewPrefs>(() => readAgendaViewPrefs());
   const [viewPrefsOpen, setViewPrefsOpen] = React.useState(false);
+  // Account consorzio: abilita il toggle "Visualizza per" (Istruttori/Veicoli)
+  // e la vista a colonne-veicolo del prototipo. Vedi docs/features/consorzio.md.
+  const company = useAtomValue(companyAtom);
+  const consortium = isConsortium(company?.services ?? null);
+  const columnsByVehicle = consortium && viewPrefs.columnsBy === "vehicle";
   React.useEffect(() => {
     try {
       window.localStorage.setItem(AGENDA_VIEW_PREFS_KEY, JSON.stringify(viewPrefs));
@@ -970,6 +995,10 @@ export function AutoscuoleAgendaPage({
     ymd: string;
     time: string;
     instructorId: string | null;
+    // Identità della colonna cliccata: id istruttore (vista Istruttori) o
+    // "veh:<id>"/"veh:__none__" (vista Veicoli del consorzio). Serve al ghost
+    // per vivere SOLO nella colonna giusta in entrambe le modalità.
+    colKey: string | null;
     colLeft: number;
     colRight: number;
     ghostTop: number;
@@ -987,6 +1016,116 @@ export function AutoscuoleAgendaPage({
   const anchorFromPlus = React.useCallback(() => {
     const rect = plusBtnRef.current?.getBoundingClientRect();
     setPopoverAnchor(rect ? { x: rect.right, y: rect.bottom + 10 } : null);
+  }, []);
+  // Richiesta guida del CONSORZIO (deep-link ?guideRequestId=… dalla campanella):
+  // card flottante + ghost tratteggiato ambra sullo slot richiesto. Il click su
+  // un altro slot della griglia SPOSTA il draft (stessa UX degli altri flussi);
+  // Accetta crea la guida con l'istruttore scelto. Vedi docs/features/consorzio.md.
+  const [guideRequest, setGuideRequest] = React.useState<ConsorzioGuideRequestDetail | null>(null);
+  const [guideDraft, setGuideDraft] = React.useState<{
+    ymd: string;
+    time: string;
+    instructorId: string;
+    // Durata/veicolo correnti del draft: partono dalla richiesta (o dalla
+    // proposta già inviata) e cambiano dal dialog "Proponi un altro orario".
+    durationMinutes: number;
+    vehicleId: string | null;
+  } | null>(null);
+  const [guideResponding, setGuideResponding] = React.useState(false);
+  // Dialog "Proponi un altro orario" (azione Sposta, prototipo).
+  const [proposeSlotOpen, setProposeSlotOpen] = React.useState(false);
+  const [proposeSubmitting, setProposeSubmitting] = React.useState(false);
+  // Snapshot del draft all'apertura del dialog: i campi editano il draft LIVE
+  // (il ghost si aggiorna mentre scegli), ma se si chiude SENZA "Proponi
+  // orario" si torna allo stato di prima — altrimenti si potrebbe accettare
+  // uno slot che l'autoscuola non ha mai chiesto (bug QA Tiziano 07/09).
+  const proposeDraftSnapshotRef = React.useRef<{
+    ymd: string;
+    time: string;
+    instructorId: string;
+    durationMinutes: number;
+    vehicleId: string | null;
+  } | null>(null);
+  const openProposeSlot = React.useCallback(() => {
+    proposeDraftSnapshotRef.current = guideDraft ? { ...guideDraft } : null;
+    setProposeSlotOpen(true);
+  }, [guideDraft]);
+  const cancelProposeSlot = React.useCallback(() => {
+    const snapshot = proposeDraftSnapshotRef.current;
+    if (snapshot) {
+      setGuideDraft((prev) => (prev ? { ...snapshot } : prev));
+    }
+    proposeDraftSnapshotRef.current = null;
+    setProposeSlotOpen(false);
+  }, []);
+  const guideRequestLoadedRef = React.useRef<string | null>(null);
+  const searchParams = useSearchParams();
+  const guideRequestParam = searchParams?.get("guideRequestId") ?? null;
+
+  React.useEffect(() => {
+    if (!guideRequestParam || guideRequestLoadedRef.current === guideRequestParam) return;
+    guideRequestLoadedRef.current = guideRequestParam;
+    void getConsorzioGuideRequest(guideRequestParam).then((res) => {
+      if (!res.success) {
+        toast.error({ description: res.message });
+        return;
+      }
+      if (res.data.status !== "pending") {
+        toast.info({ description: "Questa richiesta è già stata gestita." });
+        return;
+      }
+      // Il draft riparte dalla proposta già inviata, se c'è (dialog Sposta).
+      const starts = new Date(res.data.proposedStartsAt ?? res.data.requestedStartsAt);
+      setGuideRequest(res.data);
+      setGuideDraft({
+        ymd: formatYmd(starts),
+        time: `${pad(starts.getHours())}:${pad(starts.getMinutes())}`,
+        instructorId: "",
+        durationMinutes: res.data.proposedDurationMinutes ?? res.data.durationMinutes,
+        vehicleId: res.data.proposedStartsAt
+          ? res.data.proposedVehicleId
+          : res.data.vehicleId,
+      });
+      // Naviga alla settimana/giorno della richiesta e scrolla all'orario
+      // (stesso follow della creazione guida).
+      const day = normalizeDay(starts);
+      if (viewMode === "week") {
+        setWeekStart(weekAnchor(day, viewPrefs.weekMode));
+      } else {
+        setDayFocus(day);
+      }
+      setPopoverAnchor({
+        x: Math.max(360, window.innerWidth / 2),
+        y: Math.max(80, Math.min(160, window.innerHeight - 460)),
+      });
+      const startMin = starts.getHours() * 60 + starts.getMinutes() - DAY_START_HOUR * 60;
+      calendarScrollRef.current?.scrollTo({
+        top: Math.max(0, startMin * PIXELS_PER_MINUTE - 140),
+        behavior: "smooth",
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guideRequestParam]);
+
+  // Gli istruttori arrivano col bootstrap: appena disponibili, il draft senza
+  // istruttore prende il primo (il ghost vive nella sua colonna).
+  React.useEffect(() => {
+    if (guideRequest && instructors.length > 0) {
+      setGuideDraft((prev) =>
+        prev && !prev.instructorId ? { ...prev, instructorId: instructors[0].id } : prev,
+      );
+    }
+  }, [guideRequest, instructors]);
+
+  const closeGuideRequest = React.useCallback(() => {
+    setGuideRequest(null);
+    setGuideDraft(null);
+    setProposeSlotOpen(false);
+    proposeDraftSnapshotRef.current = null;
+    guideRequestLoadedRef.current = null;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("guideRequestId");
+    window.history.replaceState(null, "", url.toString());
   }, []);
   const [blockCreating, setBlockCreating] = React.useState(false);
   // Lo stesso dialog "blocco istruttore" serve due eventi: "generic" = Evento
@@ -1277,11 +1416,19 @@ export function AutoscuoleAgendaPage({
   const openSlotMenu = React.useCallback((
     event: React.MouseEvent<HTMLDivElement>,
     day: Date,
-    instructorId?: string | null,
+    colId?: string | null,
   ) => {
     const target = event.target as HTMLElement;
     if (target.closest("[data-radix-popper-content-wrapper], [role='menu'], button, a")) return;
     const rect = event.currentTarget.getBoundingClientRect();
+    // Vista Veicoli (consorzio): la colonna è un mezzo ("veh:<id>"), non un
+    // istruttore — i form ricevono instructorId null e, dove ha senso (ghost
+    // richiesta guida), il veicolo della colonna cliccata.
+    const isVehicleCol = colId?.startsWith("veh:") ?? false;
+    const instructorId = isVehicleCol ? null : colId ?? null;
+    const colVehicleId = isVehicleCol
+      ? (colId!.slice(4) === "__none__" ? null : colId!.slice(4))
+      : undefined;
     // rect.top is viewport-relative, so it already accounts for the container scroll.
     const offsetY = event.clientY - rect.top;
     const minutes = Math.max(0, Math.min(totalMinutes - SLOT_MINUTES, offsetY / PIXELS_PER_MINUTE));
@@ -1293,7 +1440,13 @@ export function AutoscuoleAgendaPage({
     // Con un flusso di creazione aperto, il click sulla griglia RIPOSIZIONA il
     // draft (stile Google Calendar) invece di aprire il menu slot.
     if (createOpen) {
-      setForm((prev) => ({ ...prev, day: ymd, time, instructorId: instructorId ?? prev.instructorId }));
+      setForm((prev) => ({
+        ...prev,
+        day: ymd,
+        time,
+        instructorId: instructorId ?? prev.instructorId,
+        ...(colVehicleId !== undefined && colVehicleId !== null ? { vehicleId: colVehicleId } : {}),
+      }));
       return;
     }
     if (examDialogOpen) {
@@ -1305,32 +1458,50 @@ export function AutoscuoleAgendaPage({
       return;
     }
     if (createGroupLessonOpen) {
-      setGroupSlotPatch({ date: ymd, time, instructorId: instructorId ?? null, nonce: Date.now() });
+      setGroupSlotPatch({ date: ymd, time, instructorId, nonce: Date.now() });
       return;
     }
     if (editAppointmentTarget) {
-      setEditSlotPatch({ date: ymd, time, instructorId: instructorId ?? null, nonce: Date.now() });
+      setEditSlotPatch({ date: ymd, time, instructorId, nonce: Date.now() });
+      return;
+    }
+    // Con una Richiesta guida aperta, il click sulla griglia SPOSTA il ghost
+    // della richiesta (giorno/orario/colonna) — azione "Sposta". In vista
+    // Veicoli la colonna cliccata cambia anche il mezzo del draft.
+    if (guideRequest) {
+      setGuideDraft((prev) =>
+        prev
+          ? {
+              ...prev,
+              ymd,
+              time,
+              instructorId: instructorId ?? prev.instructorId,
+              ...(colVehicleId !== undefined ? { vehicleId: colVehicleId } : {}),
+            }
+          : prev,
+      );
       return;
     }
     setSlotMenu({
       day: normalized,
       ymd,
       time,
-      instructorId: instructorId ?? null,
+      instructorId,
+      colKey: colId ?? null,
       colLeft: rect.left,
       colRight: rect.right,
       ghostTop: rect.top + startMin * PIXELS_PER_MINUTE,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createOpen, examDialogOpen, blockDialogOpen, createGroupLessonOpen, editAppointmentTarget]);
+  }, [createOpen, examDialogOpen, blockDialogOpen, createGroupLessonOpen, editAppointmentTarget, guideRequest]);
 
   // Ghost block rendered inside the clicked column while the slot menu is open
   // (neutral look: white + dashed gray border, approved via desktop preview).
-  const renderSlotGhost = (day: Date, instructorId: string | null) => {
+  const renderSlotGhost = (day: Date, colId: string | null) => {
     const active =
       slotMenu !== null &&
       slotMenu.ymd === formatYmd(day) &&
-      slotMenu.instructorId === instructorId;
+      slotMenu.colKey === colId;
     const GHOST_MINUTES = 60;
     return (
       <AnimatePresence>
@@ -1362,10 +1533,61 @@ export function AutoscuoleAgendaPage({
     );
   };
 
+  // Ghost della Richiesta guida del consorzio: blocco tratteggiato AMBRA
+  // (stato "IN ATTESA" del prototipo) nella colonna dell'istruttore scelto.
+  // Si sposta cliccando un altro slot della griglia (vedi openSlotMenu).
+  const renderGuideRequestGhost = (day: Date, colId: string | null) => {
+    if (!guideRequest || !guideDraft) return null;
+    if (guideDraft.ymd !== formatYmd(day)) return null;
+    if (colId?.startsWith("veh:")) {
+      // Vista Veicoli: il ghost vive nella colonna del mezzo del draft
+      // (indipendente dall'istruttore, che si sceglie comunque nella card).
+      if (colId !== `veh:${guideDraft.vehicleId ?? "__none__"}`) return null;
+    } else {
+      if (!guideDraft.instructorId || guideDraft.instructorId !== colId) return null;
+    }
+    const [h, m] = guideDraft.time.split(":").map(Number);
+    const startMin = h * 60 + m - DAY_START_HOUR * 60;
+    const durMin = Math.min(guideDraft.durationMinutes, totalMinutes - startMin);
+    const endTotal = h * 60 + m + durMin;
+    const end = `${pad(Math.floor(endTotal / 60) % 24)}:${pad(endTotal % 60)}`;
+    return (
+      <div
+        className="pointer-events-none absolute left-1 right-1 z-30 overflow-hidden rounded-lg border-[1.5px] border-dashed border-amber-500 bg-amber-50/90 px-2 py-1.5 shadow-[0_6px_22px_rgba(16,24,40,0.14)]"
+        style={{
+          top: startMin * PIXELS_PER_MINUTE,
+          height: Math.max(30, durMin * PIXELS_PER_MINUTE - 2),
+        }}
+      >
+        <div className="text-[9.5px] font-bold uppercase tracking-[0.08em] text-amber-600">
+          In attesa
+        </div>
+        <div className="truncate text-[11px] font-semibold text-foreground">
+          {guideRequest.studentName}
+        </div>
+        <div className="text-[10.5px] tabular-nums text-muted-foreground">
+          {guideDraft.time}–{end}
+        </div>
+      </div>
+    );
+  };
+
   // Sposta il draft attivo su un nuovo slot (click su griglia o drag del ghost).
-  const moveDraftTo = React.useCallback((ymd: string, time: string, instructorId: string | null) => {
+  // `colId` è l'identità della colonna: id istruttore o "veh:<id>" (vista Veicoli).
+  const moveDraftTo = React.useCallback((ymd: string, time: string, colId: string | null) => {
+    const isVehicleCol = colId?.startsWith("veh:") ?? false;
+    const instructorId = isVehicleCol ? null : colId;
+    const colVehicleId = isVehicleCol
+      ? (colId!.slice(4) === "__none__" ? null : colId!.slice(4))
+      : undefined;
     if (createOpen) {
-      setForm((prev) => ({ ...prev, day: ymd, time, instructorId: instructorId ?? prev.instructorId }));
+      setForm((prev) => ({
+        ...prev,
+        day: ymd,
+        time,
+        instructorId: instructorId ?? prev.instructorId,
+        ...(colVehicleId !== undefined && colVehicleId !== null ? { vehicleId: colVehicleId } : {}),
+      }));
     } else if (examDialogOpen) {
       setExamForm((prev) => ({ ...prev, date: ymd, time, timeSet: true, instructorId: instructorId ?? prev.instructorId }));
     } else if (blockDialogOpen) {
@@ -1374,8 +1596,20 @@ export function AutoscuoleAgendaPage({
       setGroupSlotPatch({ date: ymd, time, instructorId, nonce: Date.now() });
     } else if (editAppointmentTarget) {
       setEditSlotPatch({ date: ymd, time, instructorId, nonce: Date.now() });
+    } else if (guideRequest) {
+      setGuideDraft((prev) =>
+        prev
+          ? {
+              ...prev,
+              ymd,
+              time,
+              instructorId: instructorId ?? prev.instructorId,
+              ...(colVehicleId !== undefined ? { vehicleId: colVehicleId } : {}),
+            }
+          : prev,
+      );
     }
-  }, [createOpen, examDialogOpen, blockDialogOpen, createGroupLessonOpen, editAppointmentTarget]);
+  }, [createOpen, examDialogOpen, blockDialogOpen, createGroupLessonOpen, editAppointmentTarget, guideRequest]);
 
   // Drag del ghost: verticale = orario (scatti di 15'), orizzontale = giorno /
   // colonna istruttore (hit-test su [data-agenda-col-day]).
@@ -1424,6 +1658,8 @@ export function AutoscuoleAgendaPage({
     startMin: number;
     durMin: number;
     instructorId: string | null;
+    /** Mezzo del draft (solo creazione guida): posiziona il ghost nella vista Veicoli del consorzio. */
+    vehicleId: string | null;
     title: string;
     cardClass: string;
     dotClass: string;
@@ -1448,6 +1684,7 @@ export function AutoscuoleAgendaPage({
         startMin: parseStart(form.time),
         durMin: dur,
         instructorId: form.instructorId || null,
+        vehicleId: form.vehicleId || null,
         title: student ? `${student.firstName} ${student.lastName}` : "Nuova guida",
         cardClass,
         dotClass,
@@ -1469,6 +1706,7 @@ export function AutoscuoleAgendaPage({
         startMin: parseStart(editDraft.time),
         durMin: dur,
         instructorId: editDraft.instructorId,
+        vehicleId: null,
         title: who || "Guida",
         cardClass,
         dotClass,
@@ -1480,6 +1718,7 @@ export function AutoscuoleAgendaPage({
         startMin: parseStart(examForm.time),
         durMin: parseInt(examForm.duration, 10) || 60,
         instructorId: examForm.instructorId && examForm.instructorId !== "__none__" ? examForm.instructorId : null,
+        vehicleId: null,
         title: examForm.studentIds.length > 1 ? `Esame · ${examForm.studentIds.length} allievi` : "Esame",
         cardClass: "bg-[#F5F0FF]/80 border-[#b39ddb]",
         dotClass: "bg-[#8b5cf6]",
@@ -1491,6 +1730,7 @@ export function AutoscuoleAgendaPage({
         startMin: parseStart(blockForm.startTime),
         durMin: parseInt(blockForm.duration, 10) || 60,
         instructorId: blockForm.instructorId || null,
+        vehicleId: null,
         title: blockKind === "theory" ? "Lezione teorica" : (blockForm.reason.trim() || "Evento bloccante"),
         cardClass: blockKind === "theory"
           ? "bg-[#E6E9FF]/85 border-[#a5abf0]"
@@ -1505,13 +1745,14 @@ export function AutoscuoleAgendaPage({
         startMin: parseStart(groupDraft.time),
         durMin: groupDraft.durationMin,
         instructorId: groupDraft.instructorId,
+        vehicleId: null,
         title: `Guida di gruppo · ${groupDraft.capacity} posti`,
         cardClass: moto ? "bg-[#FFEDD5]/80 border-[#e8a75e]" : "bg-[#ECFDF5]/80 border-[#6fc9a3]",
         dotClass: moto ? "bg-[#f97316]" : "bg-[#10b981]",
       };
     }
     return null;
-  }, [createOpen, form.day, form.time, form.duration, form.studentId, form.instructorId, students, examDialogOpen, examForm, blockDialogOpen, blockForm, blockKind, createGroupLessonOpen, groupDraft, editAppointmentTarget, editDraft, DAY_START_HOUR]);
+  }, [createOpen, form.day, form.time, form.duration, form.studentId, form.instructorId, form.vehicleId, students, examDialogOpen, examForm, blockDialogOpen, blockForm, blockKind, createGroupLessonOpen, groupDraft, editAppointmentTarget, editDraft, DAY_START_HOUR]);
 
   // Annullamento pregresso dell'allievo su QUESTO orario. Se l'allievo aveva
   // annullato lui una guida che iniziava a questo istante, mostriamo un banner
@@ -1573,10 +1814,18 @@ export function AutoscuoleAgendaPage({
   // Ghost del draft nella colonna giusta. instructorId=null (vista classica)
   // → matcha solo il giorno; nelle viste istruttori matcha la colonna, e se
   // l'istruttore non è ancora scelto appare tratteggiato in tutte (opaco).
-  const renderDraftGhost = (day: Date, instructorId: string | null) => {
+  const renderDraftGhost = (day: Date, colId: string | null) => {
     if (!draftGhost || draftGhost.ymd !== formatYmd(day)) return null;
-    const unassigned = instructorId !== null && draftGhost.instructorId === null;
-    if (instructorId !== null && draftGhost.instructorId !== null && draftGhost.instructorId !== instructorId) return null;
+    let unassigned = false;
+    if (colId?.startsWith("veh:")) {
+      // Vista Veicoli (consorzio): il ghost segue il mezzo del draft; senza
+      // mezzo scelto vive nella colonna "Senza mezzo".
+      if (colId !== `veh:${draftGhost.vehicleId ?? "__none__"}`) return null;
+      unassigned = draftGhost.vehicleId === null;
+    } else {
+      unassigned = colId !== null && draftGhost.instructorId === null;
+      if (colId !== null && draftGhost.instructorId !== null && draftGhost.instructorId !== colId) return null;
+    }
     const startMin = Math.max(0, draftGhost.startMin);
     const durMin = Math.min(draftGhost.durMin, totalMinutes - startMin);
     const endTotal = startMin + DAY_START_HOUR * 60 + durMin;
@@ -1586,7 +1835,7 @@ export function AutoscuoleAgendaPage({
     const small = height < 40;
     return (
       <motion.div
-        key={`draft-ghost-${draftGhost.ymd}-${instructorId ?? "day"}`}
+        key={`draft-ghost-${draftGhost.ymd}-${colId ?? "day"}`}
         layout
         initial={{ opacity: 0, scale: 0.94 }}
         animate={{ opacity: unassigned ? 0.45 : 1, scale: 1 }}
@@ -1847,6 +2096,79 @@ export function AutoscuoleAgendaPage({
     load({ silent: true });
   };
 
+  // Accetta/Rifiuta la Richiesta guida del consorzio (card flottante).
+  const handleAcceptGuideRequest = async () => {
+    if (!guideRequest || !guideDraft) return;
+    if (!guideDraft.instructorId) {
+      toast.info({ description: "Scegli l'istruttore per la guida." });
+      return;
+    }
+    const startDate = buildLocalDateTime(guideDraft.ymd, guideDraft.time);
+    if (Number.isNaN(startDate.getTime())) {
+      toast.error({ description: "Slot non valido." });
+      return;
+    }
+    setGuideResponding(true);
+    const res = await acceptConsorzioGuideRequest({
+      requestId: guideRequest.id,
+      instructorId: guideDraft.instructorId,
+      startsAt: startDate.toISOString(),
+      durationMinutes: guideDraft.durationMinutes,
+      vehicleId: guideDraft.vehicleId,
+    });
+    setGuideResponding(false);
+    if (!res.success) {
+      toast.error({ description: res.message });
+      return;
+    }
+    toast.success({ description: "Richiesta accettata: guida creata in agenda." });
+    closeGuideRequest();
+    load({ silent: true });
+  };
+
+  const handleRejectGuideRequest = async () => {
+    if (!guideRequest) return;
+    setGuideResponding(true);
+    const res = await rejectConsorzioGuideRequest(guideRequest.id);
+    setGuideResponding(false);
+    if (!res.success) {
+      toast.error({ description: res.message });
+      return;
+    }
+    toast.success({ description: "Richiesta rifiutata." });
+    closeGuideRequest();
+  };
+
+  // "Proponi orario" (dialog Sposta): invia la controproposta all'autoscuola.
+  // La richiesta resta pending — il ghost segue lo slot proposto e la card
+  // resta aperta (l'ok definitivo della scuola arriva con la fase affiliate).
+  const handleProposeSlot = async () => {
+    if (!guideRequest || !guideDraft) return;
+    const startDate = buildLocalDateTime(guideDraft.ymd, guideDraft.time);
+    if (Number.isNaN(startDate.getTime())) {
+      toast.error({ description: "Slot non valido." });
+      return;
+    }
+    setProposeSubmitting(true);
+    const res = await proposeConsorzioGuideRequestSlot({
+      requestId: guideRequest.id,
+      startsAt: startDate.toISOString(),
+      durationMinutes: guideDraft.durationMinutes,
+      vehicleId: guideDraft.vehicleId,
+    });
+    setProposeSubmitting(false);
+    if (!res.success) {
+      toast.error({ description: res.message });
+      return;
+    }
+    // Proposta inviata: lo slot del draft ORA è legittimo, niente ripristino.
+    proposeDraftSnapshotRef.current = null;
+    setProposeSlotOpen(false);
+    toast.success({
+      description: "Proposta inviata all'autoscuola: riceverai la conferma.",
+    });
+  };
+
   // Dialogo unico "Annulla guida" (future) / "Rimuovi dallo storico" (passate).
   const [cancelDialogTarget, setCancelDialogTarget] = React.useState<CancelDialogTarget | null>(null);
   const [cancelDialogBusy, setCancelDialogBusy] = React.useState(false);
@@ -2070,6 +2392,27 @@ export function AutoscuoleAgendaPage({
       })
       .sort((a, b) => toDate(a.startsAt).getTime() - toDate(b.startsAt).getTime());
   });
+
+  // Colonne della vista GIORNO: istruttori (default) o veicoli del consorzio
+  // (id "veh:<id>", nessuna banda disponibilità). "Senza mezzo" solo se serve.
+  const dayViewCols = (() => {
+    if (!columnsByVehicle || viewMode !== "day") return dayViewInstructors;
+    const base = (vehicleFilter.length > 0
+      ? vehicles.filter((v) => vehicleFilter.includes(v.id))
+      : vehicles
+    ).map((v) => ({
+      id: `veh:${v.id}`,
+      name: v.name,
+      ranges: [] as Array<{ startMinutes: number; endMinutes: number }>,
+    }));
+    const unassignedNeeded =
+      (appointmentsByDay[0] ?? []).some((a) => !a.vehicle?.id) ||
+      (draftGhost !== null && draftGhost.vehicleId === null) ||
+      (guideRequest !== null && guideDraft !== null && guideDraft.vehicleId === null);
+    return unassignedNeeded
+      ? [...base, { id: "veh:__none__", name: "Senza mezzo", ranges: [] as Array<{ startMinutes: number; endMinutes: number }> }]
+      : base;
+  })();
 
   // ── Dati per l'anteprima di stampa ──────────────────────────────────────────
   // "Fotografia" della vista corrente: stesso intervallo di date, stessi filtri
@@ -2342,7 +2685,7 @@ export function AutoscuoleAgendaPage({
                 className="relative flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
               >
                 <LayoutGrid className="size-4" strokeWidth={1.6} />
-                {(viewPrefs.days.length < 7 || viewPrefs.startHour !== 0 || viewPrefs.endHour !== 24 || viewPrefs.weekMode !== "classic") && (
+                {(viewPrefs.days.length < 7 || viewPrefs.startHour !== 0 || viewPrefs.endHour !== 24 || viewPrefs.weekMode !== "classic" || columnsByVehicle) && (
                   <span className="absolute right-1 top-1 size-[7px] rounded-full bg-[#1a1a2e]" />
                 )}
               </button>
@@ -2356,6 +2699,40 @@ export function AutoscuoleAgendaPage({
               >
                 <div className="space-y-4">
                   <div className="text-[15px] font-semibold text-foreground">Visualizzazione</div>
+                  {/* Visualizza per: Istruttori / Veicoli — SOLO consorzio
+                      (prototipo: "Le colonne dell'agenda diventano i mezzi del
+                      consorzio"). Stesso pattern pill della sezione Settimana. */}
+                  {consortium && (
+                    <div className="space-y-2">
+                      <div className="text-[12.5px] font-semibold text-foreground">Visualizza per</div>
+                      <div className="flex gap-1.5">
+                        {([
+                          { key: "instructor", label: "Istruttori" },
+                          { key: "vehicle", label: "Veicoli" },
+                        ] as const).map((opt) => {
+                          const on = viewPrefs.columnsBy === opt.key;
+                          return (
+                            <button
+                              key={opt.key}
+                              type="button"
+                              onClick={() => setViewPrefs((p) => ({ ...p, columnsBy: opt.key }))}
+                              className={cn(
+                                "h-8 flex-1 cursor-pointer rounded-lg px-2 text-[12px] font-semibold transition-colors",
+                                on ? "bg-[#1a1a2e] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
+                              )}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[11.5px] text-muted-foreground">
+                        {viewPrefs.columnsBy === "vehicle"
+                          ? "Le colonne dell'agenda diventano i mezzi del consorzio."
+                          : "Le colonne dell'agenda diventano gli istruttori del consorzio."}
+                      </p>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <div className="text-[12.5px] font-semibold text-foreground">Settimana</div>
                     <div className="flex gap-1.5">
@@ -2858,17 +3235,46 @@ export function AutoscuoleAgendaPage({
           <AgendaGridSkeleton columns={viewMode === "week" ? 7 : 4} />
         ) : (<FadeIn>
 
-        {/* ── WEEKLY VIEW (istruttori) ── */}
+        {/* ── WEEKLY VIEW (istruttori, o veicoli per il consorzio) ── */}
         {viewMode === "week" && (() => {
           const weekInstructorsAll = instructorAvailability.length > 0
             ? instructorAvailability
             : instructors.map((i) => ({ instructorId: i.id, instructorName: i.name, days: {} as Record<string, Array<{ startMinutes: number; endMinutes: number }>> }));
           // Filtro istruttori attivo → solo le colonne selezionate.
-          const weekInstructors = instructorFilter.length > 0
+          const weekInstructorCols = instructorFilter.length > 0
             ? weekInstructorsAll.filter((i) => instructorFilter.includes(i.instructorId))
             : weekInstructorsAll;
+          // Vista Veicoli (consorzio): stesse strutture-colonna degli istruttori
+          // ma con id "veh:<id>" (i ghost/click/drag distinguono dal prefisso) e
+          // nessuna banda di disponibilità (days vuoto). La colonna "Senza mezzo"
+          // compare solo se serve (blocchi senza veicolo, draft/richiesta senza
+          // mezzo assegnato) — nel prototipo non esiste, qui evita blocchi persi.
+          const weekVehicleColsBase = (vehicleFilter.length > 0
+            ? vehicles.filter((v) => vehicleFilter.includes(v.id))
+            : vehicles
+          ).map((v) => ({
+            instructorId: `veh:${v.id}`,
+            instructorName: v.name,
+            days: {} as Record<string, Array<{ startMinutes: number; endMinutes: number }>>,
+          }));
+          const unassignedNeeded =
+            columnsByVehicle &&
+            (appointmentsByDay.some((list) => list.some((a) => !a.vehicle?.id)) ||
+              (draftGhost !== null && draftGhost.vehicleId === null) ||
+              (guideRequest !== null && guideDraft !== null && guideDraft.vehicleId === null));
+          const weekVehicleCols = unassignedNeeded
+            ? [
+                ...weekVehicleColsBase,
+                {
+                  instructorId: "veh:__none__",
+                  instructorName: "Senza mezzo",
+                  days: {} as Record<string, Array<{ startMinutes: number; endMinutes: number }>>,
+                },
+              ]
+            : weekVehicleColsBase;
+          const weekInstructors = columnsByVehicle ? weekVehicleCols : weekInstructorCols;
           const instrCount = Math.max(1, weekInstructors.length);
-          const totalCols = instrCount * days.length; // sotto-colonne istruttore per i giorni visibili
+          const totalCols = instrCount * days.length; // sotto-colonne per i giorni visibili
 
           return (
           <div className={cn("relative transition-opacity duration-200", refreshing && "opacity-60")} style={{ height: agendaGridHeight, minHeight: 400 }}>
@@ -2919,17 +3325,32 @@ export function AutoscuoleAgendaPage({
                     </div>
                   );
                 })}
-                {/* Instructor sub-headers within each day */}
+                {/* Sub-headers within each day: istruttori (avatar) o veicoli
+                    (chip camion, dal prototipo consorzio) */}
                 {days.map((day) =>
                   weekInstructors.map((instr, idx) => {
                     const tint = tintFor(instr.instructorId, idx);
                     const initials = instr.instructorName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
                     return (
-                      <div key={`${day.toISOString()}-${instr.instructorId}`} className={cn("flex flex-col items-center gap-0.5 py-1.5 border-l", idx === 0 ? "border-[#dddddd]" : "border-[#f0f0f0]")}>
-                        <UserPhotoCircle instructorId={instr.instructorId} size={20}>
-                          <div className={cn("flex size-5 items-center justify-center rounded-full text-[8px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>{initials}</div>
-                        </UserPhotoCircle>
-                        <span className="text-[9px] font-medium text-muted-foreground truncate max-w-full px-0.5">{instr.instructorName.split(" ")[0]}</span>
+                      <div key={`${day.toISOString()}-${instr.instructorId}`} className={cn("flex min-w-0 flex-col items-center gap-0.5 py-1.5 border-l", idx === 0 ? "border-[#dddddd]" : "border-[#f0f0f0]")}>
+                        {columnsByVehicle ? (
+                          <div className="flex size-5 items-center justify-center rounded-full bg-[#f0f0f0]">
+                            <Truck className="size-3 text-[#6a6a6a]" strokeWidth={1.8} />
+                          </div>
+                        ) : (
+                          <UserPhotoCircle instructorId={instr.instructorId} size={20}>
+                            <div className={cn("flex size-5 items-center justify-center rounded-full text-[8px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>{initials}</div>
+                          </UserPhotoCircle>
+                        )}
+                        {/* w-0 + min-w-full: l'etichetta NON contribuisce alla larghezza
+                            intrinseca della traccia — l'header è una griglia separata dal
+                            corpo (sincronizzata solo nello scroll) e i nomi veicolo lunghi
+                            la disallineavano dalle colonne reali (bug QA Tiziano 07/09). */}
+                        <div className="w-0 min-w-full px-0.5">
+                          <span className="block truncate text-center text-[9px] font-medium text-muted-foreground">
+                            {columnsByVehicle ? instr.instructorName : instr.instructorName.split(" ")[0]}
+                          </span>
+                        </div>
                       </div>
                     );
                   })
@@ -3028,7 +3449,13 @@ export function AutoscuoleAgendaPage({
                   return weekInstructors.map((instr, instrIdx) => {
                     const tint = tintFor(instr.instructorId, instrIdx);
                     const ranges = instr.days[dateKey] ?? [];
-                    const instrAppts = dayAppts.filter((a) => a.instructor?.id === instr.instructorId);
+                    // Vista Veicoli: i blocchi cadono nella colonna del LORO
+                    // mezzo (senza mezzo → colonna "Senza mezzo", se presente).
+                    const instrAppts = dayAppts.filter((a) =>
+                      columnsByVehicle
+                        ? `veh:${a.vehicle?.id ?? "__none__"}` === instr.instructorId
+                        : a.instructor?.id === instr.instructorId,
+                    );
 
                     return (
                       <div
@@ -3040,6 +3467,7 @@ export function AutoscuoleAgendaPage({
                         onClick={(event) => openSlotMenu(event, day, instr.instructorId)}
                       >
                         {renderSlotGhost(day, instr.instructorId)}
+                        {renderGuideRequestGhost(day, instr.instructorId)}
                         {renderDraftGhost(day, instr.instructorId)}
                         {isColumnHoliday && instrIdx === 0 && (
                           <div className="pointer-events-none sticky top-3 z-20 flex justify-center">
@@ -3445,11 +3873,11 @@ export function AutoscuoleAgendaPage({
           {(
             <div
               className="sticky top-0 z-30 grid border-b border-border bg-white/95 backdrop-blur-sm text-xs text-muted-foreground"
-              style={{ gridTemplateColumns: fsCols(Math.max(1, dayViewInstructors.length)) ?? `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)` }}
+              style={{ gridTemplateColumns: fsCols(Math.max(1, dayViewCols.length)) ?? `56px repeat(${Math.max(1, dayViewCols.length)}, 1fr)` }}
             >
               {/* Angolo sticky left, allineato al time gutter */}
               <div className="sticky left-0 bg-white" />
-              {dayViewInstructors.length > 0 ? dayViewInstructors.map((instr, idx) => {
+              {dayViewCols.length > 0 ? dayViewCols.map((instr, idx) => {
                 const tint = tintFor(instr.id, idx);
                 const initials = instr.name
                   .split(" ")
@@ -3460,19 +3888,29 @@ export function AutoscuoleAgendaPage({
                 return (
                   <div
                     key={instr.id}
-                    className="flex h-16 flex-col items-center justify-center gap-1 border-l border-[#eeeeee]"
+                    className="flex h-16 min-w-0 flex-col items-center justify-center gap-1 border-l border-[#eeeeee]"
                   >
-                    <UserPhotoCircle instructorId={instr.id} size={32}>
-                      <div className={cn("flex size-8 items-center justify-center rounded-full text-[11px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>
-                        {initials}
+                    {columnsByVehicle ? (
+                      <div className="flex size-8 items-center justify-center rounded-full bg-[#f0f0f0]">
+                        <Truck className="size-4 text-[#6a6a6a]" strokeWidth={1.8} />
                       </div>
-                    </UserPhotoCircle>
-                    <span className="max-w-[90%] truncate text-[12px] font-medium text-[#444444]">{instr.name}</span>
+                    ) : (
+                      <UserPhotoCircle instructorId={instr.id} size={32}>
+                        <div className={cn("flex size-8 items-center justify-center rounded-full text-[11px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>
+                          {initials}
+                        </div>
+                      </UserPhotoCircle>
+                    )}
+                    {/* w-0 + min-w-full: vedi commento gemello nella vista settimana
+                        (i nomi veicolo lunghi non devono allargare la traccia). */}
+                    <div className="w-0 min-w-full px-1">
+                      <span className="block truncate text-center text-[12px] font-medium text-[#444444]">{instr.name}</span>
+                    </div>
                   </div>
                 );
               }) : (
                 <div className="py-2.5 text-center text-xs text-muted-foreground border-l border-border/50">
-                  Nessun istruttore
+                  {columnsByVehicle ? "Nessun mezzo" : "Nessun istruttore"}
                 </div>
               )}
             </div>
@@ -3482,7 +3920,7 @@ export function AutoscuoleAgendaPage({
           <div
             className="grid"
             style={{
-              gridTemplateColumns: fsCols(Math.max(1, dayViewInstructors.length)) ?? `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)`,
+              gridTemplateColumns: fsCols(Math.max(1, dayViewCols.length)) ?? `56px repeat(${Math.max(1, dayViewCols.length)}, 1fr)`,
             }}
           >
             {/* Time gutter — sticky left (resta ancorato anche con scroll orizzontale in fullscreen; sticky fa da containing block per gli hour-mark assoluti) */}
@@ -3536,11 +3974,13 @@ export function AutoscuoleAgendaPage({
               const showNowLine = isDayToday && nowMinutes >= 0 && nowMinutes <= totalMinutes;
               const allDayAppointments = appointmentsByDay[0] ?? [];
 
-              return dayViewInstructors.map((instr, instrIdx) => {
+              return dayViewCols.map((instr, instrIdx) => {
                 const tint = tintFor(instr.id, instrIdx);
-                // Filter appointments for this instructor
-                const instrAppointments = allDayAppointments.filter(
-                  (a) => a.instructor?.id === instr.id,
+                // Colonna per istruttore, o per mezzo nella vista Veicoli.
+                const instrAppointments = allDayAppointments.filter((a) =>
+                  columnsByVehicle
+                    ? `veh:${a.vehicle?.id ?? "__none__"}` === instr.id
+                    : a.instructor?.id === instr.id,
                 );
 
                 return (
@@ -3553,6 +3993,7 @@ export function AutoscuoleAgendaPage({
                     onClick={(event) => openSlotMenu(event, day, instr.id)}
                   >
                     {renderSlotGhost(day, instr.id)}
+                    {renderGuideRequestGhost(day, instr.id)}
                     {renderDraftGhost(day, instr.id)}
                     {/* Availability bands — offset e clip alla finestra oraria visibile
                         (startMinutes è da mezzanotte, la griglia parte da DAY_START_HOUR). */}
@@ -4318,6 +4759,58 @@ export function AutoscuoleAgendaPage({
           </div>
         </div>
       </CreateEventPopover>
+
+      {/* ── Richiesta guida del consorzio (card 1:1 dal prototipo) ── */}
+      <GuideRequestCard
+        open={guideRequest !== null}
+        onClose={() => { if (!guideResponding && !proposeSlotOpen) closeGuideRequest(); }}
+        anchor={popoverAnchor}
+        rows={(() => {
+          if (!guideRequest || !guideDraft) return [];
+          const startDate = buildLocalDateTime(guideDraft.ymd, guideDraft.time);
+          const endDate = new Date(startDate.getTime() + guideDraft.durationMinutes * 60000);
+          const when = `${startDate.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "short" })}, ${guideDraft.time}–${pad(endDate.getHours())}:${pad(endDate.getMinutes())}`;
+          const draftVehicleName = guideDraft.vehicleId
+            ? vehicles.find((v) => v.id === guideDraft.vehicleId)?.name ??
+              guideRequest.vehicleName ??
+              "—"
+            : "Da assegnare";
+          return [
+            ["Quando", when.charAt(0).toUpperCase() + when.slice(1)],
+            ["Autoscuola", guideRequest.schoolName],
+            ["Veicolo", draftVehicleName],
+            ["Allievo", guideRequest.studentName],
+          ] as Array<[string, string]>;
+        })()}
+        instructors={instructors.map((instructor) => ({ id: instructor.id, name: instructor.name }))}
+        instructorId={guideDraft?.instructorId ?? ""}
+        onInstructorChange={(value) =>
+          setGuideDraft((prev) => (prev ? { ...prev, instructorId: value } : prev))
+        }
+        note={guideRequest?.note}
+        responding={guideResponding}
+        onAccept={() => void handleAcceptGuideRequest()}
+        onReject={() => void handleRejectGuideRequest()}
+        onMoveHint={openProposeSlot}
+      />
+
+      {/* ── Dialog "Proponi un altro orario" (azione Sposta, prototipo):
+          modifica il draft (il ghost in agenda si aggiorna live) e invia la
+          controproposta all'autoscuola. ── */}
+      <ProposeSlotDialog
+        open={proposeSlotOpen && guideRequest !== null && guideDraft !== null}
+        onClose={() => { if (!proposeSubmitting) cancelProposeSlot(); }}
+        ymd={guideDraft?.ymd ?? ""}
+        time={guideDraft?.time ?? "09:00"}
+        durationMinutes={guideDraft?.durationMinutes ?? 60}
+        vehicleId={guideDraft?.vehicleId ?? null}
+        vehicles={vehicles.map((v) => ({ id: v.id, name: v.name }))}
+        onChange={(patch) =>
+          setGuideDraft((prev) => (prev ? { ...prev, ...patch } : prev))
+        }
+        submitting={proposeSubmitting}
+        onSubmit={() => void handleProposeSlot()}
+      />
 
       {/* ── Recurring Block Delete Confirmation ── */}
       <Dialog open={blockDeleteConfirm !== null} onOpenChange={(open) => { if (!open) setBlockDeleteConfirm(null); }}>

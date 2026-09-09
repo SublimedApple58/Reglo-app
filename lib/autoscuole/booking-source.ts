@@ -27,6 +27,8 @@ export const BOOKING_SOURCE = {
   voice: "voice",
   groupLesson: "group_lesson",
   exam: "exam",
+  /** Guida creata dal consorzio accettando una Richiesta guida di un'autoscuola consorziata. */
+  consortiumRequest: "consortium_request",
 } as const;
 
 export type BookingSource = (typeof BOOKING_SOURCE)[keyof typeof BOOKING_SOURCE];

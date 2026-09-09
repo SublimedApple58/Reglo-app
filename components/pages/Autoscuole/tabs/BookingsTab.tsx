@@ -14,9 +14,13 @@ import {
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { TimePickerInput } from "@/components/ui/time-picker";
 import { ToggleChip } from "@/components/ui/toggle-chip";
+import { useAtomValue } from "jotai";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import PaymentsSettingsPane from "@/components/pages/Autoscuole/PaymentsSettingsPane";
+import { ConsorzioPrezziPane } from "@/components/pages/Consorzio/ConsorzioPrezziPane";
+import { companyAtom } from "@/atoms/company.store";
+import { isConsortium } from "@/lib/services";
 import { cn } from "@/lib/utils";
 import {
   NATIONAL_HOLIDAYS,
@@ -98,7 +102,7 @@ export type BookingsTabProps = {
   toast: { success: (opts: { description: string }) => void; error: (opts: { description: string }) => void };
 };
 
-type SubTab = "generali" | "limiti" | "guide" | "app" | "crediti";
+type SubTab = "generali" | "limiti" | "guide" | "app" | "crediti" | "prezzi";
 
 const SUB_TABS: Array<{ key: SubTab; label: string }> = [
   { key: "generali", label: "Generali" },
@@ -106,6 +110,16 @@ const SUB_TABS: Array<{ key: SubTab; label: string }> = [
   { key: "guide", label: "Guide" },
   { key: "app", label: "App allievi" },
   { key: "crediti", label: "Crediti e prezzi" },
+];
+
+// Modalità consorzio: "Crediti e prezzi" (pagamenti allievo/Stripe) non esiste;
+// al suo posto c'è "Prezzi" (tariffe orarie verso le autoscuole consorziate).
+const CONSORTIUM_SUB_TABS: Array<{ key: SubTab; label: string }> = [
+  { key: "generali", label: "Generali" },
+  { key: "limiti", label: "Limiti" },
+  { key: "guide", label: "Guide" },
+  { key: "app", label: "App allievi" },
+  { key: "prezzi", label: "Prezzi" },
 ];
 
 const BOOKING_DURATION_OPTIONS = [30, 45, 60, 90, 120] as const;
@@ -489,6 +503,9 @@ export default function BookingsTab({
   toast,
 }: BookingsTabProps) {
   const [subTab, setSubTab] = React.useState<SubTab>("generali");
+  const company = useAtomValue(companyAtom);
+  const consortium = isConsortium(company?.services ?? null);
+  const subTabs = consortium ? CONSORTIUM_SUB_TABS : SUB_TABS;
 
   const isPaused = Boolean(
     examPriorityPausedUntil && new Date(examPriorityPausedUntil) > new Date(),
@@ -498,7 +515,7 @@ export default function BookingsTab({
     <div data-testid="bookings-pane">
       {/* ── Sub-tab Generali / Limiti / Guide / App allievi ── */}
       <div className="flex flex-wrap items-center gap-8 border-b border-[#e8e8e8]">
-        {SUB_TABS.map((tab) => (
+        {subTabs.map((tab) => (
           <button
             key={tab.key}
             type="button"
@@ -1004,9 +1021,18 @@ export default function BookingsTab({
 
       {/* ══ CREDITI E PREZZI ══ */}
       {/* Ex pane "Fatturazione e pagamenti": self-contained, auto-save. */}
-      <div className={cn("pt-6", subTab !== "crediti" && "hidden")}>
-        <PaymentsSettingsPane />
-      </div>
+      {!consortium && (
+        <div className={cn("pt-6", subTab !== "crediti" && "hidden")}>
+          <PaymentsSettingsPane />
+        </div>
+      )}
+
+      {/* ══ PREZZI (solo consorzio) ══ */}
+      {consortium && (
+        <div className={cn("pt-6", subTab !== "prezzi" && "hidden")}>
+          <ConsorzioPrezziPane />
+        </div>
+      )}
     </div>
   );
 }

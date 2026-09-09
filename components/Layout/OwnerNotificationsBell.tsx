@@ -2,8 +2,10 @@
 
 import React from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useLocale } from "next-intl";
 import * as Popover from "@radix-ui/react-popover";
-import { CheckCheck, Trash } from "lucide-react";
+import { Check, CheckCheck, Clock, Trash, X } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 
@@ -14,6 +16,7 @@ type NotificationItem = {
   startsAt: string | null;
   instructorName: string | null;
   lessonType: string | null;
+  meta: Record<string, unknown> | null;
   read: boolean;
   createdAt: string;
 };
@@ -60,6 +63,8 @@ function initialsOf(name: string | null): string {
 
 export function OwnerNotificationsBell() {
   const toast = useFeedbackToast();
+  const router = useRouter();
+  const locale = useLocale();
   const [items, setItems] = React.useState<NotificationItem[]>([]);
   const [unread, setUnread] = React.useState(0);
   const [open, setOpen] = React.useState(false);
@@ -91,10 +96,17 @@ export function OwnerNotificationsBell() {
         for (const n of next) seenRef.current.add(n.id);
         if (fresh.length) {
           const top = fresh[0];
-          toast.info({
-            title: "Nuovo annullamento",
-            description: `${top.studentName ?? "Un allievo"} ha annullato la guida di ${formatGuida(top.startsAt)}`,
-          });
+          if (top.kind === "consortium_guide_request") {
+            toast.info({
+              title: "Nuova richiesta guida",
+              description: `${String(top.meta?.schoolName ?? "Un'autoscuola")} chiede una guida per ${top.studentName ?? "un allievo"} — ${formatGuida(top.startsAt)}`,
+            });
+          } else {
+            toast.info({
+              title: "Nuovo annullamento",
+              description: `${top.studentName ?? "Un allievo"} ha annullato la guida di ${formatGuida(top.startsAt)}`,
+            });
+          }
         }
       }
     } catch {
@@ -135,7 +147,15 @@ export function OwnerNotificationsBell() {
   if (hidden) return null;
 
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        // Refetch all'apertura: senza, un'azione appena compiuta (es. accetta/
+        // rifiuta richiesta consorzio) resterebbe stantia fino al poll dei 25s.
+        if (next) void fetchNotifications();
+      }}
+    >
       <Popover.Trigger asChild>
         <button
           type="button"
@@ -207,11 +227,92 @@ export function OwnerNotificationsBell() {
             </div>
           ) : (
             <div className="max-h-[420px] overflow-y-auto pb-1.5">
-              {items.map((n) => (
-                <div key={n.id} className="relative flex items-center gap-3.5 px-5 py-3">
-                  <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-[#f0f0f0] text-[13px] font-semibold text-[#484848]">
-                    {initialsOf(n.studentName)}
-                  </span>
+              {items.map((n) => {
+                // Kind consorzio: "Richiesta guida" clickabile → agenda col
+                // ghost sullo slot richiesto (primo click-through della bell).
+                if (n.kind === "consortium_guide_request") {
+                  const requestId =
+                    typeof n.meta?.requestId === "string" ? n.meta.requestId : null;
+                  const schoolName =
+                    typeof n.meta?.schoolName === "string" ? n.meta.schoolName : null;
+                  return (
+                    <button
+                      key={n.id}
+                      type="button"
+                      onClick={() => {
+                        if (!requestId) return;
+                        setOpen(false);
+                        router.push(
+                          `/${locale}/user/autoscuole?tab=agenda&guideRequestId=${requestId}`,
+                        );
+                      }}
+                      className="relative flex w-full cursor-pointer items-center gap-3.5 px-5 py-3 text-left transition-colors hover:bg-[#f7f7f7]"
+                    >
+                      <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+                        <Clock className="h-[19px] w-[19px]" strokeWidth={2} />
+                      </span>
+                      <div className="min-w-0 flex-1 pr-4">
+                        <p className="text-[14.5px] leading-[1.4] text-foreground">
+                          <span className="font-semibold">Richiesta guida</span>
+                          {n.studentName ? ` · ${n.studentName}` : ""}
+                        </p>
+                        <p className="mt-0.5 truncate text-[13px] font-medium text-[#717171]">
+                          {[schoolName, formatGuida(n.startsAt)].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                      {!n.read && (
+                        <span className="h-[9px] w-[9px] shrink-0 rounded-full bg-[#c13515]" />
+                      )}
+                    </button>
+                  );
+                }
+                // Kind consorzio risolti: la richiesta accettata/rifiutata resta
+                // in inbox come esito, con icona verde/rossa (prototipo).
+                if (
+                  n.kind === "consortium_guide_accepted" ||
+                  n.kind === "consortium_guide_rejected"
+                ) {
+                  const accepted = n.kind === "consortium_guide_accepted";
+                  const schoolName =
+                    typeof n.meta?.schoolName === "string" ? n.meta.schoolName : null;
+                  return (
+                    <div key={n.id} className="relative flex items-center gap-3.5 px-5 py-3">
+                      <span
+                        className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full"
+                        style={
+                          accepted
+                            ? { background: "#E4F4E7", border: "1px solid #5BA863", color: "#1F6B2A" }
+                            : { background: "#FDECEC", border: "1px solid #D98A8A", color: "#B3494F" }
+                        }
+                      >
+                        {accepted ? (
+                          <Check className="h-[19px] w-[19px]" strokeWidth={2.2} />
+                        ) : (
+                          <X className="h-[18px] w-[18px]" strokeWidth={2.2} />
+                        )}
+                      </span>
+                      <div className="min-w-0 flex-1 pr-4">
+                        <p className="text-[14.5px] leading-[1.4] text-foreground">
+                          <span className="font-semibold">
+                            {accepted ? "Guida accettata" : "Guida rifiutata"}
+                          </span>
+                          {n.studentName ? ` · ${n.studentName}` : ""}
+                        </p>
+                        <p className="mt-0.5 truncate text-[13px] font-medium text-[#717171]">
+                          {[schoolName, formatGuida(n.startsAt)].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                      {!n.read && (
+                        <span className="h-[9px] w-[9px] shrink-0 rounded-full bg-[#c13515]" />
+                      )}
+                    </div>
+                  );
+                }
+                return (
+                  <div key={n.id} className="relative flex items-center gap-3.5 px-5 py-3">
+                    <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-[#f0f0f0] text-[13px] font-semibold text-[#484848]">
+                      {initialsOf(n.studentName)}
+                    </span>
                     <div className="min-w-0 flex-1 pr-4">
                       <p className="text-[14.5px] leading-[1.4] text-foreground">
                         <span className="font-semibold">
@@ -223,11 +324,12 @@ export function OwnerNotificationsBell() {
                         {formatGuida(n.startsAt)} · {relativeTime(n.createdAt)}
                       </p>
                     </div>
-                  {!n.read && (
-                    <span className="h-[9px] w-[9px] shrink-0 rounded-full bg-[#c13515]" />
-                  )}
-                </div>
-              ))}
+                    {!n.read && (
+                      <span className="h-[9px] w-[9px] shrink-0 rounded-full bg-[#c13515]" />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </Popover.Content>
