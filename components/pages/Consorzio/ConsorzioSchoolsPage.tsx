@@ -63,6 +63,7 @@ const emptySchoolForm = {
   vatNumber: "",
   phone: "",
   email: "",
+  accountingCode: "",
 };
 
 
@@ -70,7 +71,7 @@ const emptySchoolForm = {
 function SchoolListSkeleton() {
   return (
     <div>
-      <div className="grid grid-cols-[1.6fr_1fr_70px_140px_1fr_92px] gap-x-7 border-b border-[#ebebeb] px-4 pb-2.5">
+      <div className="grid grid-cols-[1.6fr_1fr_96px_70px_130px_1fr_92px] gap-x-7 border-b border-[#ebebeb] px-4 pb-2.5">
         {Array.from({ length: 6 }).map((_, i) => (
           <Skeleton key={i} className="h-3 w-16 max-w-full rounded" />
         ))}
@@ -78,7 +79,7 @@ function SchoolListSkeleton() {
       {Array.from({ length: 4 }).map((_, i) => (
         <div
           key={i}
-          className="grid grid-cols-[1.6fr_1fr_70px_140px_1fr_92px] items-center gap-x-7 border-b border-[#f2f2f2] px-4 py-3.5"
+          className="grid grid-cols-[1.6fr_1fr_96px_70px_130px_1fr_92px] items-center gap-x-7 border-b border-[#f2f2f2] px-4 py-3.5"
         >
           <div className="flex min-w-0 items-center gap-3">
             <Skeleton className="size-9 shrink-0 rounded-full" />
@@ -134,7 +135,7 @@ export function ConsorzioSchoolsPage() {
     const query = search.trim().toLowerCase();
     if (!query) return schools;
     return schools.filter((school) =>
-      [school.name, school.city, school.ownerName]
+      [school.name, school.city, school.ownerName, school.accountingCode]
         .filter(Boolean)
         .some((value) => (value as string).toLowerCase().includes(query)),
     );
@@ -173,7 +174,7 @@ export function ConsorzioSchoolsPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cerca autoscuola, titolare o città"
+              placeholder="Cerca autoscuola, titolare o codice"
               className="w-full border-0 bg-transparent p-0 text-[15px] font-medium text-[#222222] outline-none placeholder:text-[#a0a0a0]"
             />
           </div>
@@ -203,12 +204,12 @@ export function ConsorzioSchoolsPage() {
           <FadeIn>
           <div>
             {/* Griglia del prototipo: 1.6fr 1fr 70px 140px 1fr 92px, gap 28 */}
-            <div className="grid grid-cols-[1.6fr_1fr_70px_140px_1fr_92px] gap-x-7 border-b border-[#ebebeb] px-4 pb-2.5">
-              {["Autoscuola", "Titolare", "Allievi", "Ultima guida", "Mezzo più usato", "Stato"].map(
+            <div className="grid grid-cols-[1.6fr_1fr_96px_70px_130px_1fr_92px] gap-x-7 border-b border-[#ebebeb] px-4 pb-2.5">
+              {["Autoscuola", "Titolare", "Codice", "Allievi", "Ultima guida", "Mezzo più usato", "Stato"].map(
                 (header, index) => (
                   <div
                     key={header}
-                    className={`text-[11px] font-bold uppercase tracking-[0.7px] text-[#929292] ${index === 2 ? "text-right" : ""}`}
+                    className={`text-[11px] font-bold uppercase tracking-[0.7px] text-[#929292] ${index === 3 ? "text-right" : ""}`}
                   >
                     {header}
                   </div>
@@ -221,7 +222,7 @@ export function ConsorzioSchoolsPage() {
                 <div
                   key={school.id}
                   onClick={() => router.push(`/${locale}/user/autoscuole/scuole/${school.id}`)}
-                  className="grid cursor-pointer grid-cols-[1.6fr_1fr_70px_140px_1fr_92px] items-center gap-x-7 rounded-[10px] border-b border-[#f2f2f2] px-4 py-3.5 transition-colors hover:bg-[#fafafa]"
+                  className="grid cursor-pointer grid-cols-[1.6fr_1fr_96px_70px_130px_1fr_92px] items-center gap-x-7 rounded-[10px] border-b border-[#f2f2f2] px-4 py-3.5 transition-colors hover:bg-[#fafafa]"
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#e6e6e6] bg-white text-[12px] font-bold text-[#444444]">
@@ -238,6 +239,18 @@ export function ConsorzioSchoolsPage() {
                   </div>
                   <div className="truncate text-[13.5px] font-medium text-[#444444]">
                     {school.ownerName ?? "—"}
+                  </div>
+                  <div className="min-w-0">
+                    {school.accountingCode ? (
+                      <span
+                        className="inline-flex max-w-full truncate px-2 py-[3px] text-[11.5px] font-bold"
+                        style={{ background: "#EEF0F6", color: "#1A1A2E", borderRadius: 6 }}
+                      >
+                        {school.accountingCode}
+                      </span>
+                    ) : (
+                      <span className="text-[13px] font-medium text-[#b0b0b0]">—</span>
+                    )}
                   </div>
                   <div className="text-right text-[14px] font-semibold text-[#222222]">
                     {school.studentsCount}
@@ -331,15 +344,28 @@ export function ConsorzioSchoolsPage() {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="school-email">Email</Label>
-              <Input
-                id="school-email"
-                type="email"
-                placeholder="info@autoscuola.it"
-                value={addForm.email}
-                onChange={(e) => setAddForm((p) => ({ ...p, email: e.target.value }))}
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="school-email">Email</Label>
+                <Input
+                  id="school-email"
+                  type="email"
+                  placeholder="info@autoscuola.it"
+                  value={addForm.email}
+                  onChange={(e) => setAddForm((p) => ({ ...p, email: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="school-code">Codice contabile</Label>
+                <Input
+                  id="school-code"
+                  placeholder="AS-ROSSI"
+                  value={addForm.accountingCode}
+                  onChange={(e) =>
+                    setAddForm((p) => ({ ...p, accountingCode: e.target.value.toUpperCase() }))
+                  }
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button type="submit" disabled={saving} className="w-full sm:w-auto">

@@ -2,9 +2,10 @@
 
 import React from "react";
 import Image from "next/image";
-import { ChevronDown, ChevronLeft, ChevronRight, Plus, Search, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ExpandingSearch } from "@/components/ui/expanding-search";
 import {
   Dialog,
   DialogContent,
@@ -14,14 +15,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { Input } from "@/components/ui/input";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { FadeIn } from "@/components/ui/fade-in";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
-  archiveConsorzioAccountingCode,
-  createConsorzioAccountingCode,
   getConsorzioBilling,
   setConsorzioAppointmentAccountingCodes,
   setConsorzioLessonBillingFlags,
@@ -124,9 +122,10 @@ export function ConsorzioBillingPage() {
   const [codeFilter, setCodeFilter] = React.useState<string | null>(null);
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
 
-  const [codesManagerOpen, setCodesManagerOpen] = React.useState(false);
-  const [newCode, setNewCode] = React.useState("");
-  const [codesBusy, setCodesBusy] = React.useState(false);
+  // Ricerca per codice contabile (stesso componente della sezione Allievi):
+  // con ~40 codici la fila di chip non si scorre più a occhio.
+  const [codeSearch, setCodeSearch] = React.useState("");
+  const [codeSearchOpen, setCodeSearchOpen] = React.useState(false);
 
   const [lessonCodesFor, setLessonCodesFor] = React.useState<ConsorzioBillingLesson | null>(null);
   const [lessonCodesDraft, setLessonCodesDraft] = React.useState<string[]>([]);
@@ -176,6 +175,15 @@ export function ConsorzioBillingPage() {
     return { total, settled, outstanding: Math.round((total - settled) * 100) / 100 };
   }, [filteredGroups]);
 
+  const CODE_CHIP_CAP = 12;
+  const visibleCodes = React.useMemo(() => {
+    const query = codeSearch.trim().toLowerCase();
+    const matching = query
+      ? codes.filter((code) => code.code.toLowerCase().includes(query))
+      : codes;
+    return { matching, shown: query ? matching : matching.slice(0, CODE_CHIP_CAP) };
+  }, [codes, codeSearch]);
+
   const toggleExpanded = (schoolId: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -197,31 +205,6 @@ export function ConsorzioBillingPage() {
       toast.error({ description: res.message });
       return;
     }
-    void load();
-  };
-
-  const handleCreateCode = async () => {
-    if (!newCode.trim()) return;
-    setCodesBusy(true);
-    const res = await createConsorzioAccountingCode(newCode);
-    setCodesBusy(false);
-    if (!res.success) {
-      toast.error({ description: res.message });
-      return;
-    }
-    setNewCode("");
-    void load();
-  };
-
-  const handleArchiveCode = async (codeId: string) => {
-    setCodesBusy(true);
-    const res = await archiveConsorzioAccountingCode(codeId);
-    setCodesBusy(false);
-    if (!res.success) {
-      toast.error({ description: res.message });
-      return;
-    }
-    if (codeFilter === codeId) setCodeFilter(null);
     void load();
   };
 
@@ -332,7 +315,7 @@ export function ConsorzioBillingPage() {
         >
           Tutti
         </button>
-        {codes.map((code) => (
+        {visibleCodes.shown.map((code) => (
           <button
             key={code.id}
             type="button"
@@ -347,15 +330,24 @@ export function ConsorzioBillingPage() {
             {code.code}
           </button>
         ))}
-        <button
-          type="button"
-          onClick={() => setCodesManagerOpen(true)}
-          className="flex h-[27px] w-[27px] cursor-pointer items-center justify-center rounded-full border border-dashed border-[#c8c8c8] text-[#929292] transition-colors hover:border-[#222222] hover:text-[#222222]"
-          aria-label="Gestisci codici contabili"
-          title="Gestisci codici contabili"
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </button>
+        {codeSearch.trim() && visibleCodes.matching.length === 0 && (
+          <span className="text-[12.5px] font-medium text-[#b0b0b0]">
+            Nessun codice trovato
+          </span>
+        )}
+        {!codeSearch.trim() && codes.length > CODE_CHIP_CAP && (
+          <span className="text-[12.5px] font-medium text-[#b0b0b0]">
+            +{codes.length - CODE_CHIP_CAP} — cerca per codice
+          </span>
+        )}
+        <ExpandingSearch
+          open={codeSearchOpen}
+          onOpenChange={setCodeSearchOpen}
+          value={codeSearch}
+          onChange={setCodeSearch}
+          placeholder="Cerca codice"
+          width={190}
+        />
       </div>
 
       {loading ? (
@@ -505,56 +497,6 @@ export function ConsorzioBillingPage() {
         </div>
         </FadeIn>
       )}
-
-      {/* Gestione codici contabili */}
-      <Dialog open={codesManagerOpen} onOpenChange={setCodesManagerOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Codici contabili</DialogTitle>
-            <DialogDescription>
-              Etichette libere del consorzio, assegnabili ad allievi e guide.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            {codes.length === 0 && (
-              <p className="text-sm text-muted-foreground">Nessun codice ancora.</p>
-            )}
-            {codes.map((code) => (
-              <div
-                key={code.id}
-                className="flex items-center justify-between rounded-xl border border-border px-3 py-2"
-              >
-                <span className="text-sm font-semibold text-foreground">{code.code}</span>
-                <button
-                  type="button"
-                  onClick={() => void handleArchiveCode(code.id)}
-                  disabled={codesBusy}
-                  className="cursor-pointer text-muted-foreground transition-colors hover:text-[#c13515]"
-                  aria-label={`Archivia ${code.code}`}
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <Input
-              value={newCode}
-              onChange={(e) => setNewCode(e.target.value.toUpperCase())}
-              placeholder="NUOVO-CODICE"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void handleCreateCode();
-                }
-              }}
-            />
-            <Button onClick={() => void handleCreateCode()} disabled={codesBusy || !newCode.trim()}>
-              {codesBusy ? <LoadingDots /> : "Aggiungi"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Codici della singola guida */}
       <Dialog

@@ -62,6 +62,7 @@ type SchoolData = {
   email: string | null;
   status: string;
   joinedAt: string | null;
+  accountingCode: string | null;
 };
 
 type Stats = {
@@ -189,6 +190,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
     vatNumber: "",
     phone: "",
     email: "",
+    accountingCode: "",
   });
   const [saving, setSaving] = React.useState(false);
 
@@ -229,6 +231,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
       vatNumber: school.vatNumber ?? "",
       phone: school.phone ?? "",
       email: school.email ?? "",
+      accountingCode: school.accountingCode ?? "",
     });
     setEditOpen(true);
   };
@@ -365,6 +368,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
               ["Partita IVA", school.vatNumber],
               ["Telefono", school.phone],
               ["Email", school.email],
+              ["Codice contabile", school.accountingCode],
               ["Nel consorzio da", joined],
             ].map(([label, value]) => (
               <div
@@ -552,15 +556,32 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-email">Email</Label>
-              <Input
-                id="edit-email"
-                type="email"
-                value={editForm.email}
-                onChange={(e) => setEditForm((p) => ({ ...p, email: e.target.value }))}
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="edit-email">Email</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm((p) => ({ ...p, email: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-code">Codice contabile</Label>
+                <Input
+                  id="edit-code"
+                  placeholder="AS-ROSSI"
+                  value={editForm.accountingCode}
+                  onChange={(e) =>
+                    setEditForm((p) => ({ ...p, accountingCode: e.target.value.toUpperCase() }))
+                  }
+                />
+              </div>
             </div>
+            <p className="-mt-1 text-[12.5px] font-medium leading-[1.45] text-[#929292]">
+              Il codice contabile viene applicato automaticamente a tutti gli allievi di
+              questa autoscuola.
+            </p>
             <DialogFooter>
               <Button type="submit" disabled={saving} className="w-full sm:w-auto">
                 {saving ? <LoadingDots /> : "Salva"}

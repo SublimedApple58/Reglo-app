@@ -8,6 +8,10 @@ import {
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
 import { CONSORTIUM_LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
+import {
+  DEFAULT_GUIDE_REQUEST_MIN_LEAD_HOURS,
+  guideRequestLeadTimeError,
+} from "@/lib/consorzio/guide-request-lead";
 import { resolveConsortiumGuideRequestNotification } from "@/lib/autoscuole/notifications";
 import { requireConsortium } from "@/lib/service-access";
 import { formatError } from "@/lib/utils";
@@ -28,6 +32,8 @@ const schoolFieldsSchema = z.object({
   email: z.string().trim().email("Email non valida.").optional().or(z.literal("")),
   /** YYYY-MM (mese di ingresso nel consorzio) o ISO date. Opzionale. */
   joinedAt: z.string().trim().optional(),
+  /** Codice contabile dell'autoscuola (uno solo): si propaga ai suoi allievi. */
+  accountingCode: z.string().trim().max(40, "Codice troppo lungo.").optional(),
 });
 
 const updateSchoolSchema = schoolFieldsSchema.partial().extend({
@@ -54,6 +60,64 @@ const parseJoinedAt = (value: string | undefined): Date | null => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+/**
+ * Applica il codice contabile all'autoscuola e lo propaga a TUTTI i suoi
+ * allievi: il vecchio codice della scuola viene staccato dai membri, il nuovo
+ * agganciato (i codici messi a mano sul singolo allievo restano). Stringa
+ * vuota = nessun codice. Il codice viene creato al volo se non esiste ancora
+ * (sono ~40 etichette, una per autoscuola).
+ */
+const syncSchoolAccountingCode = async (
+  companyId: string,
+  schoolId: string,
+  rawCode: string,
+): Promise<void> => {
+  const code = rawCode.trim().toUpperCase();
+
+  const school = await prisma.consorzioSchool.findFirst({
+    where: { id: schoolId, consorzioCompanyId: companyId },
+    select: { accountingCodeId: true },
+  });
+  const previousCodeId = school?.accountingCodeId ?? null;
+
+  let nextCodeId: string | null = null;
+  if (code) {
+    const row = await prisma.consorzioAccountingCode.upsert({
+      where: { consorzioCompanyId_code: { consorzioCompanyId: companyId, code } },
+      update: { archivedAt: null },
+      create: { consorzioCompanyId: companyId, code },
+      select: { id: true },
+    });
+    nextCodeId = row.id;
+  }
+  if (nextCodeId === previousCodeId) return;
+
+  await prisma.consorzioSchool.update({
+    where: { id: schoolId },
+    data: { accountingCodeId: nextCodeId },
+  });
+
+  const memberIds = (
+    await prisma.companyMember.findMany({
+      where: { companyId, consorzioSchoolId: schoolId },
+      select: { userId: true },
+    })
+  ).map((member) => member.userId);
+  if (memberIds.length === 0) return;
+
+  if (previousCodeId) {
+    await prisma.consorzioMemberAccountingCode.deleteMany({
+      where: { companyId, codeId: previousCodeId, userId: { in: memberIds } },
+    });
+  }
+  if (nextCodeId) {
+    await prisma.consorzioMemberAccountingCode.createMany({
+      data: memberIds.map((userId) => ({ companyId, userId, codeId: nextCodeId })),
+      skipDuplicates: true,
+    });
+  }
+};
+
 // ─── Autoscuole consorziate ─────────────────────────────────
 
 export type ConsorzioSchoolListItem = {
@@ -66,6 +130,7 @@ export type ConsorzioSchoolListItem = {
   studentsCount: number;
   lastLessonAt: string | null;
   topVehicleName: string | null;
+  accountingCode: string | null;
 };
 
 export async function listConsorzioSchools() {
@@ -76,6 +141,7 @@ export async function listConsorzioSchools() {
     const schools = await prisma.consorzioSchool.findMany({
       where: { consorzioCompanyId: companyId, status: { not: "removed" } },
       orderBy: { createdAt: "asc" },
+      include: { accountingCode: { select: { code: true } } },
     });
 
     // Aggregazioni in blocco: membri per scuola, poi guide dei loro allievi.
@@ -155,6 +221,7 @@ export async function listConsorzioSchools() {
         studentsCount: stats?.students.size ?? 0,
         lastLessonAt: stats?.lastLessonAt?.toISOString() ?? null,
         topVehicleName,
+        accountingCode: school.accountingCode?.code ?? null,
       };
     });
 
@@ -183,6 +250,7 @@ export async function getConsorzioSchool(schoolId: string) {
 
     const school = await prisma.consorzioSchool.findFirst({
       where: { id: schoolId, consorzioCompanyId: companyId },
+      include: { accountingCode: { select: { code: true } } },
     });
     if (!school) {
       return { success: false as const, message: "Autoscuola non trovata." };
@@ -265,6 +333,7 @@ export async function getConsorzioSchool(schoolId: string) {
           email: school.email,
           status: school.status,
           joinedAt: school.joinedAt?.toISOString() ?? null,
+          accountingCode: school.accountingCode?.code ?? null,
         },
         stats: {
           activeStudents: members.length,
@@ -300,6 +369,14 @@ export async function createConsorzioSchool(
         joinedAt: parseJoinedAt(payload.joinedAt) ?? new Date(),
       },
     });
+
+    if (payload.accountingCode !== undefined) {
+      await syncSchoolAccountingCode(
+        membership.companyId,
+        school.id,
+        payload.accountingCode,
+      );
+    }
 
     return { success: true as const, data: { schoolId: school.id } };
   } catch (error) {
@@ -337,6 +414,14 @@ export async function updateConsorzioSchool(
           : {}),
       },
     });
+
+    if (payload.accountingCode !== undefined) {
+      await syncSchoolAccountingCode(
+        membership.companyId,
+        school.id,
+        payload.accountingCode,
+      );
+    }
 
     return { success: true as const };
   } catch (error) {
@@ -385,51 +470,6 @@ export async function listConsorzioAccountingCodes() {
       select: { id: true, code: true, description: true },
     });
     return { success: true as const, data: { codes } };
-  } catch (error) {
-    return { success: false as const, message: formatError(error) };
-  }
-}
-
-export async function createConsorzioAccountingCode(code: string, description?: string) {
-  try {
-    const { membership } = await requireConsortium();
-    const label = code.trim().toUpperCase();
-    if (!label) {
-      return { success: false as const, message: "Il codice è vuoto." };
-    }
-    const desc = description?.trim() || null;
-    const row = await prisma.consorzioAccountingCode.upsert({
-      where: {
-        consorzioCompanyId_code: {
-          consorzioCompanyId: membership.companyId,
-          code: label,
-        },
-      },
-      create: { consorzioCompanyId: membership.companyId, code: label, description: desc },
-      // Ri-creare un codice archiviato lo riattiva (e aggiorna la descrizione).
-      update: { archivedAt: null, ...(desc ? { description: desc } : {}) },
-    });
-    return { success: true as const, data: { id: row.id, code: row.code } };
-  } catch (error) {
-    return { success: false as const, message: formatError(error) };
-  }
-}
-
-export async function archiveConsorzioAccountingCode(codeId: string) {
-  try {
-    const { membership } = await requireConsortium();
-    const row = await prisma.consorzioAccountingCode.findFirst({
-      where: { id: codeId, consorzioCompanyId: membership.companyId },
-      select: { id: true },
-    });
-    if (!row) {
-      return { success: false as const, message: "Codice non trovato." };
-    }
-    await prisma.consorzioAccountingCode.update({
-      where: { id: row.id },
-      data: { archivedAt: new Date() },
-    });
-    return { success: true as const };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
@@ -535,6 +575,14 @@ export async function proposeConsorzioGuideRequestSlot(
       return { success: false as const, message: "Richiesta già gestita." };
     }
 
+    const leadError = guideRequestLeadTimeError(
+      new Date(payload.startsAt),
+      await readMinLeadHours(companyId),
+    );
+    if (leadError) {
+      return { success: false as const, message: leadError };
+    }
+
     if (payload.vehicleId) {
       const vehicle = await prisma.autoscuolaVehicle.findFirst({
         where: { id: payload.vehicleId, companyId },
@@ -613,6 +661,19 @@ export async function acceptConsorzioGuideRequest(
     }
     const startsAt = new Date(payload.startsAt);
     const endsAt = new Date(startsAt.getTime() + durationMinutes * 60000);
+
+    // Preavviso minimo: vale sugli slot SCELTI dal consorzio (Sposta/proposta).
+    // Accettare lo slot chiesto dall'autoscuola non viene mai bloccato: il
+    // preavviso era già stato verificato quando la richiesta è stata inviata.
+    if (startsAt.getTime() !== request.requestedStartsAt.getTime()) {
+      const leadError = guideRequestLeadTimeError(
+        startsAt,
+        await readMinLeadHours(companyId),
+      );
+      if (leadError) {
+        return { success: false as const, message: leadError };
+      }
+    }
 
     // Conflitti: guida non annullata sovrapposta con lo stesso istruttore o
     // lo stesso veicolo → errore, la richiesta resta pending.
@@ -834,12 +895,14 @@ const pricingSchema = z.object({
   ),
   lateCancellationCutoffHours: z.number().int().min(0).max(336),
   lateCancellationPenaltyPct: z.number().int().min(0).max(100),
+  guideRequestMinLeadHours: z.number().int().min(0).max(336),
 });
 
 export type ConsorzioPricing = {
   hourlyByCategory: Partial<Record<string, number>>;
   lateCancellationCutoffHours: number;
   lateCancellationPenaltyPct: number;
+  guideRequestMinLeadHours: number;
 };
 
 const DEFAULT_CUTOFF_HOURS = 48;
@@ -865,7 +928,21 @@ const parsePricingFromLimits = (limits: Record<string, unknown>): ConsorzioPrici
       typeof raw.lateCancellationPenaltyPct === "number"
         ? raw.lateCancellationPenaltyPct
         : DEFAULT_PENALTY_PCT,
+    guideRequestMinLeadHours:
+      typeof raw.guideRequestMinLeadHours === "number"
+        ? raw.guideRequestMinLeadHours
+        : DEFAULT_GUIDE_REQUEST_MIN_LEAD_HOURS,
   };
+};
+
+/** Ore di preavviso minimo configurate per la company consorzio. */
+const readMinLeadHours = async (companyId: string): Promise<number> => {
+  const service = await prisma.companyService.findFirst({
+    where: { companyId, serviceKey: "AUTOSCUOLE" },
+    select: { limits: true },
+  });
+  const limits = (service?.limits ?? {}) as Record<string, unknown>;
+  return parsePricingFromLimits(limits).guideRequestMinLeadHours;
 };
 
 export async function getConsorzioPricing() {
@@ -907,6 +984,7 @@ export async function updateConsorzioPricing(input: z.infer<typeof pricingSchema
             hourlyByCategory,
             lateCancellationCutoffHours: payload.lateCancellationCutoffHours,
             lateCancellationPenaltyPct: payload.lateCancellationPenaltyPct,
+            guideRequestMinLeadHours: payload.guideRequestMinLeadHours,
           },
         } as object,
       },

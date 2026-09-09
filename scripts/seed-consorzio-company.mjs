@@ -60,6 +60,7 @@ const SCHOOLS = [
     vatNumber: "01234567890",
     phone: "010 200 4000",
     email: "info@robatto.demo",
+    accountingCode: "AS-ROBATTO",
   },
   {
     name: "Autoscuola Gruppo Andrea Demo",
@@ -69,6 +70,7 @@ const SCHOOLS = [
     vatNumber: "01234567891",
     phone: "010 200 4001",
     email: "info@gruppoandrea.demo",
+    accountingCode: "AS-ANDREA",
   },
   {
     name: "Autoscuola Montreal Demo",
@@ -78,6 +80,7 @@ const SCHOOLS = [
     vatNumber: "01234567892",
     phone: "0185 200 400",
     email: "info@montreal.demo",
+    accountingCode: "AS-MONTREAL",
   },
 ];
 
@@ -212,6 +215,8 @@ async function main() {
   // 6) Autoscuole consorziate
   const schoolIds = [];
   for (const school of SCHOOLS) {
+    // eslint-disable-next-line no-unused-vars
+    const { accountingCode: _schoolCode, ...schoolFields } = school;
     let existing = await prisma.consorzioSchool.findFirst({
       where: { consorzioCompanyId: company.id, name: school.name },
     });
@@ -219,7 +224,7 @@ async function main() {
       existing = await prisma.consorzioSchool.create({
         data: {
           consorzioCompanyId: company.id,
-          ...school,
+          ...schoolFields,
           status: "active",
           joinedAt: new Date("2023-01-10T09:00:00Z"),
         },
@@ -239,7 +244,28 @@ async function main() {
     });
     codeIdByLabel[code] = row.id;
   }
-  console.log(`✓ Codici contabili: ${ACCOUNTING_CODES.map((c) => c.code).join(", ")}`);
+  // Codice contabile PROPRIO di ogni autoscuola (si propaga ai suoi allievi).
+  for (const [index, school] of SCHOOLS.entries()) {
+    const row = await prisma.consorzioAccountingCode.upsert({
+      where: {
+        consorzioCompanyId_code: { consorzioCompanyId: company.id, code: school.accountingCode },
+      },
+      create: {
+        consorzioCompanyId: company.id,
+        code: school.accountingCode,
+        description: school.name,
+      },
+      update: { archivedAt: null },
+    });
+    codeIdByLabel[school.accountingCode] = row.id;
+    await prisma.consorzioSchool.update({
+      where: { id: schoolIds[index] },
+      data: { accountingCodeId: row.id },
+    });
+  }
+  console.log(
+    `✓ Codici contabili: ${[...ACCOUNTING_CODES.map((c) => c.code), ...SCHOOLS.map((s) => s.accountingCode)].join(", ")}`,
+  );
 
   // 8) Allievi (CompanyMember STUDENT taggati con la scuola + codici default)
   for (const student of STUDENTS) {
@@ -266,7 +292,7 @@ async function main() {
         consorzioSchoolId: schoolIds[student.school],
       },
     });
-    for (const code of student.codes) {
+    for (const code of [SCHOOLS[student.school].accountingCode, ...student.codes]) {
       await prisma.consorzioMemberAccountingCode.upsert({
         where: {
           codeId_companyId_userId: {

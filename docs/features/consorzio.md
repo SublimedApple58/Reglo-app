@@ -14,6 +14,7 @@ Tipo di account per i **consorzi di autoscuole** (mezzi pesanti condivisi, paten
 |---------|-------|
 | `ConsorzioSchool` | Autoscuola consorziata: anagrafica denormalizzata, `status` active/suspended/removed (mai hard delete), `joinedAt`, `linkedCompanyId?` = gancio per la fase "affiliata cliente Reglo" (oggi sempre null) |
 | `ConsorzioAccountingCode` (+ join `ConsorzioMemberAccountingCode`, `ConsorzioAppointmentAccountingCode`) | Codici contabili liberi (es. CDC-GUIDE, FSE-2026): default sull'allievo, override esplicito per singola guida (regola: righe esplicite se presenti, altrimenti eredita i default allievo) |
+| `ConsorzioSchool.accountingCodeId?` | **Codice contabile PROPRIO dell'autoscuola** (uno solo), migration `20260909101500_consorzio_school_accounting_code`. Si imposta nell'anagrafica scuola e si propaga a tutti i suoi allievi |
 | `ConsorzioGuideRequest` | Richiesta guida di un'autoscuola: lifecycle pending → accepted/rejected/cancelled (modellato su SwapOffer); `appointmentId` + `movedToStartsAt` all'accettazione |
 | `ConsorzioLessonBilling` | Contabilizzazione guida→scuola: `priceAmount` snapshot + `settledAt` (saldata) + `invoiceSentAt` (fattura inviata). SEPARATO da `AutoscuolaAppointment.priceAmount` (che è cablato ai pagamenti allievo/Stripe) |
 | `CompanyMember.consorzioSchoolId?` | Gli allievi del consorzio sono normali member STUDENT taggati con la loro scuola |
@@ -21,9 +22,21 @@ Tipo di account per i **consorzi di autoscuole** (mezzi pesanti condivisi, paten
 
 `bookingSource` nuovo valore: `consortium_request` (`lib/autoscuole/booking-source.ts`).
 
+## Codice contabile dell'autoscuola
+
+Ogni autoscuola consorziata ha **un** codice contabile (in produzione ~40 in tutto), inserito nell'anagrafica (dialog Aggiungi autoscuola e Modifica anagrafica, campo `accountingCode`, normalizzato in MAIUSCOLO). `syncSchoolAccountingCode` in `consorzio.actions.ts`: upsert del `ConsorzioAccountingCode` (creato al volo se nuovo) → aggiorna `ConsorzioSchool.accountingCodeId` → **stacca il vecchio codice-scuola da tutti i membri e aggancia il nuovo** (i codici messi a mano sul singolo allievo restano intatti). Gli allievi creati dopo lo ereditano in `createCompanyUser` (`lib/actions/user.actions.ts`).
+
+In Fatturazione il vecchio pulsante "+" (dialog di gestione codici) è stato **sostituito da una ricerca per codice**: `ExpandingSearch` (lo stesso componente della sezione Allievi, `components/ui/expanding-search.tsx`); le chip mostrate sono max 12 quando non si cerca (con l'indicatore "+N — cerca per codice"), tutte quelle che matchano quando si cerca. `createConsorzioAccountingCode`/`archiveConsorzioAccountingCode` sono state rimosse: i codici ora nascono dall'anagrafica scuola.
+
+## Preavviso minimo richieste di guida
+
+`limits.consorzioPricing.guideRequestMinLeadHours` (default **8 ore**, configurabile in Impostazioni → Prenotazioni e allievi → **Prezzi**, prima sezione "Richieste di guida": 0 = regola disattivata, 2/4/6/8/12/24/48). Regola pura e testata in `lib/consorzio/guide-request-lead.ts` (`guideRequestLeadTimeError`, unit test `tests/unit/consorzio/guide-request-lead.test.ts`).
+
+Dove è applicata oggi: su ogni slot **scelto dal consorzio** — `proposeConsorzioGuideRequestSlot` ("Proponi un altro orario", che l'autoscuola deve confermare) e `acceptConsorzioGuideRequest` **solo se lo slot è stato spostato** rispetto a quello richiesto (accettare la richiesta così com'è non viene mai bloccato: il preavviso era già stato valutato all'invio). Il controllo sull'invio della richiesta va aggiunto nel path sender quando arriverà la fase affiliate: usare la stessa `guideRequestLeadTimeError`.
+
 ## Prezzi & Fatturazione — semantica prezzo
 
-Tariffa oraria per categoria in `limits.consorzioPricing` (`hourlyByCategory` + cancellazioni tardive cutoff/penale). **Prezzo guida = durata/60 × tariffa** ("slot da 90 min = 1,5× tariffa").
+Tariffa oraria per categoria in `limits.consorzioPricing` (`hourlyByCategory` + cancellazioni tardive cutoff/penale + `guideRequestMinLeadHours`). **Prezzo guida = durata/60 × tariffa** ("slot da 90 min = 1,5× tariffa").
 
 Il prezzo è **calcolato live in Fatturazione** finché la guida non viene certificata: al **primo toggle** saldata/fatturata nasce la riga `ConsorzioLessonBilling` con lo snapshot (congelato da lì in poi). Così i ritocchi tariffa si riflettono sulle guide non certificate e NESSUN punto di creazione appuntamento è stato toccato (zero rischio sul motore prenotazioni — scelta deliberata rispetto al piano iniziale "hook alla creazione").
 

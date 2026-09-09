@@ -32,6 +32,10 @@ import {
 
 const CUTOFF_OPTIONS = [12, 24, 48, 72] as const;
 const PENALTY_OPTIONS = [25, 50, 75, 100] as const;
+const MIN_LEAD_OPTIONS = [0, 2, 4, 6, 8, 12, 24, 48] as const;
+
+const minLeadLabel = (hours: number): string =>
+  hours === 0 ? "Nessun preavviso" : `${hours} ${hours === 1 ? "ora" : "ore"} prima della guida`;
 
 export function ConsorzioPrezziPane() {
   const toast = useFeedbackToast();
@@ -67,6 +71,7 @@ export function ConsorzioPrezziPane() {
         ) as Record<ConsortiumLicenseCategory, number | null>,
         lateCancellationCutoffHours: next.lateCancellationCutoffHours,
         lateCancellationPenaltyPct: next.lateCancellationPenaltyPct,
+        guideRequestMinLeadHours: next.guideRequestMinLeadHours,
       });
       if (!res.success) toast.error({ description: res.message });
     },
@@ -94,8 +99,39 @@ export function ConsorzioPrezziPane() {
 
   return (
     <div className="divide-y divide-[#ebebeb]">
-      {/* Cancellazioni tardive */}
+      {/* Richieste di guida */}
       <div className="pb-6 pt-1">
+        <div className="text-[15px] font-semibold text-[#222222]">Richieste di guida</div>
+        <p className="mt-[3px] max-w-2xl text-sm font-medium leading-[1.45] text-[#929292]">
+          Quanto anticipo deve avere una richiesta di guida che arriva da un&apos;autoscuola
+          consorziata. Vale anche sull&apos;orario che proponi tu quando sposti una richiesta.
+        </p>
+        <div className="mt-4 grid gap-8 sm:grid-cols-2">
+          <div>
+            <div className="mb-2 text-sm font-medium text-[#444444]">Preavviso minimo</div>
+            <Select
+              value={String(pricing.guideRequestMinLeadHours)}
+              onValueChange={(value) =>
+                void persist({ ...pricing, guideRequestMinLeadHours: Number(value) })
+              }
+            >
+              <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-[12px] border-[#e6e6e6] bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-none">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MIN_LEAD_OPTIONS.map((hours) => (
+                  <SelectItem key={hours} value={String(hours)} className="cursor-pointer">
+                    {minLeadLabel(hours)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      {/* Cancellazioni tardive */}
+      <div className="py-6">
         <div className="text-[15px] font-semibold text-[#222222]">Cancellazioni tardive</div>
         <p className="mt-[3px] text-sm font-medium leading-[1.45] text-[#929292]">
           Se l&apos;allievo annulla oltre il cutoff, sulla guida viene applicata la penale.

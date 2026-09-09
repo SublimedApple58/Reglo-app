@@ -121,6 +121,8 @@ export type ServiceLimits = {
     lateCancellationCutoffHours?: number;
     /** Default 100 */
     lateCancellationPenaltyPct?: number;
+    /** Preavviso minimo (ore) di una richiesta guida autoscuola → consorzio. Default 8 */
+    guideRequestMinLeadHours?: number;
   };
 };
 

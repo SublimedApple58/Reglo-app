@@ -656,17 +656,19 @@ export async function createCompanyUser(input: {
       if (input.consorzioSchoolId) {
         const school = await prisma.consorzioSchool.findFirst({
           where: { id: input.consorzioSchoolId, consorzioCompanyId: input.companyId },
-          select: { id: true },
+          select: { id: true, accountingCodeId: true },
         });
         if (!school) throw new Error('Autoscuola consorziata non valida.');
         studentFields.consorzioSchoolId = school.id;
+        // Il codice contabile dell'autoscuola si propaga a ogni suo allievo.
+        if (school.accountingCodeId) accountingCodeIds.push(school.accountingCodeId);
       }
       if (input.accountingCodeIds?.length) {
         const codes = await prisma.consorzioAccountingCode.findMany({
           where: { id: { in: input.accountingCodeIds }, consorzioCompanyId: input.companyId },
           select: { id: true },
         });
-        accountingCodeIds = codes.map((code) => code.id);
+        accountingCodeIds = [...new Set([...accountingCodeIds, ...codes.map((code) => code.id)])];
       }
 
       if (input.studentPhase && input.studentPhase !== 'PRATICA') {

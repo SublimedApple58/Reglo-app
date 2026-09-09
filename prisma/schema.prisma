@@ -1667,11 +1667,14 @@ model ConsorzioSchool {
   status             String    @default("active")
   joinedAt           DateTime? @db.Timestamp(6)
   linkedCompanyId    String?   @db.Uuid
+  /// Codice contabile dell'autoscuola: uno solo, si propaga a tutti i suoi allievi.
+  accountingCodeId   String?   @db.Uuid
   createdAt          DateTime  @default(now()) @db.Timestamp(6)
   updatedAt          DateTime  @updatedAt
 
   consorzioCompany Company  @relation("ConsorzioSchools", fields: [consorzioCompanyId], references: [id], onDelete: Cascade)
   linkedCompany    Company? @relation("ConsorzioSchoolLinkedCompany", fields: [linkedCompanyId], references: [id], onDelete: SetNull)
+  accountingCode   ConsorzioAccountingCode? @relation("ConsorzioSchoolAccountingCode", fields: [accountingCodeId], references: [id], onDelete: SetNull)
 
   members        CompanyMember[]
   guideRequests  ConsorzioGuideRequest[]
@@ -1696,6 +1699,7 @@ model ConsorzioAccountingCode {
   consorzioCompany Company                              @relation("ConsorzioAccountingCodes", fields: [consorzioCompanyId], references: [id], onDelete: Cascade)
   memberLinks      ConsorzioMemberAccountingCode[]
   appointmentLinks ConsorzioAppointmentAccountingCode[]
+  schools          ConsorzioSchool[]                    @relation("ConsorzioSchoolAccountingCode")
 
   @@unique([consorzioCompanyId, code])
   @@index([consorzioCompanyId, archivedAt])
