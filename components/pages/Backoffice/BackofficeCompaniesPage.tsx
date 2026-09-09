@@ -410,6 +410,69 @@ function AutoscuolaDrawerContent({
         </div>
       </section>
 
+      {/* ── Modalità app ── */}
+      <section className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-50">
+            <Phone className="h-4 w-4 text-sky-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-foreground">Modalità app</p>
+            <p className="text-xs text-muted-foreground">
+              Definisce cosa vede l&apos;autoscuola nella web app.
+            </p>
+          </div>
+        </div>
+        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border bg-white px-3 py-2.5 hover:bg-gray-50/60">
+          <div>
+            <p className="text-sm font-medium text-foreground">Solo Segretaria</p>
+            <p className="text-xs text-muted-foreground">
+              La web app mostra solo l&apos;area Segretaria e le sue impostazioni
+              (niente Agenda/Allievi/Rinnovi). Richiede la Segretaria attiva.
+            </p>
+          </div>
+          <Checkbox
+            checked={secretaryOnly}
+            onCheckedChange={(checked) =>
+              setLimits((prev) => ({ ...prev, secretaryOnly: Boolean(checked) }))
+            }
+          />
+        </label>
+        {secretaryOnly && !voiceFeatureEnabled && (
+          <p className="mt-2 text-xs text-amber-600">
+            Attenzione: la Segretaria non è ancora attiva su questa autoscuola —
+            attivala qui sotto, altrimenti l&apos;utente vedrà la schermata
+            &quot;Segretaria non attiva&quot;.
+          </p>
+        )}
+        <label className="mt-2 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border bg-white px-3 py-2.5 hover:bg-gray-50/60">
+          <div>
+            <p className="text-sm font-medium text-foreground">Consorzio</p>
+            <p className="text-xs text-muted-foreground">
+              La company è un consorzio di autoscuole (mezzi pesanti condivisi):
+              la web app mostra Agenda | Autoscuole | Fatturazione e i prezzi
+              verso le consorziate. Incompatibile con &quot;Solo Segretaria&quot;.
+            </p>
+          </div>
+          <Checkbox
+            checked={isConsortiumMode}
+            onCheckedChange={(checked) =>
+              setLimits((prev) => ({
+                ...prev,
+                accountKind: checked ? "consorzio" : undefined,
+                // Modalità mutuamente esclusive
+                secretaryOnly: checked ? false : prev.secretaryOnly,
+              }))
+            }
+          />
+        </label>
+        {isConsortiumMode && secretaryOnly && (
+          <p className="mt-2 text-xs text-amber-600">
+            &quot;Consorzio&quot; e &quot;Solo Segretaria&quot; non possono essere attivi insieme.
+          </p>
+        )}
+      </section>
+
       {/* ── Segretaria vocale AI ── */}
       <section className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
         <div className="flex items-center gap-2.5 mb-4">
@@ -667,69 +730,6 @@ function AutoscuolaDrawerContent({
               </tbody>
             </table>
           </div>
-        )}
-      </section>
-
-      {/* ── Modalità app ── */}
-      <section className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
-        <div className="flex items-center gap-2.5 mb-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-50">
-            <Phone className="h-4 w-4 text-sky-600" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-foreground">Modalità app</p>
-            <p className="text-xs text-muted-foreground">
-              Definisce cosa vede l&apos;autoscuola nella web app.
-            </p>
-          </div>
-        </div>
-        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border bg-white px-3 py-2.5 hover:bg-gray-50/60">
-          <div>
-            <p className="text-sm font-medium text-foreground">Solo Segretaria</p>
-            <p className="text-xs text-muted-foreground">
-              La web app mostra solo l&apos;area Segretaria e le sue impostazioni
-              (niente Agenda/Allievi/Rinnovi). Richiede la Segretaria attiva.
-            </p>
-          </div>
-          <Checkbox
-            checked={secretaryOnly}
-            onCheckedChange={(checked) =>
-              setLimits((prev) => ({ ...prev, secretaryOnly: Boolean(checked) }))
-            }
-          />
-        </label>
-        {secretaryOnly && !voiceFeatureEnabled && (
-          <p className="mt-2 text-xs text-amber-600">
-            Attenzione: la Segretaria non è ancora attiva su questa autoscuola —
-            attivala qui sotto, altrimenti l&apos;utente vedrà la schermata
-            &quot;Segretaria non attiva&quot;.
-          </p>
-        )}
-        <label className="mt-2 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border bg-white px-3 py-2.5 hover:bg-gray-50/60">
-          <div>
-            <p className="text-sm font-medium text-foreground">Consorzio</p>
-            <p className="text-xs text-muted-foreground">
-              La company è un consorzio di autoscuole (mezzi pesanti condivisi):
-              la web app mostra Agenda | Autoscuole | Fatturazione e i prezzi
-              verso le consorziate. Incompatibile con &quot;Solo Segretaria&quot;.
-            </p>
-          </div>
-          <Checkbox
-            checked={isConsortiumMode}
-            onCheckedChange={(checked) =>
-              setLimits((prev) => ({
-                ...prev,
-                accountKind: checked ? "consorzio" : undefined,
-                // Modalità mutuamente esclusive
-                secretaryOnly: checked ? false : prev.secretaryOnly,
-              }))
-            }
-          />
-        </label>
-        {isConsortiumMode && secretaryOnly && (
-          <p className="mt-2 text-xs text-amber-600">
-            &quot;Consorzio&quot; e &quot;Solo Segretaria&quot; non possono essere attivi insieme.
-          </p>
         )}
       </section>
 
