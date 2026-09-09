@@ -783,6 +783,9 @@ const listDirectoryStudents = async (companyId: string) => {
       // Luogo di default (REG-392): serve anche il NOME, non solo l'id — il
       // form di prenotazione mobile mostra la label del Luogo da questo campo.
       defaultLocation: { select: { id: true, name: true } },
+      // Autoscuola consorziata dell'allievo: i picker dell'agenda consorzio
+      // filtrano la lista allievi per autoscuola. Null per le company normali.
+      consorzioSchool: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 500,
@@ -807,6 +810,8 @@ const listDirectoryStudents = async (companyId: string) => {
     // inclusa) alla selezione dell'allievo nel form di prenotazione.
     defaultLocationId: member.defaultLocationId ?? null,
     defaultLocationName: member.defaultLocation?.name ?? null,
+    consorzioSchoolId: member.consorzioSchoolId ?? null,
+    consorzioSchoolName: member.consorzioSchool?.name ?? null,
   }));
 };
 

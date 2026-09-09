@@ -111,7 +111,7 @@ import {
 import { NeverAccessedNudge } from "@/components/pages/Autoscuole/NeverAccessedNudge";
 import { UserPhotoCircle } from "@/components/ui/user-photo";
 
-type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; neverAccessed?: boolean; studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO"; examReady?: boolean; examReadyAt?: string | null; defaultLocationId?: string | null };
+type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; neverAccessed?: boolean; studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO"; examReady?: boolean; examReadyAt?: string | null; defaultLocationId?: string | null; consorzioSchoolId?: string | null; consorzioSchoolName?: string | null };
 type ResourceOption = {
   id: string;
   name: string;
@@ -476,6 +476,51 @@ type FilterOption = {
   label: string;
 };
 
+/**
+ * Filtro "Autoscuola" (solo modalità consorzio) da mettere SOPRA ogni picker
+ * allievo dell'agenda: gli allievi del consorzio sono taggati con la loro
+ * autoscuola consorziata, sceglierla prima accorcia la lista da cui pescare.
+ * `value` "" = tutte; "__none__" = allievi senza autoscuola.
+ */
+const NO_SCHOOL = "__none__";
+
+function SchoolFilterSelect({
+  schools,
+  value,
+  onChange,
+  label = "Autoscuola",
+}: {
+  schools: Array<{ id: string; name: string }>;
+  value: string;
+  onChange: (value: string) => void;
+  label?: string;
+}) {
+  return (
+    <div>
+      <p className="mb-1.5 text-xs font-semibold text-[#555555]">{label}</p>
+      <Select value={value || "__all__"} onValueChange={(v) => onChange(v === "__all__" ? "" : v)}>
+        <SelectTrigger><SelectValue placeholder="Tutte le autoscuole" /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__all__">Tutte le autoscuole</SelectItem>
+          {schools.map((school) => (
+            <SelectItem key={school.id} value={school.id}>{school.name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+/** Allievi della scuola selezionata ("" = tutti). */
+const filterStudentsBySchool = <T extends { consorzioSchoolId?: string | null }>(
+  list: T[],
+  schoolId: string,
+): T[] => {
+  if (!schoolId) return list;
+  if (schoolId === NO_SCHOOL) return list.filter((s) => !s.consorzioSchoolId);
+  return list.filter((s) => s.consorzioSchoolId === schoolId);
+};
+
 function StudentSearchSelect({
   students,
   instructors,
@@ -745,6 +790,12 @@ export function AutoscuoleAgendaPage({
   const company = useAtomValue(companyAtom);
   const consortium = isConsortium(company?.services ?? null);
   const columnsByVehicle = consortium && viewPrefs.columnsBy === "vehicle";
+
+  // Filtro "Autoscuola" a monte dei picker allievo (solo consorzio): uno stato
+  // per form, così il filtro di un dialog non condiziona gli altri.
+  const [createSchoolFilter, setCreateSchoolFilter] = React.useState("");
+  const [examSchoolFilter, setExamSchoolFilter] = React.useState("");
+  const [examPanelSchoolFilter, setExamPanelSchoolFilter] = React.useState("");
   React.useEffect(() => {
     try {
       window.localStorage.setItem(AGENDA_VIEW_PREFS_KEY, JSON.stringify(viewPrefs));
@@ -868,19 +919,44 @@ export function AutoscuoleAgendaPage({
     const since = days <= 0 ? "da oggi" : days === 1 ? "da 1 giorno" : `da ${days} giorni`;
     return `Segnato pronto per l'esame ${since}`;
   };
+  // Autoscuole consorziate ricavate dagli allievi stessi (nessuna fetch in più):
+  // sono le opzioni del filtro "Autoscuola" sopra i picker allievo.
+  const consortiumSchools = React.useMemo(() => {
+    if (!consortium) return [] as Array<{ id: string; name: string }>;
+    const byId = new Map<string, string>();
+    let hasUnassigned = false;
+    for (const student of students) {
+      if (student.consorzioSchoolId) {
+        byId.set(student.consorzioSchoolId, student.consorzioSchoolName ?? "Autoscuola");
+      } else {
+        hasUnassigned = true;
+      }
+    }
+    const list = Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) =>
+      a.name.localeCompare(b.name, "it"),
+    );
+    if (hasUnassigned && list.length) list.push({ id: NO_SCHOOL, name: "Senza autoscuola" });
+    return list;
+  }, [consortium, students]);
+  const showSchoolFilter = consortium && consortiumSchools.length > 1;
+
   const examAddableCount = React.useMemo(
-    () => students.reduce((n, st) => (examForm.studentIds.includes(st.id) ? n : n + 1), 0),
-    [students, examForm.studentIds],
+    () =>
+      filterStudentsBySchool(students, examSchoolFilter).reduce(
+        (n, st) => (examForm.studentIds.includes(st.id) ? n : n + 1),
+        0,
+      ),
+    [students, examForm.studentIds, examSchoolFilter],
   );
   const examBrowseList = React.useMemo(() => {
     const q = examStudentSearch.trim().toLowerCase();
-    return students
+    return filterStudentsBySchool(students, examSchoolFilter)
       .filter((s) => !examForm.studentIds.includes(s.id))
       .filter((s) => !q || `${s.firstName} ${s.lastName}`.toLowerCase().includes(q))
       // Chicca: gli allievi segnati "pronti" salgono in cima al picker esame
       // (ordine stabile per il resto — filtriamo su una copia via sort).
       .sort((a, b) => Number(Boolean(b.examReady)) - Number(Boolean(a.examReady)));
-  }, [students, examForm.studentIds, examStudentSearch]);
+  }, [students, examForm.studentIds, examStudentSearch, examSchoolFilter]);
   const [examPanelGroup, setExamPanelGroup] = React.useState<ExamGroup | null>(null);
   const [examPanelStudentSearch, setExamPanelStudentSearch] = React.useState("");
   const [examPanelPending, setExamPanelPending] = React.useState(false);
@@ -4552,10 +4628,30 @@ export function AutoscuoleAgendaPage({
             </div>
           </div>
           )}
+          {showSchoolFilter && (
+            <SchoolFilterSelect
+              schools={consortiumSchools}
+              value={createSchoolFilter}
+              onChange={(value) => {
+                setCreateSchoolFilter(value);
+                // L'allievo già scelto potrebbe non essere più in lista.
+                setForm((prev) => {
+                  if (!prev.studentId) return prev;
+                  const current = students.find((s) => s.id === prev.studentId);
+                  const stillVisible =
+                    !value ||
+                    (value === NO_SCHOOL
+                      ? !current?.consorzioSchoolId
+                      : current?.consorzioSchoolId === value);
+                  return stillVisible ? prev : { ...prev, studentId: "" };
+                });
+              }}
+            />
+          )}
           <div ref={createStudentRef}>
             <p className="mb-1.5 text-xs font-semibold text-[#555555]">Allievo</p>
             <StudentSearchSelect
-              students={
+              students={filterStudentsBySchool(
                 vehiclesEnabled
                   ? students.filter((s) =>
                       !s.licenseCategory
@@ -4564,8 +4660,9 @@ export function AutoscuoleAgendaPage({
                           ? isMotoLicenseCategory(s.licenseCategory)
                           : !isMotoLicenseCategory(s.licenseCategory),
                     )
-                  : students
-              }
+                  : students,
+                createSchoolFilter,
+              )}
               instructors={instructors}
               value={form.studentId}
               onChange={(id) => {
@@ -4960,7 +5057,9 @@ export function AutoscuoleAgendaPage({
             const draftStudents = examDraftStudentIds
               .map((id) => studentById.get(id))
               .filter((s): s is (typeof students)[number] => Boolean(s));
-            const examAddable = students.filter((s) => !examDraftStudentIds.includes(s.id));
+            const examAddable = filterStudentsBySchool(students, examPanelSchoolFilter).filter(
+              (s) => !examDraftStudentIds.includes(s.id),
+            );
             const examQuery = examPanelStudentSearch.trim().toLowerCase();
             const examBrowse = examAddable
               .filter((s) => !examQuery || `${s.firstName} ${s.lastName}`.toLowerCase().includes(examQuery))
@@ -5258,6 +5357,15 @@ export function AutoscuoleAgendaPage({
                       <p className="mt-0.5 text-[12.5px] font-medium text-[#929292]">
                         {draftStudents.length} iscritti · {examAddable.length} da aggiungere
                       </p>
+                      {showSchoolFilter && (
+                        <div className="mt-3">
+                          <SchoolFilterSelect
+                            schools={consortiumSchools}
+                            value={examPanelSchoolFilter}
+                            onChange={setExamPanelSchoolFilter}
+                          />
+                        </div>
+                      )}
                       <div className="mt-3 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
                         <Search className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
                         <input
@@ -5353,6 +5461,15 @@ export function AutoscuoleAgendaPage({
               <p className="mt-0.5 text-[12.5px] font-medium text-[#929292]">
                 {examForm.studentIds.length} selezionati · {examAddableCount} da aggiungere
               </p>
+              {showSchoolFilter && (
+                <div className="mt-3">
+                  <SchoolFilterSelect
+                    schools={consortiumSchools}
+                    value={examSchoolFilter}
+                    onChange={setExamSchoolFilter}
+                  />
+                </div>
+              )}
               <div className="mt-3 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
                 <Search className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
                 <input
