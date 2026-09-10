@@ -69,9 +69,7 @@ function StarRow({
           width={size}
           height={size}
           strokeWidth={0}
-          // Navy come le stelline dell'app istruttore: il design system mobile è
-          // mono-navy e le due piattaforme devono mostrare la stessa cosa.
-          className={i < on ? "fill-[#1a1a2e]" : "fill-[#dcdde4]"}
+          className={i < on ? "fill-[#facc15]" : "fill-[#e7e7ec]"}
         />
       ))}
     </span>

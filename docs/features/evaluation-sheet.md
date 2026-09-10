@@ -68,10 +68,10 @@ Le guide precedenti alla feature non hanno punteggi → nessuna chip, storico in
 
 ## Stile delle stelline
 
-**Navy (`#1a1a2e`), uguale su web e mobile.** Il design system mobile è mono-navy per regola
-(`src/components/StarRating.tsx`: "no yellow/gold anywhere"), quindi l'allineamento è stato fatto
-portando il web a navy — incluse le stelline della valutazione complessiva nello storico e nel suo
-editor inline, che stanno nella stessa riga della chip.
+**Gialle (`#facc15`), uguali su web e mobile.** Il web resta com'era; su mobile è stata aperta una
+deroga esplicita al design system mono-navy (`StarRating` prop `tone="gold"`) per tenere le due
+piattaforme identiche. La deroga vale SOLO per il pagellino: la valutazione complessiva su mobile
+resta navy.
 
 ## Fuori scope (v1)
 

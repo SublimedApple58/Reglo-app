@@ -171,7 +171,7 @@ function EvaluationRecap({
         aria-expanded={open}
         className="flex cursor-pointer items-center gap-1.5 rounded-[6px] border border-[#ececec] bg-[#fbfbfc] px-2 py-1 text-[12px] font-semibold text-[#6a6a6a] transition-colors hover:border-[#dcdcdc] hover:text-foreground"
       >
-        <span className="text-navy-900">★</span>
+        <span className="text-yellow-400">★</span>
         Pagellino
         <span className="font-medium text-[#929292]">{average ?? `${summary.count} voci`}</span>
         <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} strokeWidth={2.2} />
@@ -189,7 +189,7 @@ function EvaluationRecap({
               <span className="text-[12.5px] font-medium text-foreground">{row.label}</span>
               <span className="flex shrink-0 items-center gap-0.5 text-[11px]">
                 {Array.from({ length: row.scaleMax }, (_, j) => (
-                  <span key={j} className={j < row.score ? "text-navy-900" : "text-[#dcdde4]"}>
+                  <span key={j} className={j < row.score ? "text-yellow-400" : "text-gray-200"}>
                     ★
                   </span>
                 ))}
@@ -2649,7 +2649,7 @@ export function AutoscuoleStudentsPage({
                   {lesson.rating != null && (
                     <span className="ml-auto flex items-center gap-0.5 text-[10px]">
                       {Array.from({ length: 5 }, (_, i) => (
-                        <span key={i} className={i < lesson.rating! ? "text-navy-900" : "text-[#dcdde4]"}>★</span>
+                        <span key={i} className={i < lesson.rating! ? "text-yellow-400" : "text-gray-200"}>★</span>
                       ))}
                     </span>
                   )}
@@ -2729,7 +2729,7 @@ export function AutoscuoleStudentsPage({
                               onClick={() => setRatingDraft(star === ratingDraft ? null : star)}
                               className="cursor-pointer p-0.5 text-[20px] leading-none transition-transform hover:scale-110"
                             >
-                              <span className={star <= (ratingDraft ?? 0) ? "text-navy-900" : "text-[#d7dbe2]"}>★</span>
+                              <span className={star <= (ratingDraft ?? 0) ? "text-yellow-400" : "text-[#d7dbe2]"}>★</span>
                             </button>
                           ))}
                         </div>
