@@ -51,6 +51,19 @@ ricompare nel foglio SOLO sulle guide che hanno un suo punteggio, marcata "(non 
   effettuata** (`checked_in`/`completed`/`no_show`).
 - Max 12 voci per autoscuola: oltre, il foglio non si compila più "in pochi secondi".
 
+## Compilazione dal web (agenda)
+
+Il pagellino si compila anche dal web, nel dialog **"Modifica guida"** dell'agenda (blocco della
+guida → Modifica), nella posizione in cui stava la stellina che ha sostituito. Una riga per voce
+con stelline cliccabili; i punteggi entrano nella stessa "Salva modifiche" degli altri dettagli.
+
+- Le voci arrivano da `getEvaluationSheet` (una fetch per apertura del dialog); i punteggi già dati
+  viaggiano col bootstrap agenda, che ora seleziona `evaluations`.
+- Nessun vincolo di stato: si valuta anche una guida programmata o in corso.
+- Le voci **archiviate** che hanno un voto su quella guida restano in elenco (marcate "non più in
+  uso"): il salvataggio sostituisce integralmente i punteggi, ometterle le cancellerebbe.
+- Se l'autoscuola non ha configurato il pagellino, la sezione non compare.
+
 ## Consultazione nello storico guide
 
 I punteggi si consultano dallo **storico guide lato scuola**, senza aprire nulla di nuovo:

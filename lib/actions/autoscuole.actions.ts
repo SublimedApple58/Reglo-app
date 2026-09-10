@@ -1051,6 +1051,15 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           type: true,
           types: true,
           rating: true,
+          // Pagellino (REG-443): il dialog "Modifica guida" dell'agenda lo
+          // compila, quindi i punteggi già dati devono arrivare col bootstrap.
+          evaluations: {
+            select: {
+              score: true,
+              item: { select: { id: true, label: true, scaleMax: true, position: true } },
+            },
+            orderBy: { item: { position: "asc" } },
+          },
           notes: true,
           status: true,
           startsAt: true,
@@ -1202,7 +1211,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
     ]);
 
     const mappedAppointments = appointments.map((appointment) => {
-      const { appointmentVehicles, ...rest } = appointment;
+      const { appointmentVehicles, evaluations, ...rest } = appointment;
       // Auto al seguito: the role="follow" join's vehicle (null when none).
       // Ternary (not `?? null`) so the type stays nullable under the project's
       // non-strict index access, matching the gl-empty placeholder below.
@@ -1214,6 +1223,14 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         .map((v) => v.vehicle);
       return {
         ...rest,
+        // Pagellino (REG-443) appiattito per il client: il dialog "Modifica
+        // guida" lo mostra e lo compila.
+        evaluations: (evaluations ?? []).map((e) => ({
+          itemId: e.item.id,
+          label: e.item.label,
+          scaleMax: e.item.scaleMax,
+          score: e.score,
+        })),
         case: null,
         // Unique id per empty-exam placeholder (mirrors the gl-empty convention)
         // so the client can key/track it and the exam panel can filter it out.
@@ -1283,6 +1300,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           type: "group_lesson",
           types: [],
           rating: null,
+          evaluations: [],
           notes: gl.notes,
           status: "scheduled",
           startsAt: gl.startsAt,

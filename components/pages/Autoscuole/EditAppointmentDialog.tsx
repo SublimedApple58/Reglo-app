@@ -33,6 +33,8 @@ import {
   updateAutoscuolaAppointmentStatus,
 } from "@/lib/actions/autoscuole.actions";
 import { cn } from "@/lib/utils";
+import { getEvaluationSheet } from "@/lib/actions/autoscuole-evaluation.actions";
+import { defaultEvaluationScore } from "@/lib/autoscuole/evaluation-sheet";
 
 type StudentLite = {
   firstName: string;
@@ -65,8 +67,10 @@ export type EditAppointmentDialogAppointment = {
   type: string | null;
   /** Multi lesson-types ("cosa si è fatto"). Falls back to [type] when absent. */
   types?: string[] | null;
-  /** Valutazione 1-5 (null = non valutata). */
+  /** Valutazione 1-5 storica: non più compilabile, la sostituisce il pagellino. */
   rating?: number | null;
+  /** Pagellino della guida (REG-443): punteggi già dati. */
+  evaluations?: Array<{ itemId: string; label: string; scaleMax: number; score: number }>;
   notes?: string | null;
   student: StudentLite;
   instructor?: { id?: string | null; name: string } | null;
@@ -132,15 +136,24 @@ function StarRatingInput({
   value,
   onChange,
   disabled,
+  total = 5,
+  gold = false,
+  size = "size-7",
 }: {
   value: number | null;
   onChange: (v: number | null) => void;
   disabled?: boolean;
+  /** Quante stelline: il pagellino usa la scala della voce (3 o 5). */
+  total?: number;
+  /** Il pagellino è giallo su entrambe le piattaforme (vedi docs). */
+  gold?: boolean;
+  size?: string;
 }) {
   const current = value ?? 0;
+  const onColor = gold ? "#facc15" : "#1a1a2e";
   return (
     <div className="flex items-center gap-1.5">
-      {[1, 2, 3, 4, 5].map((star) => {
+      {Array.from({ length: total }, (_, i) => i + 1).map((star) => {
         const filled = star <= current;
         return (
           <button
@@ -152,8 +165,9 @@ function StarRatingInput({
             className="cursor-pointer p-0.5 transition-transform hover:scale-110 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Star
-              className={cn("size-7", filled ? "text-[#1a1a2e]" : "text-[#d7dbe2]")}
-              fill={filled ? "#1a1a2e" : "none"}
+              className={cn(size, filled ? "" : "text-[#d7dbe2]")}
+              style={filled ? { color: onColor } : undefined}
+              fill={filled ? onColor : "none"}
               strokeWidth={filled ? 0 : 1.6}
             />
           </button>
@@ -246,7 +260,6 @@ export function EditAppointmentDialog({
     () => resolveInitialTypes(appointment?.types, appointment?.type),
     [appointment],
   );
-  const originalRating = appointment?.rating ?? null;
   const currentOutcome = outcomeFromStatus(appointment?.status ?? "");
   const originalVehicleId = appointment?.vehicle?.id ?? "";
   const originalFollowVehicleId = appointment?.followVehicle?.id ?? "";
@@ -260,7 +273,17 @@ export function EditAppointmentDialog({
 
   const [instructorId, setInstructorId] = React.useState(originalInstructorId);
   const [lessonTypes, setLessonTypes] = React.useState<string[]>(originalLessonTypes);
-  const [rating, setRating] = React.useState<number | null>(originalRating);
+  // Pagellino (REG-443): le voci le decide l'autoscuola (una fetch all'apertura),
+  // i punteggi arrivano con la guida. Le voci archiviate che hanno già un voto su
+  // QUESTA guida restano in elenco, altrimenti salvando le cancelleremmo.
+  const [evalItems, setEvalItems] = React.useState<
+    Array<{ id: string; label: string; scaleMax: number; archived?: boolean }>
+  >([]);
+  const [evalScores, setEvalScores] = React.useState<Record<string, number>>({});
+  const originalEvalScores = React.useMemo(
+    () => Object.fromEntries((appointment?.evaluations ?? []).map((e) => [e.itemId, e.score])),
+    [appointment?.evaluations],
+  );
   const [esito, setEsito] = React.useState<Outcome>(currentOutcome);
   const [vehicleId, setVehicleId] = React.useState(originalVehicleId);
   const [followVehicleId, setFollowVehicleId] = React.useState(originalFollowVehicleId);
@@ -284,13 +307,36 @@ export function EditAppointmentDialog({
   const [pending, setPending] = React.useState(false);
   const [serverError, setServerError] = React.useState<string | null>(null);
 
+  // Voci del pagellino dell'autoscuola: una sola fetch per apertura del dialog.
+  // Se il pagellino è spento o senza voci, la sezione non compare.
+  React.useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    (async () => {
+      const res = await getEvaluationSheet();
+      if (!alive) return;
+      const active = res.success && res.data.enabled ? res.data.items : [];
+      const activeIds = new Set(active.map((i) => i.id));
+      // voci archiviate che hanno già un voto su questa guida
+      const archived = (appointment?.evaluations ?? [])
+        .filter((e) => !activeIds.has(e.itemId))
+        .map((e) => ({ id: e.itemId, label: e.label, scaleMax: e.scaleMax, archived: true }));
+      setEvalItems([...active.map((i) => ({ id: i.id, label: i.label, scaleMax: i.scaleMax })), ...archived]);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [open, appointment?.id, appointment?.evaluations]);
+
   // Reset state when dialog opens with a (different) appointment.
   React.useEffect(() => {
     if (!open || !appointment) return;
     const start = new Date(appointment.startsAt);
     setInstructorId(appointment.instructor?.id ?? "");
     setLessonTypes(resolveInitialTypes(appointment.types, appointment.type));
-    setRating(appointment.rating ?? null);
+    setEvalScores(
+      Object.fromEntries((appointment.evaluations ?? []).map((e) => [e.itemId, e.score])),
+    );
     setEsito(outcomeFromStatus(appointment.status ?? ""));
     setVehicleId(appointment.vehicle?.id ?? "");
     setFollowVehicleId(appointment.followVehicle?.id ?? "");
@@ -374,7 +420,15 @@ export function EditAppointmentDialog({
 
   const sortedTypesKey = (t: string[]) => [...t].sort().join(",");
   const typesChanged = sortedTypesKey(lessonTypes) !== sortedTypesKey(originalLessonTypes);
-  const ratingChanged = rating !== originalRating;
+  // Pagellino: cambiato se un voto differisce da quello salvato, o se la guida
+  // non era mai stata valutata (il salvataggio scrive tutte le voci).
+  const evalChanged =
+    evalItems.length > 0 &&
+    evalItems.some(
+      (item) =>
+        (evalScores[item.id] ?? defaultEvaluationScore(item.scaleMax)) !==
+        originalEvalScores[item.id],
+    );
   const esitoChanged = esito !== currentOutcome;
 
   // Esito modificabile: guide non annullate/non proposte e non troppo in
@@ -384,11 +438,6 @@ export function EditAppointmentDialog({
     normalizedStatus !== "proposal" &&
     originalStart !== null &&
     originalStart.getTime() - 10 * 60 * 1000 <= Date.now();
-
-  // Valutazione: solo su guide effettuate (checked_in/completed/no_show) — o se
-  // l'utente sta impostando ORA un esito Presente/Assente (che le renderà tali).
-  const showRating =
-    esito !== null || ["checked_in", "completed", "no_show"].includes(normalizedStatus);
 
   // Live availability check. We re-run whenever either the staged
   // instructor or the staged date/time changes. If neither has changed,
@@ -572,7 +621,7 @@ export function EditAppointmentDialog({
   const hasChanges =
     instructorId !== originalInstructorId ||
     typesChanged ||
-    ratingChanged ||
+    evalChanged ||
     esitoChanged ||
     vehicleId !== originalVehicleId ||
     effectiveFollowVehicleId !== originalFollowVehicleId ||
@@ -647,10 +696,12 @@ export function EditAppointmentDialog({
         detailsPayload.lessonTypes = lessonTypes;
         hasDetails = true;
       }
-      if (ratingChanged) {
-        // Accettato dal BE solo su guide effettuate: garantito dallo step esito
-        // qui sopra o dallo stato già effettuato.
-        detailsPayload.rating = rating;
+      if (evalChanged) {
+        // Il pagellino viaggia con gli altri dettagli: un solo salvataggio.
+        detailsPayload.evaluations = evalItems.map((item) => ({
+          itemId: item.id,
+          score: evalScores[item.id] ?? defaultEvaluationScore(item.scaleMax),
+        }));
         hasDetails = true;
       }
       if (vehicleId !== originalVehicleId) {
@@ -1092,14 +1143,51 @@ export function EditAppointmentDialog({
             </div>
           )}
 
-          {/* Valutazione (1-5) — solo su guide effettuate (vincolo BE). */}
-          {showRating && (
+          {/* Pagellino (REG-443) — ha sostituito la valutazione a stellina unica.
+              Nessun vincolo di stato: i punteggi si danno anche a guida in corso
+              o programmata. Assente se l'autoscuola non l'ha configurato. */}
+          {evalItems.length > 0 && (
             <div className="flex flex-col gap-2">
               <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
                 <Star className="size-3.5 text-slate-500" aria-hidden />
-                Valutazione
+                Pagellino
               </label>
-              <StarRatingInput value={rating} onChange={setRating} disabled={pending} />
+              <div className="rounded-[10px] border border-[#ececec] bg-white px-3">
+                {evalItems.map((item, i) => {
+                  const value = evalScores[item.id] ?? defaultEvaluationScore(item.scaleMax);
+                  return (
+                    <div
+                      key={item.id}
+                      className={cn(
+                        "flex items-center justify-between gap-3 py-2",
+                        i > 0 && "border-t border-[#f4f4f6]",
+                      )}
+                    >
+                      <span className="text-[12.5px] font-medium text-foreground">
+                        {item.label}
+                        {item.archived ? " (non più in uso)" : ""}
+                      </span>
+                      <StarRatingInput
+                        value={value}
+                        total={item.scaleMax}
+                        gold
+                        size="size-5"
+                        disabled={pending}
+                        onChange={(v) =>
+                          // Ritoccare la stessa stellina non azzera la voce: il
+                          // pagellino non ha lo stato "non valutato".
+                          setEvalScores((prev) => ({ ...prev, [item.id]: v ?? value }))
+                        }
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              {!(appointment?.evaluations ?? []).length && (
+                <p className="text-[11.5px] font-medium text-[#b0b0b0]">
+                  Precompilato a metà scala: salvando, la guida avrà il pagellino completo.
+                </p>
+              )}
             </div>
           )}
 

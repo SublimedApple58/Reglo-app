@@ -127,6 +127,8 @@ type AppointmentRow = {
   type: string;
   types?: string[];
   rating?: number | null;
+  /** Pagellino della guida (REG-443): compilabile dal dialog "Modifica guida". */
+  evaluations?: Array<{ itemId: string; label: string; scaleMax: number; score: number }>;
   status: string;
   startsAt: string | Date;
   endsAt?: string | Date | null;
@@ -2334,6 +2336,7 @@ export function AutoscuoleAgendaPage({
       type: item.type ?? null,
       types: item.types ?? null,
       rating: item.rating ?? null,
+      evaluations: item.evaluations ?? [],
       notes: item.notes ?? null,
       student: {
         firstName: item.student.firstName,
