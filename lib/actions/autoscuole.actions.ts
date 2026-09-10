@@ -1982,6 +1982,16 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
           groupLessonId: true,
           instructor: { select: { name: true } },
           vehicle: { select: { name: true } },
+          // Pagellino (REG-443): serve allo storico guide per mostrare tutte le
+          // voci, non solo la stellina complessiva. Le guide precedenti alla
+          // feature non hanno righe qui → array vuoto, storico invariato.
+          evaluations: {
+            select: {
+              score: true,
+              item: { select: { id: true, label: true, scaleMax: true, position: true } },
+            },
+            orderBy: { item: { position: "asc" } },
+          },
         },
         orderBy: { startsAt: "desc" },
       }),
@@ -2080,6 +2090,12 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
             notes: raw?.notes ?? null,
             createdAt: raw?.createdAt ?? null,
             group: raw?.groupLessonId ? registerGlInfo.get(raw.groupLessonId) ?? null : null,
+            evaluations: (raw?.evaluations ?? []).map((e) => ({
+              itemId: e.item.id,
+              label: e.item.label,
+              scaleMax: e.item.scaleMax,
+              score: e.score,
+            })),
           };
         }),
       },
@@ -2580,6 +2596,16 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
         instructor: true,
         vehicle: true,
         location: true,
+        // Pagellino (REG-443): lo storico guide lato scuola (app istruttore)
+        // mostra tutte le voci. Solo su questo ramo: il ramo `light` serve
+        // l'app ALLIEVO, che in v1 il pagellino non lo vede.
+        evaluations: {
+          select: {
+            score: true,
+            item: { select: { id: true, label: true, scaleMax: true, position: true } },
+          },
+          orderBy: { item: { position: "asc" } },
+        },
       },
       orderBy: { startsAt: "asc" },
       ...(limit ? { take: limit } : {}),
@@ -2599,6 +2625,12 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
           groupLessonKind: gl?.kind ?? null,
           groupLessonMotoType: gl?.motoLessonType ?? null,
           groupLessonFilled: gl?.filled ?? null,
+          evaluations: (item.evaluations ?? []).map((e) => ({
+            itemId: e.item.id,
+            label: e.item.label,
+            scaleMax: e.item.scaleMax,
+            score: e.score,
+          })),
         };
       }),
     };

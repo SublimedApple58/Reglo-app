@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ArrowDownAZ, Camera, ChevronLeft, ChevronRight, Download, KeyRound, MapPin, Ticket, UserPlus, UserRoundPlus, Users } from "lucide-react";
+import { ArrowDownAZ, Camera, ChevronDown, ChevronLeft, ChevronRight, Download, KeyRound, MapPin, Ticket, UserPlus, UserRoundPlus, Users } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -10,6 +10,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { cn } from "@/lib/utils";
+import {
+  evaluationSummary,
+  formatEvaluationAverage,
+} from "@/lib/autoscuole/evaluation-sheet";
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { PageHeader } from "@/components/ui/page-header";
 import { SegmentedPill } from "@/components/ui/segmented-pill";
@@ -139,6 +143,65 @@ type ExtendedSummary = {
   manualUnpaid: number;
 };
 
+/**
+ * Pagellino di una guida nello storico (REG-443): chip riassuntiva che espande
+ * l'elenco completo delle voci in sola lettura. Le guide precedenti alla
+ * feature non hanno punteggi → non mostra nulla, lo storico resta com'era.
+ */
+function EvaluationRecap({
+  lessonId,
+  rows,
+  open,
+  onToggle,
+}: {
+  lessonId: string;
+  rows?: Array<{ itemId: string; label: string; scaleMax: number; score: number }>;
+  open: boolean;
+  onToggle: (lessonId: string) => void;
+}) {
+  const list = rows ?? [];
+  const summary = evaluationSummary(list);
+  if (!summary) return null;
+  const average = formatEvaluationAverage(summary);
+  return (
+    <div className="mb-2">
+      <button
+        type="button"
+        onClick={() => onToggle(lessonId)}
+        aria-expanded={open}
+        className="flex cursor-pointer items-center gap-1.5 rounded-[6px] border border-[#ececec] bg-[#fbfbfc] px-2 py-1 text-[12px] font-semibold text-[#6a6a6a] transition-colors hover:border-[#dcdcdc] hover:text-foreground"
+      >
+        <span className="text-navy-900">★</span>
+        Pagellino
+        <span className="font-medium text-[#929292]">{average ?? `${summary.count} voci`}</span>
+        <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} strokeWidth={2.2} />
+      </button>
+      {open && (
+        <div className="mt-1.5 rounded-[10px] border border-[#ececec] bg-white px-3">
+          {list.map((row, i) => (
+            <div
+              key={row.itemId}
+              className={cn(
+                "flex items-center justify-between gap-3 py-2",
+                i > 0 && "border-t border-[#f4f4f6]",
+              )}
+            >
+              <span className="text-[12.5px] font-medium text-foreground">{row.label}</span>
+              <span className="flex shrink-0 items-center gap-0.5 text-[11px]">
+                {Array.from({ length: row.scaleMax }, (_, j) => (
+                  <span key={j} className={j < row.score ? "text-navy-900" : "text-[#dcdde4]"}>
+                    ★
+                  </span>
+                ))}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 type LessonEntry = {
   id: string;
   type: string;
@@ -162,6 +225,11 @@ type LessonEntry = {
   createdAt: string | Date | null;
   /** Set when this lesson was a group lesson: seats filled / capacity + kind. */
   group: { filled: number; capacity: number; kind: string } | null;
+  /**
+   * Pagellino della guida (REG-443): una riga per voce valutata. Vuoto sulle
+   * guide precedenti alla feature — lì resta la sola stellina complessiva.
+   */
+  evaluations?: Array<{ itemId: string; label: string; scaleMax: number; score: number }>;
 };
 
 /** Filtri client-side del tab Guide del drawer allievo. */
@@ -685,6 +753,9 @@ export function AutoscuoleStudentsPage({
   const [noteDraft, setNoteDraft] = React.useState("");
   const [typesDraft, setTypesDraft] = React.useState<string[]>([]);
   const [ratingDraft, setRatingDraft] = React.useState<number | null>(null);
+  // Pagellino (REG-443): riga dello storico espansa per consultare tutte le
+  // voci. Una sola alla volta, come il resto della lista.
+  const [openEvalLessonId, setOpenEvalLessonId] = React.useState<string | null>(null);
   const [esitoDraft, setEsitoDraft] = React.useState<Outcome>(null);
   const [noteSaving, setNoteSaving] = React.useState<string | null>(null);
 
@@ -2578,7 +2649,7 @@ export function AutoscuoleStudentsPage({
                   {lesson.rating != null && (
                     <span className="ml-auto flex items-center gap-0.5 text-[10px]">
                       {Array.from({ length: 5 }, (_, i) => (
-                        <span key={i} className={i < lesson.rating! ? "text-yellow-400" : "text-gray-200"}>★</span>
+                        <span key={i} className={i < lesson.rating! ? "text-navy-900" : "text-[#dcdde4]"}>★</span>
                       ))}
                     </span>
                   )}
@@ -2586,6 +2657,12 @@ export function AutoscuoleStudentsPage({
                 <p className="mb-1.5 text-[13px] font-medium text-[#6a6a6a]">
                   {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
                 </p>
+                <EvaluationRecap
+                  lessonId={lesson.id}
+                  rows={lesson.evaluations}
+                  open={openEvalLessonId === lesson.id}
+                  onToggle={(id) => setOpenEvalLessonId((cur) => (cur === id ? null : id))}
+                />
                 {editingNoteId === lesson.id ? (
                   <div className="rounded-xl border border-[#ececec] bg-[#fafafa] p-3">
                     {!lesson.group && !isExam ? (
@@ -2652,7 +2729,7 @@ export function AutoscuoleStudentsPage({
                               onClick={() => setRatingDraft(star === ratingDraft ? null : star)}
                               className="cursor-pointer p-0.5 text-[20px] leading-none transition-transform hover:scale-110"
                             >
-                              <span className={star <= (ratingDraft ?? 0) ? "text-yellow-400" : "text-[#d7dbe2]"}>★</span>
+                              <span className={star <= (ratingDraft ?? 0) ? "text-navy-900" : "text-[#d7dbe2]"}>★</span>
                             </button>
                           ))}
                         </div>

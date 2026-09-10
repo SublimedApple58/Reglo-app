@@ -60,3 +60,26 @@ export const evaluationItemDisplayLabel = (item: {
   label: string;
   archivedAt?: Date | string | null;
 }): string => (item.archivedAt ? `${item.label} (non più in uso)` : item.label);
+
+/**
+ * Riepilogo del pagellino di una guida per lo storico: la media ha senso solo
+ * se tutte le voci usano la stessa scala — con scale miste (3 e 5) sarebbe un
+ * numero fuorviante, quindi si mostra solo il conteggio.
+ */
+export const evaluationSummary = (
+  rows: ReadonlyArray<{ score: number; scaleMax: number }>,
+): { count: number; average: number | null; scaleMax: number | null } | null => {
+  if (!rows.length) return null;
+  const scales = new Set(rows.map((r) => r.scaleMax));
+  if (scales.size > 1) return { count: rows.length, average: null, scaleMax: null };
+  const average = rows.reduce((sum, r) => sum + r.score, 0) / rows.length;
+  return { count: rows.length, average, scaleMax: rows[0].scaleMax };
+};
+
+/** "4,2/5" all'italiana; null quando le scale sono miste. */
+export const formatEvaluationAverage = (
+  summary: { average: number | null; scaleMax: number | null } | null,
+): string | null =>
+  summary && summary.average != null && summary.scaleMax != null
+    ? `${summary.average.toFixed(1).replace(".", ",")}/${summary.scaleMax}`
+    : null;

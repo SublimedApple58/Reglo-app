@@ -48,6 +48,31 @@ ricompare nel foglio SOLO sulle guide che hanno un suo punteggio, marcata "(non 
   effettuata** (`checked_in`/`completed`/`no_show`).
 - Max 12 voci per autoscuola: oltre, il foglio non si compila più "in pochi secondi".
 
+## Consultazione nello storico guide
+
+I punteggi si consultano dallo **storico guide lato scuola**, senza aprire nulla di nuovo:
+
+- **Web** — scheda allievo → tab **Note** ("valutazioni e note"): sotto la riga della guida una
+  chip `★ Pagellino 4,2/5` espande l'elenco completo delle voci in sola lettura
+  (`EvaluationRecap` in `AutoscuoleStudentsPage.tsx`). La media si calcola **solo** se tutte le
+  voci hanno la stessa scala; con scale miste la chip mostra il numero di voci
+  (`evaluationSummary`).
+- **Mobile** — storico guide dell'allievo: la riga porta la stessa chip; toccando la guida si apre
+  il foglio "Dettagli guida" con tutte le voci (in sola lettura se non più modificabile).
+
+I punteggi viaggiano nei payload dello storico (`getAutoscuolaStudentDrivingRegister` per il web,
+il ramo NON-`light` di `getAutoscuolaAppointmentsFiltered` per l'app istruttore): niente chiamata
+per riga. Il ramo `light`, che serve l'app ALLIEVO, resta senza pagellino.
+
+Le guide precedenti alla feature non hanno punteggi → nessuna chip, storico invariato.
+
+## Stile delle stelline
+
+**Navy (`#1a1a2e`), uguale su web e mobile.** Il design system mobile è mono-navy per regola
+(`src/components/StarRating.tsx`: "no yellow/gold anywhere"), quindi l'allineamento è stato fatto
+portando il web a navy — incluse le stelline della valutazione complessiva nello storico e nel suo
+editor inline, che stanno nella stessa riga della chip.
+
 ## Fuori scope (v1)
 
 L'allievo **non** vede il pagellino nella sua app: resta interno all'autoscuola.

@@ -60,3 +60,32 @@ describe("pagellino — etichette storiche", () => {
     );
   });
 });
+
+describe("pagellino — riepilogo per lo storico", () => {
+  const { evaluationSummary, formatEvaluationAverage } = jest.requireActual(
+    "@/lib/autoscuole/evaluation-sheet",
+  );
+
+  it("è null quando la guida non ha punteggi (guide precedenti alla feature)", () => {
+    expect(evaluationSummary([])).toBeNull();
+  });
+
+  it("fa la media quando la scala è la stessa", () => {
+    const summary = evaluationSummary([
+      { score: 5, scaleMax: 5 },
+      { score: 4, scaleMax: 5 },
+      { score: 4, scaleMax: 5 },
+    ]);
+    expect(summary).toEqual({ count: 3, average: 13 / 3, scaleMax: 5 });
+    expect(formatEvaluationAverage(summary)).toBe("4,3/5");
+  });
+
+  it("con scale miste non inventa una media", () => {
+    const summary = evaluationSummary([
+      { score: 5, scaleMax: 5 },
+      { score: 1, scaleMax: 3 },
+    ]);
+    expect(summary).toEqual({ count: 2, average: null, scaleMax: null });
+    expect(formatEvaluationAverage(summary)).toBeNull();
+  });
+});
