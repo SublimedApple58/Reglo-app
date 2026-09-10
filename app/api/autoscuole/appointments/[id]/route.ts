@@ -12,6 +12,7 @@ export async function PATCH(
     lessonType: payload.lessonType,
     lessonTypes: payload.lessonTypes,
     rating: payload.rating,
+    evaluations: payload.evaluations,
     notes: payload.notes,
     locationId: payload.locationId,
     vehicleId: payload.vehicleId,

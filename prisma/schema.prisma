@@ -249,6 +249,7 @@ model Company {
   consorzioAccountingCodes             ConsorzioAccountingCode[]              @relation("ConsorzioAccountingCodes")
   consorzioGuideRequests               ConsorzioGuideRequest[]                @relation("ConsorzioGuideRequests")
   consorzioLessonBillings              ConsorzioLessonBilling[]               @relation("ConsorzioLessonBillings")
+  evaluationItems                      AutoscuolaEvaluationItem[]
 }
 
 /// In-app notifications shown to the autoscuola owner in the web bell/inbox.
@@ -528,6 +529,7 @@ model AutoscuolaAppointment {
   consorzioAccountingCodes ConsorzioAppointmentAccountingCode[]
   consorzioGuideRequests   ConsorzioGuideRequest[]
   consorzioBilling         ConsorzioLessonBilling?
+  evaluations              AutoscuolaAppointmentEvaluation[]
 
   @@index([companyId])
   @@index([studentId])
@@ -1672,8 +1674,8 @@ model ConsorzioSchool {
   createdAt          DateTime  @default(now()) @db.Timestamp(6)
   updatedAt          DateTime  @updatedAt
 
-  consorzioCompany Company  @relation("ConsorzioSchools", fields: [consorzioCompanyId], references: [id], onDelete: Cascade)
-  linkedCompany    Company? @relation("ConsorzioSchoolLinkedCompany", fields: [linkedCompanyId], references: [id], onDelete: SetNull)
+  consorzioCompany Company                  @relation("ConsorzioSchools", fields: [consorzioCompanyId], references: [id], onDelete: Cascade)
+  linkedCompany    Company?                 @relation("ConsorzioSchoolLinkedCompany", fields: [linkedCompanyId], references: [id], onDelete: SetNull)
   accountingCode   ConsorzioAccountingCode? @relation("ConsorzioSchoolAccountingCode", fields: [accountingCodeId], references: [id], onDelete: SetNull)
 
   members        CompanyMember[]
@@ -1802,4 +1804,43 @@ model ConsorzioLessonBilling {
 
   @@index([consorzioCompanyId, schoolId])
   @@index([schoolId, settledAt])
+}
+
+/// Voce del "pagellino" di valutazione di un'autoscuola (REG-443): l'autoscuola
+/// decide su cosa i suoi istruttori valutano ogni guida. L'ordine (`position`)
+/// è quello in cui l'istruttore le trova nell'app.
+model AutoscuolaEvaluationItem {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId  String    @db.Uuid
+  label      String
+  /// Numero di stelline della voce: 3 o 5 (vedi EVALUATION_SCALES).
+  scaleMax   Int       @default(5)
+  position   Int
+  /// Le voci non si cancellano: archiviandole i punteggi storici restano
+  /// leggibili con la loro etichetta. Null = voce attiva.
+  archivedAt DateTime? @db.Timestamp(6)
+  createdAt  DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt  DateTime  @updatedAt
+
+  company     Company                           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  evaluations AutoscuolaAppointmentEvaluation[]
+
+  @@index([companyId, position])
+}
+
+/// Punteggio di UNA voce del pagellino su UNA guida (REG-443). Convive con
+/// AutoscuolaAppointment.rating, che resta la valutazione complessiva a stelle.
+model AutoscuolaAppointmentEvaluation {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  appointmentId String   @db.Uuid
+  itemId        String   @db.Uuid
+  score         Int
+  createdAt     DateTime @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime @updatedAt
+
+  appointment AutoscuolaAppointment    @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  item        AutoscuolaEvaluationItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([appointmentId, itemId])
+  @@index([itemId])
 }

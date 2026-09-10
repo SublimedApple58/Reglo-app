@@ -115,6 +115,12 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Exam creation (agenda web + mobile)**: differenzia pronti/non-pronti nel picker (badge + ordine); NON vincola la creazione
 - → **Mobile**: contratto `examReady`/`examReadyAt`/`studentPhase` su `AutoscuolaStudent` + array `students` di `getInstructorSettings`; toggle in `StudentNotesDetailScreen`
 
+### Pagellino di valutazione (REG-443)
+- → **Appointments**: i punteggi viaggiano dentro `updateAutoscuolaAppointmentDetails` (campo `evaluations`) e vivono in `AutoscuolaAppointmentEvaluation`; `AutoscuolaAppointment.rating` (valutazione complessiva) resta invariato e indipendente
+- → **Impostazioni/limits**: l'interruttore è `limits.evaluationSheetEnabled` sul CompanyService AUTOSCUOLE → dietro la cache Redis SETTINGS, invalidata da `saveEvaluationSheet`
+- → **Mobile (istruttore)**: `GET /api/autoscuole/appointments/[id]/evaluation` alimenta il foglio "Dettagli guida"; il salvataggio passa da `ManageLessonDetailsPayload.evaluations` (istruttore in `IstruttoreHomeScreen` e storico allievo in `StudentNotesDetailScreen`)
+- → **Storico**: le voci si ARCHIVIANO, mai cancellate: togliere una voce dal pagellino non cancella i punteggi già dati
+
 ### Users Directory
 - → **Istruttori/Agenda**: `deleteUser` di un istruttore → `AutoscuolaInstructor` inactive + guide future annullate (`operationallyCancelAppointmentsByResource`)
 - → **Registrazione (tutti i canali)**: `releaseEmailIfOrphaned` chiamato in `createCompanyUser`, `signUpUser`, `acceptCompanyInviteAndRegister`, mobile `invites/[token]/accept`, mobile `student-register` — un account orfano (0 membership) non blocca mai il riuso dell'email

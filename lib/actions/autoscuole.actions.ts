@@ -8,6 +8,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
 import { sendDynamicEmail } from "@/email";
 import { formatError } from "@/lib/utils";
+import { clampEvaluationScore } from "@/lib/autoscuole/evaluation-sheet";
 import { requireServiceAccess } from "@/lib/service-access";
 import { notifyAutoscuolaCaseStatusChange } from "@/lib/autoscuole/communications";
 import { BOOKING_SOURCE, staffBookingSource } from "@/lib/autoscuole/booking-source";
@@ -183,6 +184,14 @@ const updateAppointmentDetailsSchema = z.object({
   lessonType: z.string().optional(),
   lessonTypes: z.array(z.string()).optional(),
   rating: z.number().int().min(1).max(5).nullable().optional(),
+  /**
+   * Pagellino di valutazione (REG-443): un punteggio per voce, salvato nella
+   * stessa richiesta dei dettagli guida così l'istruttore fa un solo "Salva".
+   * Array vuoto = azzera i punteggi di questa guida.
+   */
+  evaluations: z
+    .array(z.object({ itemId: z.string().uuid(), score: z.number().int().min(1).max(10) }))
+    .optional(),
   notes: z.string().nullable().optional(),
   locationId: z.string().uuid().nullable().optional(),
   /**
@@ -5390,7 +5399,28 @@ export async function updateAutoscuolaAppointmentDetails(
     const vehiclesNeedSync =
       primaryChanged || followVehicleChanged || extraMotosChanged;
 
-    if (!Object.keys(updateData).length && !vehiclesNeedSync) {
+    // Pagellino (REG-443): validato qui perché anche da solo è una modifica
+    // salvabile (l'istruttore può toccare solo le stelline).
+    const evaluationsProvided = payload.evaluations !== undefined;
+    let evaluationRows: Array<{ itemId: string; score: number }> = [];
+    if (evaluationsProvided && payload.evaluations!.length) {
+      const items = await prisma.autoscuolaEvaluationItem.findMany({
+        where: {
+          companyId: membership.companyId,
+          id: { in: payload.evaluations!.map((e) => e.itemId) },
+        },
+        select: { id: true, scaleMax: true },
+      });
+      const byId = new Map(items.map((i) => [i.id, i.scaleMax]));
+      // Le voci di un'altra autoscuola (o sparite nel frattempo) vengono
+      // ignorate invece di far fallire il salvataggio dell'istruttore.
+      evaluationRows = payload.evaluations!.filter((e) => byId.has(e.itemId)).map((e) => ({
+        itemId: e.itemId,
+        score: clampEvaluationScore(e.score, byId.get(e.itemId)!),
+      }));
+    }
+
+    if (!Object.keys(updateData).length && !vehiclesNeedSync && !evaluationsProvided) {
       return { success: false, message: "Nessuna modifica da salvare." };
     }
 
@@ -5557,6 +5587,26 @@ export async function updateAutoscuolaAppointmentDetails(
           finalFollowVehicleId,
           finalExtraMotoVehicleIds,
         );
+      }
+      if (evaluationsProvided) {
+        // Sostituzione integrale: il foglio manda sempre tutte le voci, così
+        // una voce tolta dal pagellino sparisce anche da questa guida.
+        const keep = evaluationRows.map((e) => e.itemId);
+        await tx.autoscuolaAppointmentEvaluation.deleteMany({
+          where: {
+            appointmentId: appointment.id,
+            ...(keep.length ? { itemId: { notIn: keep } } : {}),
+          },
+        });
+        for (const row of evaluationRows) {
+          await tx.autoscuolaAppointmentEvaluation.upsert({
+            where: {
+              appointmentId_itemId: { appointmentId: appointment.id, itemId: row.itemId },
+            },
+            update: { score: row.score },
+            create: { appointmentId: appointment.id, itemId: row.itemId, score: row.score },
+          });
+        }
       }
       return row;
     });

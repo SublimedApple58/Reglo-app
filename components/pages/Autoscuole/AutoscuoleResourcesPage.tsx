@@ -59,6 +59,7 @@ import BookingsTab from "./tabs/BookingsTab";
 import VehiclesTab from "./tabs/VehiclesTab";
 import { VoiceSettingsPane } from "./VoiceSettingsPane";
 import { AspettoSettingsPane } from "./AspettoSettingsPane";
+import { EvaluationSheetPane } from "./EvaluationSheetPane";
 import { BusinessInfoPane } from "./tabs/BusinessInfoPane";
 import {
   getAutoscuolaInstructors,
@@ -298,6 +299,7 @@ type ConfigPane =
   | "bookings"
   | "policy"
   | "reminders"
+  | "evaluation"
   | "instructors"
   | "vehicles"
   | "aspetto"
@@ -320,6 +322,7 @@ const CONFIG_PANE_GROUPS: Array<
   [
     { key: "bookings", label: "Prenotazioni e allievi", icon: CalendarProtoIcon },
     { key: "policy", label: "Policy tipi guida", icon: NotepadProtoIcon },
+    { key: "evaluation", label: "Pagellino", icon: NotepadProtoIcon },
     { key: "reminders", label: "Promemoria e notifiche", icon: BellProtoIcon },
   ],
   [
@@ -366,6 +369,7 @@ const CONFIG_PANE_TITLES: Record<ConfigPane, string> = {
   consorzioBilling: "Fatturazione e pagamenti",
   bookings: "Prenotazioni e allievi",
   policy: "Policy tipi guida",
+  evaluation: "Pagellino",
   reminders: "Promemoria e notifiche",
   instructors: "Istruttori",
   vehicles: "Veicoli",
@@ -2350,6 +2354,9 @@ export function AutoscuoleResourcesPage({
             instructors={instructors}
             changeInstructorColor={changeInstructorColor}
           />
+        </KeepAlivePane>
+        <KeepAlivePane active={configTab === "evaluation"} eager={mountAllPanes}>
+          <EvaluationSheetPane />
         </KeepAlivePane>
         <KeepAlivePane active={configTab === "voice"} eager={mountAllPanes}>
           <VoiceSettingsPane />
