@@ -266,6 +266,20 @@ export function AdminUsersPage({
     setPanelOpen(true);
   };
 
+  // Dopo un salvataggio il pannello chiama router.refresh(): `users` arriva
+  // aggiornato dal server ma `activeUser` era una copia congelata all'apertura,
+  // così il pannello continuava a mostrare il ruolo vecchio e "Salva modifiche"
+  // restava attivo — sembrava che la modifica non fosse andata a buon fine.
+  React.useEffect(() => {
+    setActiveUser((current) => {
+      if (!current) return current;
+      const fresh = users.find((u) => u.id === current.id);
+      // Se la riga è uscita dalla lista (filtro/ricerca) teniamo lo snapshot:
+      // chiudere il pannello a sorpresa sarebbe peggio.
+      return fresh ?? current;
+    });
+  }, [users]);
+
   return (
     <div className="w-full" data-testid="admin-users-page">
       <FadeIn className="mx-auto max-w-7xl space-y-5">
@@ -867,6 +881,11 @@ function UserDetailPanelContent({
                       ))}
                     </SelectContent>
                   </Select>
+                  {!isAdmin && (
+                    <div className="mt-1 text-xs font-medium text-[#b2b2b2]">
+                      Solo i titolari possono modificare nome e ruolo.
+                    </div>
+                  )}
                 </div>
                 {isAdmin && (
                   <button
