@@ -23,6 +23,7 @@ import {
   UserRoundProtoIcon,
   UsersProtoIcon,
   type ProtoIcon,
+  StarProtoIcon,
 } from "@/components/ui/proto-icons";
 import { ConsorzioFatturazionePane } from "@/components/pages/Consorzio/ConsorzioFatturazionePane";
 
@@ -322,7 +323,7 @@ const CONFIG_PANE_GROUPS: Array<
   [
     { key: "bookings", label: "Prenotazioni e allievi", icon: CalendarProtoIcon },
     { key: "policy", label: "Policy tipi guida", icon: NotepadProtoIcon },
-    { key: "evaluation", label: "Pagellino", icon: NotepadProtoIcon },
+    { key: "evaluation", label: "Pagellino", icon: StarProtoIcon },
     { key: "reminders", label: "Promemoria e notifiche", icon: BellProtoIcon },
   ],
   [
