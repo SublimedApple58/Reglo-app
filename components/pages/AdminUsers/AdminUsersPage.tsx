@@ -875,7 +875,10 @@ function UserDetailPanelContent({
                     <SelectTrigger className="h-10 w-full rounded-[10px] border-[1.5px] border-[#dddddd] text-sm font-medium">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    {/* Il DetailPanel è z-[200]: col default z-50 il menu si apre
+                        DIETRO al pannello e sembra che la select non risponda.
+                        Stessa convenzione della sezione Allievi. */}
+                    <SelectContent className="z-[300]">
                       {ROLE_OPTIONS.map((r) => (
                         <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
                       ))}
@@ -934,7 +937,7 @@ function UserDetailPanelContent({
 
       {/* Conferma eliminazione */}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="z-[300]">
           <AlertDialogHeader>
             <AlertDialogTitle>Eliminare {user.name}?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -959,7 +962,7 @@ function UserDetailPanelContent({
 
       {/* Conferma annulla invito */}
       <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="z-[300]">
           <AlertDialogHeader>
             <AlertDialogTitle>Annullare l&apos;invito?</AlertDialogTitle>
             <AlertDialogDescription>
