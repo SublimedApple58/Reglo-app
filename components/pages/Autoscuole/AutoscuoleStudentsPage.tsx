@@ -331,7 +331,6 @@ const EDITABLE_LESSON_TYPES = [
   "altro",
 ];
 // La valutazione è ammessa dal BE solo su guide effettuate.
-const RATEABLE_STATUSES = new Set(["checked_in", "completed", "no_show"]);
 
 // Esito derivato dallo stato (mirror EditAppointmentDialog): Presente = presente/
 // completata, Assente = no_show, altrimenti nessun esito (guida non effettuata).
@@ -752,7 +751,6 @@ export function AutoscuoleStudentsPage({
   const [editingNoteId, setEditingNoteId] = React.useState<string | null>(null);
   const [noteDraft, setNoteDraft] = React.useState("");
   const [typesDraft, setTypesDraft] = React.useState<string[]>([]);
-  const [ratingDraft, setRatingDraft] = React.useState<number | null>(null);
   // Pagellino (REG-443): riga dello storico espansa per consultare tutte le
   // voci. Una sola alla volta, come il resto della lista.
   const [openEvalLessonId, setOpenEvalLessonId] = React.useState<string | null>(null);
@@ -958,7 +956,6 @@ export function AutoscuoleStudentsPage({
   const startEditNote = (lesson: EditableLesson) => {
     setNoteDraft(lesson.notes ?? "");
     setTypesDraft(lessonInitialTypes(lesson));
-    setRatingDraft(lesson.rating ?? null);
     setEsitoDraft(outcomeFromStatus(lesson.status));
     setEditingNoteId(lesson.id);
   };
@@ -977,7 +974,6 @@ export function AutoscuoleStudentsPage({
       payload.lessonTypes = typesDraft;
       payload.lessonType = typesDraft[0];
     }
-    if (ratingDraft !== (lesson.rating ?? null)) payload.rating = ratingDraft;
     const trimmed = noteDraft.trim();
     if (trimmed !== (lesson.notes ?? "").trim()) payload.notes = trimmed;
     const hasDetails = Object.keys(payload).length > 1;
@@ -2607,7 +2603,6 @@ export function AutoscuoleStudentsPage({
             !lesson.group &&
             !isExam &&
             startDate.getTime() - 10 * 60 * 1000 <= Date.now();
-          const canRate = esitoDraft !== null || RATEABLE_STATUSES.has(lessonStatus);
           return (
             <div key={lesson.id} className="flex gap-4 border-b border-[#f2f2f2] py-4">
               <div className="min-w-[56px] pt-0.5 text-[12px] font-medium text-[#929292]">
@@ -2646,7 +2641,9 @@ export function AutoscuoleStudentsPage({
                       </span>
                     ))
                   )}
-                  {lesson.rating != null && (
+                  {/* Stellina storica: solo sulle guide che NON hanno il pagellino,
+                      altrimenti sarebbe un secondo voto accanto alla chip. */}
+                  {lesson.rating != null && !lesson.evaluations?.length && (
                     <span className="ml-auto flex items-center gap-0.5 text-[10px]">
                       {Array.from({ length: 5 }, (_, i) => (
                         <span key={i} className={i < lesson.rating! ? "text-yellow-400" : "text-gray-200"}>★</span>
@@ -2717,24 +2714,9 @@ export function AutoscuoleStudentsPage({
                         </div>
                       </>
                     ) : null}
-                    {canRate ? (
-                      <>
-                        <p className="mb-1 text-[12px] font-medium text-[#929292]">Valutazione</p>
-                        <div className="mb-3 flex items-center gap-0.5">
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <button
-                              key={star}
-                              type="button"
-                              aria-label={`${star} stell${star === 1 ? "a" : "e"}`}
-                              onClick={() => setRatingDraft(star === ratingDraft ? null : star)}
-                              className="cursor-pointer p-0.5 text-[20px] leading-none transition-transform hover:scale-110"
-                            >
-                              <span className={star <= (ratingDraft ?? 0) ? "text-yellow-400" : "text-[#d7dbe2]"}>★</span>
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    ) : null}
+                    {/* La valutazione a stellina singola non si compila più: al suo
+                        posto c'è il pagellino, che l'istruttore riempie dall'app.
+                        I voti già dati restano leggibili sopra, in sola lettura. */}
                     <p className="mb-1 text-[12px] font-medium text-[#929292]">Note</p>
                     <textarea
                       autoFocus

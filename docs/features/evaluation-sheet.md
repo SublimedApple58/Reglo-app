@@ -4,8 +4,11 @@ Ogni autoscuola decide **su cosa** i suoi istruttori valutano una guida. Le voci
 configurano in Impostazioni → **Pagellino**; l'istruttore le compila a **stelline** dal
 foglio "Dettagli guida" dell'app.
 
-Convive con `AutoscuolaAppointment.rating`, che resta la valutazione **complessiva**
-a stelle della guida: il pagellino non la sostituisce.
+**Sostituisce** la vecchia valutazione a stellina singola (`AutoscuolaAppointment.rating`), che dal
+2026-09-10 **non si compila più** né da web né da mobile. Il campo resta in tabella e nei payload
+perché i voti già dati vanno letti: nello storico guide la stellina compare **solo** sulle guide
+che non hanno punteggi pagellino (quelle create prima della feature), dove è l'unica valutazione
+esistente. Il backend continua ad accettare `rating` nella PATCH: nessun contratto rotto.
 
 ## Modello dati
 
@@ -75,4 +78,9 @@ resta navy.
 
 ## Fuori scope (v1)
 
-L'allievo **non** vede il pagellino nella sua app: resta interno all'autoscuola.
+L'allievo **non** vede il pagellino nella sua app: resta interno all'autoscuola. Conseguenza
+accettata: nel suo storico le guide nuove non mostrano alcuna valutazione, perché la stellina che
+vedeva prima non viene più compilata.
+
+Restano da decidere: la statistica "voto medio" nella scheda allievo mobile (oggi media delle
+stelline storiche, si congela col tempo) e se aprire il pagellino all'allievo.
