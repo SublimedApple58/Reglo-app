@@ -125,3 +125,123 @@ export const evaluationSummaryLabel = (summary: EvaluationSummary | null): strin
 
 /** Testo della singola voce esclusa, identico su web e app. */
 export const EVALUATION_NOT_APPLICABLE_LABEL = "non valutabile";
+
+/* ── Media del pagellino su tutto lo storico di un allievo ───────────────── */
+
+export type StudentEvaluationAverage = {
+  itemId: string;
+  label: string;
+  scaleMax: number;
+  /** Media dei voti dati su questa voce. */
+  average: number;
+  /** Quante guide hanno un voto su questa voce. */
+  count: number;
+  /** La voce non è più nel pagellino della scuola (archiviata). */
+  archived: boolean;
+};
+
+export type StudentEvaluationAggregate = {
+  items: StudentEvaluationAverage[];
+  /** Guide con almeno un voto (le annullate non contano). */
+  lessonCount: number;
+  /** Media di tutti i voti; null con scale miste. */
+  average: number | null;
+  scaleMax: number | null;
+  /** Voci del pagellino attuale mai valutate su questo allievo. */
+  notEvaluated: number;
+  /** Voce con la media più bassa (in proporzione alla sua scala). */
+  weakest: StudentEvaluationAverage | null;
+};
+
+/**
+ * Media per voce su tutte le guide di un allievo (scheda allievo → tab Note).
+ * Non tocca il DB: lavora sui punteggi che il registro guide porta già con sé.
+ *
+ * Fuori dal calcolo: guide annullate, voci "non valutabili" e voci senza voto —
+ * cioè tutto ciò che non è un giudizio che qualcuno ha dato davvero.
+ *
+ * `sheetItems` sono le voci ATTIVE del pagellino della scuola: danno l'ordine
+ * (lo stesso che l'istruttore vede nel foglio) e dicono quante voci non sono
+ * mai state valutate. Le voci archiviate che hanno voti restano in coda.
+ */
+export const aggregateStudentEvaluations = (
+  lessons: ReadonlyArray<{
+    cancelledAt?: Date | string | null;
+    evaluations?: ReadonlyArray<{
+      itemId: string;
+      label: string;
+      scaleMax: number;
+      score: number | null;
+      notApplicable?: boolean;
+    }> | null;
+  }>,
+  sheetItems: ReadonlyArray<{ id: string; label: string; scaleMax: number }> = [],
+): StudentEvaluationAggregate | null => {
+  const acc = new Map<string, { label: string; scaleMax: number; sum: number; count: number }>();
+  let lessonCount = 0;
+
+  for (const lesson of lessons) {
+    if (lesson.cancelledAt) continue;
+    let scoredHere = false;
+    for (const row of lesson.evaluations ?? []) {
+      if (row.notApplicable || row.score == null) continue;
+      scoredHere = true;
+      const prev = acc.get(row.itemId);
+      if (prev) {
+        prev.sum += row.score;
+        prev.count += 1;
+      } else {
+        acc.set(row.itemId, {
+          label: row.label,
+          scaleMax: row.scaleMax,
+          sum: row.score,
+          count: 1,
+        });
+      }
+    }
+    if (scoredHere) lessonCount += 1;
+  }
+
+  if (!acc.size) return null;
+
+  const order = new Map(sheetItems.map((item, index) => [item.id, index]));
+  const items: StudentEvaluationAverage[] = [...acc.entries()]
+    .map(([itemId, row]) => ({
+      itemId,
+      label: row.label,
+      scaleMax: row.scaleMax,
+      average: row.sum / row.count,
+      count: row.count,
+      archived: !order.has(itemId),
+    }))
+    // Ordine del pagellino della scuola; le archiviate in coda, per etichetta.
+    .sort((a, b) => {
+      const ia = order.get(a.itemId);
+      const ib = order.get(b.itemId);
+      if (ia != null && ib != null) return ia - ib;
+      if (ia != null) return -1;
+      if (ib != null) return 1;
+      return a.label.localeCompare(b.label, "it");
+    });
+
+  const scales = new Set(items.map((i) => i.scaleMax));
+  const totalScores = items.reduce((sum, i) => sum + i.count, 0);
+  const average =
+    scales.size === 1
+      ? items.reduce((sum, i) => sum + i.average * i.count, 0) / totalScores
+      : null;
+
+  const weakest =
+    items.length > 1
+      ? items.reduce((min, i) => (i.average / i.scaleMax < min.average / min.scaleMax ? i : min))
+      : null;
+
+  return {
+    items,
+    lessonCount,
+    average,
+    scaleMax: scales.size === 1 ? items[0].scaleMax : null,
+    notEvaluated: sheetItems.filter((item) => !acc.has(item.id)).length,
+    weakest,
+  };
+};

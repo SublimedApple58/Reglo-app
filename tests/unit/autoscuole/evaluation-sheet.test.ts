@@ -121,3 +121,117 @@ describe("pagellino — riepilogo per lo storico", () => {
     expect(evaluationSummaryLabel(evaluationSummary([]))).toBeNull();
   });
 });
+
+describe("pagellino — media per voce sull'allievo", () => {
+  const { aggregateStudentEvaluations } = jest.requireActual(
+    "@/lib/autoscuole/evaluation-sheet",
+  );
+
+  const row = (itemId: string, label: string, score: number | null, extra = {}) => ({
+    itemId,
+    label,
+    scaleMax: 5,
+    score,
+    ...extra,
+  });
+  const SHEET = [
+    { id: "a", label: "Sicurezza", scaleMax: 5 },
+    { id: "b", label: "Manovre", scaleMax: 5 },
+    { id: "c", label: "Autostrada", scaleMax: 5 },
+  ];
+
+  it("è null se nessuna guida ha voti", () => {
+    expect(aggregateStudentEvaluations([], SHEET)).toBeNull();
+    expect(
+      aggregateStudentEvaluations([{ evaluations: [] }, { evaluations: null }], SHEET),
+    ).toBeNull();
+  });
+
+  it("fa la media per voce e conta le guide che l'hanno valutata", () => {
+    const agg = aggregateStudentEvaluations(
+      [
+        { evaluations: [row("a", "Sicurezza", 5), row("b", "Manovre", 3)] },
+        { evaluations: [row("a", "Sicurezza", 4)] },
+      ],
+      SHEET,
+    );
+    expect(agg.items).toEqual([
+      { itemId: "a", label: "Sicurezza", scaleMax: 5, average: 4.5, count: 2, archived: false },
+      { itemId: "b", label: "Manovre", scaleMax: 5, average: 3, count: 1, archived: false },
+    ]);
+    expect(agg.lessonCount).toBe(2);
+    // media pesata sui voti dati: (5+3+4)/3
+    expect(agg.average).toBeCloseTo(4);
+    expect(agg.notEvaluated).toBe(1); // "Autostrada" mai valutata
+  });
+
+  it("ignora guide annullate, voci non valutabili e voci senza voto", () => {
+    const agg = aggregateStudentEvaluations(
+      [
+        { cancelledAt: new Date(), evaluations: [row("a", "Sicurezza", 1)] },
+        {
+          evaluations: [
+            row("a", "Sicurezza", 4),
+            row("b", "Manovre", null, { notApplicable: true }),
+            row("c", "Autostrada", null),
+          ],
+        },
+      ],
+      SHEET,
+    );
+    expect(agg.items).toHaveLength(1);
+    expect(agg.items[0]).toMatchObject({ itemId: "a", average: 4, count: 1 });
+    expect(agg.lessonCount).toBe(1);
+  });
+
+  it("tiene l'ordine del pagellino della scuola e mette in coda le archiviate", () => {
+    const agg = aggregateStudentEvaluations(
+      [
+        {
+          evaluations: [
+            row("zz", "Voce vecchia", 2),
+            row("c", "Autostrada", 5),
+            row("a", "Sicurezza", 3),
+          ],
+        },
+      ],
+      SHEET,
+    );
+    expect(agg.items.map((i: { itemId: string }) => i.itemId)).toEqual(["a", "c", "zz"]);
+    expect(agg.items[2].archived).toBe(true);
+  });
+
+  it("con scale miste non dà una media generale, ma quelle per voce sì", () => {
+    const agg = aggregateStudentEvaluations(
+      [
+        {
+          evaluations: [
+            row("a", "Sicurezza", 5),
+            { itemId: "b", label: "Manovre", scaleMax: 3, score: 2 },
+          ],
+        },
+      ],
+      SHEET,
+    );
+    expect(agg.average).toBeNull();
+    expect(agg.scaleMax).toBeNull();
+    expect(agg.items).toHaveLength(2);
+  });
+
+  it("segnala la voce più bassa in proporzione alla sua scala", () => {
+    const agg = aggregateStudentEvaluations(
+      [
+        {
+          evaluations: [
+            row("a", "Sicurezza", 5),
+            // 2/3 = 0,67 è più basso di 3/5 = 0,60? no: 0,67 > 0,60 → vince "c"
+            { itemId: "b", label: "Manovre", scaleMax: 3, score: 2 },
+            row("c", "Autostrada", 3),
+          ],
+        },
+      ],
+      SHEET,
+    );
+    expect(agg.weakest.itemId).toBe("c");
+  });
+});

@@ -1,9 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { AlertCircle, CalendarDays, Check, CheckCircle2, CircleMinus, Clock, Loader2, Route, Star, TrafficCone, UserCog, X } from "lucide-react";
+import { AlertCircle, CalendarDays, Check, CheckCircle2, ChevronDown, CircleMinus, Clock, Loader2, Route, Star, TrafficCone, UserCog, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DatePickerInput } from "@/components/ui/date-picker";
 import {
   Dialog,
@@ -294,6 +299,9 @@ export function EditAppointmentDialog({
    * punteggi: così "Ripristina" riporta il voto di prima invece del default.
    */
   const [evalNa, setEvalNa] = React.useState<Record<string, boolean>>({});
+  /** Menu "Tutte" (azioni in blocco sul pagellino). Radix controlled, come gli
+   *  altri menu dell'agenda. */
+  const [evalMenuOpen, setEvalMenuOpen] = React.useState(false);
   /** Valore salvato per voce: numero, null se esclusa, assente se mai valutata. */
   const originalEvalScores = React.useMemo(
     () =>
@@ -455,14 +463,17 @@ export function EditAppointmentDialog({
   // Pagellino: cambiato se un voto (o un'esclusione) differisce da quanto
   // salvato, o se la guida non era mai stata valutata (il salvataggio scrive
   // tutte le voci).
-  const evalValueOf = (item: { id: string; scaleMax: number }): number | null =>
-    evalNa[item.id] ? null : evalScores[item.id] ?? defaultEvaluationScore(item.scaleMax);
+  // Tre stati per voce: non valutata (assente), valutata (numero), non
+  // valutabile (null). `undefined` = nessuna riga salvata su questa guida.
+  const evalValueOf = (item: { id: string }): number | null | undefined =>
+    evalNa[item.id] ? null : evalScores[item.id];
   const evalChanged =
     evalItems.length > 0 &&
     evalItems.some((item) => {
       const saved = item.id in originalEvalScores ? originalEvalScores[item.id] : undefined;
       return evalValueOf(item) !== saved;
     });
+  const evalScoredCount = evalItems.filter((item) => evalScores[item.id] != null && !evalNa[item.id]).length;
   const esitoChanged = esito !== currentOutcome;
 
   // Esito modificabile: guide non annullate/non proposte e non troppo in
@@ -732,14 +743,15 @@ export function EditAppointmentDialog({
       }
       if (evalChanged) {
         // Il pagellino viaggia con gli altri dettagli: un solo salvataggio.
-        detailsPayload.evaluations = evalItems.map((item) =>
-          evalNa[item.id]
-            ? { itemId: item.id, score: null, notApplicable: true }
-            : {
-                itemId: item.id,
-                score: evalScores[item.id] ?? defaultEvaluationScore(item.scaleMax),
-              },
-        );
+        // Si mandano SOLO le voci toccate: quelle lasciate in bianco non sono
+        // un giudizio, e il BE cancella le righe omesse.
+        detailsPayload.evaluations = evalItems
+          .filter((item) => evalNa[item.id] || evalScores[item.id] != null)
+          .map((item) =>
+            evalNa[item.id]
+              ? { itemId: item.id, score: null, notApplicable: true }
+              : { itemId: item.id, score: evalScores[item.id]! },
+          );
         hasDetails = true;
       }
       if (vehicleId !== originalVehicleId) {
@@ -1186,13 +1198,95 @@ export function EditAppointmentDialog({
               o programmata. Assente se l'autoscuola non l'ha configurato. */}
           {evalItems.length > 0 && (
             <div className="flex flex-col gap-2">
-              <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
-                <Star className="size-3.5 text-slate-500" aria-hidden />
-                Pagellino
-              </label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                  <Star className="size-3.5 text-slate-500" aria-hidden />
+                  Pagellino
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11.5px] font-semibold text-[#929292]">
+                    {evalScoredCount} di {evalItems.length} valutate
+                  </span>
+                  {/* Azioni in blocco: con un pagellino lungo, riempire o
+                      azzerare a mano tutte le voci sarebbe il lavoro più noioso
+                      della giornata. */}
+                  <DropdownMenu open={evalMenuOpen} onOpenChange={setEvalMenuOpen}>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        className={cn(
+                          "inline-flex h-6 cursor-pointer items-center gap-1 rounded-full border px-2.5 text-[11.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                          evalMenuOpen
+                            ? "border-[#222222] text-foreground"
+                            : "border-[#e4e4e9] text-[#6a6a6a] hover:border-[#d4d4d9] hover:text-foreground",
+                        )}
+                      >
+                        Tutte
+                        <ChevronDown className="size-3" strokeWidth={2.4} />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="end"
+                      // Il dialog è un popover fixed z-40: senza questo il menu
+                      // gli finirebbe dietro (stesso inciampo della select Ruolo).
+                      className="z-[60] w-[240px] rounded-xl p-1.5 shadow-dropdown"
+                    >
+                      <button
+                        type="button"
+                        className="flex w-full cursor-pointer items-center rounded-lg px-3 py-[9px] text-left text-[13px] font-medium text-foreground transition-colors hover:bg-[#f7f7f7]"
+                        onClick={() => {
+                          setEvalMenuOpen(false);
+                          setEvalScores((prev) => {
+                            const next = { ...prev };
+                            for (const item of evalItems) {
+                              if (next[item.id] == null && !evalNa[item.id]) {
+                                next[item.id] = defaultEvaluationScore(item.scaleMax);
+                              }
+                            }
+                            return next;
+                          });
+                        }}
+                      >
+                        Valuta tutte a metà scala
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full cursor-pointer items-center rounded-lg px-3 py-[9px] text-left text-[13px] font-medium text-foreground transition-colors hover:bg-[#f7f7f7]"
+                        onClick={() => {
+                          setEvalMenuOpen(false);
+                          setEvalNa((prev) => {
+                            const next = { ...prev };
+                            for (const item of evalItems) {
+                              if (evalScores[item.id] == null) next[item.id] = true;
+                            }
+                            return next;
+                          });
+                        }}
+                      >
+                        Segna non valutabili le restanti
+                      </button>
+                      <div className="my-1 border-t border-[#f0f0f0]" />
+                      <button
+                        type="button"
+                        className="flex w-full cursor-pointer items-center rounded-lg px-3 py-[9px] text-left text-[13px] font-medium text-[#8a8a8f] transition-colors hover:bg-[#f7f7f7]"
+                        onClick={() => {
+                          setEvalMenuOpen(false);
+                          setEvalScores({});
+                          setEvalNa({});
+                        }}
+                      >
+                        Azzera il pagellino
+                      </button>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
               <div className="rounded-[10px] border border-[#ececec] bg-white px-3">
                 {evalItems.map((item, i) => {
-                  const value = evalScores[item.id] ?? defaultEvaluationScore(item.scaleMax);
+                  // Niente precompilazione: una voce senza voto è "non valutata"
+                  // e non viene salvata. Le stelline partono vuote.
+                  const value = evalScores[item.id] ?? 0;
                   const notApplicable = evalNa[item.id] === true;
                   return (
                     <div
@@ -1253,9 +1347,14 @@ export function EditAppointmentDialog({
                             size="size-5"
                             disabled={pending}
                             onChange={(v) =>
-                              // Ritoccare la stessa stellina non azzera la voce: il
-                              // pagellino non ha lo stato "non valutato".
-                              setEvalScores((prev) => ({ ...prev, [item.id]: v ?? value }))
+                              setEvalScores((prev) => {
+                                const next = { ...prev };
+                                // Ricliccare la stellina già scelta riporta la
+                                // voce a "non valutata" (v === null).
+                                if (v == null) delete next[item.id];
+                                else next[item.id] = v;
+                                return next;
+                              })
                             }
                           />
                         </div>
@@ -1265,9 +1364,8 @@ export function EditAppointmentDialog({
                 })}
               </div>
               <p className="text-[11.5px] font-medium text-[#b0b0b0]">
-                {!(appointment?.evaluations ?? []).length
-                  ? "Precompilato a metà scala: salvando, la guida avrà il pagellino completo. Le voci non valutabili restano fuori dalla media."
-                  : "Le voci non valutabili restano fuori dalla media di questa guida."}
+                Valuta solo le voci che questa guida ha toccato: quelle lasciate in bianco
+                restano “non valutate” e non entrano nelle medie.
               </p>
             </div>
           )}

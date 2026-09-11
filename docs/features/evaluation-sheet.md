@@ -39,10 +39,12 @@ ricompare nel foglio SOLO sulle guide che hanno un suo punteggio, marcata "(non 
 
 - **Scale ammesse: 3 o 5 stelline.** La scala 10 è stata provata e scartata: le stelline
   diventano troppo piccole per il pollice.
-- **Punteggio di partenza = metà scala arrotondata per eccesso** (3 su 5, 2 su 3):
-  l'istruttore tocca solo ciò che vuole correggere.
-- Il foglio manda **sempre tutte le voci**: il salvataggio è una sostituzione integrale
-  dei punteggi di quella guida, così una voce tolta dal pagellino sparisce anche da lì.
+- **Sul WEB non c'è precompilazione** (dal 2026-09-11): una voce senza stelline è "non
+  valutata" e non viene salvata. Vedi "Opt-in" qui sotto. **Sul MOBILE il foglio precompila
+  ancora a metà scala** (`defaultEvaluationScore`): il giro opt-in sull'app è il prossimo
+  passo, fino ad allora le due piattaforme si comportano diversamente.
+- Il salvataggio è una **sostituzione integrale** dei punteggi di quella guida: le voci non
+  mandate vengono cancellate, così una voce tolta dal pagellino sparisce anche da lì.
 - I punteggi viaggiano nella **stessa PATCH** dei dettagli guida: un solo "Salva".
 - Il pagellino da solo è una modifica salvabile (si può toccare solo le stelline).
 - Voci di un'altra autoscuola o sparite nel frattempo vengono **ignorate**, non fanno
@@ -82,6 +84,26 @@ con stelline cliccabili; i punteggi entrano nella stessa "Salva modifiche" degli
 - Le voci arrivano da `getEvaluationSheet` (una fetch per apertura del dialog); i punteggi già dati
   viaggiano col bootstrap agenda, che ora seleziona `evaluations`.
 - Nessun vincolo di stato: si valuta anche una guida programmata o in corso.
+
+#### Opt-in: si valuta solo ciò che si è fatto
+
+All'apertura **niente è precompilato**: le stelline partono vuote e la voce resta "non
+valutata" finché qualcuno non la tocca. Ricliccando la stellina già scelta la voce torna
+"non valutata" (prima non si poteva più azzerare).
+
+Il perché: la precompilazione a metà scala **fabbricava giudizi** — un 3/5 che nessuno aveva
+dato finiva nello storico e, da quando esiste la media per allievo, anche nelle medie. Con
+molte voci configurate il problema diventava anche di fatica (disattivarne dieci a mano).
+
+- L'intestazione della sezione conta le voci valutate ("3 di 10 valutate").
+- Il menu **"Tutte"** fa le azioni in blocco: *Valuta tutte a metà scala* (un clic e torna il
+  vecchio comportamento, per le scuole che vogliono il pagellino sempre pieno), *Segna non
+  valutabili le restanti*, *Azzera il pagellino*.
+- **Conseguenza accettata**: non vale più "una guida valutata ha sempre il pagellino
+  completo". In cambio, un voto presente è un voto che qualcuno ha davvero dato.
+- Niente soglia sul numero di voci: il comportamento è lo stesso con 3 e con 12, perché il
+  gesto dell'istruttore non deve cambiare in base a come la sua scuola ha configurato il
+  pagellino.
 - Le voci **archiviate** che hanno un voto su quella guida restano in elenco (marcate "non più in
   uso"): il salvataggio sostituisce integralmente i punteggi, ometterle le cancellerebbe.
 - Se l'autoscuola non ha configurato il pagellino, la sezione non compare.
@@ -106,6 +128,25 @@ il ramo NON-`light` di `getAutoscuolaAppointmentsFiltered` per l'app istruttore)
 per riga. Il ramo `light`, che serve l'app ALLIEVO, resta senza pagellino.
 
 Le guide precedenti alla feature non hanno punteggi → nessuna chip, storico invariato.
+
+## Media per voce nella scheda allievo (web)
+
+Scheda allievo → tab **Note**, in cima alla lista delle guide: card "Pagellino · media su
+tutte le guide" con la media generale, una riga per voce (barra + media + "su N guide") e una
+riga di lettura con la **voce più bassa** e quante voci non sono mai state valutate.
+
+- Calcolo in `aggregateStudentEvaluations` (`lib/autoscuole/evaluation-sheet.ts`, unit-testato):
+  fuori guide annullate, voci "non valutabili" e voci senza voto.
+- **Zero query nuove**: i punteggi arrivano già col registro guide. L'ordine delle voci e il
+  conteggio delle "mai valutate" vengono dalle voci attive del pagellino, caricate una sola
+  volta per pagina (`getEvaluationSheet`).
+- La media segue il **registro guide**, che tiene solo i tipi "guida": gli esami non entrano
+  nel conto, come non compaiono nella lista sotto la card.
+- Barre e non stelline: una media come 4,2 con le stelline richiederebbe mezze stelle finte.
+- Scale miste (3 e 5) → niente media generale, restano quelle per voce.
+- Le voci archiviate che hanno voti restano in coda, marcate "(non più in uso)".
+
+Sul **mobile** la vista aggregata non c'è ancora: è il passo successivo.
 
 ## Stile delle stelline
 

@@ -11,9 +11,12 @@ import {
 
 import { cn } from "@/lib/utils";
 import {
+  aggregateStudentEvaluations,
   evaluationSummary,
   evaluationSummaryLabel,
+  type StudentEvaluationAggregate,
 } from "@/lib/autoscuole/evaluation-sheet";
+import { getEvaluationSheet } from "@/lib/actions/autoscuole-evaluation.actions";
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { PageHeader } from "@/components/ui/page-header";
 import { SegmentedPill } from "@/components/ui/segmented-pill";
@@ -142,6 +145,84 @@ type ExtendedSummary = {
   upcoming: number;
   manualUnpaid: number;
 };
+
+/**
+ * Media del pagellino su TUTTE le guide dell'allievo, in cima al tab Note.
+ * È il riassunto della lista che sta sotto: stessa tab, stessi dati, nessuna
+ * chiamata in più (i punteggi arrivano col registro guide).
+ *
+ * Barre e non stelline: una media come 4,2 con le stelline si potrebbe
+ * disegnare solo con mezze stelle finte.
+ */
+function EvaluationAverages({ aggregate }: { aggregate: StudentEvaluationAggregate }) {
+  const fmt = (n: number) => n.toFixed(1).replace(".", ",");
+  return (
+    <div className="mb-6">
+      <p className={sectionLabelClass}>Pagellino · media su tutte le guide</p>
+      <div className="rounded-[14px] border border-[#ececec] bg-white px-4 pb-3 pt-3.5">
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <span className="text-[20px] font-bold leading-none tracking-[-0.4px] text-[#1a1a2e]">
+            {aggregate.average != null ? (
+              <>
+                {fmt(aggregate.average)}
+                <span className="text-[13px] font-semibold text-[#929292]">
+                  /{aggregate.scaleMax} di media
+                </span>
+              </>
+            ) : (
+              <span className="text-[13px] font-semibold text-[#929292]">
+                Scale diverse: media per voce
+              </span>
+            )}
+          </span>
+          <span className="text-[11.5px] font-semibold text-[#929292]">
+            {aggregate.lessonCount === 1 ? "1 guida valutata" : `${aggregate.lessonCount} guide valutate`}
+          </span>
+        </div>
+        {aggregate.items.map((item, i) => (
+          <div
+            key={item.itemId}
+            className={cn("flex items-center gap-3 py-[7px]", i > 0 && "border-t border-[#f6f6f8]")}
+          >
+            <span className="w-[168px] shrink-0 text-[12.5px] font-medium text-[#1a1a2e]">
+              {item.label}
+              {item.archived ? (
+                <span className="font-normal text-[#a3a3ad]"> (non più in uso)</span>
+              ) : null}
+            </span>
+            <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#f2f2f4]">
+              <span
+                className="block h-full rounded-full bg-[#facc15]"
+                style={{ width: `${(item.average / item.scaleMax) * 100}%` }}
+              />
+            </span>
+            <span className="w-[34px] text-right text-[12.5px] font-bold text-[#1a1a2e]">
+              {fmt(item.average)}
+            </span>
+            <span className="w-[62px] text-right text-[11.5px] font-medium text-[#929292]">
+              {item.count === 1 ? "su 1 guida" : `su ${item.count} guide`}
+            </span>
+          </div>
+        ))}
+        {aggregate.weakest || aggregate.notEvaluated > 0 ? (
+          <p className="mt-2.5 border-t border-[#f6f6f8] pt-2 text-[11.5px] font-medium text-[#929292]">
+            {aggregate.weakest ? (
+              <>
+                Voce più bassa: <span className="font-semibold text-[#1a1a2e]">{aggregate.weakest.label}</span>{" "}
+                ({fmt(aggregate.weakest.average)}/{aggregate.weakest.scaleMax} su {aggregate.weakest.count}{" "}
+                {aggregate.weakest.count === 1 ? "guida" : "guide"})
+              </>
+            ) : null}
+            {aggregate.weakest && aggregate.notEvaluated > 0 ? " · " : ""}
+            {aggregate.notEvaluated > 0
+              ? `${aggregate.notEvaluated} ${aggregate.notEvaluated === 1 ? "voce non ancora valutata" : "voci non ancora valutate"}`
+              : ""}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Pagellino di una guida nello storico (REG-443): chip riassuntiva che espande
@@ -679,6 +760,11 @@ export function AutoscuoleStudentsPage({
   const [panelOpen, setPanelOpen] = React.useState(false);
   const [selectedStudentId, setSelectedStudentId] = React.useState<string | null>(null);
   const [register, setRegister] = React.useState<StudentRegister | null>(null);
+  /** Voci attive del pagellino: danno l'ordine alla media per voce e dicono
+   *  quante voci non sono mai state valutate. Company-level → una fetch sola. */
+  const [evalSheetItems, setEvalSheetItems] = React.useState<
+    Array<{ id: string; label: string; scaleMax: number }>
+  >([]);
   const [registerLoading, setRegisterLoading] = React.useState(false);
   const [weeklyLimitActive, setWeeklyLimitActive] = React.useState(false);
   const [groupLessonsEnabledGlobal, setGroupLessonsEnabledGlobal] = React.useState(false);
@@ -945,6 +1031,18 @@ export function AutoscuoleStudentsPage({
     setEditingPhone(false);
     setEditingNoteId(null);
   }, [selectedStudentId]);
+
+  React.useEffect(() => {
+    let alive = true;
+    (async () => {
+      const res = await getEvaluationSheet();
+      // Pagellino spento o non configurato: la media semplicemente non compare.
+      if (alive && res.success && res.data.enabled) setEvalSheetItems(res.data.items);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const startEditPhone = () => {
     setPhoneDraft(register?.student.phone ?? "");
@@ -2611,8 +2709,11 @@ export function AutoscuoleStudentsPage({
         </div>
       );
     }
+    const aggregate = aggregateStudentEvaluations(register.lessons, evalSheetItems);
     return (
       <div>
+        {aggregate ? <EvaluationAverages aggregate={aggregate} /> : null}
+        {aggregate ? <p className={sectionLabelClass}>Guida per guida</p> : null}
         {register.lessons.map((lesson) => {
           const hasNote = !!lesson.notes?.trim();
           const isExam = lesson.type === "esame";
