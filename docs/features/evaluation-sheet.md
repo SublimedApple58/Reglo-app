@@ -39,10 +39,9 @@ ricompare nel foglio SOLO sulle guide che hanno un suo punteggio, marcata "(non 
 
 - **Scale ammesse: 3 o 5 stelline.** La scala 10 è stata provata e scartata: le stelline
   diventano troppo piccole per il pollice.
-- **Sul WEB non c'è precompilazione** (dal 2026-09-11): una voce senza stelline è "non
-  valutata" e non viene salvata. Vedi "Opt-in" qui sotto. **Sul MOBILE il foglio precompila
-  ancora a metà scala** (`defaultEvaluationScore`): il giro opt-in sull'app è il prossimo
-  passo, fino ad allora le due piattaforme si comportano diversamente.
+- **Niente precompilazione, su entrambe le piattaforme** (dal 2026-09-11): una voce senza
+  stelline è "non valutata" e non viene salvata. Vedi "Opt-in" qui sotto; il gemello mobile
+  è documentato in `reglo-mobile/docs/features/evaluation-sheet.md`.
 - Il salvataggio è una **sostituzione integrale** dei punteggi di quella guida: le voci non
   mandate vengono cancellate, così una voce tolta dal pagellino sparisce anche da lì.
 - I punteggi viaggiano nella **stessa PATCH** dei dettagli guida: un solo "Salva".
@@ -146,7 +145,8 @@ riga di lettura con la **voce più bassa** e quante voci non sono mai state valu
 - Scale miste (3 e 5) → niente media generale, restano quelle per voce.
 - Le voci archiviate che hanno voti restano in coda, marcate "(non più in uso)".
 
-Sul **mobile** la vista aggregata non c'è ancora: è il passo successivo.
+Sul **mobile** la vista aggregata non c'è ancora: è il passo successivo (l'opt-in invece è
+già allineato).
 
 ## Stile delle stelline
 
