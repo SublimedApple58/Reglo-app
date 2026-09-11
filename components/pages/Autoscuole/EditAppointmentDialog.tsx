@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertCircle, CalendarDays, Check, CheckCircle2, ChevronDown, CircleMinus, Clock, Loader2, Route, Star, TrafficCone, UserCog, X } from "lucide-react";
+import { AlertCircle, CalendarDays, Check, CheckCircle2, Clock, Loader2, Plus, Route, Star, TrafficCone, UserCog, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -39,7 +39,6 @@ import {
 } from "@/lib/actions/autoscuole.actions";
 import { cn } from "@/lib/utils";
 import { getEvaluationSheet } from "@/lib/actions/autoscuole-evaluation.actions";
-import { defaultEvaluationScore } from "@/lib/autoscuole/evaluation-sheet";
 
 type StudentLite = {
   firstName: string;
@@ -295,12 +294,19 @@ export function EditAppointmentDialog({
   >([]);
   const [evalScores, setEvalScores] = React.useState<Record<string, number>>({});
   /**
-   * Voci escluse da QUESTA guida ("non valutabile"). Stato separato dai
-   * punteggi: così "Ripristina" riporta il voto di prima invece del default.
+   * Voci MESSE nel pagellino di questa guida. Il pagellino non è più l'elenco
+   * completo in attesa di stelline: l'istruttore aggiunge le voci che ha
+   * davvero valutato, e quelle sono il pagellino della guida.
    */
-  const [evalNa, setEvalNa] = React.useState<Record<string, boolean>>({});
-  /** Menu "Tutte" (azioni in blocco sul pagellino). Radix controlled, come gli
-   *  altri menu dell'agenda. */
+  const [evalAdded, setEvalAdded] = React.useState<string[]>([]);
+  /**
+   * Voci salvate come "non valutabile" prima che quel concetto venisse tolto
+   * dalla compilazione. Non se ne creano di nuove: si tengono per non
+   * cancellarle salvando, e si possono solo rimuovere.
+   */
+  const [evalLegacyNa, setEvalLegacyNa] = React.useState<Record<string, boolean>>({});
+  /** Menu di scelta della voce da aggiungere. Radix controlled, come gli altri
+   *  menu dell'agenda. */
   const [evalMenuOpen, setEvalMenuOpen] = React.useState(false);
   /** Valore salvato per voce: numero, null se esclusa, assente se mai valutata. */
   const originalEvalScores = React.useMemo(
@@ -370,13 +376,15 @@ export function EditAppointmentDialog({
           .map((e) => [e.itemId, e.score as number]),
       ),
     );
-    setEvalNa(
+    setEvalLegacyNa(
       Object.fromEntries(
         (appointment.evaluations ?? [])
           .filter((e) => e.notApplicable)
           .map((e) => [e.itemId, true]),
       ),
     );
+    // Nel pagellino ci sono le voci che questa guida ha già salvato.
+    setEvalAdded((appointment.evaluations ?? []).map((e) => e.itemId));
     setEsito(outcomeFromStatus(appointment.status ?? ""));
     setVehicleId(appointment.vehicle?.id ?? "");
     setFollowVehicleId(appointment.followVehicle?.id ?? "");
@@ -463,17 +471,21 @@ export function EditAppointmentDialog({
   // Pagellino: cambiato se un voto (o un'esclusione) differisce da quanto
   // salvato, o se la guida non era mai stata valutata (il salvataggio scrive
   // tutte le voci).
-  // Tre stati per voce: non valutata (assente), valutata (numero), non
-  // valutabile (null). `undefined` = nessuna riga salvata su questa guida.
-  const evalValueOf = (item: { id: string }): number | null | undefined =>
-    evalNa[item.id] ? null : evalScores[item.id];
-  const evalChanged =
-    evalItems.length > 0 &&
-    evalItems.some((item) => {
-      const saved = item.id in originalEvalScores ? originalEvalScores[item.id] : undefined;
-      return evalValueOf(item) !== saved;
-    });
-  const evalScoredCount = evalItems.filter((item) => evalScores[item.id] != null && !evalNa[item.id]).length;
+  // Una voce è nel pagellino solo se è stata aggiunta E ha un voto (o è una
+  // vecchia "non valutabile"). `undefined` = non fa parte di questa guida.
+  const evalValueOf = (itemId: string): number | null | undefined => {
+    if (!evalAdded.includes(itemId)) return undefined;
+    if (evalLegacyNa[itemId]) return null;
+    return evalScores[itemId];
+  };
+  const evalChanged = evalItems.some((item) => {
+    const saved = item.id in originalEvalScores ? originalEvalScores[item.id] : undefined;
+    return evalValueOf(item.id) !== saved;
+  });
+  /** Voci in elenco, nell'ordine del pagellino della scuola (non di aggiunta):
+   *  due guide dello stesso allievo si leggono affiancate senza sorprese. */
+  const evalRows = evalItems.filter((item) => evalAdded.includes(item.id));
+  const evalAvailable = evalItems.filter((item) => !evalAdded.includes(item.id));
   const esitoChanged = esito !== currentOutcome;
 
   // Esito modificabile: guide non annullate/non proposte e non troppo in
@@ -743,12 +755,13 @@ export function EditAppointmentDialog({
       }
       if (evalChanged) {
         // Il pagellino viaggia con gli altri dettagli: un solo salvataggio.
-        // Si mandano SOLO le voci toccate: quelle lasciate in bianco non sono
-        // un giudizio, e il BE cancella le righe omesse.
-        detailsPayload.evaluations = evalItems
-          .filter((item) => evalNa[item.id] || evalScores[item.id] != null)
+        // Solo le voci in elenco e con un voto (più le vecchie "non
+        // valutabili", che si conservano). Una voce aggiunta ma mai votata non
+        // viene salvata: niente righe fantasma. Il BE cancella le omesse.
+        detailsPayload.evaluations = evalRows
+          .filter((item) => evalLegacyNa[item.id] || evalScores[item.id] != null)
           .map((item) =>
-            evalNa[item.id]
+            evalLegacyNa[item.id]
               ? { itemId: item.id, score: null, notApplicable: true }
               : { itemId: item.id, score: evalScores[item.id]! },
           );
@@ -1194,8 +1207,10 @@ export function EditAppointmentDialog({
           )}
 
           {/* Pagellino (REG-443) — ha sostituito la valutazione a stellina unica.
-              Nessun vincolo di stato: i punteggi si danno anche a guida in corso
-              o programmata. Assente se l'autoscuola non l'ha configurato. */}
+              Non è l'elenco completo in attesa di stelline: l'istruttore
+              AGGIUNGE le voci che questa guida ha davvero toccato. Nessun
+              vincolo di stato: si valuta anche a guida programmata o in corso.
+              Assente se l'autoscuola non ha configurato il pagellino. */}
           {evalItems.length > 0 && (
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-2">
@@ -1203,169 +1218,139 @@ export function EditAppointmentDialog({
                   <Star className="size-3.5 text-slate-500" aria-hidden />
                   Pagellino
                 </label>
-                <div className="flex items-center gap-2">
+                {evalRows.length > 0 && (
                   <span className="text-[11.5px] font-semibold text-[#929292]">
-                    {evalScoredCount} di {evalItems.length} valutate
+                    {evalRows.length === 1 ? "1 voce" : `${evalRows.length} voci`}
                   </span>
-                  {/* Azioni in blocco: con un pagellino lungo, riempire o
-                      azzerare a mano tutte le voci sarebbe il lavoro più noioso
-                      della giornata. */}
-                  <DropdownMenu open={evalMenuOpen} onOpenChange={setEvalMenuOpen}>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        disabled={pending}
-                        className={cn(
-                          "inline-flex h-6 cursor-pointer items-center gap-1 rounded-full border px-2.5 text-[11.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-                          evalMenuOpen
-                            ? "border-[#222222] text-foreground"
-                            : "border-[#e4e4e9] text-[#6a6a6a] hover:border-[#d4d4d9] hover:text-foreground",
-                        )}
-                      >
-                        Tutte
-                        <ChevronDown className="size-3" strokeWidth={2.4} />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      // Il dialog è un popover fixed z-40: senza questo il menu
-                      // gli finirebbe dietro (stesso inciampo della select Ruolo).
-                      className="z-[60] w-[240px] rounded-xl p-1.5 shadow-dropdown"
-                    >
-                      <button
-                        type="button"
-                        className="flex w-full cursor-pointer items-center rounded-lg px-3 py-[9px] text-left text-[13px] font-medium text-foreground transition-colors hover:bg-[#f7f7f7]"
-                        onClick={() => {
-                          setEvalMenuOpen(false);
-                          setEvalScores((prev) => {
-                            const next = { ...prev };
-                            for (const item of evalItems) {
-                              if (next[item.id] == null && !evalNa[item.id]) {
-                                next[item.id] = defaultEvaluationScore(item.scaleMax);
-                              }
-                            }
-                            return next;
-                          });
-                        }}
-                      >
-                        Valuta tutte a metà scala
-                      </button>
-                      <button
-                        type="button"
-                        className="flex w-full cursor-pointer items-center rounded-lg px-3 py-[9px] text-left text-[13px] font-medium text-foreground transition-colors hover:bg-[#f7f7f7]"
-                        onClick={() => {
-                          setEvalMenuOpen(false);
-                          setEvalNa((prev) => {
-                            const next = { ...prev };
-                            for (const item of evalItems) {
-                              if (evalScores[item.id] == null) next[item.id] = true;
-                            }
-                            return next;
-                          });
-                        }}
-                      >
-                        Segna non valutabili le restanti
-                      </button>
-                      <div className="my-1 border-t border-[#f0f0f0]" />
-                      <button
-                        type="button"
-                        className="flex w-full cursor-pointer items-center rounded-lg px-3 py-[9px] text-left text-[13px] font-medium text-[#8a8a8f] transition-colors hover:bg-[#f7f7f7]"
-                        onClick={() => {
-                          setEvalMenuOpen(false);
-                          setEvalScores({});
-                          setEvalNa({});
-                        }}
-                      >
-                        Azzera il pagellino
-                      </button>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+                )}
               </div>
-              <div className="rounded-[10px] border border-[#ececec] bg-white px-3">
-                {evalItems.map((item, i) => {
-                  // Niente precompilazione: una voce senza voto è "non valutata"
-                  // e non viene salvata. Le stelline partono vuote.
-                  const value = evalScores[item.id] ?? 0;
-                  const notApplicable = evalNa[item.id] === true;
-                  return (
-                    <div
-                      key={item.id}
-                      className={cn(
-                        "group flex items-center justify-between gap-3 py-2",
-                        i > 0 && "border-t border-[#f4f4f6]",
-                      )}
-                    >
-                      <span
+
+              {evalRows.length > 0 && (
+                <div className="rounded-[10px] border border-[#ececec] bg-white px-3">
+                  {evalRows.map((item, i) => {
+                    const value = evalScores[item.id] ?? 0;
+                    const legacyNa = evalLegacyNa[item.id] === true;
+                    return (
+                      <div
+                        key={item.id}
                         className={cn(
-                          "text-[12.5px] font-medium",
-                          notApplicable ? "text-[#a3a3ad]" : "text-foreground",
+                          "group flex items-center justify-between gap-3 py-2",
+                          i > 0 && "border-t border-[#f4f4f6]",
                         )}
                       >
-                        {item.label}
-                        {item.archived ? " (non più in uso)" : ""}
-                      </span>
-                      {/* Voce non valutabile SU QUESTA GUIDA: il bottone compare
-                          in hover (resta raggiungibile da tastiera col focus) per
-                          non affollare la riga delle stelline. */}
-                      {notApplicable ? (
+                        <span className="text-[12.5px] font-medium text-foreground">
+                          {item.label}
+                          {item.archived ? " (non più in uso)" : ""}
+                        </span>
                         <div className="flex shrink-0 items-center gap-2">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#f2f2f4] px-2 py-0.5 text-[11.5px] font-semibold text-[#6e7596]">
-                            <CircleMinus className="size-3.5" aria-hidden />
-                            Non valutabile
-                          </span>
+                          {legacyNa ? (
+                            // Voce salvata come "non valutabile" quando quel
+                            // concetto esisteva: si legge, non si crea più.
+                            <span className="text-[11.5px] font-medium text-[#a3a3ad]">
+                              — non valutabile
+                            </span>
+                          ) : (
+                            <>
+                              {value === 0 && (
+                                <span className="text-[11.5px] font-semibold text-[#b0b0b0]">
+                                  da valutare
+                                </span>
+                              )}
+                              <StarRatingInput
+                                value={value}
+                                total={item.scaleMax}
+                                gold
+                                size="size-5"
+                                disabled={pending}
+                                onChange={(v) =>
+                                  setEvalScores((prev) => {
+                                    const next = { ...prev };
+                                    // Ricliccare la stellina già scelta svuota
+                                    // il voto; per togliere la voce c'è la ×.
+                                    if (v == null) delete next[item.id];
+                                    else next[item.id] = v;
+                                    return next;
+                                  })
+                                }
+                              />
+                            </>
+                          )}
                           <button
                             type="button"
                             disabled={pending}
-                            onClick={() =>
-                              setEvalNa((prev) => {
+                            aria-label={`Togli ${item.label} dal pagellino`}
+                            onClick={() => {
+                              setEvalAdded((prev) => prev.filter((id) => id !== item.id));
+                              setEvalScores((prev) => {
                                 const next = { ...prev };
                                 delete next[item.id];
                                 return next;
-                              })
-                            }
-                            className="cursor-pointer text-[11.5px] font-semibold text-[#6e7596] underline underline-offset-2 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Ripristina
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex shrink-0 items-center gap-2">
-                          <button
-                            type="button"
-                            disabled={pending}
-                            onClick={() => setEvalNa((prev) => ({ ...prev, [item.id]: true }))}
-                            className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-[#e4e4e9] bg-white px-2 py-0.5 text-[11.5px] font-semibold text-[#6a6a6a] opacity-0 transition-[opacity,color,border-color] hover:border-[#d4d4d9] hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed"
-                          >
-                            <CircleMinus className="size-3.5" aria-hidden />
-                            Non valutabile
-                          </button>
-                          <StarRatingInput
-                            value={value}
-                            total={item.scaleMax}
-                            gold
-                            size="size-5"
-                            disabled={pending}
-                            onChange={(v) =>
-                              setEvalScores((prev) => {
+                              });
+                              setEvalLegacyNa((prev) => {
                                 const next = { ...prev };
-                                // Ricliccare la stellina già scelta riporta la
-                                // voce a "non valutata" (v === null).
-                                if (v == null) delete next[item.id];
-                                else next[item.id] = v;
+                                delete next[item.id];
                                 return next;
-                              })
-                            }
-                          />
+                              });
+                            }}
+                            className="flex size-[22px] cursor-pointer items-center justify-center rounded-full text-[#a3a3ad] opacity-0 transition-[opacity,background-color] hover:bg-[#f2f2f4] hover:text-[#6a6a6a] focus-visible:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed"
+                          >
+                            <X className="size-3.5" strokeWidth={2.4} aria-hidden />
+                          </button>
                         </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {evalAvailable.length > 0 && (
+                <DropdownMenu open={evalMenuOpen} onOpenChange={setEvalMenuOpen}>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      className={cn(
+                        "flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-[10px] border text-[12.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                        evalMenuOpen
+                          ? "border-solid border-[#222222] text-foreground"
+                          : "border-dashed border-[#dcdce2] text-[#6a6a6a] hover:border-[#c9c9d2] hover:text-foreground",
+                        evalRows.length === 0 && "h-11",
                       )}
-                    </div>
-                  );
-                })}
-              </div>
+                    >
+                      <Plus className="size-3.5" strokeWidth={2.4} aria-hidden />
+                      Aggiungi voce da valutare
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    // Il dialog è un popover fixed z-40: senza questo il menu
+                    // gli finirebbe dietro (stesso inciampo della select Ruolo).
+                    className="z-[60] w-[var(--radix-dropdown-menu-trigger-width)] rounded-xl p-1.5 shadow-dropdown"
+                  >
+                    <p className="px-2.5 pb-1.5 pt-1 text-[11px] font-bold uppercase tracking-[0.04em] text-[#a3a3ad]">
+                      Voci del pagellino
+                    </p>
+                    {evalAvailable.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="flex w-full cursor-pointer items-center rounded-lg px-3 py-[9px] text-left text-[12.5px] font-medium text-foreground transition-colors hover:bg-[#f7f7f7]"
+                        onClick={() => {
+                          setEvalMenuOpen(false);
+                          setEvalAdded((prev) => [...prev, item.id]);
+                        }}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+
               <p className="text-[11.5px] font-medium text-[#b0b0b0]">
-                Valuta solo le voci che questa guida ha toccato: quelle lasciate in bianco
-                restano “non valutate” e non entrano nelle medie.
+                {evalRows.length === 0
+                  ? "Nessuna voce: questa guida non ha ancora un pagellino."
+                  : "Il pagellino di questa guida sono le voci che aggiungi: le altre non esistono."}
               </p>
             </div>
           )}

@@ -52,19 +52,18 @@ ricompare nel foglio SOLO sulle guide che hanno un suo punteggio, marcata "(non 
   effettuata** (`checked_in`/`completed`/`no_show`).
 - Max 12 voci per autoscuola: oltre, il foglio non si compila più "in pochi secondi".
 
-### Voce "non valutabile" su una guida
+### Voce "non valutabile" (non si crea più)
 
 Non tutte le guide toccano tutti i punti (l'autostrada in una guida di sole manovre). Ogni riga
 si può marcare **non valutabile per QUELLA guida**, senza configurazione a priori — la strada
 "aggancia la voce a un tag/tipo guida" è stata esclusa.
 
-- **Web (dialog "Modifica guida")**: hover sulla riga → pillola ghost "Non valutabile" a sinistra
-  delle stelline (le stelline restano ancorate a destra: niente salto di layout). La riga esclusa
-  diventa grigia con chip + link "Ripristina". Il bottone è raggiungibile da tastiera (compare sul
-  focus), non solo in hover.
-- **Mobile**: un trattino `[—]` dedicato dentro la scala, prima delle stelline (variante scelta da
-  Tiziano contro swipe e long-press: le uniche discutibili sul fatto che a riposo non comunicano
-  nulla). Attivo = bordo e testo navy.
+- **Web: rimossa dalla compilazione (2026-09-11).** Col modello "aggiungi voce" il messaggio
+  "questa qui no" lo dà il non aggiungerla, e tenere sia la × sia la pillola rimetteva confusione
+  nella riga. Le righe **già salvate** con il flag restano: si leggono nel dialog come
+  "— non valutabile" e si possono solo rimuovere, così salvando non si cancellano di nascosto.
+- **Mobile**: ha ancora il trattino `[—]` dentro la scala e il modello a lista completa. Verrà
+  rifatto sul modello del web in un secondo giro: fino ad allora le due piattaforme divergono.
 - Sul filo: la riga **si salva comunque**, con `score: null` e `notApplicable: true`. Una riga
   assente sarebbe indistinguibile da una voce **aggiunta al pagellino dopo** quella guida.
 - "Ripristina" riporta il **voto di prima**, non il default: sul client lo stato delle esclusioni
@@ -84,25 +83,29 @@ con stelline cliccabili; i punteggi entrano nella stessa "Salva modifiche" degli
   viaggiano col bootstrap agenda, che ora seleziona `evaluations`.
 - Nessun vincolo di stato: si valuta anche una guida programmata o in corso.
 
-#### Opt-in: si valuta solo ciò che si è fatto
+#### Il pagellino si costruisce: "aggiungi voce da valutare"
 
-All'apertura **niente è precompilato**: le stelline partono vuote e la voce resta "non
-valutata" finché qualcuno non la tocca. Ricliccando la stellina già scelta la voce torna
-"non valutata" (prima non si poteva più azzerare).
+Il pagellino di una guida **non è l'elenco completo delle voci in attesa di stelline**: è
+l'elenco delle voci che l'istruttore ha **aggiunto** perché quella guida le ha toccate.
+
+- Guida senza pagellino → nessuna riga, solo il bottone tratteggiato **"+ Aggiungi voce da
+  valutare"**, che apre l'elenco delle voci configurate **già filtrato** su quelle non ancora
+  aggiunte (e sparisce quando sono tutte in elenco).
+- Ogni riga ha la **×** (in hover, raggiungibile da tastiera) per toglierla dal pagellino.
+- Contatore "3 voci": non c'è più un totale da raggiungere.
+- Le righe restano nell'**ordine del pagellino della scuola**, non in quello di aggiunta: due
+  guide dello stesso allievo si leggono affiancate senza sorprese.
+- Una voce aggiunta ma mai votata **non viene salvata** (niente righe fantasma); nella riga
+  compare un "da valutare" grigio finché non si tocca una stellina.
+- Ricliccando la stellina già scelta il voto si svuota; per togliere la voce c'è la ×.
 
 Il perché: la precompilazione a metà scala **fabbricava giudizi** — un 3/5 che nessuno aveva
-dato finiva nello storico e, da quando esiste la media per allievo, anche nelle medie. Con
-molte voci configurate il problema diventava anche di fatica (disattivarne dieci a mano).
+dato finiva nello storico e nelle medie — e con molte voci configurate costringeva a
+disattivarne una dopo l'altra. Le scorciatoie di massa ("valuta tutte a metà scala", "segna
+non valutabili le restanti") sono state tolte: rimettevano in circolo lo stesso problema.
 
-- L'intestazione della sezione conta le voci valutate ("3 di 10 valutate").
-- Il menu **"Tutte"** fa le azioni in blocco: *Valuta tutte a metà scala* (un clic e torna il
-  vecchio comportamento, per le scuole che vogliono il pagellino sempre pieno), *Segna non
-  valutabili le restanti*, *Azzera il pagellino*.
-- **Conseguenza accettata**: non vale più "una guida valutata ha sempre il pagellino
-  completo". In cambio, un voto presente è un voto che qualcuno ha davvero dato.
-- Niente soglia sul numero di voci: il comportamento è lo stesso con 3 e con 12, perché il
-  gesto dell'istruttore non deve cambiare in base a come la sua scuola ha configurato il
-  pagellino.
+**Conseguenza accettata**: non vale più "una guida valutata ha sempre il pagellino completo".
+In cambio, una voce presente è una voce che qualcuno ha davvero valutato.
 - Le voci **archiviate** che hanno un voto su quella guida restano in elenco (marcate "non più in
   uso"): il salvataggio sostituisce integralmente i punteggi, ometterle le cancellerebbe.
 - Se l'autoscuola non ha configurato il pagellino, la sezione non compare.
