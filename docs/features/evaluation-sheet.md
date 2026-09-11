@@ -62,8 +62,9 @@ si può marcare **non valutabile per QUELLA guida**, senza configurazione a prio
   "questa qui no" lo dà il non aggiungerla, e tenere sia la × sia la pillola rimetteva confusione
   nella riga. Le righe **già salvate** con il flag restano: si leggono nel dialog come
   "— non valutabile" e si possono solo rimuovere, così salvando non si cancellano di nascosto.
-- **Mobile**: ha ancora il trattino `[—]` dentro la scala e il modello a lista completa. Verrà
-  rifatto sul modello del web in un secondo giro: fino ad allora le due piattaforme divergono.
+- **Mobile: allineato** (2026-09-11). Stesso modello, tradotto nei gesti dell'app: bottone
+  "Aggiungi voce" che apre il picker nativo `OptionsPickerSheet` a **selezione multipla**, × sulla
+  riga, nessuna scorciatoia di massa. Vedi `reglo-mobile/docs/features/evaluation-sheet.md`.
 - Sul filo: la riga **si salva comunque**, con `score: null` e `notApplicable: true`. Una riga
   assente sarebbe indistinguibile da una voce **aggiunta al pagellino dopo** quella guida.
 - "Ripristina" riporta il **voto di prima**, non il default: sul client lo stato delle esclusioni
