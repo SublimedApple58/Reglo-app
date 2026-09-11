@@ -1834,7 +1834,9 @@ model AutoscuolaAppointmentEvaluation {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   appointmentId String   @db.Uuid
   itemId        String   @db.Uuid
-  /** null quando la voce è "non valutabile" su questa guida. */
+  /**
+   * null quando la voce è "non valutabile" su questa guida.
+   */
   score         Int?
   /**
    * La voce non si applica a QUESTA guida (es. autostrada in una guida di sole
