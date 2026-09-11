@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertCircle, CalendarDays, Check, CheckCircle2, Clock, Loader2, Route, Star, TrafficCone, UserCog, X } from "lucide-react";
+import { AlertCircle, CalendarDays, Check, CheckCircle2, CircleMinus, Clock, Loader2, Route, Star, TrafficCone, UserCog, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DatePickerInput } from "@/components/ui/date-picker";
@@ -69,8 +69,17 @@ export type EditAppointmentDialogAppointment = {
   types?: string[] | null;
   /** Valutazione 1-5 storica: non più compilabile, la sostituisce il pagellino. */
   rating?: number | null;
-  /** Pagellino della guida (REG-443): punteggi già dati. */
-  evaluations?: Array<{ itemId: string; label: string; scaleMax: number; score: number }>;
+  /**
+   * Pagellino della guida (REG-443): punteggi già dati. `score: null` +
+   * `notApplicable` = voce dichiarata non valutabile su questa guida.
+   */
+  evaluations?: Array<{
+    itemId: string;
+    label: string;
+    scaleMax: number;
+    score: number | null;
+    notApplicable?: boolean;
+  }>;
   notes?: string | null;
   student: StudentLite;
   instructor?: { id?: string | null; name: string } | null;
@@ -280,8 +289,20 @@ export function EditAppointmentDialog({
     Array<{ id: string; label: string; scaleMax: number; archived?: boolean }>
   >([]);
   const [evalScores, setEvalScores] = React.useState<Record<string, number>>({});
+  /**
+   * Voci escluse da QUESTA guida ("non valutabile"). Stato separato dai
+   * punteggi: così "Ripristina" riporta il voto di prima invece del default.
+   */
+  const [evalNa, setEvalNa] = React.useState<Record<string, boolean>>({});
+  /** Valore salvato per voce: numero, null se esclusa, assente se mai valutata. */
   const originalEvalScores = React.useMemo(
-    () => Object.fromEntries((appointment?.evaluations ?? []).map((e) => [e.itemId, e.score])),
+    () =>
+      Object.fromEntries(
+        (appointment?.evaluations ?? []).map((e) => [
+          e.itemId,
+          e.notApplicable ? null : e.score,
+        ]),
+      ) as Record<string, number | null>,
     [appointment?.evaluations],
   );
   const [esito, setEsito] = React.useState<Outcome>(currentOutcome);
@@ -335,7 +356,18 @@ export function EditAppointmentDialog({
     setInstructorId(appointment.instructor?.id ?? "");
     setLessonTypes(resolveInitialTypes(appointment.types, appointment.type));
     setEvalScores(
-      Object.fromEntries((appointment.evaluations ?? []).map((e) => [e.itemId, e.score])),
+      Object.fromEntries(
+        (appointment.evaluations ?? [])
+          .filter((e) => e.score != null)
+          .map((e) => [e.itemId, e.score as number]),
+      ),
+    );
+    setEvalNa(
+      Object.fromEntries(
+        (appointment.evaluations ?? [])
+          .filter((e) => e.notApplicable)
+          .map((e) => [e.itemId, true]),
+      ),
     );
     setEsito(outcomeFromStatus(appointment.status ?? ""));
     setVehicleId(appointment.vehicle?.id ?? "");
@@ -420,15 +452,17 @@ export function EditAppointmentDialog({
 
   const sortedTypesKey = (t: string[]) => [...t].sort().join(",");
   const typesChanged = sortedTypesKey(lessonTypes) !== sortedTypesKey(originalLessonTypes);
-  // Pagellino: cambiato se un voto differisce da quello salvato, o se la guida
-  // non era mai stata valutata (il salvataggio scrive tutte le voci).
+  // Pagellino: cambiato se un voto (o un'esclusione) differisce da quanto
+  // salvato, o se la guida non era mai stata valutata (il salvataggio scrive
+  // tutte le voci).
+  const evalValueOf = (item: { id: string; scaleMax: number }): number | null =>
+    evalNa[item.id] ? null : evalScores[item.id] ?? defaultEvaluationScore(item.scaleMax);
   const evalChanged =
     evalItems.length > 0 &&
-    evalItems.some(
-      (item) =>
-        (evalScores[item.id] ?? defaultEvaluationScore(item.scaleMax)) !==
-        originalEvalScores[item.id],
-    );
+    evalItems.some((item) => {
+      const saved = item.id in originalEvalScores ? originalEvalScores[item.id] : undefined;
+      return evalValueOf(item) !== saved;
+    });
   const esitoChanged = esito !== currentOutcome;
 
   // Esito modificabile: guide non annullate/non proposte e non troppo in
@@ -698,10 +732,14 @@ export function EditAppointmentDialog({
       }
       if (evalChanged) {
         // Il pagellino viaggia con gli altri dettagli: un solo salvataggio.
-        detailsPayload.evaluations = evalItems.map((item) => ({
-          itemId: item.id,
-          score: evalScores[item.id] ?? defaultEvaluationScore(item.scaleMax),
-        }));
+        detailsPayload.evaluations = evalItems.map((item) =>
+          evalNa[item.id]
+            ? { itemId: item.id, score: null, notApplicable: true }
+            : {
+                itemId: item.id,
+                score: evalScores[item.id] ?? defaultEvaluationScore(item.scaleMax),
+              },
+        );
         hasDetails = true;
       }
       if (vehicleId !== originalVehicleId) {
@@ -1155,39 +1193,82 @@ export function EditAppointmentDialog({
               <div className="rounded-[10px] border border-[#ececec] bg-white px-3">
                 {evalItems.map((item, i) => {
                   const value = evalScores[item.id] ?? defaultEvaluationScore(item.scaleMax);
+                  const notApplicable = evalNa[item.id] === true;
                   return (
                     <div
                       key={item.id}
                       className={cn(
-                        "flex items-center justify-between gap-3 py-2",
+                        "group flex items-center justify-between gap-3 py-2",
                         i > 0 && "border-t border-[#f4f4f6]",
                       )}
                     >
-                      <span className="text-[12.5px] font-medium text-foreground">
+                      <span
+                        className={cn(
+                          "text-[12.5px] font-medium",
+                          notApplicable ? "text-[#a3a3ad]" : "text-foreground",
+                        )}
+                      >
                         {item.label}
                         {item.archived ? " (non più in uso)" : ""}
                       </span>
-                      <StarRatingInput
-                        value={value}
-                        total={item.scaleMax}
-                        gold
-                        size="size-5"
-                        disabled={pending}
-                        onChange={(v) =>
-                          // Ritoccare la stessa stellina non azzera la voce: il
-                          // pagellino non ha lo stato "non valutato".
-                          setEvalScores((prev) => ({ ...prev, [item.id]: v ?? value }))
-                        }
-                      />
+                      {/* Voce non valutabile SU QUESTA GUIDA: il bottone compare
+                          in hover (resta raggiungibile da tastiera col focus) per
+                          non affollare la riga delle stelline. */}
+                      {notApplicable ? (
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#f2f2f4] px-2 py-0.5 text-[11.5px] font-semibold text-[#6e7596]">
+                            <CircleMinus className="size-3.5" aria-hidden />
+                            Non valutabile
+                          </span>
+                          <button
+                            type="button"
+                            disabled={pending}
+                            onClick={() =>
+                              setEvalNa((prev) => {
+                                const next = { ...prev };
+                                delete next[item.id];
+                                return next;
+                              })
+                            }
+                            className="cursor-pointer text-[11.5px] font-semibold text-[#6e7596] underline underline-offset-2 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Ripristina
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={pending}
+                            onClick={() => setEvalNa((prev) => ({ ...prev, [item.id]: true }))}
+                            className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-[#e4e4e9] bg-white px-2 py-0.5 text-[11.5px] font-semibold text-[#6a6a6a] opacity-0 transition-[opacity,color,border-color] hover:border-[#d4d4d9] hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed"
+                          >
+                            <CircleMinus className="size-3.5" aria-hidden />
+                            Non valutabile
+                          </button>
+                          <StarRatingInput
+                            value={value}
+                            total={item.scaleMax}
+                            gold
+                            size="size-5"
+                            disabled={pending}
+                            onChange={(v) =>
+                              // Ritoccare la stessa stellina non azzera la voce: il
+                              // pagellino non ha lo stato "non valutato".
+                              setEvalScores((prev) => ({ ...prev, [item.id]: v ?? value }))
+                            }
+                          />
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
-              {!(appointment?.evaluations ?? []).length && (
-                <p className="text-[11.5px] font-medium text-[#b0b0b0]">
-                  Precompilato a metà scala: salvando, la guida avrà il pagellino completo.
-                </p>
-              )}
+              <p className="text-[11.5px] font-medium text-[#b0b0b0]">
+                {!(appointment?.evaluations ?? []).length
+                  ? "Precompilato a metà scala: salvando, la guida avrà il pagellino completo. Le voci non valutabili restano fuori dalla media."
+                  : "Le voci non valutabili restano fuori dalla media di questa guida."}
+              </p>
             </div>
           )}
 

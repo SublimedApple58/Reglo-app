@@ -62,24 +62,66 @@ export const evaluationItemDisplayLabel = (item: {
 }): string => (item.archivedAt ? `${item.label} (non più in uso)` : item.label);
 
 /**
+ * Riga di pagellino come arriva dal DB o dal client. `score` è null quando la
+ * voce è "non valutabile" su quella guida; `notApplicable` resta assente sulle
+ * righe scritte prima della feature (e dalle app che non lo mandano).
+ */
+export type EvaluationRowLike = {
+  score: number | null;
+  scaleMax: number;
+  notApplicable?: boolean;
+};
+
+export type EvaluationSummary = {
+  /** Voci effettivamente valutate (le escluse non contano). */
+  count: number;
+  average: number | null;
+  scaleMax: number | null;
+  /** Voci marcate "non valutabile" su questa guida. */
+  skipped: number;
+};
+
+/**
  * Riepilogo del pagellino di una guida per lo storico: la media ha senso solo
  * se tutte le voci usano la stessa scala — con scale miste (3 e 5) sarebbe un
  * numero fuorviante, quindi si mostra solo il conteggio.
+ *
+ * Le voci "non valutabili" restano fuori dalla media e dal conteggio: se lo
+ * sono tutte il pagellino esiste ma non ha un voto (`count: 0`).
  */
 export const evaluationSummary = (
-  rows: ReadonlyArray<{ score: number; scaleMax: number }>,
-): { count: number; average: number | null; scaleMax: number | null } | null => {
+  rows: ReadonlyArray<EvaluationRowLike>,
+): EvaluationSummary | null => {
   if (!rows.length) return null;
-  const scales = new Set(rows.map((r) => r.scaleMax));
-  if (scales.size > 1) return { count: rows.length, average: null, scaleMax: null };
-  const average = rows.reduce((sum, r) => sum + r.score, 0) / rows.length;
-  return { count: rows.length, average, scaleMax: rows[0].scaleMax };
+  const scored = rows.filter(
+    (r): r is EvaluationRowLike & { score: number } => !r.notApplicable && r.score != null,
+  );
+  const skipped = rows.length - scored.length;
+  if (!scored.length) return { count: 0, average: null, scaleMax: null, skipped };
+  const scales = new Set(scored.map((r) => r.scaleMax));
+  if (scales.size > 1) return { count: scored.length, average: null, scaleMax: null, skipped };
+  const average = scored.reduce((sum, r) => sum + r.score, 0) / scored.length;
+  return { count: scored.length, average, scaleMax: scored[0].scaleMax, skipped };
 };
 
-/** "4,2/5" all'italiana; null quando le scale sono miste. */
+/** "4,2/5" all'italiana; null quando le scale sono miste o non c'è nessun voto. */
 export const formatEvaluationAverage = (
   summary: { average: number | null; scaleMax: number | null } | null,
 ): string | null =>
   summary && summary.average != null && summary.scaleMax != null
     ? `${summary.average.toFixed(1).replace(".", ",")}/${summary.scaleMax}`
     : null;
+
+/**
+ * Etichetta unica della chip "Pagellino" nello storico, così web e app dicono
+ * le stesse tre cose: media, conteggio (scale miste) o "non applicabile"
+ * (tutte le voci escluse su quella guida).
+ */
+export const evaluationSummaryLabel = (summary: EvaluationSummary | null): string | null => {
+  if (!summary) return null;
+  if (!summary.count) return "non applicabile";
+  return formatEvaluationAverage(summary) ?? `${summary.count} voci`;
+};
+
+/** Testo della singola voce esclusa, identico su web e app. */
+export const EVALUATION_NOT_APPLICABLE_LABEL = "non valutabile";

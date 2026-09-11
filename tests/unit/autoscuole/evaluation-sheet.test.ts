@@ -62,9 +62,8 @@ describe("pagellino — etichette storiche", () => {
 });
 
 describe("pagellino — riepilogo per lo storico", () => {
-  const { evaluationSummary, formatEvaluationAverage } = jest.requireActual(
-    "@/lib/autoscuole/evaluation-sheet",
-  );
+  const { evaluationSummary, formatEvaluationAverage, evaluationSummaryLabel } =
+    jest.requireActual("@/lib/autoscuole/evaluation-sheet");
 
   it("è null quando la guida non ha punteggi (guide precedenti alla feature)", () => {
     expect(evaluationSummary([])).toBeNull();
@@ -76,8 +75,9 @@ describe("pagellino — riepilogo per lo storico", () => {
       { score: 4, scaleMax: 5 },
       { score: 4, scaleMax: 5 },
     ]);
-    expect(summary).toEqual({ count: 3, average: 13 / 3, scaleMax: 5 });
+    expect(summary).toEqual({ count: 3, average: 13 / 3, scaleMax: 5, skipped: 0 });
     expect(formatEvaluationAverage(summary)).toBe("4,3/5");
+    expect(evaluationSummaryLabel(summary)).toBe("4,3/5");
   });
 
   it("con scale miste non inventa una media", () => {
@@ -85,7 +85,39 @@ describe("pagellino — riepilogo per lo storico", () => {
       { score: 5, scaleMax: 5 },
       { score: 1, scaleMax: 3 },
     ]);
-    expect(summary).toEqual({ count: 2, average: null, scaleMax: null });
+    expect(summary).toEqual({ count: 2, average: null, scaleMax: null, skipped: 0 });
     expect(formatEvaluationAverage(summary)).toBeNull();
+    expect(evaluationSummaryLabel(summary)).toBe("2 voci");
+  });
+
+  it("tiene le voci non valutabili fuori da media e conteggio", () => {
+    const summary = evaluationSummary([
+      { score: 5, scaleMax: 5 },
+      { score: 3, scaleMax: 5 },
+      { score: null, scaleMax: 5, notApplicable: true },
+    ]);
+    expect(summary).toEqual({ count: 2, average: 4, scaleMax: 5, skipped: 1 });
+    expect(evaluationSummaryLabel(summary)).toBe("4,0/5");
+  });
+
+  it("con tutte le voci escluse il pagellino esiste ma non ha voto", () => {
+    const summary = evaluationSummary([
+      { score: null, scaleMax: 5, notApplicable: true },
+      { score: null, scaleMax: 3, notApplicable: true },
+    ]);
+    expect(summary).toEqual({ count: 0, average: null, scaleMax: null, skipped: 2 });
+    expect(evaluationSummaryLabel(summary)).toBe("non applicabile");
+  });
+
+  it("ignora un punteggio nullo anche senza flag (payload vecchi o sporchi)", () => {
+    const summary = evaluationSummary([
+      { score: null, scaleMax: 5 },
+      { score: 2, scaleMax: 5 },
+    ]);
+    expect(summary).toEqual({ count: 1, average: 2, scaleMax: 5, skipped: 1 });
+  });
+
+  it("senza righe non c'è pagellino, quindi nessuna etichetta", () => {
+    expect(evaluationSummaryLabel(evaluationSummary([]))).toBeNull();
   });
 });

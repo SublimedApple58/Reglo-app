@@ -174,7 +174,8 @@ export async function getAppointmentEvaluation(appointmentId: string): Promise<
       data: {
         enabled: boolean;
         items: Array<EvaluationItemDTO & { archived: boolean }>;
-        scores: Array<{ itemId: string; score: number }>;
+        /** score null = voce marcata "non valutabile" su questa guida. */
+        scores: Array<{ itemId: string; score: number | null; notApplicable: boolean }>;
       };
     }
   | { success: false; message: string }
@@ -197,6 +198,7 @@ export async function getAppointmentEvaluation(appointmentId: string): Promise<
         select: {
           itemId: true,
           score: true,
+          notApplicable: true,
           item: { select: { id: true, label: true, scaleMax: true, position: true, archivedAt: true } },
         },
       }),
@@ -218,7 +220,11 @@ export async function getAppointmentEvaluation(appointmentId: string): Promise<
       data: {
         enabled,
         items: [...active.map((i) => ({ ...i, archived: false })), ...archivedWithScore],
-        scores: saved.map((s) => ({ itemId: s.itemId, score: s.score })),
+        scores: saved.map((s) => ({
+          itemId: s.itemId,
+          score: s.score,
+          notApplicable: s.notApplicable,
+        })),
       },
     };
   } catch (error) {

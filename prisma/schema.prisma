@@ -1834,7 +1834,14 @@ model AutoscuolaAppointmentEvaluation {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   appointmentId String   @db.Uuid
   itemId        String   @db.Uuid
-  score         Int
+  /** null quando la voce è "non valutabile" su questa guida. */
+  score         Int?
+  /**
+   * La voce non si applica a QUESTA guida (es. autostrada in una guida di sole
+   * manovre). Riga presente col flag invece che assente: una riga mancante è
+   * indistinguibile da una voce aggiunta al pagellino dopo la guida.
+   */
+  notApplicable Boolean  @default(false)
   createdAt     DateTime @default(now()) @db.Timestamp(6)
   updatedAt     DateTime @updatedAt
 

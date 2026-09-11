@@ -15,7 +15,7 @@ esistente. Il backend continua ad accettare `rating` nella PATCH: nessun contrat
 | Modello | Ruolo |
 |---|---|
 | `AutoscuolaEvaluationItem` | voce del pagellino di UNA autoscuola: `label`, `scaleMax` (3 o 5), `position` (ordine nell'app), `archivedAt` |
-| `AutoscuolaAppointmentEvaluation` | punteggio di UNA voce su UNA guida, unique `(appointmentId, itemId)` |
+| `AutoscuolaAppointmentEvaluation` | punteggio di UNA voce su UNA guida, unique `(appointmentId, itemId)`. `score` è **nullable**: null + `notApplicable: true` = voce non valutabile su quella guida |
 
 `CompanyService.limits.evaluationSheetEnabled` (servizio AUTOSCUOLE) è l'interruttore
 "Pagellino attivo". Sta dietro la cache Redis SETTINGS → `saveEvaluationSheet` la invalida.
@@ -28,7 +28,7 @@ ricompare nel foglio SOLO sulle guide che hanno un suo punteggio, marcata "(non 
 
 | Cosa | Dove |
 |---|---|
-| Regole pure (scale, punteggio di partenza, clamp) | `lib/autoscuole/evaluation-sheet.ts` |
+| Regole pure (scale, punteggio di partenza, clamp, riepilogo/etichette) | `lib/autoscuole/evaluation-sheet.ts` |
 | Actions (lettura/salvataggio voci + interruttore, pagellino di una guida) | `lib/actions/autoscuole-evaluation.actions.ts` |
 | Pane Impostazioni → Pagellino | `components/pages/Autoscuole/EvaluationSheetPane.tsx` (registrato in `AutoscuoleResourcesPage.tsx`) |
 | API per l'app istruttore | `app/api/autoscuole/appointments/[id]/evaluation/route.ts` (GET) |
@@ -51,6 +51,28 @@ ricompare nel foglio SOLO sulle guide che hanno un suo punteggio, marcata "(non 
   effettuata** (`checked_in`/`completed`/`no_show`).
 - Max 12 voci per autoscuola: oltre, il foglio non si compila più "in pochi secondi".
 
+### Voce "non valutabile" su una guida
+
+Non tutte le guide toccano tutti i punti (l'autostrada in una guida di sole manovre). Ogni riga
+si può marcare **non valutabile per QUELLA guida**, senza configurazione a priori — la strada
+"aggancia la voce a un tag/tipo guida" è stata esclusa.
+
+- **Web (dialog "Modifica guida")**: hover sulla riga → pillola ghost "Non valutabile" a sinistra
+  delle stelline (le stelline restano ancorate a destra: niente salto di layout). La riga esclusa
+  diventa grigia con chip + link "Ripristina". Il bottone è raggiungibile da tastiera (compare sul
+  focus), non solo in hover.
+- **Mobile**: un trattino `[—]` dedicato dentro la scala, prima delle stelline (variante scelta da
+  Tiziano contro swipe e long-press: le uniche discutibili sul fatto che a riposo non comunicano
+  nulla). Attivo = bordo e testo navy.
+- Sul filo: la riga **si salva comunque**, con `score: null` e `notApplicable: true`. Una riga
+  assente sarebbe indistinguibile da una voce **aggiunta al pagellino dopo** quella guida.
+- "Ripristina" riporta il **voto di prima**, non il default: sul client lo stato delle esclusioni
+  è separato da quello dei punteggi.
+- Si possono escludere **tutte** le voci: il pagellino esiste, non ha media, e lo storico mostra
+  "Pagellino non applicabile".
+- Le voci escluse restano **fuori da media e conteggio** (`evaluationSummary` le filtra e le conta
+  a parte in `skipped`).
+
 ## Compilazione dal web (agenda)
 
 Il pagellino si compila anche dal web, nel dialog **"Modifica guida"** dell'agenda (blocco della
@@ -72,7 +94,10 @@ I punteggi si consultano dallo **storico guide lato scuola**, senza aprire nulla
   chip `★ Pagellino 4,2/5` espande l'elenco completo delle voci in sola lettura
   (`EvaluationRecap` in `AutoscuoleStudentsPage.tsx`). La media si calcola **solo** se tutte le
   voci hanno la stessa scala; con scale miste la chip mostra il numero di voci
-  (`evaluationSummary`).
+  (`evaluationSummary`). Le voci escluse si vedono lo stesso, come **"— non valutabile"**: serve a
+  distinguere "non si applicava" da "dimenticata".
+  Le tre etichette della chip (media, conteggio, `non applicabile`) vengono tutte da
+  `evaluationSummaryLabel`, gemello di quello mobile: non scriverle a mano nei componenti.
 - **Mobile** — storico guide dell'allievo: la riga porta la stessa chip; toccando la guida si apre
   il foglio "Dettagli guida" con tutte le voci (in sola lettura se non più modificabile).
 

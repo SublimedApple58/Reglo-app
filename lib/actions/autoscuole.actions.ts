@@ -188,9 +188,19 @@ const updateAppointmentDetailsSchema = z.object({
    * Pagellino di valutazione (REG-443): un punteggio per voce, salvato nella
    * stessa richiesta dei dettagli guida così l'istruttore fa un solo "Salva".
    * Array vuoto = azzera i punteggi di questa guida.
+   *
+   * `notApplicable: true` = voce non valutabile SU QUESTA GUIDA: la riga si
+   * salva comunque (senza punteggio) così lo storico distingue "escluso
+   * apposta" da "voce aggiunta al pagellino dopo la guida".
    */
   evaluations: z
-    .array(z.object({ itemId: z.string().uuid(), score: z.number().int().min(1).max(10) }))
+    .array(
+      z.object({
+        itemId: z.string().uuid(),
+        score: z.number().int().min(1).max(10).nullable().optional(),
+        notApplicable: z.boolean().optional(),
+      }),
+    )
     .optional(),
   notes: z.string().nullable().optional(),
   locationId: z.string().uuid().nullable().optional(),
@@ -1056,6 +1066,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           evaluations: {
             select: {
               score: true,
+              notApplicable: true,
               item: { select: { id: true, label: true, scaleMax: true, position: true } },
             },
             orderBy: { item: { position: "asc" } },
@@ -1230,6 +1241,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           label: e.item.label,
           scaleMax: e.item.scaleMax,
           score: e.score,
+          notApplicable: e.notApplicable,
         })),
         case: null,
         // Unique id per empty-exam placeholder (mirrors the gl-empty convention)
@@ -2006,6 +2018,7 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
           evaluations: {
             select: {
               score: true,
+              notApplicable: true,
               item: { select: { id: true, label: true, scaleMax: true, position: true } },
             },
             orderBy: { item: { position: "asc" } },
@@ -2113,6 +2126,7 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
               label: e.item.label,
               scaleMax: e.item.scaleMax,
               score: e.score,
+              notApplicable: e.notApplicable,
             })),
           };
         }),
@@ -2620,6 +2634,7 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
         evaluations: {
           select: {
             score: true,
+            notApplicable: true,
             item: { select: { id: true, label: true, scaleMax: true, position: true } },
           },
           orderBy: { item: { position: "asc" } },
@@ -2648,6 +2663,7 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
             label: e.item.label,
             scaleMax: e.item.scaleMax,
             score: e.score,
+            notApplicable: e.notApplicable,
           })),
         };
       }),
@@ -5452,7 +5468,11 @@ export async function updateAutoscuolaAppointmentDetails(
     // Pagellino (REG-443): validato qui perché anche da solo è una modifica
     // salvabile (l'istruttore può toccare solo le stelline).
     const evaluationsProvided = payload.evaluations !== undefined;
-    let evaluationRows: Array<{ itemId: string; score: number }> = [];
+    let evaluationRows: Array<{
+      itemId: string;
+      score: number | null;
+      notApplicable: boolean;
+    }> = [];
     if (evaluationsProvided && payload.evaluations!.length) {
       const items = await prisma.autoscuolaEvaluationItem.findMany({
         where: {
@@ -5464,10 +5484,20 @@ export async function updateAutoscuolaAppointmentDetails(
       const byId = new Map(items.map((i) => [i.id, i.scaleMax]));
       // Le voci di un'altra autoscuola (o sparite nel frattempo) vengono
       // ignorate invece di far fallire il salvataggio dell'istruttore.
-      evaluationRows = payload.evaluations!.filter((e) => byId.has(e.itemId)).map((e) => ({
-        itemId: e.itemId,
-        score: clampEvaluationScore(e.score, byId.get(e.itemId)!),
-      }));
+      evaluationRows = payload
+        .evaluations!.filter((e) => byId.has(e.itemId))
+        // Una voce senza punteggio e senza flag non è una valutazione: la
+        // scarto invece di inventarle un voto.
+        .filter((e) => e.notApplicable === true || e.score != null)
+        .map((e) =>
+          e.notApplicable
+            ? { itemId: e.itemId, score: null, notApplicable: true }
+            : {
+                itemId: e.itemId,
+                score: clampEvaluationScore(e.score!, byId.get(e.itemId)!),
+                notApplicable: false,
+              },
+        );
     }
 
     if (!Object.keys(updateData).length && !vehiclesNeedSync && !evaluationsProvided) {
@@ -5653,8 +5683,13 @@ export async function updateAutoscuolaAppointmentDetails(
             where: {
               appointmentId_itemId: { appointmentId: appointment.id, itemId: row.itemId },
             },
-            update: { score: row.score },
-            create: { appointmentId: appointment.id, itemId: row.itemId, score: row.score },
+            update: { score: row.score, notApplicable: row.notApplicable },
+            create: {
+              appointmentId: appointment.id,
+              itemId: row.itemId,
+              score: row.score,
+              notApplicable: row.notApplicable,
+            },
           });
         }
       }

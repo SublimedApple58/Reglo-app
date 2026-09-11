@@ -12,7 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   evaluationSummary,
-  formatEvaluationAverage,
+  evaluationSummaryLabel,
 } from "@/lib/autoscuole/evaluation-sheet";
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { PageHeader } from "@/components/ui/page-header";
@@ -155,14 +155,20 @@ function EvaluationRecap({
   onToggle,
 }: {
   lessonId: string;
-  rows?: Array<{ itemId: string; label: string; scaleMax: number; score: number }>;
+  rows?: Array<{
+    itemId: string;
+    label: string;
+    scaleMax: number;
+    score: number | null;
+    notApplicable?: boolean;
+  }>;
   open: boolean;
   onToggle: (lessonId: string) => void;
 }) {
   const list = rows ?? [];
   const summary = evaluationSummary(list);
   if (!summary) return null;
-  const average = formatEvaluationAverage(summary);
+  const label = evaluationSummaryLabel(summary);
   return (
     <div className="mb-2">
       <button
@@ -173,7 +179,7 @@ function EvaluationRecap({
       >
         <span className="text-yellow-400">★</span>
         Pagellino
-        <span className="font-medium text-[#929292]">{average ?? `${summary.count} voci`}</span>
+        <span className="font-medium text-[#929292]">{label}</span>
         <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} strokeWidth={2.2} />
       </button>
       {open && (
@@ -186,14 +192,29 @@ function EvaluationRecap({
                 i > 0 && "border-t border-[#f4f4f6]",
               )}
             >
-              <span className="text-[12.5px] font-medium text-foreground">{row.label}</span>
-              <span className="flex shrink-0 items-center gap-0.5 text-[11px]">
-                {Array.from({ length: row.scaleMax }, (_, j) => (
-                  <span key={j} className={j < row.score ? "text-yellow-400" : "text-gray-200"}>
-                    ★
-                  </span>
-                ))}
+              <span
+                className={cn(
+                  "text-[12.5px] font-medium",
+                  row.notApplicable ? "text-[#a3a3ad]" : "text-foreground",
+                )}
+              >
+                {row.label}
               </span>
+              {/* Voce esclusa da questa guida: si mostra lo stesso, così si
+                  distingue "non si applicava" da "dimenticata". */}
+              {row.notApplicable || row.score == null ? (
+                <span className="shrink-0 text-[11.5px] font-medium text-[#a3a3ad]">
+                  — non valutabile
+                </span>
+              ) : (
+                <span className="flex shrink-0 items-center gap-0.5 text-[11px]">
+                  {Array.from({ length: row.scaleMax }, (_, j) => (
+                    <span key={j} className={j < row.score! ? "text-yellow-400" : "text-gray-200"}>
+                      ★
+                    </span>
+                  ))}
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -229,7 +250,13 @@ type LessonEntry = {
    * Pagellino della guida (REG-443): una riga per voce valutata. Vuoto sulle
    * guide precedenti alla feature — lì resta la sola stellina complessiva.
    */
-  evaluations?: Array<{ itemId: string; label: string; scaleMax: number; score: number }>;
+  evaluations?: Array<{
+    itemId: string;
+    label: string;
+    scaleMax: number;
+    score: number | null;
+    notApplicable?: boolean;
+  }>;
 };
 
 /** Filtri client-side del tab Guide del drawer allievo. */
