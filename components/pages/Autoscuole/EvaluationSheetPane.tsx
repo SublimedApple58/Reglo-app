@@ -14,7 +14,6 @@ import {
   EVALUATION_SCALES,
   MAX_EVALUATION_ITEMS,
   MAX_EVALUATION_LABEL_LENGTH,
-  defaultEvaluationScore,
   type EvaluationScale,
 } from "@/lib/autoscuole/evaluation-sheet";
 import {
@@ -309,8 +308,8 @@ export function EvaluationSheetPane() {
               Pagellino attivo
             </div>
             <div className="mt-1 max-w-[540px] text-[12.5px] font-medium leading-[1.5] text-[#929292]">
-              Quando è spento gli istruttori vedono solo la valutazione complessiva a stelle,
-              come prima. Le valutazioni già salvate restano.
+              Quando è spento gli istruttori non valutano più le guide: la sezione sparisce
+              dal foglio &quot;Dettagli guida&quot;. Le valutazioni già salvate restano leggibili.
             </div>
           </div>
           <InlineToggle
@@ -387,16 +386,15 @@ export function EvaluationSheetPane() {
                 )}
               >
                 <span className="text-[12.5px] font-semibold text-foreground">{item.label}</span>
-                <StarRow
-                  total={item.scaleMax}
-                  filled={defaultEvaluationScore(item.scaleMax)}
-                  size={18}
-                />
+                {/* Stelline VUOTE: l'istruttore parte da zero e tocca solo ciò
+                    che vuole davvero valutare (niente più precompilazione). */}
+                <StarRow total={item.scaleMax} filled={0} size={18} />
               </div>
             ))}
           </div>
           <div className="mt-2.5 text-[12px] font-medium text-[#b0b0b0]">
-            Le stelline partono da metà scala: l&apos;istruttore tocca solo ciò che corregge.
+            L&apos;istruttore aggiunge le voci che quella guida ha toccato: le altre non
+            finiscono nel pagellino.
           </div>
         </div>
       )}

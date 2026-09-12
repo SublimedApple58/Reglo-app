@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
-import { isOwner } from "@/lib/autoscuole/roles";
+import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
@@ -48,8 +48,14 @@ export type EvaluationSheetDTO = {
   items: EvaluationItemDTO[];
 };
 
+/**
+ * Chi può cambiare le voci del pagellino: titolari **e istruttori**. Sono gli
+ * istruttori a compilarlo tutti i giorni, quindi sono loro a sapere quali voci
+ * servono davvero (decisione di prodotto, 2026-09-12). Restano fuori solo
+ * segretarie e allievi.
+ */
 const canManageSettings = (role: string, autoscuolaRole: string | null) =>
-  role === "admin" || isOwner(autoscuolaRole);
+  role === "admin" || isOwner(autoscuolaRole) || isInstructor(autoscuolaRole);
 
 /** Voci ATTIVE di una company, in ordine. Usata anche dalla route mobile. */
 export async function listCompanyEvaluationItems(
