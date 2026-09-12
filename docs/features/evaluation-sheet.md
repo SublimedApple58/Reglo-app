@@ -32,6 +32,7 @@ ricompare nel foglio SOLO sulle guide che hanno un suo punteggio, marcata "(non 
 | Actions (lettura/salvataggio voci + interruttore, pagellino di una guida) | `lib/actions/autoscuole-evaluation.actions.ts` |
 | Pane Impostazioni → Pagellino | `components/pages/Autoscuole/EvaluationSheetPane.tsx` (registrato in `AutoscuoleResourcesPage.tsx`) |
 | API per l'app istruttore | `app/api/autoscuole/appointments/[id]/evaluation/route.ts` (GET) |
+| API di configurazione per l'app | `app/api/autoscuole/evaluation-sheet/route.ts` (GET + PUT) |
 | Salvataggio punteggi | `updateAutoscuolaAppointmentDetails` in `lib/actions/autoscuole.actions.ts` (campo `evaluations`) + `app/api/autoscuole/appointments/[id]/route.ts` (PATCH) |
 | Test | `tests/unit/autoscuole/evaluation-sheet.test.ts` |
 
@@ -51,6 +52,15 @@ ricompare nel foglio SOLO sulle guide che hanno un suo punteggio, marcata "(non 
 - Vale il vincolo già esistente sulla valutazione: si valuta solo una guida **già
   effettuata** (`checked_in`/`completed`/`no_show`).
 - Max 12 voci per autoscuola: oltre, il foglio non si compila più "in pochi secondi".
+- **Chi configura: titolari e istruttori** (`canManageSettings` in `autoscuole-evaluation.actions.ts`
+  = `admin || isOwner || isInstructor`). Aperto agli istruttori il 2026-09-12: sono loro a
+  compilare il pagellino tutti i giorni, quindi sono loro a sapere quali voci servono. Restano
+  fuori segretarie e allievi. `getEvaluationSheet` invece non ha guardia: la lettura è per
+  chiunque abbia accesso al servizio.
+- La configurazione si fa **anche dall'app** (Altro → Pagellino) dalla stessa data, tramite
+  `GET`/`PUT /api/autoscuole/evaluation-sheet` — due proxy secchi sulle action di questo file,
+  nessuna logica duplicata. Il disegno e i gesti stanno in
+  `reglo-mobile/docs/features/evaluation-sheet.md`.
 
 ### Voce "non valutabile" (non si crea più)
 
