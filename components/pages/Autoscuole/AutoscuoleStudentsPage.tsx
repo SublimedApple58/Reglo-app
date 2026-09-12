@@ -1036,8 +1036,12 @@ export function AutoscuoleStudentsPage({
     let alive = true;
     (async () => {
       const res = await getEvaluationSheet();
-      // Pagellino spento o non configurato: la media semplicemente non compare.
-      if (alive && res.success && res.data.enabled) setEvalSheetItems(res.data.items);
+      // Le voci servono a ORDINARE la media e a distinguere quelle davvero
+      // archiviate: si leggono anche a pagellino spento. Filtrandole su
+      // `enabled` ogni voce risultava sconosciuta e la card le marcava tutte
+      // "(non più in uso)" pur essendo vive. Senza voci configurate la card
+      // non compare comunque, perché la media nasce dai voti delle guide.
+      if (alive && res.success) setEvalSheetItems(res.data.items);
     })();
     return () => {
       alive = false;

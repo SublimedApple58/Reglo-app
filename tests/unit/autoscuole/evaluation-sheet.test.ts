@@ -201,6 +201,18 @@ describe("pagellino — media per voce sull'allievo", () => {
     expect(agg.items[2].archived).toBe(true);
   });
 
+  it("senza l'elenco delle voci marca tutto come archiviato: per questo il chiamante deve passarlo anche a pagellino spento", () => {
+    // Regressione: la scheda allievo caricava le voci solo se il pagellino era
+    // ACCESO, e a interruttore spento ogni riga della card medie usciva
+    // "(non più in uso)" pur essendo una voce viva.
+    const lessons = [{ evaluations: [row("a", "Sicurezza", 4), row("c", "Autostrada", 5)] }];
+    const senza = aggregateStudentEvaluations(lessons, []);
+    expect(senza!.items.every((i: { archived: boolean }) => i.archived)).toBe(true);
+
+    const con = aggregateStudentEvaluations(lessons, SHEET);
+    expect(con!.items.every((i: { archived: boolean }) => i.archived)).toBe(false);
+  });
+
   it("con scale miste non dà una media generale, ma quelle per voce sì", () => {
     const agg = aggregateStudentEvaluations(
       [

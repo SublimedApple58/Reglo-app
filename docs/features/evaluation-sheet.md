@@ -62,6 +62,26 @@ ricompare nel foglio SOLO sulle guide che hanno un suo punteggio, marcata "(non 
   nessuna logica duplicata. Il disegno e i gesti stanno in
   `reglo-mobile/docs/features/evaluation-sheet.md`.
 
+### Cosa succede a interruttore SPENTO
+
+`limits.evaluationSheetEnabled = false` vuol dire **"da adesso non se ne danno di nuovi"**, non
+"sparisce quello che c'è". Il flag è letto in due soli punti (`getEvaluationSheet`,
+`getAppointmentEvaluation`) e serve solo a **riferire** lo stato: non blocca nessuna scrittura,
+il filtro è tutto lato client.
+
+- Le **voci configurate restano**: spegnere non archivia niente (`saveEvaluationSheet` archivia
+  solo le voci assenti dall'array che riceve). Riaccendendo torna tutto con gli stessi id.
+- I **voti già dati restano**: nessun percorso li cancella. Aprire e salvare una guida a
+  pagellino spento non li tocca, perché il payload `evaluations` parte solo se il pagellino è
+  cambiato (`evalChanged` sul web, confronto con `savedEvalKey` sull'app).
+- **In compilazione** non si aggiungono voci nuove, ma le righe **già votate su quella guida
+  restano visibili e rimovibili** — su web (dialog "Modifica guida") **e su app** (dal
+  2026-09-12: prima l'app nascondeva tutto, anche i voti già dati).
+- **Storico e medie non si spengono**: sono calcolati dai punteggi che viaggiano nei payload
+  delle guide, non dalla configurazione. La card "media su tutte le guide" continua a comparire.
+  Dal 2026-09-12 le voci si caricano **anche a pagellino spento**: prima `evalSheetItems` restava
+  vuoto e la card marcava "(non più in uso)" ogni riga, comprese quelle vive.
+
 ### Voce "non valutabile" (non si crea più)
 
 Non tutte le guide toccano tutti i punti (l'autostrada in una guida di sole manovre). Ogni riga
