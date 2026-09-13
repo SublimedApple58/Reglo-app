@@ -1,6 +1,15 @@
 import { z } from "zod";
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
+import { buildAvailabilityResolver } from "@/lib/actions/autoscuole-availability.actions";
+import {
+  clampIntervals,
+  instructorSaturation,
+  romeWallClockToInstant,
+  romeYmd,
+  withRatio,
+  type Interval,
+} from "@/lib/backoffice/agenda-saturation";
 import {
   SOURCE_BUCKETS,
   bucketKeyFor,
@@ -116,6 +125,14 @@ export type BackofficeKpis = {
     appShare: KpiDelta;
     activeInstructors: KpiDelta;
   };
+  /** Saturazione dell'agenda istruttori nel periodo (ore occupate / dichiarate). */
+  saturation: {
+    availableHours: number;
+    busyHours: number;
+    outsideHours: number;
+    ratio: KpiDelta;
+    instructorsWithAvailability: number;
+  };
   activity: {
     booked: KpiDelta;
     cancelled: number;
@@ -189,6 +206,9 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
       prevStartedRows,
       prevCreatedRows,
       newStudents,
+      agendaInstructors,
+      instructorBlocks,
+      holidays,
       licensePurchases,
       groupLessons,
       evaluations,
@@ -225,6 +245,7 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
         select: {
           companyId: true,
           startsAt: true,
+          endsAt: true,
           status: true,
           type: true,
           studentId: true,
@@ -238,7 +259,7 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
       }),
       prisma.autoscuolaAppointment.findMany({
         where: { startsAt: inPrev },
-        select: { status: true, instructorId: true },
+        select: { status: true, instructorId: true, startsAt: true, endsAt: true },
       }),
       prisma.autoscuolaAppointment.findMany({
         where: { createdAt: inPrev },
@@ -246,6 +267,28 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
       }),
       prisma.companyMember.count({
         where: { autoscuolaRole: "STUDENT", createdAt: inRange },
+      }),
+      // Saturazione: istruttori che possono comparire in agenda (stesso filtro
+      // di getInstructorAvailabilityForAgenda), blocchi e festivi del periodo.
+      prisma.autoscuolaInstructor.findMany({
+        where: {
+          status: { not: "inactive" },
+          userId: { not: null },
+          user: {
+            companyMembers: {
+              some: { autoscuolaRole: { in: ["INSTRUCTOR", "INSTRUCTOR_OWNER"] } },
+            },
+          },
+        },
+        select: { id: true, companyId: true },
+      }),
+      prisma.autoscuolaInstructorBlock.findMany({
+        where: { startsAt: { lt: toExclusive }, endsAt: { gt: prevFrom } },
+        select: { instructorId: true, startsAt: true, endsAt: true },
+      }),
+      prisma.autoscuolaHoliday.findMany({
+        where: { date: { gte: prevFrom, lte: toExclusive } },
+        select: { companyId: true, date: true },
       }),
       prisma.companyLicensePurchase.findMany({
         where: { purchasedAt: inRange },
@@ -531,6 +574,142 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
       });
     }
 
+    // ── Saturazione dell'agenda ───────────────────────────────────────────
+    // Quante ore gli istruttori DICHIARANO disponibili in agenda e quante di
+    // quelle ore sono davvero occupate da guide. Le fasce arrivano dallo stesso
+    // risolutore dell'agenda (settimanale + eccezioni giornaliere), quindi il
+    // numero è quello che il titolare vede a schermo. Dalle ore disponibili si
+    // tolgono blocchi (malattia, ferie, teoria) e festivi dell'autoscuola: un
+    // istruttore in ferie non è disponibile. Le guide fuori fascia restano
+    // fuori dal rapporto ma vengono contate a parte.
+    const instructorsByCompany = new Map<string, string[]>();
+    for (const instructor of agendaInstructors) {
+      const list = instructorsByCompany.get(instructor.companyId) ?? [];
+      list.push(instructor.id);
+      instructorsByCompany.set(instructor.companyId, list);
+    }
+    const blocksByInstructor = new Map<string, Interval[]>();
+    for (const block of instructorBlocks) {
+      const list = blocksByInstructor.get(block.instructorId) ?? [];
+      list.push({ start: block.startsAt.getTime(), end: block.endsAt.getTime() });
+      blocksByInstructor.set(block.instructorId, list);
+    }
+    const holidaysByCompany = new Map<string, Set<string>>();
+    for (const holiday of holidays) {
+      const set = holidaysByCompany.get(holiday.companyId) ?? new Set<string>();
+      // `date` è una colonna DATE: la si legge in UTC per non slittare di un giorno.
+      set.add(holiday.date.toISOString().slice(0, 10));
+      holidaysByCompany.set(holiday.companyId, set);
+    }
+
+    /** Durata di una guida: 60 minuti quando manca `endsAt` (righe vecchie). */
+    const lessonInterval = (row: { startsAt: Date; endsAt: Date | null }): Interval => {
+      const start = row.startsAt.getTime();
+      const end = row.endsAt ? row.endsAt.getTime() : start + 60 * 60_000;
+      return { start, end: end > start ? end : start + 60 * 60_000 };
+    };
+
+    const availabilityResolvers = new Map(
+      await Promise.all(
+        Array.from(instructorsByCompany, async ([companyId, ids]) => {
+          const resolver = await buildAvailabilityResolver(
+            companyId,
+            "instructor",
+            ids,
+            prevFrom,
+            toExclusive,
+          );
+          return [companyId, resolver] as const;
+        }),
+      ),
+    );
+
+    const saturationFor = (
+      windowStart: Date,
+      windowEnd: Date,
+      lessonRows: Array<{
+        instructorId: string | null;
+        status: string;
+        startsAt: Date;
+        endsAt: Date | null;
+      }>,
+    ) => {
+      const window: Interval = { start: windowStart.getTime(), end: windowEnd.getTime() };
+      const lessonsByInstructor = new Map<string, Interval[]>();
+      for (const row of lessonRows) {
+        if (!row.instructorId || isCancelledStatus(row.status)) continue;
+        const list = lessonsByInstructor.get(row.instructorId) ?? [];
+        list.push(lessonInterval(row));
+        lessonsByInstructor.set(row.instructorId, list);
+      }
+
+      // Un giorno alla volta, sul calendario ITALIANO: le fasce sono orari da
+      // orologio, non istanti (il server gira a UTC).
+      const days: Date[] = [];
+      for (
+        let cursor = windowStart.getTime();
+        cursor < windowEnd.getTime();
+        cursor += dayMs
+      ) {
+        days.push(new Date(cursor + dayMs / 2)); // mezzogiorno: immune all'ora legale
+      }
+
+      let available = 0;
+      let busy = 0;
+      let outside = 0;
+      let withAvailability = 0;
+
+      const perCompany = Array.from(instructorsByCompany, ([companyId, ids]) => {
+          const resolver = availabilityResolvers.get(companyId)!;
+          const closedDays = holidaysByCompany.get(companyId) ?? new Set<string>();
+          return ids.map((instructorId) => {
+            const slots: Interval[] = [];
+            for (const day of days) {
+              const { year, month, day: dayOfMonth } = romeYmd(day);
+              const ymd = `${year}-${String(month).padStart(2, "0")}-${String(dayOfMonth).padStart(2, "0")}`;
+              if (closedDays.has(ymd)) continue;
+              const record = resolver.resolve(instructorId, day);
+              if (!record) continue;
+              const dow = new Date(
+                romeWallClockToInstant(year, month, dayOfMonth, 12 * 60),
+              ).getUTCDay();
+              if (!record.daysOfWeek.includes(dow)) continue;
+              for (const range of record.ranges) {
+                slots.push({
+                  start: romeWallClockToInstant(year, month, dayOfMonth, range.startMinutes),
+                  end: romeWallClockToInstant(year, month, dayOfMonth, range.endMinutes),
+                });
+              }
+            }
+            const totals = instructorSaturation(
+              clampIntervals(slots, window),
+              clampIntervals(blocksByInstructor.get(instructorId) ?? [], window),
+              clampIntervals(lessonsByInstructor.get(instructorId) ?? [], window),
+            );
+            return totals;
+          });
+      });
+
+      for (const totals of perCompany.flat()) {
+        available += totals.availableHours;
+        busy += totals.busyHours;
+        outside += totals.outsideHours;
+        if (totals.availableHours > 0) withAvailability += 1;
+      }
+
+      return {
+        ...withRatio({
+          availableHours: available,
+          busyHours: busy,
+          outsideHours: outside,
+        }),
+        withAvailability,
+      };
+    };
+
+    const saturationNow = saturationFor(from, toExclusive, startedRows);
+    const saturationPrev = saturationFor(prevFrom, prevTo, prevStartedRows);
+
     const seatsSold = plans.reduce((n, p) => n + p.instructorSeats, 0);
 
     return {
@@ -558,6 +737,13 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
             prevBooked > 0 ? prevApp / prevBooked : 0,
           ),
           activeInstructors: delta(activeInstructorIds.size, prevInstructorIds.size),
+        },
+        saturation: {
+          availableHours: saturationNow.availableHours,
+          busyHours: saturationNow.busyHours,
+          outsideHours: saturationNow.outsideHours,
+          ratio: delta(saturationNow.ratio, saturationPrev.ratio),
+          instructorsWithAvailability: saturationNow.withAvailability,
         },
         activity: {
           booked: delta(booked, prevBooked),

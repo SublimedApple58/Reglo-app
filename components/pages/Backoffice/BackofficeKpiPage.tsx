@@ -285,7 +285,7 @@ export function BackofficeKpiPage({
           )}
         </p>
       </div>
-      <div className={cn("mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4", loading && "opacity-60 transition-opacity")}>
+      <div className={cn("mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3", loading && "opacity-60 transition-opacity")}>
         <KpiCard
           index={2}
           label="Guide svolte"
@@ -319,6 +319,32 @@ export function BackofficeKpiPage({
         />
         <KpiCard
           index={5}
+          label="Saturazione agenda"
+          value={(kpis?.saturation.ratio?.current ?? 0) * 100}
+          decimals={1}
+          suffix="%"
+          delta={kpis?.saturation.ratio}
+          loading={!kpis}
+          hint={
+            kpis
+              ? `${formatInt(kpis.saturation.busyHours)} ore di guida su ${formatInt(kpis.saturation.availableHours)} dichiarate disponibili${
+                  kpis.saturation.outsideHours >= 1
+                    ? ` · ${formatInt(kpis.saturation.outsideHours)} ore fuori fascia`
+                    : ""
+                }`
+              : undefined
+          }
+        />
+        <KpiCard
+          index={6}
+          label="Guide prenotate"
+          value={activity?.booked?.current ?? 0}
+          delta={activity?.booked}
+          loading={!kpis}
+          spark={bookedSeries}
+        />
+        <KpiCard
+          index={7}
           label="Istruttori attivi"
           value={head?.activeInstructors?.current ?? 0}
           delta={head?.activeInstructors}
@@ -353,11 +379,6 @@ export function BackofficeKpiPage({
           {kpis ? (
             <dl className="divide-y divide-[#f2f2f5]">
               {[
-                {
-                  label: "Guide prenotate",
-                  value: formatInt(activity!.booked?.current ?? 0),
-                  hint: "nuove prenotazioni create nel periodo",
-                },
                 {
                   label: "Tasso di annullamento",
                   value: formatPercent(activity!.cancelRate, 1),

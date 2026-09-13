@@ -37,6 +37,37 @@ tabelle) in un file solo, separatore `;` e BOM per Excel italiano.
 Confonderli è l'errore classico di queste dashboard: "guide svolte" e "guide
 prenotate" sono due numeri diversi e nella pagina stanno in due posti diversi.
 
+## Saturazione dell'agenda istruttori (2026-09-13)
+
+Card nel blocco **"Nel periodo"**: quante ore gli istruttori dichiarano
+disponibili in agenda e quante di quelle ore sono davvero occupate da guide.
+
+- **Ore disponibili**: le fasce risolte dallo **stesso risolutore dell'agenda**
+  (`buildAvailabilityResolver`: `AutoscuolaWeeklyAvailability` con
+  `rangesByDay` + eccezioni giornaliere `AutoscuolaDailyAvailabilityOverride`),
+  quindi il numero è quello che il titolare vede a schermo. Da lì si
+  **sottraggono** i blocchi istruttore (malattia, ferie, teoria:
+  `AutoscuolaInstructorBlock`) e i **festivi** dell'autoscuola
+  (`AutoscuolaHoliday`): un istruttore in ferie non è disponibile.
+- **Ore occupate**: le guide non annullate con un istruttore assegnato,
+  **intersecate** con le fasce disponibili. Le guide fatte fuori fascia non
+  gonfiano il rapporto (che resta 0-100%) ma sono contate a parte e mostrate
+  nel sottotitolo della card.
+- Gli intervalli vengono **fusi prima** di sommarli: i posti di una stessa guida
+  di gruppo sono un'ora sola, non una per allievo.
+- ⚠️ Le fasce sono **orari da orologio italiano**, non istanti: in produzione il
+  server gira a UTC, quindi la conversione passa da `romeWallClockToInstant`.
+  Senza, ogni fascia slitterebbe di un'ora o due e non combacerebbe con le guide.
+- Istruttori considerati: stesso filtro dell'agenda (attivi, con utente, ruolo
+  INSTRUCTOR/INSTRUCTOR_OWNER).
+- I risolutori di disponibilità si costruiscono **una volta** sulla finestra che
+  copre periodo corrente e precedente (servono per il confronto): due query per
+  autoscuola, non quattro.
+
+L'aritmetica sta in `lib/backoffice/agenda-saturation.ts` — modulo puro
+(`mergeIntervals`, `subtractIntervals`, `intersectIntervals`, fuso orario) con
+16 test: è l'unica parte che potrebbe sbagliare in silenzio.
+
 ## Data model
 
 **Nessun modello nuovo, nessuna migrazione, nessun job.** Tutto è calcolato live
@@ -50,6 +81,7 @@ materializzazione.
 
 | File | Ruolo |
 |------|-------|
+| `lib/backoffice/agenda-saturation.ts` | Aritmetica pura degli intervalli per la saturazione agenda + conversione orologio italiano → istante |
 | `lib/backoffice/kpi-math.ts` | Modulo **puro** (niente Prisma): granularità dei bucket (`pickBucketUnit`, `buildBuckets`, `bucketKeyFor`), esiti (`isDoneStatus`/`isCancelledStatus`), canali (`SOURCE_BUCKETS`, `sourceBucketOf`), piani (`planMonthlyCents`), tipo account (`companyKindOf`) |
 | `lib/actions/backoffice-kpi.actions.ts` | `getBackofficeKpis({from,to})`: `requireGlobalAdmin`, ~18 query in parallelo, aggregazione in memoria, tipo `BackofficeKpis` |
 | `app/[locale]/backoffice/kpi/page.tsx` | Route: legge `?da=&a=` (default ultimi 30 giorni) e calcola il primo giro lato server (nessun flash di scheletri) |
