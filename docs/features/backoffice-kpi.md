@@ -62,11 +62,7 @@ disponibili in agenda e quante di quelle ore sono davvero occupate da guide.
   `now`. Le fasce dichiarate per i giorni che devono ancora arrivare non entrano
   né al numeratore né al denominatore — è un consuntivo, non una previsione. Un
   periodo tutto nel futuro dà 0 ore e rapporto 0, non una divisione per zero.
-- **Autoscuole di prova escluse**: quelle con `excludeFromKpis: true` nei
-  `limits` (oggi "Autoscuola Maltese", 11 istruttori che dichiarano
-  disponibilità senza guide vere). L'esclusione **si vede**: la card scrive
-  quante ne ha tenute fuori, invece di farlo di nascosto. ⚠️ Il flag oggi vale
-  SOLO per questa card: le altre contano tutte le autoscuole.
+- **Autoscuole di prova escluse** come in tutto il resto della pagina (sotto).
 - Istruttori considerati: stesso filtro dell'agenda (attivi, con utente, ruolo
   INSTRUCTOR/INSTRUCTOR_OWNER).
 - I risolutori di disponibilità si costruiscono **una volta** sulla finestra che
@@ -76,6 +72,29 @@ disponibili in agenda e quante di quelle ore sono davvero occupate da guide.
 L'aritmetica sta in `lib/backoffice/agenda-saturation.ts` — modulo puro
 (`mergeIntervals`, `subtractIntervals`, `intersectIntervals`, fuso orario) con
 16 test: è l'unica parte che potrebbe sbagliare in silenzio.
+
+## Autoscuole interne di prova
+
+Le autoscuole con `excludeFromKpis: true` nei `limits` del servizio AUTOSCUOLE
+sono **fuori da tutti i numeri della pagina**: MRR, clienti, guide, medie,
+adozione, parco app, saturazione (decisione di prodotto 2026-09-13, estesa
+dalla sola saturazione a tutto). Oggi è marcata "Autoscuola Maltese", che ha 11
+istruttori che dichiarano disponibilità e quasi nessuna guida vera.
+
+Nel codice l'elenco si legge **una volta all'inizio** di `computeKpis` e diventa
+un `where` su ogni query: nessun filtro a posteriori, nessuna query che
+dimentica l'esclusione. Se aggiungi una query alla funzione, aggiungi
+`...notExcluded` al suo `where`.
+
+L'esclusione **si dichiara in pagina**, nella nota in fondo: un cruscotto che
+nasconde righe senza dirlo non è affidabile.
+
+Si marca una company dal DB (nessuna UI, è un'operazione rara):
+```sql
+UPDATE "CompanyService"
+SET limits = jsonb_set(limits::jsonb, '{excludeFromKpis}', 'true'::jsonb, true)::json
+WHERE "companyId" = '<id>' AND "serviceKey" = 'AUTOSCUOLE';
+```
 
 ## Data model
 

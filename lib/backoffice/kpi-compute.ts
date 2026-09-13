@@ -121,6 +121,8 @@ export type BackofficeKpis = {
     companiesTotal: number;
     activeCompanies: number;
     newCompanies: number;
+    /** Autoscuole interne di prova tenute fuori da TUTTI i conteggi. */
+    excludedCompanies: number;
     lessonsDone: KpiDelta;
     lessonsPerDay: KpiDelta;
     appShare: KpiDelta;
@@ -133,8 +135,6 @@ export type BackofficeKpis = {
     outsideHours: number;
     ratio: KpiDelta;
     instructorsWithAvailability: number;
-    /** Autoscuole di prova tenute fuori dal calcolo. */
-    excludedCompanies: number;
   };
   activity: {
     booked: KpiDelta;
@@ -198,6 +198,21 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
     const prevFrom = new Date(from.getTime() - spanMs);
     const unit = pickBucketUnit(days);
 
+    // Autoscuole interne di prova: fuori da TUTTI i KPI (decisione di prodotto
+    // 2026-09-13). Si leggono prima, così ogni query sotto nasce già ristretta.
+    const services = await prisma.companyService.findMany({
+      where: { serviceKey: "AUTOSCUOLE" },
+      select: { companyId: true, limits: true },
+    });
+    const excludedCompanyIds = services
+      .filter((service) => isExcludedFromKpis(service.limits))
+      .map((service) => service.companyId);
+    const notExcluded = excludedCompanyIds.length
+      ? { companyId: { notIn: excludedCompanyIds } }
+      : {};
+    const isExcluded = (companyId: string | null) =>
+      companyId !== null && excludedCompanyIds.includes(companyId);
+
     const inRange = { gte: from, lt: toExclusive };
     const inPrev = { gte: prevFrom, lt: prevTo };
 
@@ -225,6 +240,7 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
       plansForGrowth,
     ] = await Promise.all([
       prisma.company.findMany({
+        where: excludedCompanyIds.length ? { id: { notIn: excludedCompanyIds } } : {},
         select: {
           id: true,
           name: true,
@@ -233,6 +249,7 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
         },
       }),
       prisma.companyPlan.findMany({
+        where: notExcluded,
         select: {
           companyId: true,
           billingPeriod: true,
@@ -244,7 +261,7 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
       }),
       // Guide che SI SVOLGONO nel periodo → volume ed esiti.
       prisma.autoscuolaAppointment.findMany({
-        where: { startsAt: inRange },
+        where: { startsAt: inRange, ...notExcluded },
         select: {
           companyId: true,
           startsAt: true,
@@ -257,24 +274,25 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
       }),
       // Guide PRENOTATE nel periodo → domanda e canale.
       prisma.autoscuolaAppointment.findMany({
-        where: { createdAt: inRange },
+        where: { createdAt: inRange, ...notExcluded },
         select: { companyId: true, createdAt: true, bookingSource: true },
       }),
       prisma.autoscuolaAppointment.findMany({
-        where: { startsAt: inPrev },
+        where: { startsAt: inPrev, ...notExcluded },
         select: { status: true, instructorId: true, startsAt: true, endsAt: true },
       }),
       prisma.autoscuolaAppointment.findMany({
-        where: { createdAt: inPrev },
+        where: { createdAt: inPrev, ...notExcluded },
         select: { bookingSource: true },
       }),
       prisma.companyMember.count({
-        where: { autoscuolaRole: "STUDENT", createdAt: inRange },
+        where: { autoscuolaRole: "STUDENT", createdAt: inRange, ...notExcluded },
       }),
       // Saturazione: istruttori che possono comparire in agenda (stesso filtro
       // di getInstructorAvailabilityForAgenda), blocchi e festivi del periodo.
       prisma.autoscuolaInstructor.findMany({
         where: {
+          ...notExcluded,
           status: { not: "inactive" },
           userId: { not: null },
           user: {
@@ -286,62 +304,73 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
         select: { id: true, companyId: true },
       }),
       prisma.autoscuolaInstructorBlock.findMany({
-        where: { startsAt: { lt: toExclusive }, endsAt: { gt: prevFrom } },
+        where: { startsAt: { lt: toExclusive }, endsAt: { gt: prevFrom }, ...notExcluded },
         select: { instructorId: true, startsAt: true, endsAt: true },
       }),
       prisma.autoscuolaHoliday.findMany({
-        where: { date: { gte: prevFrom, lte: toExclusive } },
+        where: { date: { gte: prevFrom, lte: toExclusive }, ...notExcluded },
         select: { companyId: true, date: true },
       }),
       prisma.companyLicensePurchase.findMany({
-        where: { purchasedAt: inRange },
+        where: { purchasedAt: inRange, ...notExcluded },
         select: { seats: true, seatPriceCents: true },
       }),
       prisma.autoscuolaGroupLesson.groupBy({
         by: ["companyId"],
-        where: { startsAt: inRange },
+        where: { startsAt: inRange, ...notExcluded },
         _count: { _all: true },
       }),
       prisma.autoscuolaAppointmentEvaluation.findMany({
-        where: { createdAt: inRange },
+        where: {
+          createdAt: inRange,
+          ...(excludedCompanyIds.length
+            ? { appointment: { companyId: { notIn: excludedCompanyIds } } }
+            : {}),
+        },
         select: { appointment: { select: { companyId: true } } },
       }),
       prisma.autoscuolaSwapOffer.groupBy({
         by: ["companyId"],
-        where: { createdAt: inRange },
+        where: { createdAt: inRange, ...notExcluded },
         _count: { _all: true },
       }),
       prisma.quizSession.groupBy({
         by: ["companyId"],
-        where: { startedAt: inRange },
+        where: { startedAt: inRange, ...notExcluded },
         _count: { _all: true },
       }),
       prisma.autoscuolaVoiceCall.groupBy({
         by: ["companyId"],
-        where: { startedAt: inRange },
+        where: { startedAt: inRange, ...notExcluded },
         _count: { _all: true },
       }),
       prisma.aulaLesson.groupBy({
         by: ["companyId"],
-        where: { createdAt: inRange, companyId: { not: null } },
+        where: excludedCompanyIds.length
+          ? { createdAt: inRange, companyId: { not: null, notIn: excludedCompanyIds } }
+          : { createdAt: inRange, companyId: { not: null } },
         _count: { _all: true },
       }),
       prisma.autoscuolaAppointmentPayment.groupBy({
         by: ["companyId"],
-        where: { createdAt: inRange },
+        where: { createdAt: inRange, ...notExcluded },
         _count: { _all: true },
       }),
       prisma.mobilePushDevice.findMany({
-        where: { lastSeenAt: inRange, disabledAt: null },
+        where: { lastSeenAt: inRange, disabledAt: null, ...notExcluded },
         select: { platform: true, appVersion: true },
       }),
       // Crescita: SEMPRE ultimi 12 mesi, indipendente dal filtro (una curva di
       // crescita su "ultimi 7 giorni" non direbbe niente).
       prisma.company.findMany({
-        where: { createdAt: { gte: new Date(Date.now() - 366 * dayMs) } },
+        where: {
+          createdAt: { gte: new Date(Date.now() - 366 * dayMs) },
+          ...(excludedCompanyIds.length ? { id: { notIn: excludedCompanyIds } } : {}),
+        },
         select: { createdAt: true },
       }),
       prisma.companyPlan.findMany({
+        where: notExcluded,
         select: {
           createdAt: true,
           billingPeriod: true,
@@ -585,14 +614,9 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
     // tolgono blocchi (malattia, ferie, teoria) e festivi dell'autoscuola: un
     // istruttore in ferie non è disponibile. Le guide fuori fascia restano
     // fuori dal rapporto ma vengono contate a parte.
-    const excludedCompanyIds = new Set(
-      companies
-        .filter((c) => isExcludedFromKpis(serviceOf(c)?.limits))
-        .map((c) => c.id),
-    );
     const instructorsByCompany = new Map<string, string[]>();
     for (const instructor of agendaInstructors) {
-      if (excludedCompanyIds.has(instructor.companyId)) continue;
+      if (isExcluded(instructor.companyId)) continue;
       const list = instructorsByCompany.get(instructor.companyId) ?? [];
       list.push(instructor.id);
       instructorsByCompany.set(instructor.companyId, list);
@@ -751,6 +775,7 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
           companiesTotal: companies.length,
           activeCompanies: activeCompanies.length,
           newCompanies,
+          excludedCompanies: excludedCompanyIds.length,
           lessonsDone: delta(lessonsDone, prevDone),
           lessonsPerDay: delta(lessonsDone / days, prevDone / days),
           appShare: delta(
@@ -765,7 +790,6 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
           outsideHours: saturationNow.outsideHours,
           ratio: delta(saturationNow.ratio, saturationPrev.ratio),
           instructorsWithAvailability: saturationNow.withAvailability,
-          excludedCompanies: excludedCompanyIds.size,
         },
         activity: {
           booked: delta(booked, prevBooked),

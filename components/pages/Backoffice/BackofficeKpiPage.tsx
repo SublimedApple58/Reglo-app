@@ -334,9 +334,6 @@ export function BackofficeKpiPage({
                   kpis.saturation.outsideHours >= 1
                     ? `${formatInt(kpis.saturation.outsideHours)} ore fuori fascia`
                     : null,
-                  kpis.saturation.excludedCompanies > 0
-                    ? `${kpis.saturation.excludedCompanies} di prova ${kpis.saturation.excludedCompanies === 1 ? "esclusa" : "escluse"}`
-                    : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")
@@ -716,6 +713,15 @@ export function BackofficeKpiPage({
       <p className="mt-6 flex items-start gap-2 text-[12px] font-medium leading-relaxed text-[#9a9a9a]">
         <Info className="mt-0.5 size-3.5 shrink-0" strokeWidth={2} />
         <span>
+          {kpis && kpis.headline.excludedCompanies > 0 && (
+            <>
+              {kpis.headline.excludedCompanies === 1
+                ? "Un'autoscuola interna di prova è esclusa"
+                : `${kpis.headline.excludedCompanies} autoscuole interne di prova sono escluse`}{" "}
+              da tutti i numeri di questa pagina (flag «excludeFromKpis» nelle impostazioni
+              del servizio).{" "}
+            </>
+          )}
           MRR e ARR vengono dai piani registrati a mano in backoffice, non dal fatturato.
           Le guide più vecchie del campo &quot;canale di prenotazione&quot; finiscono in
           &quot;Storico&quot;. Lo storico dei cambi di stato delle autoscuole non è tracciato:
