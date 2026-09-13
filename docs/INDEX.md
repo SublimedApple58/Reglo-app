@@ -47,6 +47,7 @@
 | Company Documents (contratto/fatture) | [company-documents.md](features/company-documents.md) | `company-documents.actions.ts`, `api/backoffice/company-documents`, `BackofficeCompanyDocumentsDialog.tsx`, `AutoscuoleAreaPersonalePage.tsx` |
 | Foto profilo + Firma allievo (export Portale automobilista) | [student-photo-signature.md](features/student-photo-signature.md) | `lib/portal-image-specs.ts`, `lib/images/portal.ts`, `api/mobile/profile/photo\|signature`, `api/students/[studentUserId]/media/[kind]`, `student-media.actions.ts`, `StudentMediaSection.tsx` |
 | Login as admin (impersonazione autoscuola dal backoffice) | [admin-impersonation.md](features/admin-impersonation.md) | `impersonation-grant.ts`, `auth.ts` (provider `impersonation`), `company-context.ts`, `backoffice.actions.ts` (`impersonateCompany`), `BackofficeCompaniesPage.tsx` |
+| Backoffice — KPI (sezione metriche con filtro periodo, grafici, export CSV) | [backoffice-kpi.md](features/backoffice-kpi.md) | `lib/backoffice/kpi-math.ts`, `lib/actions/backoffice-kpi.actions.ts` (`getBackofficeKpis`), `app/[locale]/backoffice/kpi/page.tsx`, `BackofficeKpiPage.tsx` + `kpi/` (recharts), `BackofficeHeader.tsx` |
 | Company Plan (abbonamento) | [company-plan.md](features/company-plan.md) | `company-plan.actions.ts`, `BackofficeCompanyPlanDialog.tsx`, `AutoscuoleAreaPersonalePage.tsx` |
 
 ## Design System

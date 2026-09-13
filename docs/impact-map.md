@@ -143,6 +143,14 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Mobile**: endpoint `api/mobile/profile/photo|signature` + campi `photoUrl`/`signatureUrl` in `/api/mobile/me` (tipi in `reglo-mobile/src/types/regloApi.ts`)
 - → **Specs portale**: costanti SOLO in `lib/portal-image-specs.ts` (valori cliente, imprecisi per definizione)
 
+### Backoffice — KPI
+- ← **Company Plan**: MRR/ARR/ARPA e posti istruttore venduti da `CompanyPlan`; ricavi una tantum da `CompanyLicensePurchase` (nessuna scrittura, sola lettura)
+- ← **Appointments**: volume ed esiti per `startsAt`, domanda e canale per `createdAt` + `bookingSource`. Se cambiano gli stati o si aggiunge un `bookingSource`, aggiornare `lib/backoffice/kpi-math.ts` (`DONE_STATUSES`, `SOURCE_BUCKETS`) o il nuovo canale finisce in "Storico"
+- ← **Secretary-only / Consorzio**: `limits.secretaryOnly` e `limits.accountKind` danno l'etichetta di tipo account (inclusi nelle medie, etichettati)
+- ← **Notifications/mobile**: `MobilePushDevice` (`platform`, `appVersion`, `lastSeenAt`) per il parco app
+- ← **Quiz, Aula, Swap, Group lessons, Voice, Pagellino, Pagamenti**: conteggi di adozione per feature (sola lettura, un `groupBy` per feature)
+- Nessun modello nuovo e nessun job: tutto calcolato live dall'action `getBackofficeKpis`
+
 ### Support Center + Feedback
 - → **Users Directory**: `SupportMessage.senderUserId` / `ProductFeedback.userId` SetNull su delete utente (il nome resta come snapshot `senderName`/`userName`)
 - → **Backoffice**: nuove pagine support/feedback sotto la stessa auth cookie (`requireGlobalAdmin`); header con nav + badge non-letti

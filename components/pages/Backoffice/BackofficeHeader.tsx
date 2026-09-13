@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/backoffice", label: "Autoscuole" },
+  { href: "/backoffice/kpi", label: "KPI" },
   { href: "/backoffice/support", label: "Assistenza" },
   { href: "/backoffice/feedback", label: "Feedback" },
 ] as const;
