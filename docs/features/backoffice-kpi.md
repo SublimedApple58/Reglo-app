@@ -58,6 +58,15 @@ disponibili in agenda e quante di quelle ore sono davvero occupate da guide.
 - ⚠️ Le fasce sono **orari da orologio italiano**, non istanti: in produzione il
   server gira a UTC, quindi la conversione passa da `romeWallClockToInstant`.
   Senza, ogni fascia slitterebbe di un'ora o due e non combacerebbe con le guide.
+- **Solo ore già passate** (correzione 2026-09-13): la finestra viene tagliata a
+  `now`. Le fasce dichiarate per i giorni che devono ancora arrivare non entrano
+  né al numeratore né al denominatore — è un consuntivo, non una previsione. Un
+  periodo tutto nel futuro dà 0 ore e rapporto 0, non una divisione per zero.
+- **Autoscuole di prova escluse**: quelle con `excludeFromKpis: true` nei
+  `limits` (oggi "Autoscuola Maltese", 11 istruttori che dichiarano
+  disponibilità senza guide vere). L'esclusione **si vede**: la card scrive
+  quante ne ha tenute fuori, invece di farlo di nascosto. ⚠️ Il flag oggi vale
+  SOLO per questa card: le altre contano tutte le autoscuole.
 - Istruttori considerati: stesso filtro dell'agenda (attivi, con utente, ruolo
   INSTRUCTOR/INSTRUCTOR_OWNER).
 - I risolutori di disponibilità si costruiscono **una volta** sulla finestra che

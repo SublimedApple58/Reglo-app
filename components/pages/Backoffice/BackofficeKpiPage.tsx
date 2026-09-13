@@ -327,11 +327,19 @@ export function BackofficeKpiPage({
           loading={!kpis}
           hint={
             kpis
-              ? `${formatInt(kpis.saturation.busyHours)} ore di guida su ${formatInt(kpis.saturation.availableHours)} dichiarate disponibili${
+              ? [
+                  // "finora": si contano solo le ore già passate, non le fasce
+                  // dichiarate per i giorni che devono ancora arrivare.
+                  `${formatInt(kpis.saturation.busyHours)} ore di guida su ${formatInt(kpis.saturation.availableHours)} disponibili finora`,
                   kpis.saturation.outsideHours >= 1
-                    ? ` · ${formatInt(kpis.saturation.outsideHours)} ore fuori fascia`
-                    : ""
-                }`
+                    ? `${formatInt(kpis.saturation.outsideHours)} ore fuori fascia`
+                    : null,
+                  kpis.saturation.excludedCompanies > 0
+                    ? `${kpis.saturation.excludedCompanies} di prova ${kpis.saturation.excludedCompanies === 1 ? "esclusa" : "escluse"}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
               : undefined
           }
         />

@@ -18,6 +18,7 @@ import {
   companyKindOf,
   isCancelledStatus,
   isDoneStatus,
+  isExcludedFromKpis,
   pickBucketUnit,
   planMonthlyCents,
   sourceBucketOf,
@@ -132,6 +133,8 @@ export type BackofficeKpis = {
     outsideHours: number;
     ratio: KpiDelta;
     instructorsWithAvailability: number;
+    /** Autoscuole di prova tenute fuori dal calcolo. */
+    excludedCompanies: number;
   };
   activity: {
     booked: KpiDelta;
@@ -582,8 +585,14 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
     // tolgono blocchi (malattia, ferie, teoria) e festivi dell'autoscuola: un
     // istruttore in ferie non è disponibile. Le guide fuori fascia restano
     // fuori dal rapporto ma vengono contate a parte.
+    const excludedCompanyIds = new Set(
+      companies
+        .filter((c) => isExcludedFromKpis(serviceOf(c)?.limits))
+        .map((c) => c.id),
+    );
     const instructorsByCompany = new Map<string, string[]>();
     for (const instructor of agendaInstructors) {
+      if (excludedCompanyIds.has(instructor.companyId)) continue;
       const list = instructorsByCompany.get(instructor.companyId) ?? [];
       list.push(instructor.id);
       instructorsByCompany.set(instructor.companyId, list);
@@ -624,9 +633,14 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
       ),
     );
 
+    // Il futuro non si misura: un'agenda piena di fasce dichiarate per domani
+    // farebbe sembrare la piattaforma più vuota di quello che è. Si guarda solo
+    // la parte di periodo già passata.
+    const now = Date.now();
+
     const saturationFor = (
       windowStart: Date,
-      windowEnd: Date,
+      windowEndRaw: Date,
       lessonRows: Array<{
         instructorId: string | null;
         status: string;
@@ -634,6 +648,13 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
         endsAt: Date | null;
       }>,
     ) => {
+      const windowEnd = new Date(Math.min(windowEndRaw.getTime(), now));
+      if (windowEnd.getTime() <= windowStart.getTime()) {
+        return {
+          ...withRatio({ availableHours: 0, busyHours: 0, outsideHours: 0 }),
+          withAvailability: 0,
+        };
+      }
       const window: Interval = { start: windowStart.getTime(), end: windowEnd.getTime() };
       const lessonsByInstructor = new Map<string, Interval[]>();
       for (const row of lessonRows) {
@@ -744,6 +765,7 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
           outsideHours: saturationNow.outsideHours,
           ratio: delta(saturationNow.ratio, saturationPrev.ratio),
           instructorsWithAvailability: saturationNow.withAvailability,
+          excludedCompanies: excludedCompanyIds.size,
         },
         activity: {
           booked: delta(booked, prevBooked),

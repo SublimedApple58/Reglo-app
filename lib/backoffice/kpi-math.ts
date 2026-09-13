@@ -129,3 +129,20 @@ export const companyKindOf = (limits: unknown): KpiCompanyKind => {
   if (l.secretaryOnly === true) return "segretaria";
   return "autoscuola";
 };
+
+/**
+ * Autoscuole interne di prova, tenute fuori dai KPI: hanno dati finti che
+ * falsano le medie (la nostra "Autoscuola Maltese" ha 11 istruttori che
+ * dichiarano disponibilità e quasi nessuna guida vera).
+ *
+ * Si attiva con `excludeFromKpis: true` nei `limits` del servizio AUTOSCUOLE —
+ * stesso posto di `secretaryOnly` e `accountKind`, nessuna migrazione.
+ *
+ * ⚠️ Oggi è applicato SOLO alla **saturazione agenda** (decisione di prodotto
+ * 2026-09-13): le altre card contano ancora tutte le autoscuole. Estenderlo è
+ * una riga, ma va deciso, non fatto di nascosto.
+ */
+export const isExcludedFromKpis = (limits: unknown): boolean => {
+  const l = (limits ?? {}) as Record<string, unknown>;
+  return l.excludeFromKpis === true;
+};
