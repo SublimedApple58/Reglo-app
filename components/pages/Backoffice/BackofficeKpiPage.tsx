@@ -241,8 +241,19 @@ export function BackofficeKpiPage({
         </div>
       </div>
 
-      {/* ── Card principali ── */}
-      <div className={cn("mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3", loading && "opacity-60 transition-opacity")}>
+      {/* ── Card principali, in DUE gruppi ──────────────────────────────────
+           MRR e autoscuole attive sono uno stato di ADESSO: non cambiano col
+           filtro, e messe nella stessa griglia delle altre sembravano "MRR
+           degli ultimi 30 giorni". Separate per etichetta, non per colore. */}
+      <div className={cn("mt-7", loading && "opacity-60 transition-opacity")}>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#9a9aa8]">
+          Adesso
+          <span className="ml-2 font-medium normal-case tracking-normal text-[#b4b4bd]">
+            non cambia col periodo
+          </span>
+        </p>
+      </div>
+      <div className={cn("mt-3 grid gap-3 sm:grid-cols-2", loading && "opacity-60 transition-opacity")}>
         <KpiCard
           index={0}
           label="MRR"
@@ -260,12 +271,21 @@ export function BackofficeKpiPage({
           label="Autoscuole attive"
           value={head?.activeCompanies ?? 0}
           loading={!kpis}
-          hint={
-            kpis
-              ? `su ${head?.companiesTotal ?? 0} registrate${head?.newCompanies ? ` · ${head.newCompanies} ${head.newCompanies === 1 ? "nuova" : "nuove"} nel periodo` : ""}`
-              : undefined
-          }
+          hint={kpis ? `su ${head?.companiesTotal ?? 0} registrate` : undefined}
         />
+      </div>
+
+      <div className={cn("mt-8", loading && "opacity-60 transition-opacity")}>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#9a9aa8]">
+          Nel periodo
+          {kpis && (
+            <span className="ml-2 font-medium normal-case tracking-normal text-[#b4b4bd]">
+              {formatRangeLabel(kpis.range.from, kpis.range.to)}
+            </span>
+          )}
+        </p>
+      </div>
+      <div className={cn("mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4", loading && "opacity-60 transition-opacity")}>
         <KpiCard
           index={2}
           label="Guide svolte"
@@ -353,6 +373,11 @@ export function BackofficeKpiPage({
                   label: "Allievi attivi",
                   value: formatInt(activity!.activeStudents),
                   hint: `${formatInt(activity!.newStudents)} nuovi iscritti nel periodo`,
+                },
+                {
+                  label: "Nuove autoscuole",
+                  value: formatInt(kpis.headline.newCompanies),
+                  hint: "entrate nel periodo",
                 },
               ].map((row) => (
                 <div key={row.label} className="flex items-start justify-between gap-4 py-3.5 first:pt-0 last:pb-0">

@@ -69,6 +69,27 @@ Il **calcolo** è lo stesso del backoffice: `lib/backoffice/kpi-compute.ts`
 **non è** `"use server"` e non ha guardie: chi lo usa mette la propria
 autorizzazione davanti (backoffice → `requireGlobalAdmin`, investor → token).
 
+## Tre orologi, separati in pagina (2026-09-13)
+
+L'MRR non è mai dipeso dal filtro — ma stando sotto lo switcher **sembrava**
+"MRR degli ultimi 30 giorni". Ora la pagina dichiara la differenza con la
+posizione, non con una nota:
+
+1. **"Stato di oggi"**, sopra il filtro: MRR, ARR, ARPA, autoscuole attive,
+   allievi registrati e guide gestite dall'inizio. Non cambia mai.
+2. **"Negli ultimi N giorni"**, subito sotto il filtro, con una riga che lo dice
+   a voce ("da qui in giù i numeri seguono il periodo scelto"): guide svolte,
+   media al giorno, nuovi clienti, quota app, allievi e istruttori attivi,
+   adozione.
+3. **"Crescita — ultimi 12 mesi"**, in fondo, dichiaratamente indipendente dal
+   filtro.
+
+Stessa separazione nel backoffice: le card sono in due gruppi, **"Adesso · non
+cambia col periodo"** (MRR, autoscuole attive) e **"Nel periodo"** con
+l'intervallo scritto accanto. Regola pratica: una card sotto "Adesso" non deve
+mai citare il periodo nel sottotitolo (le "nuove autoscuole" sono infatti
+migrate nel blocco periodo).
+
 ## Design (mobile-first)
 
 Pensata prima per il telefono: colonna singola da 720px al massimo, numeri in

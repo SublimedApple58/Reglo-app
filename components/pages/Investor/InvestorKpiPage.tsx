@@ -237,10 +237,62 @@ export function InvestorKpiPage({
           </p>
         </motion.header>
 
+        {/* ── ADESSO: stato di oggi, NON tocca il filtro. Sta sopra lo
+             switcher apposta: la posizione dice più di qualsiasi didascalia. ── */}
+        <Section eyebrow={`Stato di oggi · ${updated}`} className="mt-9 border-t-0 pt-0 sm:mt-12 sm:pt-0">
+          {(inView) => (
+            <>
+              <div className="mt-5 grid gap-7 sm:grid-cols-2 sm:gap-6">
+                <BigNumber
+                  value={kpis.revenue.mrrCents / 100}
+                  active={inView}
+                  currency
+                  caption="di ricavo ricorrente al mese (MRR)"
+                />
+                <BigNumber
+                  value={kpis.customers.active}
+                  active={inView}
+                  caption={`autoscuole attive su ${kpis.customers.total} registrate`}
+                />
+              </div>
+              <div className="mt-6 grid grid-cols-2 gap-3">
+                <MiniStat label="ARR" value={formatEuro(kpis.revenue.arrCents)} hint="proiezione annua" />
+                <MiniStat
+                  label="ARPA"
+                  value={formatEuro(kpis.revenue.arpaCents)}
+                  hint="per cliente al mese"
+                />
+                <MiniStat
+                  label="Allievi"
+                  value={formatInt(kpis.usage.studentsAllTime)}
+                  hint="registrati dall'inizio"
+                />
+                <MiniStat
+                  label="Guide"
+                  value={formatInt(kpis.usage.lessonsAllTime)}
+                  hint="gestite dall'inizio"
+                />
+              </div>
+            </>
+          )}
+        </Section>
+
         {/* ── Periodo: link veri, così la pagina resta servita dal server ── */}
+        <div className="mt-12 border-t border-[#ededf1] pt-9 sm:mt-16 sm:pt-12">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#9a9aa8]">
+            Nel periodo scelto
+          </p>
+          <h2 className="mt-2 text-[19px] font-semibold tracking-[-0.01em] text-[#12121c] sm:text-[22px]">
+            Negli ultimi {kpis.period.label}
+          </h2>
+          <p className="mt-2 max-w-[46ch] text-[14.5px] font-medium leading-relaxed text-[#8a8a98]">
+            Da qui in giù i numeri seguono il periodo scelto. Quelli qui sopra sono
+            lo stato di oggi e non cambiano.
+          </p>
+        </div>
         <nav
           aria-label="Periodo"
-          className="mt-7 flex gap-1.5 rounded-[14px] bg-[#f4f4f6] p-1.5"
+          className="mt-5 flex gap-1.5 rounded-[14px] bg-[#f4f4f6] p-1.5"
         >
           {INVESTOR_PERIODS.map((period) => {
             const active = period.key === kpis.period.key;
@@ -265,63 +317,6 @@ export function InvestorKpiPage({
 
         <div className="mt-10 space-y-10 sm:mt-14 sm:space-y-14">
           {/* ── Ricavi ── */}
-          <Section eyebrow="Ricavi ricorrenti" className="border-t-0 pt-0 sm:pt-0">
-            {(inView) => (
-              <>
-                <div className="mt-5">
-                  <BigNumber
-                    value={kpis.revenue.mrrCents / 100}
-                    active={inView}
-                    currency
-                    caption="di ricavo ricorrente al mese (MRR)"
-                  />
-                </div>
-                <div className="mt-6 grid grid-cols-2 gap-3">
-                  <MiniStat label="ARR" value={formatEuro(kpis.revenue.arrCents)} hint="proiezione annua" />
-                  <MiniStat
-                    label="ARPA"
-                    value={formatEuro(kpis.revenue.arpaCents)}
-                    hint="per cliente al mese"
-                  />
-                </div>
-              </>
-            )}
-          </Section>
-
-          {/* ── Clienti ── */}
-          <Section eyebrow="Clienti" title="Autoscuole a bordo">
-            {(inView) => (
-              <>
-                <div className="mt-5 flex flex-wrap items-end gap-x-5 gap-y-3">
-                  <BigNumber
-                    value={kpis.customers.active}
-                    active={inView}
-                    caption={
-                      kpis.customers.newInPeriod > 0
-                        ? `autoscuole attive · ${kpis.customers.newInPeriod} ${
-                            kpis.customers.newInPeriod === 1 ? "nuova" : "nuove"
-                          } negli ultimi ${kpis.period.label}`
-                        : "autoscuole attive sulla piattaforma"
-                    }
-                  />
-                </div>
-                <div className="mt-7 rounded-2xl bg-[#fafafb] p-4 pt-5">
-                  <div className="flex items-baseline justify-between gap-3 px-1">
-                    <span className="text-[13px] font-semibold text-[#12121c]">
-                      Ultimi 12 mesi
-                    </span>
-                    <span className="text-[12.5px] font-medium text-[#8a8a98]">
-                      barre: nuovi clienti · linea: MRR
-                    </span>
-                  </div>
-                  <div className="mt-2">
-                    <InvestorGrowthChart growth={kpis.growth} />
-                  </div>
-                </div>
-              </>
-            )}
-          </Section>
-
           {/* ── Volume ── */}
           <Section eyebrow="Attività" title="Guide gestite">
             {(inView) => (
@@ -360,9 +355,9 @@ export function InvestorKpiPage({
                     hint="guide su tutta la piattaforma"
                   />
                   <MiniStat
-                    label="Dall'inizio"
-                    value={formatInt(kpis.usage.lessonsAllTime)}
-                    hint="guide gestite in totale"
+                    label="Nuovi clienti"
+                    value={formatInt(kpis.customers.newInPeriod)}
+                    hint={`autoscuole entrate negli ultimi ${kpis.period.label}`}
                   />
                 </div>
               </>
@@ -462,6 +457,31 @@ export function InvestorKpiPage({
               )}
             </Section>
           )}
+
+          {/* ── Crescita: terzo orologio, dichiarato ── */}
+          <Section eyebrow="Crescita" title="Ultimi 12 mesi">
+            {() => (
+              <>
+                <p className="mt-3 max-w-[46ch] text-[15px] font-medium leading-relaxed text-[#6a6a78]">
+                  Indipendente dal periodo scelto sopra: nuovi clienti mese per mese e
+                  ricavo ricorrente cumulato.
+                </p>
+                <div className="mt-6 rounded-2xl bg-[#fafafb] p-4 pt-5">
+                  <div className="flex items-baseline justify-between gap-3 px-1">
+                    <span className="text-[13px] font-semibold text-[#12121c]">
+                      Nuovi clienti e MRR
+                    </span>
+                    <span className="text-[12.5px] font-medium text-[#8a8a98]">
+                      barre: nuovi clienti · linea: MRR
+                    </span>
+                  </div>
+                  <div className="mt-2">
+                    <InvestorGrowthChart growth={kpis.growth} />
+                  </div>
+                </div>
+              </>
+            )}
+          </Section>
         </div>
 
         {/* ── Piede: il nome del destinatario è stampato apposta ── */}
