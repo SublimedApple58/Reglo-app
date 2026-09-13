@@ -1,7 +1,8 @@
 "use client";
 
 import React from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, GripVertical } from "lucide-react";
+import { Reorder, useDragControls } from "motion/react";
 
 import {
   getAutoscuolaSettings,
@@ -19,6 +20,7 @@ import {
   type AgendaColorExceptions,
   type AgendaColorOverrides,
 } from "@/lib/autoscuole/agenda-color-criterion";
+import { sortInstructorsForAgenda } from "@/lib/autoscuole/agenda-instructor-order";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { INSTRUCTOR_COLOR_CHOICES } from "@/lib/autoscuole/instructor-colors";
 import { ColorSwatchPicker } from "@/components/ui/color-swatch-picker";
@@ -57,12 +59,90 @@ const CRITERION_OPTIONS: Array<{
   },
 ];
 
+// ─── Riga istruttore (trascinabile) ──────────────────────────────────────────
+
+/**
+ * Una riga della lista "Istruttori in agenda": maniglia di trascinamento,
+ * pallino del colore e picker. Il drag parte SOLO dalla maniglia
+ * (`dragListener={false}` + `dragControls`), così il click sul picker non
+ * diventa un trascinamento per sbaglio.
+ */
+function InstructorOrderRow<T extends AspettoInstructor>({
+  instructor,
+  dotHex,
+  taken,
+  disabled,
+  handleRef,
+  onMove,
+  onCommit,
+  onColor,
+}: {
+  instructor: T;
+  dotHex: string;
+  taken: string[];
+  disabled: boolean;
+  handleRef: (el: HTMLButtonElement | null) => void;
+  onMove: (direction: -1 | 1) => void;
+  onCommit: () => void;
+  onColor: (hex: string | null) => Promise<void>;
+}) {
+  const controls = useDragControls();
+  return (
+    <Reorder.Item
+      value={instructor}
+      dragListener={false}
+      dragControls={controls}
+      onDragEnd={onCommit}
+      className="list-none"
+      whileDrag={{ scale: 1.01, boxShadow: "0 10px 24px rgba(0,0,0,0.10)" }}
+    >
+      <div className="flex items-center gap-3 rounded-[12px] border-[1.5px] border-[#ededed] bg-white px-3 py-2.5">
+        {/* Maniglia: trascinabile col mouse, ↑/↓ da tastiera (la lista è corta,
+            un drag&drop puro sarebbe inaccessibile). */}
+        <button
+          ref={handleRef}
+          type="button"
+          disabled={disabled}
+          onPointerDown={(e) => !disabled && controls.start(e)}
+          onKeyDown={(e) => {
+            if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+            e.preventDefault();
+            onMove(e.key === "ArrowUp" ? -1 : 1);
+          }}
+          aria-label={`Sposta ${instructor.name}`}
+          className={cn(
+            "flex h-7 w-6 shrink-0 cursor-grab items-center justify-center rounded-[6px] text-[#c2c2c2] transition-colors hover:text-[#8a8a8a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#222222]/25 active:cursor-grabbing",
+            disabled && "cursor-default opacity-50",
+          )}
+        >
+          <GripVertical className="size-4" strokeWidth={2} />
+        </button>
+
+        <span
+          className="size-2.5 shrink-0 rounded-full"
+          style={{ backgroundColor: dotHex }}
+        />
+        <div className="min-w-0 flex-1 truncate text-sm font-semibold text-[#222222]">
+          {instructor.name}
+        </div>
+        <ColorSwatchPicker
+          value={instructor.color}
+          taken={taken}
+          title={`Colore di ${instructor.name}`}
+          onSelect={onColor}
+        />
+      </div>
+    </Reorder.Item>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 /**
  * Pane "Aspetto" delle Impostazioni: personalizzazione visiva dell'agenda.
  * - Criterio colore dei blocchi guida (setting company in CompanyService.limits)
- * - Colori istruttori (spostati qui dal dettaglio "Gestisci istruttore")
+ * - Istruttori in agenda: ordine delle colonne (drag&drop, REG-443→REG-449) e
+ *   colore di ciascuno (spostato qui dal dettaglio "Gestisci istruttore")
  * Gli istruttori arrivano via props dal parent (stesso stato di InstructorsTab)
  * così il cambio colore resta coerente in tutto l'overlay.
  */
@@ -87,6 +167,13 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
     asAgendaColorExceptions(null),
   );
   const [savingExceptionKey, setSavingExceptionKey] = React.useState<string | null>(null);
+  // Ordine custom delle colonne istruttore in agenda (REG-449): elenco di id
+  // salvato nei limits. Vuoto = ordine alfabetico (com'era prima).
+  const [order, setOrder] = React.useState<string[]>([]);
+  // Lista visualizzata: si muove subito col drag, il salvataggio la conferma.
+  const [rows, setRows] = React.useState<T[]>([]);
+  const [savingOrder, setSavingOrder] = React.useState(false);
+  const handleRefs = React.useRef<Record<string, HTMLButtonElement | null>>({});
 
   React.useEffect(() => {
     let active = true;
@@ -97,6 +184,7 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
         setCriterion(res.data.agendaColorCriterion);
         setOverrides(res.data.agendaColorOverrides);
         setExceptions(res.data.agendaColorExceptions);
+        setOrder(res.data.agendaInstructorOrder);
       }
       setLoading(false);
     };
@@ -158,6 +246,64 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
     setExceptions(res.data.agendaColorExceptions);
   };
 
+  // La lista mostrata segue l'ordine salvato; gli istruttori non ancora
+  // ordinati (es. aggiunti dopo) restano in coda in ordine alfabetico.
+  React.useEffect(() => {
+    setRows(sortInstructorsForAgenda(instructors, order));
+  }, [instructors, order]);
+
+  const saveOrder = async (next: T[]) => {
+    const previous = rows;
+    setRows(next);
+    setSavingOrder(true);
+    // Si salva l'elenco COMPLETO di chi è in lista: così l'ordine è esplicito e
+    // un istruttore nuovo finisce in fondo invece che in mezzo.
+    const res = await updateAutoscuolaSettings({
+      agendaInstructorOrder: next.map((i) => i.id),
+    });
+    setSavingOrder(false);
+    if (!res.success || !res.data) {
+      setRows(previous);
+      toast.error({ description: res.message ?? "Impossibile salvare l'ordine." });
+      return;
+    }
+    setOrder(res.data.agendaInstructorOrder);
+  };
+
+  // Fine trascinamento: `rows` è già l'ordine nuovo (lo muove Reorder in
+  // tempo reale), qui lo si persiste — e solo se è davvero cambiato, così un
+  // drag annullato a metà non scrive niente.
+  const commitOrder = () => {
+    const nextIds = rows.map((i) => i.id);
+    const currentIds = sortInstructorsForAgenda(instructors, order).map((i) => i.id);
+    if (nextIds.join("|") === currentIds.join("|")) return;
+    void saveOrder(rows);
+  };
+
+  // ↑/↓ da tastiera sulla maniglia: sposta la riga di una posizione e le
+  // ridà il focus (dopo il riordino il nodo è un altro).
+  const moveRow = (id: string, direction: -1 | 1) => {
+    const from = rows.findIndex((i) => i.id === id);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= rows.length) return;
+    const next = [...rows];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    void saveOrder(next);
+    requestAnimationFrame(() => handleRefs.current[id]?.focus());
+  };
+
+  const resetOrder = async () => {
+    setSavingOrder(true);
+    const res = await updateAutoscuolaSettings({ agendaInstructorOrder: [] });
+    setSavingOrder(false);
+    if (!res.success || !res.data) {
+      toast.error({ description: res.message ?? "Impossibile ripristinare l'ordine." });
+      return;
+    }
+    setOrder(res.data.agendaInstructorOrder);
+  };
+
   const entriesForCriterion: AgendaColorEntry[] =
     criterion === "patente" ? LICENSE_COLOR_ENTRIES : DURATION_COLOR_ENTRIES;
 
@@ -170,10 +316,20 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
     Boolean(exceptions[exc.key]),
   ).length;
 
-  // Colore effettivo mostrato in anteprima: custom oppure palette posizionale
-  // (stessa regola di InstructorsTab/agenda per gli istruttori senza colore).
-  const effectiveHex = (instructor: AspettoInstructor, index: number) =>
-    instructor.color ?? INSTRUCTOR_COLOR_CHOICES[index % 8].hex;
+  // Colore effettivo mostrato in anteprima: custom oppure palette posizionale.
+  // L'indice è quello ALFABETICO, non la posizione in lista: in agenda la
+  // palette automatica è agganciata all'alfabeto, quindi riordinare le colonne
+  // non deve cambiare il colore di nessuno (né qui né lì).
+  const alphaIndexById = React.useMemo(() => {
+    const map = new Map<string, number>();
+    [...instructors]
+      .sort((a, b) => a.name.localeCompare(b.name, "it"))
+      .forEach((instructor, index) => map.set(instructor.id, index));
+    return map;
+  }, [instructors]);
+  const effectiveHex = (instructor: AspettoInstructor) =>
+    instructor.color ??
+    INSTRUCTOR_COLOR_CHOICES[(alphaIndexById.get(instructor.id) ?? 0) % 8].hex;
 
   if (loading) {
     return (
@@ -393,50 +549,60 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
         </div>
       )}
 
-      {/* ── Colori istruttori ── */}
+      {/* ── Istruttori in agenda: ordine delle colonne + colore ── */}
       <section className="mt-10">
-        <h3 className="text-base font-semibold text-[#222222]">Colori istruttori</h3>
+        <div className="flex items-center gap-2.5">
+          <h3 className="text-base font-semibold text-[#222222]">Istruttori in agenda</h3>
+          {savingOrder && <LoadingDots className="text-[#929292]" />}
+        </div>
         <p className="mt-1 max-w-[560px] text-[13px] font-medium leading-normal text-[#929292]">
-          Il colore identifica l&apos;istruttore in agenda (banda di disponibilità, avatar e
-          stampa). &quot;Automatico&quot; assegna una tinta dalla palette.
+          Trascina per scegliere in che ordine compaiono le colonne in agenda. Il colore
+          identifica l&apos;istruttore (banda di disponibilit&agrave;, avatar e stampa):
+          &quot;Automatico&quot; assegna una tinta dalla palette.
         </p>
 
-        <div className="mt-2">
-          {instructors.length === 0 ? (
+        <div className="mt-4">
+          {rows.length === 0 ? (
             <div className="py-5 text-[13px] font-medium italic text-[#a8a8a8]">
               Nessun istruttore attivo.
             </div>
           ) : (
-            instructors.map((instructor, index) => {
-              const taken = instructors
-                .filter((i) => i.id !== instructor.id && i.color)
-                .map((i) => i.color as string);
-              return (
-                <div
-                  key={instructor.id}
-                  className={cn(
-                    "flex items-center justify-between gap-4 py-3.5",
-                    index < instructors.length - 1 && "border-b border-[#eeeeee]",
-                  )}
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span
-                      className="size-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: effectiveHex(instructor, index) }}
-                    />
-                    <div className="truncate text-sm font-semibold text-[#222222]">
-                      {instructor.name}
-                    </div>
-                  </div>
-                  <ColorSwatchPicker
-                    value={instructor.color}
-                    taken={taken}
-                    title={`Colore di ${instructor.name}`}
-                    onSelect={(hex) => changeInstructorColor(instructor, hex)}
+            <>
+              <Reorder.Group
+                axis="y"
+                values={rows}
+                onReorder={(next) => setRows(next as T[])}
+                className="flex list-none flex-col gap-2"
+              >
+                {rows.map((instructor) => (
+                  <InstructorOrderRow
+                    key={instructor.id}
+                    instructor={instructor}
+                    dotHex={effectiveHex(instructor)}
+                    taken={rows
+                      .filter((i) => i.id !== instructor.id && i.color)
+                      .map((i) => i.color as string)}
+                    disabled={savingOrder}
+                    handleRef={(el) => {
+                      handleRefs.current[instructor.id] = el;
+                    }}
+                    onMove={(direction) => moveRow(instructor.id, direction)}
+                    onCommit={commitOrder}
+                    onColor={(hex) => changeInstructorColor(instructor, hex)}
                   />
-                </div>
-              );
-            })
+                ))}
+              </Reorder.Group>
+              {order.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void resetOrder()}
+                  disabled={savingOrder}
+                  className="mt-3 cursor-pointer text-[13px] font-semibold text-[#929292] underline decoration-1 underline-offset-2 transition-colors hover:text-[#222222] disabled:opacity-50"
+                >
+                  Ripristina l&apos;ordine alfabetico
+                </button>
+              )}
+            </>
           )}
         </div>
       </section>

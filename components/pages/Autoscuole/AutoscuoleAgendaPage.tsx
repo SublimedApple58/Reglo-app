@@ -77,6 +77,10 @@ import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, mot
 import { instructorTintStyles } from "@/lib/autoscuole/instructor-colors";
 import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
 import {
+  agendaInstructorComparator,
+  sortInstructorsForAgenda,
+} from "@/lib/autoscuole/agenda-instructor-order";
+import {
   AGENDA_COLOR_EXCEPTIONS,
   DEFAULT_AGENDA_COLOR_CRITERION,
   DURATION_COLOR_ENTRIES,
@@ -714,7 +718,32 @@ export function AutoscuoleAgendaPage({
   const [manageGroupLessonId, setManageGroupLessonId] = React.useState<string | null>(null);
   const [createGroupLessonOpen, setCreateGroupLessonOpen] = React.useState(false);
   const [students, setStudents] = React.useState<StudentOption[]>([]);
-  const [instructors, setInstructors] = React.useState<ResourceOption[]>([]);
+  const [instructorsRaw, setInstructors] = React.useState<ResourceOption[]>([]);
+  // Ordine custom delle colonne istruttore (Impostazioni → Aspetto, REG-449).
+  // Elenco di id anche parziale: chi non c'è resta in coda in ordine alfabetico.
+  // Arriva coi settings (cache Redis) insieme al criterio colore, vedi sotto.
+  const [agendaInstructorOrder, setAgendaInstructorOrder] = React.useState<string[]>([]);
+  // Ordinata UNA volta qui: tutto ciò che discende da `instructors` (colonne
+  // vista Giorno, filtro Istruttori, select dei dialoghi, stampa) eredita
+  // l'ordine dell'autoscuola. La palette colori posizionale NO — resta
+  // agganciata all'alfabeto, vedi `instructorColorMap`.
+  const instructors = React.useMemo(
+    () => sortInstructorsForAgenda(instructorsRaw, agendaInstructorOrder),
+    [instructorsRaw, agendaInstructorOrder],
+  );
+  // Stesso comparatore per le righe "colonna" (id+nome) che arrivano dalla
+  // disponibilità istruttori, dove il campo si chiama instructorId/Name.
+  const columnOrderComparator = React.useMemo(() => {
+    const compare = agendaInstructorComparator(agendaInstructorOrder);
+    return (
+      a: { instructorId: string; instructorName: string },
+      b: { instructorId: string; instructorName: string },
+    ) =>
+      compare(
+        { id: a.instructorId, name: a.instructorName },
+        { id: b.instructorId, name: b.instructorName },
+      );
+  }, [agendaInstructorOrder]);
   const [vehicles, setVehicles] = React.useState<ResourceOption[]>([]);
   const [vehiclesEnabled, setVehiclesEnabled] = React.useState(true);
   const [followCarRules, setFollowCarRules] = React.useState<
@@ -1013,6 +1042,7 @@ export function AutoscuoleAgendaPage({
         setAgendaColorCriterion(res.data.agendaColorCriterion);
         setAgendaColorOverrides(res.data.agendaColorOverrides);
         setAgendaColorExceptions(res.data.agendaColorExceptions);
+        setAgendaInstructorOrder(res.data.agendaInstructorOrder);
       }
     });
     return () => {
@@ -1970,8 +2000,8 @@ export function AutoscuoleAgendaPage({
     const list = Array.from(instrMap.values()).filter(
       (instr) => instructorFilter.length === 0 || instructorFilter.includes(instr.id),
     );
-    return list.sort((a, b) => a.name.localeCompare(b.name));
-  }, [viewMode, instructors, instructorAvailability, dayFocus, instructorFilter]);
+    return sortInstructorsForAgenda(list, agendaInstructorOrder);
+  }, [viewMode, instructors, instructorAvailability, dayFocus, instructorFilter, agendaInstructorOrder]);
 
   const filtered = React.useMemo(() => {
     return regularAppointments.filter((item) => {
@@ -2381,7 +2411,8 @@ export function AutoscuoleAgendaPage({
   }, []);
   // Stable instructor → tint mapping (used in both week and day views).
   // Owner-picked hex (instructor.color) wins; otherwise the legacy positional
-  // palette by alphabetical index. Custom colors resolve to inline styles,
+  // palette by alphabetical index — ALFABETICO di proposito: l'ordine custom
+  // delle colonne (REG-449) sposta le colonne, non deve ricolorare nessuno. Custom colors resolve to inline styles,
   // legacy ones to Tailwind classes — consumers apply both.
   const instructorColorMap = React.useMemo(() => {
     const map = new Map<string, InstructorTint>();
@@ -3316,9 +3347,13 @@ export function AutoscuoleAgendaPage({
 
         {/* ── WEEKLY VIEW (istruttori, o veicoli per il consorzio) ── */}
         {viewMode === "week" && (() => {
-          const weekInstructorsAll = instructorAvailability.length > 0
-            ? instructorAvailability
-            : instructors.map((i) => ({ instructorId: i.id, instructorName: i.name, days: {} as Record<string, Array<{ startMinutes: number; endMinutes: number }>> }));
+          // Le righe di disponibilità arrivano dal server in ordine alfabetico:
+          // qui passano per l'ordine custom dell'autoscuola (REG-449).
+          const weekInstructorsAll = [
+            ...(instructorAvailability.length > 0
+              ? instructorAvailability
+              : instructors.map((i) => ({ instructorId: i.id, instructorName: i.name, days: {} as Record<string, Array<{ startMinutes: number; endMinutes: number }>> }))),
+          ].sort(columnOrderComparator);
           // Filtro istruttori attivo → solo le colonne selezionate.
           const weekInstructorCols = instructorFilter.length > 0
             ? weekInstructorsAll.filter((i) => instructorFilter.includes(i.instructorId))

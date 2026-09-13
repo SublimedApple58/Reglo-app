@@ -2,9 +2,10 @@
 
 Pannello "Aspetto" (icona tavolozza) nell'overlay Impostazioni dell'account:
 personalizzazione visiva dell'agenda. Due sezioni: criterio colore dei blocchi
-guida (durata | tipo patente) e colori istruttori (spostati qui da Gestisci
-istruttore, 2026-08-10). Il colore istruttore tinge avatar/bande/stampa, NON i
-blocchi.
+guida (durata | tipo patente) e "Istruttori in agenda" — una sola lista dove si
+trascina per l'**ordine delle colonne** (REG-449, 2026-09-13) e si tocca il
+pallino per il **colore** (spostato qui da Gestisci istruttore, 2026-08-10). Il
+colore istruttore tinge avatar/bande/stampa, NON i blocchi.
 
 ## Data model
 
@@ -16,6 +17,9 @@ blocchi.
   `asAgendaColorOverrides` / `asAgendaColorExceptions` (chiavi note, default
   dal registry). Colore istruttore: `AutoscuolaInstructor.color`
   (vedi [instructor-colors.md](instructor-colors.md)).
+- Ordine colonne: `agendaInstructorOrder` (array di id istruttore) nello stesso
+  JSON `limits`, normalizzato da `asAgendaInstructorOrder`. Elenco anche
+  **parziale**; array vuoto = ordine alfabetico (il comportamento storico).
 
 ## Files
 
@@ -23,7 +27,8 @@ blocchi.
 |------|------|
 | `lib/autoscuole/agenda-color-criterion.ts` | Costante `AGENDA_COLOR_CRITERIA`, tipo, default, normalizzatori + palette (`DURATION_COLOR_ENTRIES`, `LICENSE_COLOR_ENTRIES`, `durationColorEntry`, `licenseColorEntryForTag`) + `agendaBlockStyle(entry, overrideHex?)` (override → tinta alpha 0.20 + ombra in tinta) — modulo client-safe, condiviso action↔UI |
 | `lib/actions/autoscuole-settings.actions.ts` | `agendaColorCriterion` in patch schema, `AutoscuolaSettingsData`, `resolveAutoscuolaSettingsData`, `nextLimits` e risposta di `updateAutoscuolaSettings` |
-| `components/pages/Autoscuole/AspettoSettingsPane.tsx` | Il pannello: card radio criterio (anteprima chip override-aware) + link "Personalizza i colori" che apre on-demand la chip strip (una chip pillola per voce del criterio attivo, tap → `ColorSwatchPicker` via `renderTrigger`, reset "Colore standard") + righe colori istruttori (`taken`) |
+| `lib/autoscuole/agenda-instructor-order.ts` | `asAgendaInstructorOrder` (normalizzatore), `agendaInstructorComparator` (ordinati per posizione, gli altri alfabetici in coda) e `sortInstructorsForAgenda` — modulo client-safe condiviso action↔agenda↔pane |
+| `components/pages/Autoscuole/AspettoSettingsPane.tsx` | Il pannello: card radio criterio (anteprima chip override-aware) + link "Personalizza i colori" che apre on-demand la chip strip (una chip pillola per voce del criterio attivo, tap → `ColorSwatchPicker` via `renderTrigger`, reset "Colore standard") + lista "Istruttori in agenda": `Reorder`/`useDragControls` di `motion/react` (drag dalla sola maniglia, ↑/↓ da tastiera), auto-save al rilascio con rollback, link "Ripristina l'ordine alfabetico" + `ColorSwatchPicker` per riga (`taken`) |
 | `components/pages/Autoscuole/AutoscuoleResourcesPage.tsx` | Wiring: `ConfigPane` union, `CONFIG_PANE_GROUPS` (gruppo Istruttori/Veicoli), `CONFIG_PANE_TITLES`, `PANES_NEEDING_RESOURCES`, `KeepAlivePane`; passa `instructors` + `changeInstructorColor` |
 | `components/ui/proto-icons.tsx` | `PaletteProtoIcon` (tavolozza) |
 | `components/ui/color-swatch-picker.tsx` | Esteso con `taken?: string[]` (swatch disabilitati se usati da altri) |
@@ -62,6 +67,21 @@ blocchi.
 - La legenda mostra una sezione "Eccezioni" con le sole attive del criterio.
 - La legenda agenda mostra i bucket durata oppure la palette patenti a
   seconda del criterio attivo, coi colori personalizzati applicati.
+- **Ordine degli istruttori in agenda** (REG-449): l'ordine scelto nel pannello
+  vale per tutta l'autoscuola e si applica a colonne vista Settimana, colonne
+  vista Giorno, filtro "Istruttori", select istruttore dei dialoghi e anteprima
+  di stampa. In `AutoscuoleAgendaPage` la lista `instructors` viene ordinata una
+  volta sola (`sortInstructorsForAgenda`) e tutto il resto la eredita; le colonne
+  della vista Settimana nascono invece dalle righe di
+  `getInstructorAvailabilityForAgenda` e passano per lo stesso comparatore
+  (`columnOrderComparator`). Casi limite: istruttore **nuovo** → in fondo, mai in
+  mezzo; id di istruttore non più esistente → ignorato; filtro istruttori attivo →
+  filtra soltanto, l'ordine relativo resta. La vista "colonne per Veicolo"
+  (consorzio) non è toccata.
+- ⚠️ La **palette colori posizionale** degli istruttori senza colore scelto resta
+  agganciata all'**indice alfabetico** (due `sort` espliciti in agenda + stampa, e
+  `alphaIndexById` nel pannello): riordinare le colonne non deve ricolorare
+  nessuno.
 - Setting a livello autoscuola (non per-utente); salvataggio auto-save con
   rollback su errore. Cache Redis limits invalidata da `updateAutoscuolaSettings`
   (l'agenda rilegge al mount successivo).
@@ -73,6 +93,10 @@ L'endpoint `/api/autoscuole/settings` è **già completo per il mobile**: auth v
 `requireServiceAccess` → `getActiveCompanyContext`, che accetta sia session web
 sia bearer token mobile.
 
+- **Ordine istruttori (REG-449)**: `agendaInstructorOrder` viaggia nello stesso
+  payload GET ma il **mobile non lo consuma** (feature web-only per scelta: in
+  app l'agenda istruttore è la propria, non una griglia di colonne). Se un domani
+  servisse, basta ordinare la lista con `sortInstructorsForAgenda`.
 - **Lettura (GET)**: `getAutoscuolaSettings` espone `agendaColorCriterion`,
   `agendaColorOverrides` e `agendaColorExceptions` a tutti i membri (nessun gate
   owner/admin), così anche un istruttore normale può leggere il criterio per il

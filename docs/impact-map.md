@@ -156,7 +156,8 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Mobile**: `color` already returned by `GET /api/autoscuole/instructors` + agenda bootstrap (not consumed yet)
 
 ### Aspetto (Impostazioni)
-- → **Instructor Colors**: sezione "Colori istruttori" usa `changeInstructorColor` (AutoscuoleResourcesPage) → `updateAutoscuolaInstructor`
+- → **Instructor Colors**: la sezione "Istruttori in agenda" usa `changeInstructorColor` (AutoscuoleResourcesPage) → `updateAutoscuolaInstructor`
+- → **Appointments/Agenda (ordine colonne, REG-449)**: `agendaInstructorOrder` (elenco di id in `CompanyService.limits`) riordina le colonne istruttore in agenda — vista Settimana, vista Giorno, filtro Istruttori, select dei dialoghi e stampa. Letto da `AutoscuoleAgendaPage` insieme al criterio colore; chi non è in elenco resta in coda in ordine alfabetico. **La palette colori posizionale NON lo segue**: resta agganciata all'ordine alfabetico, altrimenti riordinare le colonne ricolorerebbe gli istruttori senza colore scelto
 - → **Appointments/Agenda**: `agendaColorCriterion` ("durata" | "patente") + `agendaColorOverrides` (colori per voce, in `CompanyService.limits`) letti da `AutoscuoleAgendaPage` al mount; i blocchi guida normali sono colorati inline via `guideBlockColorStyle` (patente: `licenseColorEntryForTag(licenseTagFor(item))`, dipende dalla directory allievi bootstrap `licenseCategory`+`transmission`; durata: `durationColorEntry`); legenda dinamica override-aware
 - → **Settings (autoscuole-settings.actions)**: campo nel patch schema/`AutoscuolaSettingsData`; cache Redis limits invalidata su update
 - → **Vehicles/License**: la palette patenti copre le categorie di `LICENSE_CATEGORIES` (`lib/autoscuole/license.ts`); la distinzione cambio automatico è NATIVA del criterio patente (voce `autom`), eccezione `automatic` solo per il criterio durata

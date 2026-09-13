@@ -34,6 +34,7 @@ import {
   type AgendaColorExceptions,
   type AgendaColorOverrides,
 } from "@/lib/autoscuole/agenda-color-criterion";
+import { asAgendaInstructorOrder } from "@/lib/autoscuole/agenda-instructor-order";
 import {
   BOOKING_SLOT_DURATION_OPTIONS,
   LESSON_POLICY_TYPES,
@@ -431,6 +432,9 @@ const autoscuolaSettingsPatchSchema = z
     // Eccezioni colore pre-costruite (chiave → attiva); chiavi rivalidate da
     // asAgendaColorExceptions (default dal registry per quelle mancanti).
     agendaColorExceptions: z.record(z.string(), z.boolean()).optional(),
+    // Ordine custom delle colonne istruttore in agenda (REG-449): elenco di id,
+    // anche parziale. Array vuoto = si torna all'ordine alfabetico.
+    agendaInstructorOrder: z.array(z.string()).optional(),
   })
   .refine(
     // Almeno un campo presente: check generico su tutte le chiavi dello schema
@@ -634,6 +638,7 @@ export type AutoscuolaSettingsData = {
   agendaColorCriterion: AgendaColorCriterion;
   agendaColorOverrides: AgendaColorOverrides;
   agendaColorExceptions: AgendaColorExceptions;
+  agendaInstructorOrder: string[];
 };
 
 const resolveAutoscuolaSettingsData = async (
@@ -1006,6 +1011,7 @@ const resolveAutoscuolaSettingsData = async (
     agendaColorCriterion: asAgendaColorCriterion(limits.agendaColorCriterion),
     agendaColorOverrides: asAgendaColorOverrides(limits.agendaColorOverrides),
     agendaColorExceptions: asAgendaColorExceptions(limits.agendaColorExceptions),
+    agendaInstructorOrder: asAgendaInstructorOrder(limits.agendaInstructorOrder),
   };
 };
 
@@ -1592,6 +1598,9 @@ export async function updateAutoscuolaSettings(
       agendaColorExceptions: asAgendaColorExceptions(
         payload.agendaColorExceptions ?? limits.agendaColorExceptions,
       ),
+      agendaInstructorOrder: asAgendaInstructorOrder(
+        payload.agendaInstructorOrder ?? limits.agendaInstructorOrder,
+      ),
     };
 
     if (service) {
@@ -1736,6 +1745,7 @@ export async function updateAutoscuolaSettings(
         agendaColorCriterion: nextLimits.agendaColorCriterion,
         agendaColorOverrides: nextLimits.agendaColorOverrides,
         agendaColorExceptions: nextLimits.agendaColorExceptions,
+        agendaInstructorOrder: nextLimits.agendaInstructorOrder,
       },
     };
   } catch (error) {
