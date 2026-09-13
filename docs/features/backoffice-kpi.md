@@ -58,6 +58,20 @@ disponibili in agenda e quante di quelle ore sono davvero occupate da guide.
 - ⚠️ Le fasce sono **orari da orologio italiano**, non istanti: in produzione il
   server gira a UTC, quindi la conversione passa da `romeWallClockToInstant`.
   Senza, ogni fascia slitterebbe di un'ora o due e non combacerebbe con le guide.
+- **Fuori dal rapporto le autoscuole senza nemmeno una guida nel periodo**
+  (2026-09-13): una scuola appena entrata che ha già dichiarato le fasce ma non
+  ha ancora lavorato non ha "l'agenda vuota", non sta usando l'agenda. Con 8
+  scuole in gioco una sola così (Solferino: 343 ore dichiarate, 0 guide) valeva
+  14% del denominatore. Quante ne restano fuori è scritto nella nota in fondo.
+- **Spacco per prenotazione in app dell'allievo**: sotto la percentuale, "con
+  app allievo X% · senza Y%" (`limits.appBookingActors` ∈ students|both = attiva,
+  default students). Su prod lo scarto è enorme — **79% contro 35%** — e spiega
+  da solo la media bassa: le scuole che tengono la prenotazione ai soli
+  istruttori riempiono molto meno. Si è scelto di **mostrare lo spacco invece di
+  filtrare** sulle sole app-enabled: filtrando, il KPI avrebbe nascosto 3 clienti
+  su 8 e sarebbe saltato ogni volta che una scuola cambia impostazione. Gli
+  override per percorso patente e per cluster istruttore (REG-426) qui si
+  ignorano: per un KPI di piattaforma conta il default dell'autoscuola.
 - **Solo ore già passate** (correzione 2026-09-13): la finestra viene tagliata a
   `now`. Le fasce dichiarate per i giorni che devono ancora arrivare non entrano
   né al numeratore né al denominatore — è un consuntivo, non una previsione. Un

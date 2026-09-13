@@ -326,18 +326,34 @@ export function BackofficeKpiPage({
           delta={kpis?.saturation.ratio}
           loading={!kpis}
           hint={
-            kpis
-              ? [
-                  // "finora": si contano solo le ore già passate, non le fasce
-                  // dichiarate per i giorni che devono ancora arrivare.
-                  `${formatInt(kpis.saturation.busyHours)} ore di guida su ${formatInt(kpis.saturation.availableHours)} disponibili finora`,
-                  kpis.saturation.outsideHours >= 1
-                    ? `${formatInt(kpis.saturation.outsideHours)} ore fuori fascia`
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")
-              : undefined
+            kpis ? (
+              <>
+                {/* "finora": solo ore già passate, non le fasce dichiarate per
+                    i giorni che devono ancora arrivare. */}
+                <span className="block">
+                  {formatInt(kpis.saturation.busyHours)} ore di guida su{" "}
+                  {formatInt(kpis.saturation.availableHours)} disponibili finora
+                  {kpis.saturation.outsideHours >= 1
+                    ? ` · ${formatInt(kpis.saturation.outsideHours)} fuori fascia`
+                    : ""}
+                </span>
+                {/* Lo spacco che spiega la media: chi apre la prenotazione in
+                    app all'allievo riempie molto di più. */}
+                {kpis.saturation.byAppBooking.enabled.companies > 0 &&
+                  kpis.saturation.byAppBooking.disabled.companies > 0 && (
+                    <span className="mt-1 block text-[#6a6a6a]">
+                      con app allievo{" "}
+                      <strong className="font-semibold tabular-nums">
+                        {formatPercent(kpis.saturation.byAppBooking.enabled.ratio)}
+                      </strong>{" "}
+                      · senza{" "}
+                      <strong className="font-semibold tabular-nums">
+                        {formatPercent(kpis.saturation.byAppBooking.disabled.ratio)}
+                      </strong>
+                    </span>
+                  )}
+              </>
+            ) : undefined
           }
         />
         <KpiCard
@@ -720,6 +736,17 @@ export function BackofficeKpiPage({
                 : `${kpis.headline.excludedCompanies} autoscuole interne di prova sono escluse`}{" "}
               da tutti i numeri di questa pagina (flag «excludeFromKpis» nelle impostazioni
               del servizio).{" "}
+            </>
+          )}
+          {kpis && kpis.saturation.companiesIdle > 0 && (
+            <>
+              La saturazione agenda guarda le{" "}
+              {kpis.saturation.companiesCounted} autoscuole che hanno lavorato nel
+              periodo:{" "}
+              {kpis.saturation.companiesIdle === 1
+                ? "una che ha dichiarato disponibilità senza fare nemmeno una guida è fuori dal rapporto"
+                : `${kpis.saturation.companiesIdle} che hanno dichiarato disponibilità senza fare nemmeno una guida sono fuori dal rapporto`}{" "}
+              (agenda non usata, non agenda vuota).{" "}
             </>
           )}
           MRR e ARR vengono dai piani registrati a mano in backoffice, non dal fatturato.

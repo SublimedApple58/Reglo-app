@@ -3,6 +3,10 @@ import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { buildAvailabilityResolver } from "@/lib/actions/autoscuole-availability.actions";
 import {
+  isStudentAppBookingEnabled,
+  parseBookingGovernanceFromLimits,
+} from "@/lib/autoscuole/booking-governance";
+import {
   clampIntervals,
   instructorSaturation,
   romeWallClockToInstant,
@@ -135,6 +139,15 @@ export type BackofficeKpis = {
     outsideHours: number;
     ratio: KpiDelta;
     instructorsWithAvailability: number;
+    /** Autoscuole entrate nel rapporto (hanno lavorato nel periodo). */
+    companiesCounted: number;
+    /** Autoscuole tenute fuori perché senza nemmeno una guida nel periodo. */
+    companiesIdle: number;
+    /** Lo stesso rapporto spaccato per prenotazione in app dell'allievo. */
+    byAppBooking: {
+      enabled: { ratio: number; companies: number };
+      disabled: { ratio: number; companies: number };
+    };
   };
   activity: {
     booked: KpiDelta;
@@ -210,6 +223,17 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
     const notExcluded = excludedCompanyIds.length
       ? { companyId: { notIn: excludedCompanyIds } }
       : {};
+    // Prenotazione in app per l'ALLIEVO, default di autoscuola (REG-426: gli
+    // override per percorso patente e per cluster istruttore qui si ignorano —
+    // per un KPI di piattaforma conta l'impostazione della scuola).
+    const appBookingByCompany = new Map(
+      services.map((service) => [
+        service.companyId,
+        isStudentAppBookingEnabled(
+          parseBookingGovernanceFromLimits((service.limits ?? {}) as Record<string, unknown>),
+        ),
+      ]),
+    );
     const isExcluded = (companyId: string | null) =>
       companyId !== null && excludedCompanyIds.includes(companyId);
 
@@ -677,6 +701,12 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
         return {
           ...withRatio({ availableHours: 0, busyHours: 0, outsideHours: 0 }),
           withAvailability: 0,
+          companiesCounted: 0,
+          companiesIdle: 0,
+          byAppBooking: {
+            enabled: { ratio: 0, companies: 0 },
+            disabled: { ratio: 0, companies: 0 },
+          },
         };
       }
       const window: Interval = { start: windowStart.getTime(), end: windowEnd.getTime() };
@@ -707,7 +737,7 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
       const perCompany = Array.from(instructorsByCompany, ([companyId, ids]) => {
           const resolver = availabilityResolvers.get(companyId)!;
           const closedDays = holidaysByCompany.get(companyId) ?? new Set<string>();
-          return ids.map((instructorId) => {
+          const rows = ids.map((instructorId) => {
             const slots: Interval[] = [];
             for (const day of days) {
               const { year, month, day: dayOfMonth } = romeYmd(day);
@@ -733,14 +763,42 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
             );
             return totals;
           });
+          return { companyId, rows };
       });
 
-      for (const totals of perCompany.flat()) {
-        available += totals.availableHours;
-        busy += totals.busyHours;
-        outside += totals.outsideHours;
-        if (totals.availableHours > 0) withAvailability += 1;
+      // Una scuola senza NEMMENO una guida nel periodo non ha "l'agenda vuota":
+      // non sta usando l'agenda (appena entrata, oppure la tiene fuori da
+      // Reglo). Le sue ore dichiarate falserebbero il rapporto verso il basso,
+      // quindi resta fuori — e la pagina lo dichiara.
+      let companiesCounted = 0;
+      let companiesIdle = 0;
+      const byApp = {
+        enabled: { available: 0, busy: 0, companies: 0 },
+        disabled: { available: 0, busy: 0, companies: 0 },
+      };
+
+      for (const { companyId, rows } of perCompany) {
+        const companyBusy = rows.reduce((n, r) => n + r.busyHours + r.outsideHours, 0);
+        const companyAvailable = rows.reduce((n, r) => n + r.availableHours, 0);
+        if (companyBusy <= 0) {
+          if (companyAvailable > 0) companiesIdle += 1;
+          continue;
+        }
+        companiesCounted += 1;
+        const bucket = appBookingByCompany.get(companyId) ? byApp.enabled : byApp.disabled;
+        bucket.companies += 1;
+        for (const totals of rows) {
+          available += totals.availableHours;
+          busy += totals.busyHours;
+          outside += totals.outsideHours;
+          bucket.available += totals.availableHours;
+          bucket.busy += totals.busyHours;
+          if (totals.availableHours > 0) withAvailability += 1;
+        }
       }
+
+      const share = (group: { available: number; busy: number }) =>
+        group.available > 0 ? group.busy / group.available : 0;
 
       return {
         ...withRatio({
@@ -749,6 +807,12 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
           outsideHours: outside,
         }),
         withAvailability,
+        companiesCounted,
+        companiesIdle,
+        byAppBooking: {
+          enabled: { ratio: share(byApp.enabled), companies: byApp.enabled.companies },
+          disabled: { ratio: share(byApp.disabled), companies: byApp.disabled.companies },
+        },
       };
     };
 
@@ -790,6 +854,9 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
           outsideHours: saturationNow.outsideHours,
           ratio: delta(saturationNow.ratio, saturationPrev.ratio),
           instructorsWithAvailability: saturationNow.withAvailability,
+          companiesCounted: saturationNow.companiesCounted,
+          companiesIdle: saturationNow.companiesIdle,
+          byAppBooking: saturationNow.byAppBooking,
         },
         activity: {
           booked: delta(booked, prevBooked),
