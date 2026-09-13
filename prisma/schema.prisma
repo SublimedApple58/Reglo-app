@@ -1630,6 +1630,29 @@ model CompanyLicensePurchase {
 // innesca (allievi via self-delete, titolari via Directory, o rilascio email in
 // fase di ri-registrazione). Nessuna FK: l'utente resta (anonimizzato), non viene
 // eliminato. `trigger`: self_delete | directory_removal | orphan_release | unknown.
+// Link "KPI per investor": una pagina pubblica di soli numeri aggregati,
+// raggiungibile SOLO con il token nell'URL (32 byte random, noindex). Un link
+// per destinatario: l'etichetta finisce stampata in fondo alla pagina, così se
+// circola si sa da chi è partito e lo si revoca senza toccare gli altri.
+// Creati e revocati dal backoffice. Vedi docs/features/investor-kpi.md.
+model InvestorKpiLink {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Token in chiaro: chi legge questo DB ha già accesso a tutto il resto, e
+  /// in cambio il link si può ricopiare mesi dopo invece di rigenerarlo.
+  token        String    @unique
+  /// "Preparato per …" — destinatario, mostrato in fondo alla pagina.
+  label        String
+  /// Scadenza opzionale: null = non scade (resta comunque revocabile).
+  expiresAt    DateTime? @db.Timestamp(6)
+  revokedAt    DateTime? @db.Timestamp(6)
+  viewCount    Int       @default(0)
+  lastViewedAt DateTime? @db.Timestamp(6)
+  createdAt    DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt    DateTime  @updatedAt
+
+  @@index([revokedAt])
+}
+
 model AccountDeletionAudit {
   id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   deletedUserId    String   @db.Uuid

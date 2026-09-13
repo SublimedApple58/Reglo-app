@@ -16,7 +16,7 @@ import {
   YAxis,
 } from "recharts";
 
-import type { BackofficeKpis } from "@/lib/actions/backoffice-kpi.actions";
+import type { BackofficeKpis } from "@/lib/backoffice/kpi-compute";
 import { formatEuro, formatInt } from "./kpi-format";
 import { LegendDot } from "./KpiPrimitives";
 

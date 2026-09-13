@@ -1,4 +1,4 @@
-import type { BackofficeKpis } from "@/lib/actions/backoffice-kpi.actions";
+import type { BackofficeKpis } from "@/lib/backoffice/kpi-compute";
 
 // Formattatori condivisi della sezione KPI. Numeri sempre it-IT, sempre
 // tabular-nums nel markup: una colonna di cifre che balla di mezzo pixel è la

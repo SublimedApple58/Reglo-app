@@ -4,7 +4,7 @@ import React from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 
-import type { KpiDelta } from "@/lib/actions/backoffice-kpi.actions";
+import type { KpiDelta } from "@/lib/backoffice/kpi-compute";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 

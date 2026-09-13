@@ -5,10 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion, useReducedMotion } from "motion/react";
 import { Download, Info } from "lucide-react";
 
-import {
-  getBackofficeKpis,
-  type BackofficeKpis,
-} from "@/lib/actions/backoffice-kpi.actions";
+import { getBackofficeKpis } from "@/lib/actions/backoffice-kpi.actions";
+import type { BackofficeKpis } from "@/lib/backoffice/kpi-compute";
 import { DatePickerInput } from "@/components/ui/date-picker";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
@@ -22,6 +20,7 @@ import {
   GrowthChart,
   LessonsTrendChart,
 } from "./kpi/KpiCharts";
+import { InvestorLinksPanel } from "./kpi/InvestorLinksPanel";
 import { KpiCard, KpiSection, LegendDot } from "./kpi/KpiPrimitives";
 import {
   COMPANY_KIND_LABEL,
@@ -655,6 +654,9 @@ export function BackofficeKpiPage({
           )}
         </KpiSection>
       </div>
+
+      {/* ── Link investor (pagina pubblica a token) ── */}
+      <InvestorLinksPanel />
 
       {/* ── Nota metodologica: i limiti si dicono, non si nascondono ── */}
       <p className="mt-6 flex items-start gap-2 text-[12px] font-medium leading-relaxed text-[#9a9a9a]">

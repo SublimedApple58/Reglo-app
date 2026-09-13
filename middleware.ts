@@ -23,6 +23,12 @@ const isPublicRoute = (req: NextRequest) => {
   if (normalizedPath === '/invite' || normalizedPath.startsWith('/invite/')) {
     return true;
   }
+
+  // Pagina "Reglo in numeri": pubblica perché protetta dal token nell'URL
+  // (32 byte random + noindex), non da una sessione.
+  if (normalizedPath.startsWith('/investor/')) {
+    return true;
+  }
   if (
     normalizedPath === '/backoffice' ||
     normalizedPath.startsWith('/backoffice/') ||

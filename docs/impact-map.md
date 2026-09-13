@@ -143,6 +143,12 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Mobile**: endpoint `api/mobile/profile/photo|signature` + campi `photoUrl`/`signatureUrl` in `/api/mobile/me` (tipi in `reglo-mobile/src/types/regloApi.ts`)
 - → **Specs portale**: costanti SOLO in `lib/portal-image-specs.ts` (valori cliente, imprecisi per definizione)
 
+### Pagina investor (link pubblico)
+- ← **Backoffice KPI**: stesso `computeKpis`; la proiezione verso l'esterno è in `lib/investor/investor-shape.ts` ed è **testata** perché non lasci passare nomi di autoscuole o metriche operative. Un KPI nuovo nel backoffice NON compare qui finché non lo si aggiunge a mano
+- → **Middleware**: `/investor/` fra le `isPublicRoute` (protetta dal token, non dalla sessione)
+- → **Backoffice**: pannello "Link investor" dentro la pagina KPI (crea/copia/revoca, contatore aperture)
+- Modello `InvestorKpiLink` (token, label, revoca, scadenza, viste): nessuna relazione con Company/User, è un oggetto di livello Reglo
+
 ### Backoffice — KPI
 - ← **Company Plan**: MRR/ARR/ARPA e posti istruttore venduti da `CompanyPlan`; ricavi una tantum da `CompanyLicensePurchase` (nessuna scrittura, sola lettura)
 - ← **Appointments**: volume ed esiti per `startsAt`, domanda e canale per `createdAt` + `bookingSource`. Se cambiano gli stati o si aggiunge un `bookingSource`, aggiornare `lib/backoffice/kpi-math.ts` (`DONE_STATUSES`, `SOURCE_BUCKETS`) o il nuovo canale finisce in "Storico"
