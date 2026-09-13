@@ -1,10 +1,10 @@
 "use client";
 
 import React from "react";
-import Link from "next/link";
 import { motion, useInView, useReducedMotion } from "motion/react";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 
+import { fetchInvestorKpis } from "@/lib/actions/investor-public.actions";
 import { RegloMark } from "@/components/ui/reglo-mark";
 import type { InvestorKpis, InvestorPeriodKey } from "@/lib/investor/investor-kpi";
 import { INVESTOR_PERIODS } from "@/lib/investor/investor-kpi";
@@ -39,10 +39,19 @@ const formatPercent = (value: number) =>
 function useCountUpInView(value: number, active: boolean, decimals = 0) {
   const reduce = useReducedMotion();
   const [shown, setShown] = React.useState(reduce ? value : 0);
+  // Da dove parte l'animazione: 0 la prima volta, il valore già a schermo
+  // quando cambia il periodo (così i numeri scorrono, non sbattono a zero).
+  const fromRef = React.useRef(reduce ? value : 0);
 
   React.useEffect(() => {
     if (reduce || !active) {
       if (reduce) setShown(value);
+      return;
+    }
+    const from = fromRef.current;
+    const delta = value - from;
+    if (Math.abs(delta) < 0.0001) {
+      setShown(value);
       return;
     }
     let frame = 0;
@@ -51,12 +60,17 @@ function useCountUpInView(value: number, active: boolean, decimals = 0) {
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / duration);
       const eased = 1 - Math.pow(1 - t, 3);
-      setShown(value * eased);
+      setShown(from + delta * eased);
       if (t < 1) frame = requestAnimationFrame(tick);
+      else fromRef.current = value;
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [value, active, reduce]);
+
+  React.useEffect(() => {
+    if (reduce) fromRef.current = value;
+  }, [value, reduce]);
 
   return decimals > 0 ? shown : Math.round(shown);
 }
@@ -189,15 +203,38 @@ function Trend({ current, previous, label }: { current: number; previous: number
 }
 
 export function InvestorKpiPage({
-  kpis,
+  kpis: initialKpis,
   label,
   basePath,
+  token,
 }: {
   kpis: InvestorKpis;
   label: string;
   basePath: string;
+  token: string;
 }) {
   const reduce = useReducedMotion();
+  // Il periodo si cambia SENZA ricaricare: si rifà solo il calcolo e i numeri
+  // scorrono al nuovo valore. La pagina è servita dal server al primo giro
+  // (funziona anche senza JS), da lì in poi aggiorna in posto.
+  const [kpis, setKpis] = React.useState(initialKpis);
+  const [pending, setPending] = React.useState<InvestorPeriodKey | null>(null);
+  React.useEffect(() => setKpis(initialKpis), [initialKpis]);
+
+  const changePeriod = React.useCallback(
+    (next: InvestorPeriodKey) => {
+      if (next === kpis.period.key || pending) return;
+      setPending(next);
+      // L'URL resta condivisibile senza far navigare Next: history diretta.
+      window.history.replaceState(null, "", `${basePath}?p=${next}`);
+      fetchInvestorKpis(token, next)
+        .then((res) => {
+          if (res.success && res.data) setKpis(res.data);
+        })
+        .finally(() => setPending(null));
+    },
+    [basePath, kpis.period.key, pending, token],
+  );
   const updated = new Date(kpis.updatedAt).toLocaleDateString("it-IT", {
     day: "numeric",
     month: "long",
@@ -260,7 +297,7 @@ export function InvestorKpiPage({
                 <MiniStat
                   label="ARPA"
                   value={formatEuro(kpis.revenue.arpaCents)}
-                  hint="per cliente al mese"
+                  hint="al mese per autoscuola pagante"
                 />
                 <MiniStat
                   label="Allievi"
@@ -296,26 +333,38 @@ export function InvestorKpiPage({
         >
           {INVESTOR_PERIODS.map((period) => {
             const active = period.key === kpis.period.key;
+            const loading = pending === period.key;
             return (
-              <Link
+              <button
                 key={period.key}
-                href={`${basePath}?p=${period.key}`}
-                scroll={false}
+                type="button"
+                onClick={() => changePeriod(period.key)}
                 aria-current={active ? "page" : undefined}
+                aria-busy={loading}
                 className={cn(
-                  "flex min-h-[44px] flex-1 items-center justify-center rounded-[10px] text-[14.5px] font-semibold transition-colors",
+                  "flex min-h-[44px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-[10px] text-[14.5px] font-semibold transition-all duration-200",
                   active
                     ? "bg-white text-[#12121c] shadow-[0_1px_3px_rgba(18,18,28,0.12)]"
-                    : "text-[#7a7a88]",
+                    : "text-[#7a7a88] hover:text-[#12121c]",
                 )}
               >
                 {period.label}
-              </Link>
+                {loading && (
+                  <span className="size-1.5 animate-pulse rounded-full bg-[#12121c]" />
+                )}
+              </button>
             );
           })}
         </nav>
 
-        <div className="mt-10 space-y-10 sm:mt-14 sm:space-y-14">
+        {/* Mentre ricalcola i numeri restano a schermo, solo un po' indietro:
+            niente scheletri, niente salti di altezza, niente ricarica. */}
+        <div
+          className={cn(
+            "mt-10 space-y-10 transition-opacity duration-300 sm:mt-14 sm:space-y-14",
+            pending && "opacity-45",
+          )}
+        >
           {/* ── Ricavi ── */}
           {/* ── Volume ── */}
           <Section eyebrow="Attività" title="Guide gestite">
@@ -355,9 +404,9 @@ export function InvestorKpiPage({
                     hint="guide su tutta la piattaforma"
                   />
                   <MiniStat
-                    label="Nuovi clienti"
+                    label="Nuove autoscuole"
                     value={formatInt(kpis.customers.newInPeriod)}
-                    hint={`autoscuole entrate negli ultimi ${kpis.period.label}`}
+                    hint={`entrate negli ultimi ${kpis.period.label}`}
                   />
                 </div>
               </>
@@ -463,16 +512,16 @@ export function InvestorKpiPage({
             {() => (
               <>
                 <p className="mt-3 max-w-[46ch] text-[15px] font-medium leading-relaxed text-[#6a6a78]">
-                  Indipendente dal periodo scelto sopra: nuovi clienti mese per mese e
-                  ricavo ricorrente cumulato.
+                  Indipendente dal periodo scelto sopra: autoscuole entrate mese per
+                  mese e ricavo ricorrente cumulato.
                 </p>
                 <div className="mt-6 rounded-2xl bg-[#fafafb] p-4 pt-5">
                   <div className="flex items-baseline justify-between gap-3 px-1">
                     <span className="text-[13px] font-semibold text-[#12121c]">
-                      Nuovi clienti e MRR
+                      Nuove autoscuole e MRR
                     </span>
                     <span className="text-[12.5px] font-medium text-[#8a8a98]">
-                      barre: nuovi clienti · linea: MRR
+                      barre: autoscuole · linea: MRR
                     </span>
                   </div>
                   <div className="mt-2">

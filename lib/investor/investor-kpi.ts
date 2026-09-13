@@ -64,10 +64,15 @@ export type InvestorLinkState =
   | { ok: false; reason: "unknown" | "revoked" | "expired" };
 
 /**
- * Valida il token e segna la visita. Un token sconosciuto e uno revocato danno
- * pagine diverse solo nel testo: in entrambi i casi zero dati.
+ * Valida il token. `countView` segna la visita: va messo SOLO all'apertura
+ * della pagina — cambiare il periodo dal filtro non è una visita nuova.
+ * Un token sconosciuto e uno revocato danno pagine diverse solo nel testo:
+ * in entrambi i casi zero dati.
  */
-export async function resolveInvestorLink(token: string): Promise<InvestorLinkState> {
+export async function resolveInvestorLink(
+  token: string,
+  { countView = true }: { countView?: boolean } = {},
+): Promise<InvestorLinkState> {
   if (!token || token.length < 20 || token.length > 120) return { ok: false, reason: "unknown" };
   const link = await prisma.investorKpiLink.findUnique({
     where: { token },
@@ -80,12 +85,14 @@ export async function resolveInvestorLink(token: string): Promise<InvestorLinkSt
   }
 
   // Contatore visite: best-effort, non deve mai far fallire la pagina.
-  prisma.investorKpiLink
-    .update({
-      where: { id: link.id },
-      data: { viewCount: { increment: 1 }, lastViewedAt: new Date() },
-    })
-    .catch(() => undefined);
+  if (countView) {
+    prisma.investorKpiLink
+      .update({
+        where: { id: link.id },
+        data: { viewCount: { increment: 1 }, lastViewedAt: new Date() },
+      })
+      .catch(() => undefined);
+  }
 
   return { ok: true, label: link.label };
 }

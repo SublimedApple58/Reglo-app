@@ -90,6 +90,31 @@ l'intervallo scritto accanto. Regola pratica: una card sotto "Adesso" non deve
 mai citare il periodo nel sottotitolo (le "nuove autoscuole" sono infatti
 migrate nel blocco periodo).
 
+## Cambio periodo senza ricaricare
+
+Lo switcher **non** naviga: sono bottoni che chiamano `fetchInvestorKpis`
+(`lib/actions/investor-public.actions.ts`), il blocco "nel periodo" si attenua
+per un istante e i numeri scorrono dal valore vecchio al nuovo. L'URL resta
+allineato via `history.replaceState`, quindi si può ancora condividere
+`?p=12m`; il primo caricamento resta servito dal server, quindi la pagina
+funziona anche senza JavaScript.
+
+Prima erano tre `<Link>`: ogni click era una navigazione vera su una pagina
+`force-dynamic`, con tutte le sezioni che si rimontavano e le animazioni e i
+contatori che ripartivano da capo — sembrava una ricarica perché lo era.
+
+⚠️ `fetchInvestorKpis` è un'action **pubblica**: l'autorizzazione è il token,
+come per la pagina. Non incrementa il contatore delle visite — cambiare filtro
+non è una visita nuova, quel conteggio lo fa solo l'apertura della pagina
+(`resolveInvestorLink(token, { countView })`).
+
+## Parole: autoscuole e allievi, mai "clienti"
+
+ARPA è MRR diviso le **autoscuole con un piano attivo**, non gli allievi: la
+card lo scrive ("al mese per autoscuola pagante"). In tutta la pagina esistono
+solo due soggetti, *autoscuole* (chi paga) e *allievi* (chi guida); "clienti"
+è ambiguo per chi legge da fuori e non si usa.
+
 ## Design (mobile-first)
 
 Pensata prima per il telefono: colonna singola da 720px al massimo, numeri in

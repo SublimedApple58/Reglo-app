@@ -58,6 +58,7 @@ export default async function InvestorKpiRoute({
     <InvestorKpiPage
       kpis={kpis}
       label={link.label}
+      token={token}
       basePath={`/${locale}/investor/${token}`}
     />
   );
