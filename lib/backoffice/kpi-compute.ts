@@ -9,8 +9,10 @@ import {
 import {
   clampIntervals,
   instructorSaturation,
+  minutesToHours,
   romeWallClockToInstant,
   romeYmd,
+  totalMinutes,
   withRatio,
   type Interval,
 } from "@/lib/backoffice/agenda-saturation";
@@ -777,12 +779,15 @@ export async function computeKpis(
                 });
               }
             }
+            const blocks = clampIntervals(blocksByInstructor.get(instructorId) ?? [], window);
             const totals = instructorSaturation(
               clampIntervals(slots, window),
-              clampIntervals(blocksByInstructor.get(instructorId) ?? [], window),
+              blocks,
               clampIntervals(lessonsByInstructor.get(instructorId) ?? [], window),
             );
-            return totals;
+            // Serve per capire se un istruttore senza guide era semplicemente
+            // fermo (ferie, malattia) o se non fa guide di mestiere.
+            return { ...totals, blockHours: minutesToHours(totalMinutes(blocks)) };
           });
           return { companyId, rows };
       });
@@ -813,10 +818,14 @@ export async function computeKpis(
           // Stessa regola delle scuole ferme, un gradino più in basso: un
           // istruttore che nel periodo non ha fatto NEMMENO una guida non ha
           // l'agenda vuota — non fa guide. È il titolare, la segretaria, o chi
-          // se n'è andato senza che nessuno l'abbia disattivato. Le sue ore
-          // dichiarate non sono capacità inutilizzata (2 istruttori su 25 su
-          // prod, 438 ore a zero da soli).
-          if (totals.busyHours + totals.outsideHours <= 0) {
+          // se n'è andato senza che nessuno l'abbia disattivato.
+          //
+          // Ma solo se non ha nemmeno un BLOCCO: chi è stato in ferie o in
+          // malattia non guida per un motivo, e le ore che gli restano sono
+          // capacità persa vera, che deve continuare a contare. Su finestre
+          // brevi senza questo distinguo la regola mordeva troppo (+10 punti
+          // sui 30 giorni contro +4 sui 90).
+          if (totals.busyHours + totals.outsideHours <= 0 && totals.blockHours <= 0) {
             if (totals.availableHours > 0) instructorsIdle += 1;
             continue;
           }

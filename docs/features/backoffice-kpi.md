@@ -68,8 +68,13 @@ disponibili in agenda e quante di quelle ore sono davvero occupate da guide.
   basso. Sono titolari, segretarie o istruttori che se ne sono andati senza
   essere disattivati: le loro fasce dichiarate non sono capacità inutilizzata.
   Su prod erano 2 su 25 e da soli valevano 438 ore a zero, il 5,7% del
-  denominatore (58,7% → 62,3% su 90 giorni). Anche questo è dichiarato nella
+  denominatore (58,7% → 62,5% su 90 giorni). Anche questo è dichiarato nella
   nota in fondo alla pagina.
+  ⚠️ L'esclusione vale **solo se l'istruttore non ha nemmeno un blocco** nel
+  periodo: chi è stato in ferie o in malattia non guida per un motivo, e le ore
+  che gli restano sono capacità persa vera. Senza questo distinguo la regola
+  mordeva troppo sulle finestre brevi (+10 punti sui 30 giorni contro +4 sui 90,
+  perché in un mese "zero guide" spesso vuol dire "era in ferie").
 - **Spacco per prenotazione in app dell'allievo**: sotto la percentuale, "con
   app allievo X% · senza Y%" (`limits.appBookingActors` ∈ students|both = attiva,
   default students). Su prod lo scarto è enorme — **79% contro 35%** — e spiega
