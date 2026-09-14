@@ -647,9 +647,18 @@ export async function computeKpis(
     // tolgono blocchi (malattia, ferie, teoria) e festivi dell'autoscuola: un
     // istruttore in ferie non è disponibile. Le guide fuori fascia restano
     // fuori dal rapporto ma vengono contate a parte.
+    // Le autoscuole di demo restano fuori dalla SOLA saturazione, comunque sia
+    // impostata `excludeSeedDemo`: i loro istruttori hanno una disponibilità
+    // settimanale che vale anche per i giorni PRIMA che la scuola esistesse, e
+    // quelle ore vuote schiacciavano il rapporto di tutta la piattaforma
+    // (60,9% → 45,3%). Contano dappertutto, tranne qui.
+    const seedDemoCompanyIds = new Set(
+      services.filter((service) => isSeedDemo(service.limits)).map((s) => s.companyId),
+    );
     const instructorsByCompany = new Map<string, string[]>();
     for (const instructor of agendaInstructors) {
       if (isExcluded(instructor.companyId)) continue;
+      if (seedDemoCompanyIds.has(instructor.companyId)) continue;
       const list = instructorsByCompany.get(instructor.companyId) ?? [];
       list.push(instructor.id);
       instructorsByCompany.set(instructor.companyId, list);
