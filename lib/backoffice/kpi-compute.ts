@@ -23,6 +23,7 @@ import {
   isCancelledStatus,
   isDoneStatus,
   isExcludedFromKpis,
+  isSeedDemo,
   pickBucketUnit,
   planMonthlyCents,
   sourceBucketOf,
@@ -196,7 +197,11 @@ const delta = (current: number, previous: number): KpiDelta => ({ current, previ
 
 // ── Action ──────────────────────────────────────────────────────────────────
 
-export async function computeKpis(input: z.infer<typeof rangeSchema>) {
+export async function computeKpis(
+  input: z.infer<typeof rangeSchema>,
+  /** `excludeSeedDemo`: usata dalla pagina investor, vedi `isSeedDemo`. */
+  options: { excludeSeedDemo?: boolean } = {},
+) {
   try {
     const { from: fromRaw, to: toRaw } = rangeSchema.parse(input);
 
@@ -218,7 +223,11 @@ export async function computeKpis(input: z.infer<typeof rangeSchema>) {
       select: { companyId: true, limits: true },
     });
     const excludedCompanyIds = services
-      .filter((service) => isExcludedFromKpis(service.limits))
+      .filter(
+        (service) =>
+          isExcludedFromKpis(service.limits) ||
+          (options.excludeSeedDemo === true && isSeedDemo(service.limits)),
+      )
       .map((service) => service.companyId);
     const notExcluded = excludedCompanyIds.length
       ? { companyId: { notIn: excludedCompanyIds } }

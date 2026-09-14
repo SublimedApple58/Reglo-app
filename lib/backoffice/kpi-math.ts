@@ -146,3 +146,15 @@ export const isExcludedFromKpis = (limits: unknown): boolean => {
   const l = (limits ?? {}) as Record<string, unknown>;
   return l.excludeFromKpis === true;
 };
+
+/**
+ * Autoscuole finte seminate per una demo (`seedDemo: true` nei limits).
+ *
+ * Contano nel backoffice — è il loro scopo — ma NON devono uscire dalla pagina
+ * investor: lì i numeri vanno a persone fuori dall'azienda, e un ARR gonfiato
+ * da dati di prova sarebbe una cosa diversa da una demo.
+ */
+export const isSeedDemo = (limits: unknown): boolean => {
+  const l = (limits ?? {}) as Record<string, unknown>;
+  return l.seedDemo === true;
+};

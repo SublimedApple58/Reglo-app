@@ -50,7 +50,9 @@ export async function buildInvestorKpis(
   from.setDate(from.getDate() - (period.days - 1));
 
   const [res, totals] = await Promise.all([
-    computeKpis({ from: ymd(from), to: ymd(to) }),
+    // Le autoscuole di prova restano fuori: questa pagina la leggono persone
+    // fuori dall'azienda.
+    computeKpis({ from: ymd(from), to: ymd(to) }, { excludeSeedDemo: true }),
     allTimeTotals(),
   ]);
   if (!res.success || !res.data) return null;
