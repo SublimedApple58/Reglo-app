@@ -23,6 +23,19 @@ const INTERNI = {
     appShare: { current: 0.408, previous: 0.279 },
     activeInstructors: { current: 23, previous: 24 },
   },
+  saturation: {
+    availableHours: 2071,
+    busyHours: 1262,
+    outsideHours: 62,
+    ratio: { current: 0.609, previous: 0.68 },
+    instructorsWithAvailability: 21,
+    companiesCounted: 6,
+    companiesIdle: 2,
+    byAppBooking: {
+      enabled: { ratio: 0.73, companies: 4 },
+      disabled: { ratio: 0.48, companies: 2 },
+    },
+  },
   activity: {
     booked: { current: 2108, previous: 1900 },
     cancelled: 653,
@@ -115,6 +128,15 @@ describe("pagina investor — cosa esce, e giusto", () => {
     expect(out.usage.lessonsDone).toBe(1335);
     expect(out.usage.lessonsPrevious).toBe(1673);
     expect(out.usage.appShare).toBeCloseTo(0.408);
+  });
+
+  it("porta la saturazione agenda, ma non il suo dettaglio interno", () => {
+    expect(out.agenda).toEqual({ ratio: 0.609, availableHours: 2071, busyHours: 1262 });
+    const serialized = JSON.stringify(out);
+    // Lo spacco per impostazione dell'app e le ore fuori fascia restano dentro.
+    expect(serialized).not.toContain("byAppBooking");
+    expect(serialized).not.toContain("outsideHours");
+    expect(serialized).not.toContain("companiesIdle");
   });
 
   it("aggiunge i totali dall'inizio, che il cruscotto interno non ha", () => {

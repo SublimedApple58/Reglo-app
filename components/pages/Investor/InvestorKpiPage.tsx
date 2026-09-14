@@ -413,6 +413,53 @@ export function InvestorKpiPage({
             )}
           </Section>
 
+          {/* ── Agenda: quanto è piena. Sta subito dopo il volume perché è
+               la lettura che dà senso al volume: 1.300 guide su un'agenda mezza
+               vuota e su una piena raccontano due aziende diverse. ── */}
+          <Section eyebrow="Agenda" title="Quanto è piena l'agenda">
+            {(inView) => (
+              <>
+                <p className="mt-3 max-w-[46ch] text-[15.5px] font-medium leading-relaxed text-[#6a6a78]">
+                  Gli istruttori dichiarano in agenda le ore in cui sono
+                  disponibili. Questa è la quota di quelle ore che si riempie di
+                  guide: misura quanto margine di crescita c&apos;è senza
+                  assumere nessuno.
+                </p>
+                <div className="mt-6">
+                  <BigNumber
+                    value={kpis.agenda.ratio * 100}
+                    active={inView}
+                    decimals={1}
+                    suffix="%"
+                    caption="delle ore disponibili è occupato da guide"
+                  />
+                  <div className="mt-5 h-2 overflow-hidden rounded-full bg-[#f0f0f3]">
+                    {kpis.agenda.ratio > 0 && (
+                      <motion.div
+                        className="h-full rounded-full bg-[#12121c]"
+                        initial={reduce ? false : { width: 0 }}
+                        animate={inView ? { width: `${Math.min(100, Math.max(kpis.agenda.ratio * 100, 3))}%` } : undefined}
+                        transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
+                      />
+                    )}
+                  </div>
+                </div>
+                <div className="mt-7 grid grid-cols-2 gap-3">
+                  <MiniStat
+                    label="Ore occupate"
+                    value={formatInt(kpis.agenda.busyHours)}
+                    hint={`negli ultimi ${kpis.period.label}`}
+                  />
+                  <MiniStat
+                    label="Ore disponibili"
+                    value={formatInt(kpis.agenda.availableHours)}
+                    hint="dichiarate dagli istruttori"
+                  />
+                </div>
+              </>
+            )}
+          </Section>
+
           {/* ── Prodotto ── */}
           <Section eyebrow="Prodotto" title="L'allievo prenota da solo">
             {(inView) => (

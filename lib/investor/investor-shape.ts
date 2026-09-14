@@ -41,6 +41,12 @@ export type InvestorKpis = {
     appShare: number;
     appSharePrevious: number;
   };
+  /** Quanto è piena l'agenda degli istruttori nel periodo. */
+  agenda: {
+    ratio: number;
+    availableHours: number;
+    busyHours: number;
+  };
   /** Serie del periodo: solo le guide svolte, il resto è rumore per chi legge da fuori. */
   series: Array<{ label: string; value: number }>;
   /** Ultimi 12 mesi: nuove autoscuole e MRR cumulato (stima). */
@@ -86,6 +92,11 @@ export function projectInvestorKpis(
       activeInstructors: kpis.headline.activeInstructors?.current ?? 0,
       appShare: kpis.headline.appShare?.current ?? 0,
       appSharePrevious: kpis.headline.appShare?.previous ?? 0,
+    },
+    agenda: {
+      ratio: kpis.saturation?.ratio?.current ?? 0,
+      availableHours: kpis.saturation?.availableHours ?? 0,
+      busyHours: kpis.saturation?.busyHours ?? 0,
     },
     series: kpis.activity.series.map((point) => ({ label: point.label, value: point.done })),
     growth: kpis.revenue.growth.map((point) => ({
