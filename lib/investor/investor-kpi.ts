@@ -50,9 +50,14 @@ export async function buildInvestorKpis(
   from.setDate(from.getDate() - (period.days - 1));
 
   const [res, totals] = await Promise.all([
-    // Le autoscuole di prova restano fuori: questa pagina la leggono persone
-    // fuori dall'azienda.
-    computeKpis({ from: ymd(from), to: ymd(to) }, { excludeSeedDemo: true }),
+    // Le autoscuole `seedDemo` contano anche qui: scelta esplicita del titolare
+    // (2026-09-14) per una presentazione che gestisce lui, sui propri dati e su
+    // link che distribuisce lui. Per tornare a una pagina con i soli numeri
+    // reali basta rimettere `{ excludeSeedDemo: true }` qui sotto — l'opzione
+    // resta in `computeKpis`. A demo finita, la DELETE in testa a
+    // scripts/demo/seed-demo-companies.mjs rimuove le tre scuole e tutto torna
+    // com'era da solo.
+    computeKpis({ from: ymd(from), to: ymd(to) }),
     allTimeTotals(),
   ]);
   if (!res.success || !res.data) return null;
