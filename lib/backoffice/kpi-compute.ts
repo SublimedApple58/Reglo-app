@@ -140,6 +140,8 @@ export type BackofficeKpis = {
     outsideHours: number;
     ratio: KpiDelta;
     instructorsWithAvailability: number;
+    /** Istruttori con fasce dichiarate ma nessuna guida: fuori dal rapporto. */
+    instructorsIdle: number;
     /** Autoscuole entrate nel rapporto (hanno lavorato nel periodo). */
     companiesCounted: number;
     /** Autoscuole tenute fuori perché senza nemmeno una guida nel periodo. */
@@ -721,6 +723,7 @@ export async function computeKpis(
           withAvailability: 0,
           companiesCounted: 0,
           companiesIdle: 0,
+          instructorsIdle: 0,
           byAppBooking: {
             enabled: { ratio: 0, companies: 0 },
             disabled: { ratio: 0, companies: 0 },
@@ -790,6 +793,7 @@ export async function computeKpis(
       // quindi resta fuori — e la pagina lo dichiara.
       let companiesCounted = 0;
       let companiesIdle = 0;
+      let instructorsIdle = 0;
       const byApp = {
         enabled: { available: 0, busy: 0, companies: 0 },
         disabled: { available: 0, busy: 0, companies: 0 },
@@ -806,6 +810,16 @@ export async function computeKpis(
         const bucket = appBookingByCompany.get(companyId) ? byApp.enabled : byApp.disabled;
         bucket.companies += 1;
         for (const totals of rows) {
+          // Stessa regola delle scuole ferme, un gradino più in basso: un
+          // istruttore che nel periodo non ha fatto NEMMENO una guida non ha
+          // l'agenda vuota — non fa guide. È il titolare, la segretaria, o chi
+          // se n'è andato senza che nessuno l'abbia disattivato. Le sue ore
+          // dichiarate non sono capacità inutilizzata (2 istruttori su 25 su
+          // prod, 438 ore a zero da soli).
+          if (totals.busyHours + totals.outsideHours <= 0) {
+            if (totals.availableHours > 0) instructorsIdle += 1;
+            continue;
+          }
           available += totals.availableHours;
           busy += totals.busyHours;
           outside += totals.outsideHours;
@@ -827,6 +841,7 @@ export async function computeKpis(
         withAvailability,
         companiesCounted,
         companiesIdle,
+        instructorsIdle,
         byAppBooking: {
           enabled: { ratio: share(byApp.enabled), companies: byApp.enabled.companies },
           disabled: { ratio: share(byApp.disabled), companies: byApp.disabled.companies },
@@ -874,6 +889,7 @@ export async function computeKpis(
           instructorsWithAvailability: saturationNow.withAvailability,
           companiesCounted: saturationNow.companiesCounted,
           companiesIdle: saturationNow.companiesIdle,
+          instructorsIdle: saturationNow.instructorsIdle,
           byAppBooking: saturationNow.byAppBooking,
         },
         activity: {

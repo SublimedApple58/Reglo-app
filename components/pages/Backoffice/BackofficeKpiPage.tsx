@@ -749,6 +749,15 @@ export function BackofficeKpiPage({
               (agenda non usata, non agenda vuota).{" "}
             </>
           )}
+          {kpis && kpis.saturation.instructorsIdle > 0 && (
+            <>
+              Fuori anche{" "}
+              {kpis.saturation.instructorsIdle === 1
+                ? "un istruttore che ha fasce dichiarate ma non ha fatto nemmeno una guida"
+                : `${kpis.saturation.instructorsIdle} istruttori che hanno fasce dichiarate ma non hanno fatto nemmeno una guida`}{" "}
+              (titolari, segretarie, o chi ha lasciato senza essere disattivato).{" "}
+            </>
+          )}
           MRR e ARR vengono dai piani registrati a mano in backoffice, non dal fatturato.
           Le guide più vecchie del campo &quot;canale di prenotazione&quot; finiscono in
           &quot;Storico&quot;. Lo storico dei cambi di stato delle autoscuole non è tracciato:

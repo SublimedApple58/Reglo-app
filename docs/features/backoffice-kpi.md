@@ -63,6 +63,13 @@ disponibili in agenda e quante di quelle ore sono davvero occupate da guide.
   ha ancora lavorato non ha "l'agenda vuota", non sta usando l'agenda. Con 8
   scuole in gioco una sola così (Solferino: 343 ore dichiarate, 0 guide) valeva
   14% del denominatore. Quante ne restano fuori è scritto nella nota in fondo.
+- **Fuori dal rapporto anche gli istruttori senza nemmeno una guida nel
+  periodo** (2026-09-14): stessa regola delle scuole ferme, un gradino più in
+  basso. Sono titolari, segretarie o istruttori che se ne sono andati senza
+  essere disattivati: le loro fasce dichiarate non sono capacità inutilizzata.
+  Su prod erano 2 su 25 e da soli valevano 438 ore a zero, il 5,7% del
+  denominatore (58,7% → 62,3% su 90 giorni). Anche questo è dichiarato nella
+  nota in fondo alla pagina.
 - **Spacco per prenotazione in app dell'allievo**: sotto la percentuale, "con
   app allievo X% · senza Y%" (`limits.appBookingActors` ∈ students|both = attiva,
   default students). Su prod lo scarto è enorme — **79% contro 35%** — e spiega
