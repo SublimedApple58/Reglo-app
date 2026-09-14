@@ -6839,6 +6839,15 @@ const setInstructorWeeklyAvailabilitySchema = z.object({
   startMinutes: z.number().int().min(0).max(1410),
   endMinutes: z.number().int().min(30).max(1440),
   ranges: z.array(timeRangeSchema).optional(),
+  // Orari indipendenti per giorno ({ "1": [...], ... }, 0=Dom..6=Sab) — stessa
+  // forma che scrive il mobile via `createAvailabilitySlots`. Quando presente è
+  // AUTORITATIVO e finisce in `rangesByDay`; i campi piatti restano popolati col
+  // giorno rappresentativo per i lettori legacy. Quando assente `rangesByDay`
+  // viene AZZERATO (= salvataggio a orari condivisi), altrimenti un vecchio
+  // per-giorno scritto dall'app continuerebbe a vincere sul salvataggio web.
+  scheduleByDay: z
+    .record(z.string().regex(/^[0-6]$/), z.array(timeRangeSchema))
+    .optional(),
 });
 
 export async function setAutoscuolaInstructorWeeklyAvailability(
@@ -6856,17 +6865,44 @@ export async function setAutoscuolaInstructorWeeklyAvailability(
       return { success: false as const, message: "Istruttore non trovato." };
     }
 
-    const daysOfWeek = Array.from(new Set(payload.daysOfWeek)).sort((a, b) => a - b);
-    if (!daysOfWeek.length) {
-      return { success: false as const, message: "Seleziona almeno un giorno." };
-    }
-    if (payload.endMinutes <= payload.startMinutes) {
-      return { success: false as const, message: "Intervallo orario non valido." };
-    }
+    type Range = { startMinutes: number; endMinutes: number };
 
-    const rangesJson = payload.ranges?.length
+    let daysOfWeek = Array.from(new Set(payload.daysOfWeek)).sort((a, b) => a - b);
+    let rangesJson: Range[] = payload.ranges?.length
       ? payload.ranges
       : [{ startMinutes: payload.startMinutes, endMinutes: payload.endMinutes }];
+    let startMinutes = payload.startMinutes;
+    let endMinutes = payload.endMinutes;
+    let rangesByDayJson: Record<string, Range[]> | null = null;
+
+    if (payload.scheduleByDay) {
+      const map: Record<string, Range[]> = {};
+      const activeDays: number[] = [];
+      for (const [day, dayRanges] of Object.entries(payload.scheduleByDay)) {
+        const valid = ((dayRanges ?? []) as Range[]).filter((r) => r.endMinutes > r.startMinutes);
+        if (valid.length) {
+          map[day] = valid;
+          activeDays.push(Number(day));
+        }
+      }
+      if (!activeDays.length) {
+        return { success: false as const, message: "Seleziona almeno un giorno." };
+      }
+      activeDays.sort((a, b) => a - b);
+      const representative = map[String(activeDays[0])];
+      rangesByDayJson = map;
+      daysOfWeek = activeDays;
+      rangesJson = representative;
+      startMinutes = representative[0].startMinutes;
+      endMinutes = representative[0].endMinutes;
+    } else {
+      if (!daysOfWeek.length) {
+        return { success: false as const, message: "Seleziona almeno un giorno." };
+      }
+      if (payload.endMinutes <= payload.startMinutes) {
+        return { success: false as const, message: "Intervallo orario non valido." };
+      }
+    }
 
     const availability = await prisma.autoscuolaWeeklyAvailability.upsert({
       where: {
@@ -6876,15 +6912,22 @@ export async function setAutoscuolaInstructorWeeklyAvailability(
           ownerId: payload.instructorId,
         },
       },
-      update: { daysOfWeek, startMinutes: payload.startMinutes, endMinutes: payload.endMinutes, ranges: rangesJson },
+      update: {
+        daysOfWeek,
+        startMinutes,
+        endMinutes,
+        ranges: rangesJson,
+        rangesByDay: rangesByDayJson ?? Prisma.DbNull,
+      },
       create: {
         companyId,
         ownerType: "instructor",
         ownerId: payload.instructorId,
         daysOfWeek,
-        startMinutes: payload.startMinutes,
-        endMinutes: payload.endMinutes,
+        startMinutes,
+        endMinutes,
         ranges: rangesJson,
+        rangesByDay: rangesByDayJson ?? Prisma.DbNull,
       },
     });
 
@@ -6912,6 +6955,9 @@ export async function setAutoscuolaInstructorWeeklyAvailability(
         startMinutes: availability.startMinutes,
         endMinutes: availability.endMinutes,
         ranges: rangesJson,
+        // Stesso motivo dei `ranges`: la pagina rimette questo payload nella sua
+        // mappa locale, quindi deve ricevere anche il per-giorno (o l'assenza).
+        ...(rangesByDayJson ? { rangesByDay: rangesByDayJson } : {}),
       },
     };
   } catch (error) {
