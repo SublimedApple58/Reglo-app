@@ -350,6 +350,8 @@ test.describe("Autoscuole smoke", () => {
     await gestisci.click();
     await expect(pane.getByText("Modalità disponibilità")).toBeVisible({ timeout: 20000 });
     await expect(pane.getByText("Tipo di pianificazione")).toBeVisible();
+    // Settimana tipo: switch orari condivisi ⇄ orari indipendenti per giorno
+    await expect(pane.getByText("Orari diversi per giorno")).toBeVisible();
 
     await pane.getByRole("button", { name: "Malattia", exact: true }).click();
     await expect(pane.getByRole("button", { name: "Aggiungi assenza" })).toBeVisible();

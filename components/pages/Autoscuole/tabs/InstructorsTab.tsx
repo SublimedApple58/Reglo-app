@@ -38,6 +38,15 @@ import {
   setRecurringAvailabilityOverride,
 } from "@/lib/actions/autoscuole-availability.actions";
 import { InstructorPublicationEditor } from "@/components/pages/Autoscuole/InstructorPublicationEditor";
+import {
+  activeDaysOf,
+  groupDaysByRanges,
+  hasPerDayHours,
+  rangesForWeekday,
+  scheduleFromWeekly,
+  weeklyPayloadFromSchedule,
+  type WeeklySchedule,
+} from "@/lib/autoscuole/weekly-schedule";
 import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -60,7 +69,12 @@ export type WeeklyAvailability = {
   startMinutes: number;
   endMinutes: number;
   ranges?: Range[];
+  /** Orari indipendenti per giorno ({ "1": [...] }, 0=Dom..6=Sab). Quando c'è vince sui campi piatti. */
+  rangesByDay?: Record<string, Range[]>;
 };
+
+/** Giorno della settimana → fasce attive. Modello unico dell'editor (= quello dell'app). */
+type Schedule = WeeklySchedule;
 
 type StudentEntry = {
   id: string;
@@ -117,15 +131,30 @@ function compressDays(days: number[]): string {
     .join(", ");
 }
 
-function weeklySummary(w: WeeklyAvailability | null | undefined): string | null {
-  if (!w || !w.daysOfWeek.length) return null;
-  const ranges = w.ranges?.length ? w.ranges : [{ startMinutes: w.startMinutes, endMinutes: w.endMinutes }];
-  const label = ranges.map((r) => `${mmToLabel(r.startMinutes)}–${mmToLabel(r.endMinutes)}`).join(", ");
-  return `${label} · ${compressDays(w.daysOfWeek)}`;
-}
-
 const rangesOf = (w: WeeklyAvailability | null | undefined): Range[] =>
   w ? (w.ranges?.length ? w.ranges.map((r) => ({ ...r })) : [{ startMinutes: w.startMinutes, endMinutes: w.endMinutes }]) : [];
+
+const mkDefaultRange = (): Range => ({ startMinutes: 9 * 60, endMinutes: 18 * 60 });
+
+/** Fascia suggerita quando se ne aggiunge una: parte un'ora dopo l'ultima. */
+const nextRangeAfter = (rs: Range[]): Range => {
+  const start = Math.min((rs[rs.length - 1]?.endMinutes ?? 9 * 60) + 60, 21 * 60);
+  return { startMinutes: start, endMinutes: Math.min(start + 120, 23 * 60) };
+};
+
+const rangesLabel = (rs: Range[]): string =>
+  rs.map((r) => `${mmToLabel(r.startMinutes)}–${mmToLabel(r.endMinutes)}`).join(", ");
+
+/**
+ * Riepilogo in lista: i giorni che condividono le stesse fasce vengono raggruppati,
+ * così l'orario condiviso resta una riga sola e quello per-giorno resta leggibile.
+ */
+function weeklySummary(w: WeeklyAvailability | null | undefined): string | null {
+  const groups = groupDaysByRanges(scheduleFromWeekly(w), DAY_ORDER);
+  if (!groups.length) return null;
+  const parts = groups.map((g) => `${rangesLabel(g.ranges)} · ${compressDays(g.days)}`);
+  return parts.length <= 2 ? parts.join("  •  ") : `${parts[0]}  •  +${parts.length - 1} altri orari`;
+}
 
 // ── Atomi UI ───────────────────────────────────────────────────────────────────
 
@@ -429,22 +458,39 @@ function DisponibilitaTab({
   );
   const [plan, setPlan] = React.useState<"pre" | "cal">("pre");
 
-  // Stato locale della settimana tipo (draft = server, auto-save a ogni modifica)
-  const [days, setDays] = React.useState<number[]>(weekly?.daysOfWeek ?? [1, 2, 3, 4, 5]);
-  const [ranges, setRanges] = React.useState<Range[]>(
-    weekly ? rangesOf(weekly) : [{ startMinutes: 9 * 60, endMinutes: 18 * 60 }],
-  );
+  // Stato locale della settimana tipo (draft = server, auto-save a ogni modifica).
+  // Sorgente unica: `schedule` (giorno → fasce), lo STESSO modello per-giorno che
+  // scrive l'app istruttore. Con «Orari diversi per giorno» spento tutti i giorni
+  // attivi condividono le fasce del primo, e si salva nel modello piatto legacy.
+  const [schedule, setSchedule] = React.useState<Schedule>(() => {
+    const initial = scheduleFromWeekly(weekly);
+    if (Object.keys(initial).length) return initial;
+    const suggested: Schedule = {};
+    for (const d of [1, 2, 3, 4, 5]) suggested[d] = [mkDefaultRange()];
+    return suggested;
+  });
+  const [perDay, setPerDay] = React.useState<boolean>(() => hasPerDayHours(weekly));
   const hasWeekly = Boolean(weekly);
 
+  const days = DAY_ORDER.filter((d) => (schedule[d]?.length ?? 0) > 0);
+  const sharedRanges: Range[] = (() => {
+    const first = days[0];
+    const ranges = first == null ? undefined : schedule[first];
+    return ranges?.length ? ranges.map((r) => ({ ...r })) : [mkDefaultRange()];
+  })();
+
   // ── persistenza settimana tipo ──
-  const persistWeekly = async (nextDays: number[], nextRanges: Range[], rollback: () => void) => {
-    const res = await setAutoscuolaInstructorWeeklyAvailability({
-      instructorId: instructor.id,
-      daysOfWeek: nextDays,
-      startMinutes: nextRanges[0]?.startMinutes ?? 9 * 60,
-      endMinutes: nextRanges[0]?.endMinutes ?? 18 * 60,
-      ranges: nextRanges,
-    });
+  // `scheduleByDay` viene inviato SOLO in modalità per-giorno: senza, il backend
+  // azzera `rangesByDay` e la settimana torna al modello condiviso (anche se il
+  // per-giorno era stato scritto dall'app).
+  const persist = async (next: Schedule, usePerDay: boolean, rollback: () => void) => {
+    const payload = weeklyPayloadFromSchedule(next, usePerDay);
+    if (!payload) {
+      rollback();
+      toast.error({ description: "Seleziona almeno un giorno attivo." });
+      return;
+    }
+    const res = await setAutoscuolaInstructorWeeklyAvailability({ instructorId: instructor.id, ...payload });
     if (!res.success || !res.data) {
       rollback();
       toast.error({ description: res.message ?? "Impossibile salvare la disponibilità." });
@@ -454,19 +500,32 @@ function DisponibilitaTab({
     refreshAgenda();
   };
 
+  const commit = (next: Schedule, usePerDay: boolean) => {
+    const prev = schedule;
+    setSchedule(next);
+    void persist(next, usePerDay, () => setSchedule(prev));
+  };
+
+  // ── modalità orari condivisi ──
+  const applyShared = (nextRanges: Range[], nextDays: number[]) => {
+    const next: Schedule = {};
+    for (const d of nextDays) next[d] = nextRanges.map((r) => ({ ...r }));
+    commit(next, false);
+  };
+
   const toggleDay = (day: number) => {
-    const next = days.includes(day) ? days.filter((d) => d !== day) : [...days, day].sort((a, b) => a - b);
-    if (!next.length) {
+    const nextDays = days.includes(day as (typeof DAY_ORDER)[number])
+      ? days.filter((d) => d !== day)
+      : [...days, day];
+    if (!nextDays.length) {
       toast.error({ description: "Seleziona almeno un giorno attivo." });
       return;
     }
-    const prev = days;
-    setDays(next);
-    void persistWeekly(next, ranges, () => setDays(prev));
+    applyShared(sharedRanges, nextDays);
   };
 
   const setRangeSide = (i: number, side: "a" | "b", label: string) => {
-    const next = ranges.map((r) => ({ ...r }));
+    const next = sharedRanges.map((r) => ({ ...r }));
     const v = labelToMm(label);
     if (side === "a") next[i].startMinutes = v;
     else next[i].endMinutes = v;
@@ -474,26 +533,77 @@ function DisponibilitaTab({
       toast.error({ description: "L'orario di fine deve essere successivo all'inizio." });
       return;
     }
-    const prev = ranges;
-    setRanges(next);
-    void persistWeekly(days, next, () => setRanges(prev));
+    applyShared(next, [...days]);
   };
 
-  const addRange = () => {
-    const last = ranges[ranges.length - 1];
-    const start = Math.min((last?.endMinutes ?? 9 * 60) + 60, 21 * 60);
-    const next = [...ranges.map((r) => ({ ...r })), { startMinutes: start, endMinutes: Math.min(start + 120, 23 * 60) }];
-    const prev = ranges;
-    setRanges(next);
-    void persistWeekly(days, next, () => setRanges(prev));
+  const addRange = () => applyShared([...sharedRanges, nextRangeAfter(sharedRanges)], [...days]);
+
+  // ── modalità orari per giorno ──
+  const setDayAvailable = (day: number, on: boolean) => {
+    const next: Schedule = { ...schedule };
+    if (on) next[day] = (schedule[day]?.length ? schedule[day] : sharedRanges).map((r) => ({ ...r }));
+    else delete next[day];
+    if (!activeDaysOf(next).length) {
+      toast.error({ description: "Seleziona almeno un giorno attivo." });
+      return;
+    }
+    commit(next, true);
+  };
+
+  const setDayRangeSide = (day: number, i: number, side: "a" | "b", label: string) => {
+    const dayRanges = (schedule[day] ?? []).map((r) => ({ ...r }));
+    const v = labelToMm(label);
+    if (side === "a") dayRanges[i].startMinutes = v;
+    else dayRanges[i].endMinutes = v;
+    if (dayRanges[i].endMinutes <= dayRanges[i].startMinutes) {
+      toast.error({ description: "L'orario di fine deve essere successivo all'inizio." });
+      return;
+    }
+    commit({ ...schedule, [day]: dayRanges }, true);
+  };
+
+  const addDayRange = (day: number) => {
+    const current = schedule[day] ?? [];
+    commit({ ...schedule, [day]: [...current.map((r) => ({ ...r })), nextRangeAfter(current)] }, true);
+  };
+
+  const removeDayRange = (day: number, i: number) => {
+    const current = (schedule[day] ?? []).filter((_, k) => k !== i);
+    if (!current.length) {
+      setDayAvailable(day, false);
+      return;
+    }
+    commit({ ...schedule, [day]: current }, true);
+  };
+
+  // ── switch condivisi ⇄ per giorno ──
+  const togglePerDay = () => {
+    const nextPerDay = !perDay;
+    const prevSchedule = schedule;
+    let next: Schedule;
+    if (nextPerDay) {
+      // La struttura è già per-giorno (fasce uguali): si persiste subito così il
+      // DB passa a `rangesByDay` e l'app vede esattamente la stessa cosa.
+      next = { ...schedule };
+    } else {
+      // Collasso: vincono le fasce del primo giorno attivo (e lo diciamo).
+      next = {};
+      for (const d of days) next[d] = sharedRanges.map((r) => ({ ...r }));
+    }
+    setPerDay(nextPerDay);
+    setSchedule(next);
+    void persist(next, nextPerDay, () => {
+      setPerDay(!nextPerDay);
+      setSchedule(prevSchedule);
+    });
+    if (!nextPerDay && days.length > 1) {
+      toast.success({ description: `Tutti i giorni attivi usano ora ${rangesLabel(sharedRanges)}.` });
+    }
   };
 
   const removeAvailability = async () => {
-    if (ranges.length > 1) {
-      const next = ranges.slice(0, -1);
-      const prev = ranges;
-      setRanges(next);
-      void persistWeekly(days, next, () => setRanges(prev));
+    if (!perDay && sharedRanges.length > 1) {
+      applyShared(sharedRanges.slice(0, -1), [...days]);
       return;
     }
     if (!hasWeekly) return;
@@ -508,6 +618,10 @@ function DisponibilitaTab({
       delete next[instructor.id];
       return next;
     });
+    const suggested: Schedule = {};
+    for (const d of [1, 2, 3, 4, 5]) suggested[d] = [mkDefaultRange()];
+    setSchedule(suggested);
+    setPerDay(false);
     refreshAgenda();
     toast.success({ description: "Disponibilità rimossa." });
   };
@@ -575,33 +689,105 @@ function DisponibilitaTab({
 
       {plan === "pre" ? (
         <div>
-          <div className={LBL}>Giorni attivi</div>
-          <div className="mb-[22px] flex flex-wrap gap-2">
-            {DAY_ORDER.map((d) => (
-              <BlueChip key={d} active={days.includes(d)} onClick={() => toggleDay(d)}>
-                {DAY_LABELS[d]}
-              </BlueChip>
-            ))}
-          </div>
-          <div className={LBL}>Fasce orarie</div>
-          <div className="mb-3 flex flex-col gap-2.5">
-            {ranges.map((r, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <TimePickerInput value={mmToLabel(r.startMinutes)} onChange={(v) => setRangeSide(i, "a", v)} minTime="06:00" maxTime="23:00" className="min-w-0 flex-1 justify-between py-[11px]" />
-                <span className="text-[13px] text-[#999999]">–</span>
-                <TimePickerInput value={mmToLabel(r.endMinutes)} onChange={(v) => setRangeSide(i, "b", v)} minTime="06:00" maxTime="24:00" className="min-w-0 flex-1 justify-between py-[11px]" />
+          {/* Orari uguali ovunque (semplice) ⇄ orari indipendenti per giorno (come l'app). */}
+          <div className="mb-[22px] flex items-start justify-between gap-6 rounded-[14px] border border-[#ececec] px-4 py-[13px]">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-[#222222]">Orari diversi per giorno</div>
+              <div className="mt-0.5 max-w-[430px] text-[12.5px] font-medium leading-snug text-[#929292]">
+                Ogni giorno con le sue fasce, come nell&apos;app istruttore. Spento, tutti i giorni attivi condividono gli stessi orari.
               </div>
-            ))}
+            </div>
+            <InlineToggle checked={perDay} onChange={togglePerDay} />
           </div>
+
+          {perDay ? (
+            <div className="mb-[22px] overflow-hidden rounded-[14px] border border-[#ececec]">
+              {DAY_ORDER.map((d, i) => {
+                const dayRanges = schedule[d] ?? [];
+                const on = dayRanges.length > 0;
+                return (
+                  <div key={d} className={cn("flex items-start gap-4 px-4 py-[13px]", i > 0 && "border-t border-[#f0f0f0]")}>
+                    <div className={cn("w-[84px] shrink-0 pt-[9px] text-sm font-semibold capitalize", on ? "text-[#222222]" : "text-[#a8a8a8]")}>
+                      {DAY_FULL[d]}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      {on ? (
+                        <div className="flex flex-col gap-2">
+                          {dayRanges.map((r, k) => (
+                            <div key={k} className="flex items-center gap-2">
+                              <TimePickerInput value={mmToLabel(r.startMinutes)} onChange={(v) => setDayRangeSide(d, k, "a", v)} minTime="06:00" maxTime="23:00" className="min-w-0 flex-1 justify-between py-[8px]" />
+                              <span className="text-[13px] text-[#999999]">–</span>
+                              <TimePickerInput value={mmToLabel(r.endMinutes)} onChange={(v) => setDayRangeSide(d, k, "b", v)} minTime="06:00" maxTime="24:00" className="min-w-0 flex-1 justify-between py-[8px]" />
+                              {/* Con una sola fascia la rimozione è già il toggle del giorno. */}
+                              {dayRanges.length > 1 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => removeDayRange(d, k)}
+                                  aria-label={`Rimuovi la fascia ${mmToLabel(r.startMinutes)}–${mmToLabel(r.endMinutes)} di ${DAY_FULL[d]}`}
+                                  className="shrink-0 cursor-pointer rounded-full p-1.5 text-[#b0b0b0] transition-colors hover:bg-[#f4f4f6] hover:text-[#222222]"
+                                >
+                                  <X className="size-3.5" strokeWidth={2.4} />
+                                </button>
+                              ) : (
+                                <span className="size-[26px] shrink-0" />
+                              )}
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => addDayRange(d)}
+                            className="inline-flex w-fit cursor-pointer items-center gap-1.5 pt-0.5 text-[12.5px] font-semibold text-navy-900"
+                          >
+                            <Plus className="size-3.5" strokeWidth={2.2} />
+                            Aggiungi fascia
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="pt-[9px] text-[13px] font-medium text-[#a8a8a8]">Non disponibile</div>
+                      )}
+                    </div>
+                    <div className="shrink-0 pt-[9px]">
+                      <InlineToggle checked={on} onChange={() => setDayAvailable(d, !on)} size="sm" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <>
+              <div className={LBL}>Giorni attivi</div>
+              <div className="mb-[22px] flex flex-wrap gap-2">
+                {DAY_ORDER.map((d) => (
+                  <BlueChip key={d} active={days.includes(d)} onClick={() => toggleDay(d)}>
+                    {DAY_LABELS[d]}
+                  </BlueChip>
+                ))}
+              </div>
+              <div className={LBL}>Fasce orarie</div>
+              <div className="mb-3 flex flex-col gap-2.5">
+                {sharedRanges.map((r, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <TimePickerInput value={mmToLabel(r.startMinutes)} onChange={(v) => setRangeSide(i, "a", v)} minTime="06:00" maxTime="23:00" className="min-w-0 flex-1 justify-between py-[11px]" />
+                    <span className="text-[13px] text-[#999999]">–</span>
+                    <TimePickerInput value={mmToLabel(r.endMinutes)} onChange={(v) => setRangeSide(i, "b", v)} minTime="06:00" maxTime="24:00" className="min-w-0 flex-1 justify-between py-[11px]" />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
           <div className="mb-[22px] flex items-center justify-between">
-            <button
-              type="button"
-              onClick={addRange}
-              className="inline-flex cursor-pointer items-center gap-1.5 text-[13.5px] font-semibold text-navy-900"
-            >
-              <Plus className="size-3.5" strokeWidth={2.2} />
-              Aggiungi fascia
-            </button>
+            {perDay ? (
+              <span />
+            ) : (
+              <button
+                type="button"
+                onClick={addRange}
+                className="inline-flex cursor-pointer items-center gap-1.5 text-[13.5px] font-semibold text-navy-900"
+              >
+                <Plus className="size-3.5" strokeWidth={2.2} />
+                Aggiungi fascia
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void removeAvailability()}
@@ -680,9 +866,9 @@ function CalendarOverrides({
   // ── stato del giorno selezionato (default dalla settimana tipo) ──
   const defaultFor = (iso: string): { available: boolean; ranges: Range[] } => {
     const dow = new Date(iso + "T00:00:00").getDay();
-    if (!weekly) return { available: false, ranges: [] };
-    const inWeek = weekly.daysOfWeek.includes(dow);
-    return { available: inWeek, ranges: inWeek ? rangesOf(weekly) : [] };
+    // Fasce DEL GIORNO: con orari per-giorno la settimana tipo non è più uniforme.
+    const ranges = rangesForWeekday(weekly, dow);
+    return { available: ranges.length > 0, ranges };
   };
   const stateFor = (iso: string): { available: boolean; ranges: Range[] } =>
     iso in overrides ? { available: overrides[iso].length > 0, ranges: overrides[iso] } : defaultFor(iso);
@@ -706,12 +892,13 @@ function CalendarOverrides({
 
   const setAvailable = (on: boolean) => {
     const current = sel;
+    const fromWeekly = firstSel ? defaultFor(firstSel).ranges : [];
     const ranges = on
       ? current && current.ranges.length
         ? current.ranges
-        : rangesOf(weekly).length
-          ? rangesOf(weekly)
-          : [{ startMinutes: 9 * 60, endMinutes: 18 * 60 }]
+        : fromWeekly.length
+          ? fromWeekly
+          : [mkDefaultRange()]
       : [];
     // ottimista: aggiorna subito i pallini
     setOverrides((prev) => {

@@ -5,6 +5,7 @@ Instructor and vehicle availability management: weekly schedules, daily override
 
 ## Key files
 - `lib/actions/autoscuole-availability.actions.ts` — all availability mutations
+- `lib/autoscuole/weekly-schedule.ts` — helper PURI sulla settimana tipo (proiezione per-giorno, raggruppamento, payload di salvataggio); usati dalla web UI, unit test `tests/unit/autoscuole/weekly-schedule.test.ts`
 - `lib/autoscuole/slot-matcher.ts` — reads availability to find bookable slots
 - `lib/autoscuole/slot-packing.ts` — pure helpers for anchor-aware slot packing
 - `components/pages/Autoscuole/AutoscuoleResourcesPage.tsx` — web instructor/vehicle management (178KB)
@@ -30,7 +31,12 @@ The base schedule supports **different ranges per weekday**. `AutoscuolaWeeklyAv
 
 Read accessor: `rangesForDay(record, dayOfWeek)` returns the ranges effective on a weekday for either model. `narrowToDay(record, dayOfWeek)` projects a record to a single date shaped like the legacy resolved record, so **every existing consumer** (`isOwnerAvailable`/`isAvailabilityCovering` copies in slot-matcher, repositioning, swap) keeps working unchanged — both `buildAvailabilityResolver().resolve()` and `resolveEffectiveAvailability()` narrow before returning.
 
-Write: `createAvailabilitySlots()` accepts an optional `scheduleByDay` map; when provided it persists `rangesByDay` and derives the flat fields from the first active day. A shared-hours save (no `scheduleByDay`) clears `rangesByDay` (reverts to legacy). Read: `getDefaultAvailability()` always returns `scheduleByDay` (legacy records are projected by applying the shared ranges to each active day). Daily overrides are unchanged and still win over the base.
+Write: `createAvailabilitySlots()` (mobile) **e** `setAutoscuolaInstructorWeeklyAvailability()` (web, dal 2026-09-14) accettano un `scheduleByDay` opzionale; quando c'è persistono `rangesByDay` e derivano i campi piatti dal primo giorno attivo. Un salvataggio a orari condivisi (senza `scheduleByDay`) **azzera** `rangesByDay` (torna al modello legacy). Read: `getDefaultAvailability()` always returns `scheduleByDay` (legacy records are projected by applying the shared ranges to each active day). Daily overrides are unchanged and still win over the base.
+
+**Allineamento web ↔ app (2026-09-14).** Prima la web app applicava UNA fascia a tutti i giorni attivi: l'app istruttore scriveva `rangesByDay`, la web non lo leggeva né lo cancellava, quindi un salvataggio dal web veniva *silenziosamente ignorato* (il per-giorno restava autoritativo). Ora il tab Disponibilità → Predefinito (`tabs/InstructorsTab.tsx`) ha lo switch **«Orari diversi per giorno»**:
+- spento → giorni attivi a chip + fasce condivise (UI invariata), salva senza `scheduleByDay` → `rangesByDay = NULL`;
+- acceso → lista dei 7 giorni con toggle e fasce indipendenti (stesso modello della `DefaultAvailabilityEditor` mobile), salva `scheduleByDay` → `rangesByDay`.
+Lo switch nasce già acceso se la settimana tipo ha `rangesByDay`, quindi quello che l'istruttore imposta da app si vede e si modifica dal web. Collassare a orari condivisi è **lossy**: vincono le fasce del primo giorno attivo (lo dice un toast). Auto-save a ogni modifica, come prima. Il riepilogo in lista raggruppa i giorni con le stesse fasce (`groupDaysByRanges`), e il tab Calendario legge il default **del giorno** (`rangesForWeekday`), non più le fasce piatte. Nessuna migrazione: la colonna `rangesByDay` esisteva già.
 - `AutoscuolaAvailabilitySlot` — published bookable slots (open/booked)
 - `AutoscuolaInstructorPublishedWeek` — unique on companyId + instructorId + weekStart
 
