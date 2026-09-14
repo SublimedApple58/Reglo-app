@@ -4,7 +4,7 @@ import React from "react";
 import Image from "next/image";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Check, ChevronLeft, Loader2, Plus, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, Loader2, Plus, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -162,13 +162,99 @@ function BlueChip({ active, onClick, children }: { active: boolean; onClick: () 
   return (
     <button
       type="button"
+      aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "cursor-pointer rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors",
-        active ? "border-[#b9ccf5] bg-[#dbe4fb] text-[#26324d]" : "border-[#e0e0e0] bg-white text-[#666666] hover:border-[#c9c9c9]",
+        "cursor-pointer rounded-full border px-3.5 py-[7px] text-[13px] font-semibold transition-colors duration-150",
+        active
+          ? "border-[#222222] bg-[#222222] text-white hover:bg-black"
+          : "border-[#e2e2e2] bg-white text-[#8a8a8a] hover:border-[#c2c2c2] hover:text-[#585858]",
       )}
     >
       {children}
+    </button>
+  );
+}
+
+// ── Settimana tipo: atomi dedicati ────────────────────────────────────────────
+
+/** Arco della giornata mostrato dalla barra: dalle 6:00 a mezzanotte. */
+const TIMELINE_FROM = 6 * 60;
+const TIMELINE_TO = 24 * 60;
+
+/**
+ * Barra sottile che colloca le fasce nella giornata: rende leggibile a colpo
+ * d'occhio la FORMA della settimana (mattina/pomeriggio, buchi, giorni pieni),
+ * cosa che una colonna di orari non dice. Puramente decorativa.
+ */
+function DayTimeline({ ranges }: { ranges: Range[] }) {
+  const span = TIMELINE_TO - TIMELINE_FROM;
+  return (
+    <div className="relative mt-2.5 h-[3px] w-full overflow-hidden rounded-full bg-[#f3f3f3]" aria-hidden>
+      {ranges.map((r, i) => {
+        const from = Math.max(r.startMinutes, TIMELINE_FROM);
+        const to = Math.min(r.endMinutes, TIMELINE_TO);
+        if (to <= from) return null;
+        return (
+          <span
+            key={i}
+            className="absolute inset-y-0 rounded-full bg-[#3d3d3d]"
+            style={{ left: `${((from - TIMELINE_FROM) / span) * 100}%`, width: `${((to - from) / span) * 100}%` }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Una fascia = UN oggetto: i due orari vivono dentro lo stesso guscio a pillola,
+ * senza le due cornici da campo di testo che facevano sembrare la settimana un
+ * modulo da compilare. I TimePicker restano quelli di sistema, solo smontati
+ * della loro cornice (l'icona orologio è nascosta: la pillola è già il comando).
+ */
+function TimeBand({
+  range,
+  onSide,
+  onRemove,
+  removeLabel,
+}: {
+  range: Range;
+  onSide: (side: "a" | "b", label: string) => void;
+  onRemove?: () => void;
+  removeLabel?: string;
+}) {
+  const inner =
+    "rounded-full border-transparent bg-transparent px-2.5 py-[5px] text-[13px] font-semibold tabular-nums text-[#222222] outline-none hover:border-transparent focus-visible:bg-[#f4f4f4] data-[state=open]:bg-[#f0f0f0] [&>svg]:hidden";
+  return (
+    <div className="inline-flex items-center rounded-full border border-[#e6e6e6] bg-white p-[3px] transition-colors duration-150 hover:border-[#cfcfcf] focus-within:border-[#222222] focus-within:shadow-[0_0_0_3px_rgba(34,34,34,0.08)] has-[[data-state=open]]:border-[#222222]">
+      <TimePickerInput value={mmToLabel(range.startMinutes)} onChange={(v) => onSide("a", v)} minTime="06:00" maxTime="23:00" className={inner} />
+      <span className="select-none text-[12px] text-[#c9c9c9]">–</span>
+      <TimePickerInput value={mmToLabel(range.endMinutes)} onChange={(v) => onSide("b", v)} minTime="06:00" maxTime="24:00" className={inner} />
+      {onRemove ? (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={removeLabel}
+          className="ml-0.5 mr-[3px] flex size-[22px] cursor-pointer items-center justify-center rounded-full text-[#bdbdbd] transition-colors hover:bg-[#f2f2f2] hover:text-[#222222]"
+        >
+          <X className="size-3" strokeWidth={2.6} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** Comando "aggiungi": tratteggiato e in sordina, non compete con gli orari. */
+function AddBandButton({ onClick, label = "Fascia" }: { onClick: () => void; label?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-dashed border-[#d8d8d8] px-3 py-[7px] text-[12.5px] font-semibold text-[#909090] transition-colors duration-150 hover:border-[#222222] hover:text-[#222222]"
+    >
+      <Plus className="size-3.5" strokeWidth={2.4} />
+      {label}
     </button>
   );
 }
@@ -470,6 +556,16 @@ function DisponibilitaTab({
     return suggested;
   });
   const [perDay, setPerDay] = React.useState<boolean>(() => hasPerDayHours(weekly));
+  // Lista per-giorno a fisarmonica: un giorno aperto alla volta. All'apertura è
+  // quello di oggi se ha orari, altrimenti il primo attivo — gli altri restano
+  // chiusi, così la settimana si legge tutta senza scorrere.
+  const [openDay, setOpenDay] = React.useState<number | null>(() => {
+    const initial = scheduleFromWeekly(weekly);
+    const active = DAY_ORDER.filter((d) => (initial[d]?.length ?? 0) > 0);
+    if (!active.length) return null;
+    const today = new Date().getDay();
+    return active.includes(today as (typeof DAY_ORDER)[number]) ? today : active[0];
+  });
   const hasWeekly = Boolean(weekly);
 
   const days = DAY_ORDER.filter((d) => (schedule[d]?.length ?? 0) > 0);
@@ -547,6 +643,8 @@ function DisponibilitaTab({
       toast.error({ description: "Seleziona almeno un giorno attivo." });
       return;
     }
+    // Acceso → si apre da solo sulle fasce appena assegnate; spento → si chiude.
+    setOpenDay(on ? day : (prev) => (prev === day ? null : prev));
     commit(next, true);
   };
 
@@ -688,110 +786,170 @@ function DisponibilitaTab({
       </div>
 
       {plan === "pre" ? (
+        /* Stesso impianto delle altre Impostazioni: righe piatte separate da
+           filetti, nessuna card. Il blocco vive dentro il pane, non accanto. */
         <div>
-          {/* Orari uguali ovunque (semplice) ⇄ orari indipendenti per giorno (come l'app). */}
-          <div className="mb-[22px] flex items-start justify-between gap-6 rounded-[14px] border border-[#ececec] px-4 py-[13px]">
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold text-[#222222]">Orari diversi per giorno</div>
-              <div className="mt-0.5 max-w-[430px] text-[12.5px] font-medium leading-snug text-[#929292]">
+          <div className="flex items-center justify-between gap-6 border-b border-[#ebebeb] pb-5">
+            <div className="min-w-0">
+              <div className="text-[15px] font-semibold text-foreground">Orari diversi per giorno</div>
+              <div className="mt-0.5 max-w-[680px] text-[13.5px] font-medium leading-relaxed text-[#6a6a6a]">
                 Ogni giorno con le sue fasce, come nell&apos;app istruttore. Spento, tutti i giorni attivi condividono gli stessi orari.
               </div>
             </div>
-            <InlineToggle checked={perDay} onChange={togglePerDay} />
+            <InlineToggle checked={perDay} onChange={togglePerDay} size="lg" />
           </div>
 
-          {perDay ? (
-            <div className="mb-[22px] overflow-hidden rounded-[14px] border border-[#ececec]">
-              {DAY_ORDER.map((d, i) => {
-                const dayRanges = schedule[d] ?? [];
-                const on = dayRanges.length > 0;
-                return (
-                  <div key={d} className={cn("flex items-start gap-4 px-4 py-[13px]", i > 0 && "border-t border-[#f0f0f0]")}>
-                    <div className={cn("w-[84px] shrink-0 pt-[9px] text-sm font-semibold capitalize", on ? "text-[#222222]" : "text-[#a8a8a8]")}>
-                      {DAY_FULL[d]}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      {on ? (
-                        <div className="flex flex-col gap-2">
-                          {dayRanges.map((r, k) => (
-                            <div key={k} className="flex items-center gap-2">
-                              <TimePickerInput value={mmToLabel(r.startMinutes)} onChange={(v) => setDayRangeSide(d, k, "a", v)} minTime="06:00" maxTime="23:00" className="min-w-0 flex-1 justify-between py-[8px]" />
-                              <span className="text-[13px] text-[#999999]">–</span>
-                              <TimePickerInput value={mmToLabel(r.endMinutes)} onChange={(v) => setDayRangeSide(d, k, "b", v)} minTime="06:00" maxTime="24:00" className="min-w-0 flex-1 justify-between py-[8px]" />
-                              {/* Con una sola fascia la rimozione è già il toggle del giorno. */}
-                              {dayRanges.length > 1 ? (
-                                <button
-                                  type="button"
-                                  onClick={() => removeDayRange(d, k)}
-                                  aria-label={`Rimuovi la fascia ${mmToLabel(r.startMinutes)}–${mmToLabel(r.endMinutes)} di ${DAY_FULL[d]}`}
-                                  className="shrink-0 cursor-pointer rounded-full p-1.5 text-[#b0b0b0] transition-colors hover:bg-[#f4f4f6] hover:text-[#222222]"
-                                >
-                                  <X className="size-3.5" strokeWidth={2.4} />
-                                </button>
-                              ) : (
-                                <span className="size-[26px] shrink-0" />
-                              )}
-                            </div>
-                          ))}
-                          <button
-                            type="button"
-                            onClick={() => addDayRange(d)}
-                            className="inline-flex w-fit cursor-pointer items-center gap-1.5 pt-0.5 text-[12.5px] font-semibold text-navy-900"
-                          >
-                            <Plus className="size-3.5" strokeWidth={2.2} />
-                            Aggiungi fascia
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="pt-[9px] text-[13px] font-medium text-[#a8a8a8]">Non disponibile</div>
-                      )}
-                    </div>
-                    <div className="shrink-0 pt-[9px]">
-                      <InlineToggle checked={on} onChange={() => setDayAvailable(d, !on)} size="sm" />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <>
-              <div className={LBL}>Giorni attivi</div>
-              <div className="mb-[22px] flex flex-wrap gap-2">
-                {DAY_ORDER.map((d) => (
-                  <BlueChip key={d} active={days.includes(d)} onClick={() => toggleDay(d)}>
-                    {DAY_LABELS[d]}
-                  </BlueChip>
-                ))}
-              </div>
-              <div className={LBL}>Fasce orarie</div>
-              <div className="mb-3 flex flex-col gap-2.5">
-                {sharedRanges.map((r, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <TimePickerInput value={mmToLabel(r.startMinutes)} onChange={(v) => setRangeSide(i, "a", v)} minTime="06:00" maxTime="23:00" className="min-w-0 flex-1 justify-between py-[11px]" />
-                    <span className="text-[13px] text-[#999999]">–</span>
-                    <TimePickerInput value={mmToLabel(r.endMinutes)} onChange={(v) => setRangeSide(i, "b", v)} minTime="06:00" maxTime="24:00" className="min-w-0 flex-1 justify-between py-[11px]" />
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-          <div className="mb-[22px] flex items-center justify-between">
+          <AnimatePresence mode="wait" initial={false}>
             {perDay ? (
-              <span />
-            ) : (
-              <button
-                type="button"
-                onClick={addRange}
-                className="inline-flex cursor-pointer items-center gap-1.5 text-[13.5px] font-semibold text-navy-900"
+              <motion.div
+                key="per-giorno"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
               >
-                <Plus className="size-3.5" strokeWidth={2.2} />
-                Aggiungi fascia
-              </button>
+                {DAY_ORDER.map((d, i) => {
+                  const dayRanges = schedule[d] ?? [];
+                  const on = dayRanges.length > 0;
+                  const open = openDay === d && on;
+                  return (
+                    <div
+                      key={d}
+                      data-day-row={d}
+                      className={cn(i < DAY_ORDER.length - 1 && "border-b border-[#f2f2f2]")}
+                    >
+                      <div className="flex items-center gap-3 py-[13px]">
+                        <button
+                          type="button"
+                          onClick={() => setOpenDay(open ? null : d)}
+                          aria-expanded={open}
+                          disabled={!on}
+                          className={cn(
+                            "flex min-w-0 flex-1 items-center gap-3 text-left",
+                            on ? "cursor-pointer" : "cursor-default",
+                          )}
+                        >
+                          <ChevronDown
+                            className={cn(
+                              "size-4 shrink-0 transition-all duration-200 ease-out",
+                              open ? "rotate-180 text-[#222222]" : "text-[#c4c4c4]",
+                              !on && "opacity-0",
+                            )}
+                            strokeWidth={2.2}
+                          />
+                          <span
+                            className={cn(
+                              "w-[86px] shrink-0 text-sm font-semibold capitalize tracking-[-0.1px] transition-colors",
+                              on ? "text-[#222222]" : "text-[#b0b0b0]",
+                            )}
+                          >
+                            {DAY_FULL[d]}
+                          </span>
+                          <span
+                            className={cn(
+                              "min-w-0 flex-1 truncate text-[13px] font-medium tabular-nums transition-opacity duration-200",
+                              on ? "text-[#6a6a6a]" : "text-[#b0b0b0]",
+                              open && "opacity-0",
+                            )}
+                          >
+                            {on ? rangesLabel(dayRanges) : "Riposo"}
+                          </span>
+                        </button>
+                        <InlineToggle checked={on} onChange={() => setDayAvailable(d, !on)} />
+                      </div>
+
+                      <AnimatePresence initial={false}>
+                        {open && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.28, ease: "easeOut" }}
+                            className="overflow-hidden"
+                          >
+                            <div className="pb-[15px] pl-7">
+                              <div className="flex flex-wrap items-center gap-2">
+                              <AnimatePresence initial={false}>
+                                {dayRanges.map((r, k) => (
+                                  <motion.div
+                                    key={k}
+                                    initial={{ opacity: 0, scale: 0.96 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.96 }}
+                                    transition={{ duration: 0.16, ease: "easeOut" }}
+                                  >
+                                    <TimeBand
+                                      range={r}
+                                      onSide={(side, v) => setDayRangeSide(d, k, side, v)}
+                                      /* Con una fascia sola la rimozione è già l'interruttore del giorno. */
+                                      onRemove={dayRanges.length > 1 ? () => removeDayRange(d, k) : undefined}
+                                      removeLabel={`Rimuovi la fascia ${mmToLabel(r.startMinutes)}–${mmToLabel(r.endMinutes)} di ${DAY_FULL[d]}`}
+                                    />
+                                  </motion.div>
+                                ))}
+                              </AnimatePresence>
+                                <AddBandButton onClick={() => addDayRange(d)} />
+                              </div>
+                              {/* La barra spiega la fascia che stai modificando: sta
+                                  nel giorno aperto, non sotto ogni riga chiusa. */}
+                              <DayTimeline ranges={dayRanges} />
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="condivisi"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="pt-6"
+              >
+                <div className={LBL}>Giorni attivi</div>
+                <div className="mb-6 flex flex-wrap gap-2">
+                  {DAY_ORDER.map((d) => (
+                    <BlueChip key={d} active={days.includes(d)} onClick={() => toggleDay(d)}>
+                      {DAY_LABELS[d]}
+                    </BlueChip>
+                  ))}
+                </div>
+                <div className={LBL}>Fasce orarie</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <AnimatePresence initial={false}>
+                    {sharedRanges.map((r, i) => (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, scale: 0.96 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.96 }}
+                        transition={{ duration: 0.16, ease: "easeOut" }}
+                      >
+                        <TimeBand range={r} onSide={(side, v) => setRangeSide(i, side, v)} />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                  <AddBandButton onClick={addRange} />
+                </div>
+                <DayTimeline ranges={sharedRanges} />
+              </motion.div>
             )}
+          </AnimatePresence>
+
+          <div className="mt-5 flex items-center justify-between gap-4 border-t border-[#ebebeb] pt-5">
+            {/* La nota spiega la barra: se nessuna barra è a schermo (tutti i
+                giorni chiusi) non ha niente da spiegare. */}
+            <span className="text-[12px] font-medium text-[#a8a8a8]">
+              {!perDay || openDay != null ? "La barra copre la giornata dalle 6:00 a mezzanotte." : ""}
+            </span>
             <button
               type="button"
               onClick={() => void removeAvailability()}
-              className="cursor-pointer text-[13px] font-semibold text-[#c13515]"
+              className="shrink-0 cursor-pointer text-[13px] font-semibold text-[#b4472c] transition-colors hover:text-[#8f2f18]"
             >
               Rimuovi disponibilità
             </button>
