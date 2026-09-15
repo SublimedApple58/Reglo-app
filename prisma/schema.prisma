@@ -249,6 +249,7 @@ model Company {
   consorzioAccountingCodes             ConsorzioAccountingCode[]              @relation("ConsorzioAccountingCodes")
   consorzioGuideRequests               ConsorzioGuideRequest[]                @relation("ConsorzioGuideRequests")
   consorzioLessonBillings              ConsorzioLessonBilling[]               @relation("ConsorzioLessonBillings")
+  consorzioCourseBillings              ConsorzioCourseBilling[]               @relation("ConsorzioCourseBillings")
   evaluationItems                      AutoscuolaEvaluationItem[]
 }
 
@@ -1704,6 +1705,7 @@ model ConsorzioSchool {
   members        CompanyMember[]
   guideRequests  ConsorzioGuideRequest[]
   lessonBillings ConsorzioLessonBilling[]
+  courseBillings ConsorzioCourseBilling[]
 
   @@index([consorzioCompanyId, status])
   @@index([linkedCompanyId])
@@ -1827,6 +1829,31 @@ model ConsorzioLessonBilling {
 
   @@index([consorzioCompanyId, schoolId])
   @@index([schoolId, settledAt])
+}
+
+/// Voce "percorso completo" in Fatturazione (REG-462): per le patenti a prezzo
+/// unico si fattura il percorso dell'allievo, non le singole guide. Nasce al
+/// primo toggle saldata/fatturata e congela prezzo e mese (fino ad allora la
+/// voce è calcolata live nel mese della prima guida dell'allievo).
+model ConsorzioCourseBilling {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  consorzioCompanyId String    @db.Uuid
+  schoolId           String    @db.Uuid
+  studentUserId      String    @db.Uuid
+  licenseCategory    String
+  priceAmount        Decimal   @default(0) @db.Decimal(12, 2)
+  /// "YYYY-MM": mese di Fatturazione in cui compare la voce
+  billingMonth       String
+  settledAt          DateTime? @db.Timestamp(6)
+  invoiceSentAt      DateTime? @db.Timestamp(6)
+  createdAt          DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt          DateTime  @updatedAt
+
+  consorzioCompany Company         @relation("ConsorzioCourseBillings", fields: [consorzioCompanyId], references: [id], onDelete: Cascade)
+  school           ConsorzioSchool @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@unique([consorzioCompanyId, studentUserId, licenseCategory])
+  @@index([consorzioCompanyId, billingMonth])
 }
 
 /// Voce del "pagellino" di valutazione di un'autoscuola (REG-443): l'autoscuola

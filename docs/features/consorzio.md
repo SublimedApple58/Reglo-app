@@ -42,7 +42,12 @@ Dove è applicata oggi: su ogni slot **scelto dal consorzio** — `proposeConsor
 
 ## Prezzi & Fatturazione — semantica prezzo
 
-Tariffa oraria per categoria in `limits.consorzioPricing` (`hourlyByCategory` + cancellazioni tardive cutoff/penale + `guideRequestMinLeadHours`). **Prezzo guida = durata/60 × tariffa** ("slot da 90 min = 1,5× tariffa").
+Listino in `limits.consorzioPricing`, parse e calcolo in **`lib/consorzio/pricing.ts`** (modulo puro, unit test `tests/unit/consorzio/pricing.test.ts`): `hourlyByCategory`, `billingModeByCategory`, `courseByCategory` + cancellazioni tardive cutoff/penale + `guideRequestMinLeadHours`. **Prezzo guida = durata/60 × tariffa** ("slot da 90 min = 1,5× tariffa").
+
+**Criterio di fatturazione per patente (REG-462)** — segmented "A ore / Percorso" su ogni riga della tabella "Tariffe per patente":
+- `hourly` (default): come sopra;
+- `course`: **prezzo unico per il percorso completo** dell'allievo. Le guide di quella patente valgono 0 (in Fatturazione mostrano "Incluso") e il percorso è una **voce propria** (tag "Percorso", codici = default allievo, non editabili) nel mese della **prima guida** non annullata dell'allievo (esami/gruppi esclusi). Al primo toggle saldata/fatturata nasce `ConsorzioCourseBilling` (unique consorzio+allievo+patente) che **congela prezzo e mese** (migration `20260915190000_consorzio_course_billing`); da lì la voce resta in quel mese anche se il criterio cambia. Action: `setConsorzioCourseBillingFlags`.
+- Le due cifre (oraria e percorso) restano salvate entrambe: cambiare criterio non perde l'altra. Il criterio si legge LIVE: guide già certificate col vecchio criterio tengono lo snapshot.
 
 Il prezzo è **calcolato live in Fatturazione** finché la guida non viene certificata: al **primo toggle** saldata/fatturata nasce la riga `ConsorzioLessonBilling` con lo snapshot (congelato da lì in poi). Così i ritocchi tariffa si riflettono sulle guide non certificate e NESSUN punto di creazione appuntamento è stato toccato (zero rischio sul motore prenotazioni — scelta deliberata rispetto al piano iniziale "hook alla creazione").
 

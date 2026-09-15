@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import {
   getConsorzioBilling,
   setConsorzioAppointmentAccountingCodes,
+  setConsorzioCourseBillingFlags,
   setConsorzioLessonBillingFlags,
   type ConsorzioBillingLesson,
   type ConsorzioBillingSchoolGroup,
@@ -34,7 +35,9 @@ import {
  * chip codici 12.5/600 (attivo navy, inattivo #F2F2F2), gruppi scuola h68 con
  * avatar 40, righe guida h44 (badge patente e chip codici #EEF0F6/#1A1A2E,
  * quadratini saldata/fattura 16px), placeholder mese futuro con sfera di
- * cristallo. Vedi docs/features/consorzio.md.
+ * cristallo. Voci percorso (REG-462): riga con tag "Percorso" e prezzo unico;
+ * le guide di quella patente mostrano "Incluso" al posto del prezzo.
+ * Vedi docs/features/consorzio.md.
  */
 
 const monthKey = (date: Date): string =>
@@ -91,6 +94,31 @@ function CodeChip({ code, small }: { code: string; small?: boolean }) {
   );
 }
 
+
+/** Tag del tipo di voce (le guide normali non ne hanno). */
+function LineKindTag({ label, tone }: { label: string; tone: "course" }) {
+  const palette = { course: { background: "#E3F4F1", color: "#0F5E55" } }[tone];
+  return (
+    <span
+      className="inline-flex shrink-0 rounded-[6px] px-[7px] py-[3px] text-[11px] font-bold"
+      style={palette}
+    >
+      {label}
+    </span>
+  );
+}
+
+/** "3 guide · 1 percorso" per il sottotitolo del gruppo autoscuola. */
+const groupSummary = (lessons: ConsorzioBillingLesson[]): string => {
+  const guides = lessons.filter((l) => l.kind === "guide").length;
+  const courses = lessons.filter((l) => l.kind === "course").length;
+  return [
+    guides ? `${guides} ${guides === 1 ? "guida" : "guide"}` : null,
+    courses ? `${courses} ${courses === 1 ? "percorso" : "percorsi"}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+};
 
 /** Skeleton dei gruppi-autoscuola della Fatturazione. */
 function BillingListSkeleton() {
@@ -197,10 +225,19 @@ export function ConsorzioBillingPage() {
     lesson: ConsorzioBillingLesson,
     flag: "settled" | "invoiceSent",
   ) => {
-    const res = await setConsorzioLessonBillingFlags({
-      appointmentId: lesson.appointmentId,
-      ...(flag === "settled" ? { settled: !lesson.settled } : { invoiceSent: !lesson.invoiceSent }),
-    });
+    const patch =
+      flag === "settled" ? { settled: !lesson.settled } : { invoiceSent: !lesson.invoiceSent };
+    const res =
+      lesson.kind === "course" || !lesson.appointmentId
+        ? await setConsorzioCourseBillingFlags({
+            studentUserId: lesson.studentUserId,
+            licenseCategory: lesson.licenseCategory as Parameters<
+              typeof setConsorzioCourseBillingFlags
+            >[0]["licenseCategory"],
+            month,
+            ...patch,
+          })
+        : await setConsorzioLessonBillingFlags({ appointmentId: lesson.appointmentId, ...patch });
     if (!res.success) {
       toast.error({ description: res.message });
       return;
@@ -214,7 +251,7 @@ export function ConsorzioBillingPage() {
   };
 
   const handleSaveLessonCodes = async () => {
-    if (!lessonCodesFor) return;
+    if (!lessonCodesFor?.appointmentId) return;
     setLessonCodesSaving(true);
     const res = await setConsorzioAppointmentAccountingCodes({
       appointmentId: lessonCodesFor.appointmentId,
@@ -393,7 +430,7 @@ export function ConsorzioBillingPage() {
                       {group.schoolName}
                     </div>
                     <div className="truncate text-[13px] font-medium text-[#929292]">
-                      {[group.schoolCity, `${group.lessons.length} ${group.lessons.length === 1 ? 'guida' : 'guide'}`, `${formatMoney(group.total)} totale`]
+                      {[group.schoolCity, groupSummary(group.lessons), `${formatMoney(group.total)} totale`]
                         .filter(Boolean)
                         .join(" · ")}
                     </div>
@@ -412,7 +449,8 @@ export function ConsorzioBillingPage() {
                   <div className="pb-3 pl-[54px]">
                     {group.lessons.map((lesson) => (
                       <div
-                        key={lesson.appointmentId}
+                        key={lesson.lineId}
+                        data-testid={`billing-line-${lesson.kind}`}
                         className="flex h-11 items-center gap-3.5"
                       >
                         <span className="w-14 shrink-0 text-[13px] font-medium text-[#929292]">
@@ -431,15 +469,28 @@ export function ConsorzioBillingPage() {
                         ) : (
                           <span className="w-8 shrink-0" />
                         )}
+                        {lesson.kind === "course" && <LineKindTag label="Percorso" tone="course" />}
                         <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#929292]">
-                          {[
-                            `${lesson.durationMinutes} min`,
-                            lesson.instructorName,
-                            lesson.vehicleName,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
+                          {lesson.kind === "course"
+                            ? "Percorso completo · prezzo unico"
+                            : [
+                                `${lesson.durationMinutes} min`,
+                                lesson.instructorName,
+                                lesson.vehicleName,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
                         </span>
+                        {lesson.kind === "course" ? (
+                          <span
+                            className="flex shrink-0 flex-wrap items-center gap-1.5"
+                            title="Codici dell'allievo"
+                          >
+                            {lesson.codes.map((code) => (
+                              <CodeChip key={code.id} code={code.code} small />
+                            ))}
+                          </span>
+                        ) : (
                         <button
                           type="button"
                           onClick={() => openLessonCodes(lesson)}
@@ -456,9 +507,19 @@ export function ConsorzioBillingPage() {
                             ))
                           )}
                         </button>
-                        <span className="w-[60px] shrink-0 text-right text-[14px] font-bold text-[#222222]">
-                          {formatMoney(lesson.price)}
-                        </span>
+                        )}
+                        {lesson.includedInCourse && lesson.price === 0 ? (
+                          <span
+                            className="w-[60px] shrink-0 text-right text-[12.5px] font-semibold text-[#a0a0a0]"
+                            title="Compresa nel prezzo unico del percorso"
+                          >
+                            Incluso
+                          </span>
+                        ) : (
+                          <span className="w-[60px] shrink-0 text-right text-[14px] font-bold text-[#222222]">
+                            {formatMoney(lesson.price)}
+                          </span>
+                        )}
                         <div className="flex shrink-0 items-center gap-2">
                           <button
                             type="button"
