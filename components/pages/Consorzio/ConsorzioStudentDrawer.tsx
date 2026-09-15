@@ -19,7 +19,8 @@ import {
  * Consorzi.html: header avatar 50 navy + nome 21/700; stat 3× (border 1.5
  * #EBEBEB r14); CODICI CONTABILI con righe code/descrizione e picker chip
  * "CODICE · Desc" (assegnati navy op.55, disponibili #F2F2F2); GUIDE
- * CERTIFICATE con badge Certificata/Da certificare.
+ * CERTIFICATE con badge Certificata/Da certificare. REG-459/462: RIEPILOGO
+ * COSTI (guide / percorso / esami + totale) e lista ESAMI con prezzo.
  * Vedi docs/features/consorzio.md.
  */
 
@@ -43,6 +44,12 @@ const formatLessonWhen = (iso: string): string => {
   });
   return `${day} · ${time}`;
 };
+
+const formatMoney = (value: number): string =>
+  `€ ${value.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const plural = (count: number, one: string, many: string) =>
+  `${count} ${count === 1 ? one : many}`;
 
 const initialsOf = (name: string): string =>
   name
@@ -292,6 +299,75 @@ export function ConsorzioStudentDrawer({
               )}
             </div>
 
+            {/* Riepilogo costi verso l'autoscuola */}
+            <div className="mb-8" data-testid="student-costs">
+              <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.8px] text-[#929292]">
+                Riepilogo costi
+              </div>
+              <div className="rounded-[14px] border-[1.5px] border-[#ebebeb] px-4 py-1">
+                {[
+                  {
+                    key: "guides",
+                    label: "Guide",
+                    sub: plural(detail.costs.guides.count, "guida", "guide"),
+                    value: detail.costs.guides.includedInCourse
+                      ? "Incluse nel percorso"
+                      : formatMoney(detail.costs.guides.amount),
+                    muted: detail.costs.guides.includedInCourse,
+                  },
+                  ...(detail.costs.course
+                    ? [
+                        {
+                          key: "course",
+                          label: "Percorso completo",
+                          sub: `Prezzo unico ${detail.costs.course.category}${
+                            detail.costs.course.settled ? " · saldato" : ""
+                          }`,
+                          value: formatMoney(detail.costs.course.amount),
+                          muted: false,
+                        },
+                      ]
+                    : []),
+                  {
+                    key: "exams",
+                    label: "Esami",
+                    sub: plural(detail.costs.exams.count, "esame", "esami"),
+                    value: formatMoney(detail.costs.exams.amount),
+                    muted: false,
+                  },
+                ].map((row) => (
+                  <div
+                    key={row.key}
+                    data-testid={`student-cost-${row.key}`}
+                    className="flex items-center justify-between gap-4 border-b border-[#f0f0f0] py-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[14px] font-semibold text-[#222222]">{row.label}</div>
+                      <div className="mt-0.5 text-[12.5px] font-medium text-[#929292]">{row.sub}</div>
+                    </div>
+                    <span
+                      className={
+                        row.muted
+                          ? "shrink-0 text-[13px] font-semibold text-[#a0a0a0]"
+                          : "shrink-0 text-[14px] font-bold tabular-nums text-[#222222]"
+                      }
+                    >
+                      {row.value}
+                    </span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between gap-4 py-3">
+                  <span className="text-[14px] font-bold text-[#222222]">Totale</span>
+                  <span
+                    data-testid="student-cost-total"
+                    className="text-[16px] font-extrabold tabular-nums tracking-[-0.3px] text-[#222222]"
+                  >
+                    {formatMoney(detail.costs.total)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {/* Guide certificate */}
             <div>
               <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.8px] text-[#929292]">
@@ -337,6 +413,51 @@ export function ConsorzioStudentDrawer({
                 ))
               )}
             </div>
+
+            {/* Esami (REG-459): voce distinta dalle guide */}
+            {detail.exams.length > 0 && (
+              <div className="mt-8" data-testid="student-exams">
+                <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.8px] text-[#929292]">
+                  Esami
+                </div>
+                {detail.exams.map((exam) => (
+                  <div
+                    key={exam.appointmentId}
+                    className="flex items-center justify-between gap-4 border-b border-[#f0f0f0] py-3 last:border-b-0"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-[14px] font-semibold text-[#222222]">
+                        <span
+                          className="inline-flex rounded-[6px] px-[7px] py-[3px] text-[11px] font-bold"
+                          style={{ background: "#F0E9FF", color: "#5B3FB0" }}
+                        >
+                          Esame
+                        </span>
+                        {formatLessonWhen(exam.startsAt)}
+                      </div>
+                      <div className="mt-0.5 truncate text-[13px] font-medium text-[#929292]">
+                        {[exam.vehicleName, exam.instructorName].filter(Boolean).join(" · ") || "—"}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="text-[14px] font-bold tabular-nums text-[#222222]">
+                        {formatMoney(exam.price)}
+                      </span>
+                      <span
+                        className="inline-flex rounded-[999px] px-2.5 py-1 text-[11.5px] font-bold"
+                        style={
+                          exam.settled
+                            ? { background: "#E4F4E7", color: "#1F6B2A" }
+                            : { background: "#FCEFC7", color: "#8A6D1A" }
+                        }
+                      >
+                        {exam.settled ? "Saldato" : "Da saldare"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </FadeIn>
       )}

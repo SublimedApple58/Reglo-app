@@ -14,6 +14,7 @@ import {
   billingModeFor,
   billingMonthOf,
   coursePrice,
+  examPrice,
   guidePrice,
   parseConsorzioPricing,
   roundMoney,
@@ -810,12 +811,29 @@ export type ConsorzioStudentDetail = {
     instructorName: string | null;
     certified: boolean;
   }>;
+  /** Esami non annullati dell'allievo, voce distinta dalle guide (REG-459). */
+  exams: Array<{
+    appointmentId: string;
+    startsAt: string;
+    vehicleName: string | null;
+    instructorName: string | null;
+    price: number;
+    settled: boolean;
+  }>;
+  /** Riepilogo costi verso l'autoscuola (stessa semantica prezzi della Fatturazione). */
+  costs: {
+    guides: { count: number; amount: number; includedInCourse: boolean };
+    course: { category: string; amount: number; settled: boolean } | null;
+    exams: { count: number; amount: number };
+    total: number;
+  };
 };
 
 export async function getConsorzioStudentDetail(userId: string) {
   try {
-    const { membership } = await requireConsortium();
+    const { membership, company } = await requireConsortium();
     const companyId = membership.companyId;
+    const pricing = readPricing(company);
 
     const member = await prisma.companyMember.findFirst({
       where: { companyId, userId, autoscuolaRole: "STUDENT" },
@@ -833,39 +851,48 @@ export async function getConsorzioStudentDetail(userId: string) {
       return { success: false as const, message: "Allievo non trovato." };
     }
 
-    const [appointments, allCodes] = await Promise.all([
+    const [appointments, allCodes, courseRows] = await Promise.all([
       prisma.autoscuolaAppointment.findMany({
         where: {
           companyId,
           studentId: userId,
           status: { not: "cancelled" },
-          type: { notIn: ["esame", "group_lesson"] },
+          type: { not: "group_lesson" },
         },
         select: {
           id: true,
+          type: true,
           startsAt: true,
           endsAt: true,
           instructor: { select: { name: true } },
           vehicle: { select: { name: true } },
-          consorzioBilling: { select: { settledAt: true } },
+          consorzioBilling: { select: { settledAt: true, priceAmount: true } },
         },
         orderBy: { startsAt: "desc" },
-        take: 30,
       }),
       prisma.consorzioAccountingCode.findMany({
         where: { consorzioCompanyId: companyId, archivedAt: null },
         orderBy: { createdAt: "asc" },
         select: { id: true, code: true, description: true },
       }),
+      prisma.consorzioCourseBilling.findMany({
+        where: { consorzioCompanyId: companyId, studentUserId: userId },
+        select: { licenseCategory: true, priceAmount: true, settledAt: true },
+      }),
     ]);
 
+    const guideAppointments = appointments.filter((appt) => appt.type !== "esame");
+    const examAppointments = appointments.filter((appt) => appt.type === "esame");
+
     let certifiedMinutes = 0;
-    const lessons = appointments.map((appt) => {
-      const durationMinutes = appt.endsAt
-        ? Math.max(0, Math.round((appt.endsAt.getTime() - appt.startsAt.getTime()) / 60000))
-        : 60;
+    let guidesAmount = 0;
+    const allLessons = guideAppointments.map((appt) => {
+      const durationMinutes = lessonMinutes(appt.startsAt, appt.endsAt);
       const certified = Boolean(appt.consorzioBilling?.settledAt);
       if (certified) certifiedMinutes += durationMinutes;
+      guidesAmount += appt.consorzioBilling
+        ? decimalToNumber(appt.consorzioBilling.priceAmount)
+        : guidePrice(pricing, member.licenseCategory, durationMinutes);
       return {
         appointmentId: appt.id,
         startsAt: appt.startsAt.toISOString(),
@@ -876,17 +903,53 @@ export async function getConsorzioStudentDetail(userId: string) {
       };
     });
 
+    const exams = examAppointments.map((appt) => ({
+      appointmentId: appt.id,
+      startsAt: appt.startsAt.toISOString(),
+      vehicleName: appt.vehicle?.name ?? null,
+      instructorName: appt.instructor?.name ?? null,
+      price: appt.consorzioBilling
+        ? decimalToNumber(appt.consorzioBilling.priceAmount)
+        : examPrice(pricing),
+      settled: Boolean(appt.consorzioBilling?.settledAt),
+    }));
+    const examsAmount = exams.reduce((sum, exam) => sum + exam.price, 0);
+
+    // Percorso: la voce congelata della patente attuale, altrimenti il prezzo
+    // unico live se la patente è a percorso.
+    const frozenCourse = courseRows.find((row) => row.licenseCategory === member.licenseCategory);
+    const liveCourse = coursePrice(pricing, member.licenseCategory);
+    const course =
+      member.licenseCategory && (frozenCourse || liveCourse !== null)
+        ? {
+            category: member.licenseCategory,
+            amount: frozenCourse ? decimalToNumber(frozenCourse.priceAmount) : (liveCourse ?? 0),
+            settled: Boolean(frozenCourse?.settledAt),
+          }
+        : null;
+
     const detail: ConsorzioStudentDetail = {
       userId: member.userId,
       name: member.user.name ?? "—",
       schoolName: member.consorzioSchool?.name ?? null,
       schoolCity: member.consorzioSchool?.city ?? null,
       licenseCategory: member.licenseCategory,
-      lessonsCount: appointments.length,
+      lessonsCount: guideAppointments.length,
       certifiedMinutes,
       codes: member.consorzioAccountingCodes.map((link) => link.code),
       allCodes,
-      lessons,
+      lessons: allLessons.slice(0, 30),
+      exams,
+      costs: {
+        guides: {
+          count: guideAppointments.length,
+          amount: roundMoney(guidesAmount),
+          includedInCourse: billingModeFor(pricing, member.licenseCategory) === "course",
+        },
+        course,
+        exams: { count: exams.length, amount: roundMoney(examsAmount) },
+        total: roundMoney(guidesAmount + examsAmount + (course?.amount ?? 0)),
+      },
     };
     return { success: true as const, data: detail };
   } catch (error) {
@@ -908,6 +971,7 @@ const pricingSchema = z.object({
     z.enum(CONSORZIO_BILLING_MODES),
   ),
   courseByCategory: amountByCategorySchema,
+  examFee: z.number().min(0).max(1_000_000).nullable(),
   lateCancellationCutoffHours: z.number().int().min(0).max(336),
   lateCancellationPenaltyPct: z.number().int().min(0).max(100),
   guideRequestMinLeadHours: z.number().int().min(0).max(336),
@@ -976,6 +1040,7 @@ export async function updateConsorzioPricing(input: z.infer<typeof pricingSchema
             hourlyByCategory,
             billingModeByCategory,
             courseByCategory,
+            examFee: payload.examFee,
             lateCancellationCutoffHours: payload.lateCancellationCutoffHours,
             lateCancellationPenaltyPct: payload.lateCancellationPenaltyPct,
             guideRequestMinLeadHours: payload.guideRequestMinLeadHours,
@@ -1025,9 +1090,10 @@ const setAppointmentCodesSchema = z.object({
 /**
  * Una voce di Fatturazione:
  * - "guide": guida individuale (a ore, o inclusa se la patente è a percorso);
+ * - "exam": esame prenotato all'allievo, a tariffa esame (REG-459);
  * - "course": prezzo unico del percorso completo di un allievo (REG-462).
  */
-export type ConsorzioBillingLineKind = "guide" | "course";
+export type ConsorzioBillingLineKind = "guide" | "exam" | "course";
 
 export type ConsorzioBillingLesson = {
   /** Chiave stabile della riga (appuntamento o percorso allievo+patente). */
@@ -1074,6 +1140,9 @@ const lessonMinutes = (startsAt: Date, endsAt: Date | null): number =>
  * (`guidePrice`). Così i ritocchi di tariffa si riflettono sulle guide non
  * ancora certificate, mai su quelle già saldate.
  *
+ * Esami (REG-459): ogni esame non annullato dell'allievo è una voce "Esame"
+ * a tariffa esame, distinta dalle guide.
+ *
  * Patenti a percorso (REG-462): le guide valgono 0 ("incluse") e il percorso
  * compare come voce propria nel mese della PRIMA guida dell'allievo — oppure,
  * se è già stato toccato, nel mese congelato in ConsorzioCourseBilling.
@@ -1113,10 +1182,11 @@ export async function getConsorzioBilling(input: z.infer<typeof billingMonthSche
             studentId: { in: members.map((m) => m.userId) },
             startsAt: { gte: monthStart, lt: monthEnd },
             status: { not: "cancelled" },
-            type: { notIn: ["esame", "group_lesson"] },
+            type: { not: "group_lesson" },
           },
           select: {
             id: true,
+            type: true,
             studentId: true,
             startsAt: true,
             endsAt: true,
@@ -1150,7 +1220,9 @@ export async function getConsorzioBilling(input: z.infer<typeof billingMonthSche
       const member = appt.studentId ? memberByUserId.get(appt.studentId) : undefined;
       if (!member?.consorzioSchoolId) continue;
       const durationMinutes = lessonMinutes(appt.startsAt, appt.endsAt);
-      const includedInCourse = billingModeFor(pricing, member.licenseCategory) === "course";
+      const isExam = appt.type === "esame";
+      const includedInCourse =
+        !isExam && billingModeFor(pricing, member.licenseCategory) === "course";
       const billing = appt.consorzioBilling;
       // Codici della guida: espliciti se presenti, altrimenti i default allievo.
       const codes = appt.consorzioAccountingCodes.length
@@ -1159,7 +1231,7 @@ export async function getConsorzioBilling(input: z.infer<typeof billingMonthSche
 
       pushLine(member.consorzioSchoolId, {
         lineId: `appt:${appt.id}`,
-        kind: "guide",
+        kind: isExam ? "exam" : "guide",
         appointmentId: appt.id,
         studentUserId: member.userId,
         startsAt: appt.startsAt.toISOString(),
@@ -1171,7 +1243,9 @@ export async function getConsorzioBilling(input: z.infer<typeof billingMonthSche
         codes,
         price: billing
           ? decimalToNumber(billing.priceAmount)
-          : guidePrice(pricing, member.licenseCategory, durationMinutes),
+          : isExam
+            ? examPrice(pricing)
+            : guidePrice(pricing, member.licenseCategory, durationMinutes),
         includedInCourse,
         settled: Boolean(billing?.settledAt),
         invoiceSent: Boolean(billing?.invoiceSentAt),
@@ -1336,7 +1410,7 @@ export async function getConsorzioBilling(input: z.infer<typeof billingMonthSche
 }
 
 /**
- * Toggle "saldata" / "fattura inviata" su una guida. Al primo toggle la riga
+ * Toggle "saldata" / "fattura inviata" su una guida o un esame. Al primo toggle la riga
  * di billing viene creata congelando il prezzo corrente del listino.
  */
 export async function setConsorzioLessonBillingFlags(
@@ -1351,6 +1425,7 @@ export async function setConsorzioLessonBillingFlags(
       where: { id: payload.appointmentId, companyId },
       select: {
         id: true,
+        type: true,
         studentId: true,
         startsAt: true,
         endsAt: true,
@@ -1380,11 +1455,15 @@ export async function setConsorzioLessonBillingFlags(
         data: flagPatch,
       });
     } else {
-      const price = guidePrice(
-        readPricing(company),
-        member.licenseCategory,
-        lessonMinutes(appointment.startsAt, appointment.endsAt),
-      );
+      const pricing = readPricing(company);
+      const price =
+        appointment.type === "esame"
+          ? examPrice(pricing)
+          : guidePrice(
+              pricing,
+              member.licenseCategory,
+              lessonMinutes(appointment.startsAt, appointment.endsAt),
+            );
       await prisma.consorzioLessonBilling.create({
         data: {
           appointmentId: appointment.id,

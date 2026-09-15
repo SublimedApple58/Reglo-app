@@ -36,7 +36,8 @@ import {
  * avatar 40, righe guida h44 (badge patente e chip codici #EEF0F6/#1A1A2E,
  * quadratini saldata/fattura 16px), placeholder mese futuro con sfera di
  * cristallo. Voci percorso (REG-462): riga con tag "Percorso" e prezzo unico;
- * le guide di quella patente mostrano "Incluso" al posto del prezzo.
+ * le guide di quella patente mostrano "Incluso" al posto del prezzo. Esami
+ * (REG-459): riga con tag "Esame" a tariffa esame.
  * Vedi docs/features/consorzio.md.
  */
 
@@ -96,8 +97,11 @@ function CodeChip({ code, small }: { code: string; small?: boolean }) {
 
 
 /** Tag del tipo di voce (le guide normali non ne hanno). */
-function LineKindTag({ label, tone }: { label: string; tone: "course" }) {
-  const palette = { course: { background: "#E3F4F1", color: "#0F5E55" } }[tone];
+function LineKindTag({ label, tone }: { label: string; tone: "course" | "exam" }) {
+  const palette = {
+    course: { background: "#E3F4F1", color: "#0F5E55" },
+    exam: { background: "#F0E9FF", color: "#5B3FB0" },
+  }[tone];
   return (
     <span
       className="inline-flex shrink-0 rounded-[6px] px-[7px] py-[3px] text-[11px] font-bold"
@@ -108,12 +112,14 @@ function LineKindTag({ label, tone }: { label: string; tone: "course" }) {
   );
 }
 
-/** "3 guide · 1 percorso" per il sottotitolo del gruppo autoscuola. */
+/** "3 guide · 1 esame · 1 percorso" per il sottotitolo del gruppo autoscuola. */
 const groupSummary = (lessons: ConsorzioBillingLesson[]): string => {
   const guides = lessons.filter((l) => l.kind === "guide").length;
+  const exams = lessons.filter((l) => l.kind === "exam").length;
   const courses = lessons.filter((l) => l.kind === "course").length;
   return [
     guides ? `${guides} ${guides === 1 ? "guida" : "guide"}` : null,
+    exams ? `${exams} ${exams === 1 ? "esame" : "esami"}` : null,
     courses ? `${courses} ${courses === 1 ? "percorso" : "percorsi"}` : null,
   ]
     .filter(Boolean)
@@ -403,10 +409,10 @@ export function ConsorzioBillingPage() {
           <div className="mb-2 text-[22px] font-bold tracking-[-0.4px] text-[#222222]">
             {isFutureMonth(month)
               ? "Non riusciamo ANCORA a vedere nel futuro"
-              : `Nessuna guida a ${monthLabel(month).toLowerCase()}`}
+              : `Niente da fatturare a ${monthLabel(month).toLowerCase()}`}
           </div>
           <p className="max-w-[380px] text-[14.5px] font-medium leading-[1.55] text-[#6a6a6a]">
-            Le guide di {monthLabel(month)} compariranno qui man mano che vengono fatte.
+            Guide ed esami di {monthLabel(month)} compariranno qui man mano che vengono fatti.
           </p>
         </div>
         </FadeIn>
@@ -470,11 +476,12 @@ export function ConsorzioBillingPage() {
                           <span className="w-8 shrink-0" />
                         )}
                         {lesson.kind === "course" && <LineKindTag label="Percorso" tone="course" />}
+                        {lesson.kind === "exam" && <LineKindTag label="Esame" tone="exam" />}
                         <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#929292]">
                           {lesson.kind === "course"
                             ? "Percorso completo · prezzo unico"
                             : [
-                                `${lesson.durationMinutes} min`,
+                                lesson.kind === "exam" ? null : `${lesson.durationMinutes} min`,
                                 lesson.instructorName,
                                 lesson.vehicleName,
                               ]
@@ -566,7 +573,9 @@ export function ConsorzioBillingPage() {
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Codici della guida</DialogTitle>
+            <DialogTitle>
+              {lessonCodesFor?.kind === "exam" ? "Codici dell'esame" : "Codici della guida"}
+            </DialogTitle>
             <DialogDescription>
               {lessonCodesFor
                 ? `${lessonCodesFor.studentName} · ${formatLessonDate(lessonCodesFor.startsAt)}`

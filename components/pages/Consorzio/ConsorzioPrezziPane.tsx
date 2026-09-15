@@ -32,6 +32,8 @@ import { cn } from "@/lib/utils";
  * REG-462: per ogni patente il criterio è "A ore" o "Percorso" (prezzo unico
  * per il percorso completo dell'allievo, guide incluse). Le due cifre sono
  * salvate entrambe, il segmented sceglie quale vale.
+ * REG-459: sezione "Esami" con la tariffa fissa per esame (voce "Esame" in
+ * Fatturazione e nel riepilogo dell'allievo, distinta dalle guide).
  * Vedi docs/features/consorzio.md.
  */
 
@@ -69,6 +71,7 @@ export function ConsorzioPrezziPane() {
             next[draftKey(field, category)] = value !== undefined ? String(value) : "";
           }
         }
+        next.examFee = res.data.examFee !== null ? String(res.data.examFee) : "";
         setDrafts(next);
       }
       setLoading(false);
@@ -94,6 +97,7 @@ export function ConsorzioPrezziPane() {
             next.billingModeByCategory[category] ?? "hourly",
           ]),
         ) as Record<ConsortiumLicenseCategory, ConsorzioBillingMode>,
+        examFee: next.examFee,
         lateCancellationCutoffHours: next.lateCancellationCutoffHours,
         lateCancellationPenaltyPct: next.lateCancellationPenaltyPct,
         guideRequestMinLeadHours: next.guideRequestMinLeadHours,
@@ -118,6 +122,19 @@ export function ConsorzioPrezziPane() {
     if (value === undefined) delete nextMap[category];
     else nextMap[category] = value;
     void persist({ ...pricing, [field]: nextMap });
+  };
+
+  const commitExamFee = () => {
+    if (!pricing) return;
+    const raw = (drafts.examFee ?? "").trim().replace(",", ".");
+    const parsed = raw === "" ? null : Number(raw);
+    const value =
+      parsed !== null && Number.isFinite(parsed) && parsed >= 0
+        ? Math.round(parsed * 100) / 100
+        : null;
+    setDrafts((prev) => ({ ...prev, examFee: value !== null ? String(value) : "" }));
+    if (value === pricing.examFee) return;
+    void persist({ ...pricing, examFee: value });
   };
 
   const setMode = (category: ConsortiumLicenseCategory, mode: ConsorzioBillingMode) => {
@@ -212,6 +229,48 @@ export function ConsorzioPrezziPane() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+        </div>
+      </div>
+
+      {/* Esami: tariffa fissa per esame */}
+      <div className="py-6" data-testid="exam-fee-section">
+        <div className="text-[15px] font-semibold text-[#222222]">Esami</div>
+        <p className="mt-[3px] max-w-2xl text-sm font-medium leading-[1.45] text-[#929292]">
+          Quanto costa all&apos;autoscuola ogni esame prenotato per un suo allievo. In
+          Fatturazione e nel riepilogo dell&apos;allievo è una voce a sé, separata dalle
+          guide, anche per le patenti a percorso.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2.5 py-3">
+          <span
+            className="flex h-[30px] min-w-[46px] shrink-0 items-center justify-center rounded-[9px] px-2.5 text-[12px] font-bold tracking-[0.2px]"
+            style={{ background: "#F0E9FF", border: "1px solid #E2D6FB", color: "#5B3FB0" }}
+          >
+            Esame
+          </span>
+          <div className="min-w-[180px] flex-1">
+            <div className="text-[15px] font-semibold text-[#222222]">Tariffa esame</div>
+            <div className="text-sm font-medium text-[#929292]">
+              Prezzo fisso, uguale per tutte le patenti.
+            </div>
+          </div>
+          <div className="relative ml-auto w-[190px] shrink-0">
+            <input
+              inputMode="decimal"
+              aria-label="Tariffa esame"
+              data-testid="exam-fee-input"
+              value={drafts.examFee ?? ""}
+              onChange={(e) => setDrafts((prev) => ({ ...prev, examFee: e.target.value }))}
+              onBlur={commitExamFee}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              }}
+              placeholder="—"
+              className="h-[46px] w-full rounded-[12px] border-[1.5px] border-[#e2e2e2] bg-white pl-4 pr-[92px] text-[15px] font-semibold text-[#222222] outline-none transition-colors focus:border-[#222222]"
+            />
+            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-[#a0a0a0]">
+              € / esame
+            </span>
           </div>
         </div>
       </div>

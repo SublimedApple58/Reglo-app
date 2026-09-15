@@ -2,6 +2,7 @@ import {
   billingModeFor,
   billingMonthOf,
   coursePrice,
+  examPrice,
   guidePrice,
   parseConsorzioPricing,
 } from "@/lib/consorzio/pricing";
@@ -77,6 +78,16 @@ describe("listino consorzio", () => {
     );
     expect(pricing.hourlyByCategory).toEqual({});
     expect(pricing.billingModeByCategory).toEqual({});
+  });
+
+  it("tariffa esame fissa, anche con patente a percorso (REG-459)", () => {
+    const pricing = parseConsorzioPricing(
+      limits({ examFee: 150, billingModeByCategory: { CQC: "course" } }),
+    );
+    expect(examPrice(pricing)).toBe(150);
+    expect(parseConsorzioPricing({}).examFee).toBeNull();
+    expect(examPrice(parseConsorzioPricing({}))).toBe(0);
+    expect(parseConsorzioPricing(limits({ examFee: -1 })).examFee).toBeNull();
   });
 
   it("mese di fatturazione in UTC", () => {

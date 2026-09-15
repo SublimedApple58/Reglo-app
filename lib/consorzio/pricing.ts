@@ -12,6 +12,9 @@ import { DEFAULT_GUIDE_REQUEST_MIN_LEAD_HOURS } from "@/lib/consorzio/guide-requ
  *   quella patente valgono 0 (incluse) e il percorso compare come voce a sé in
  *   Fatturazione, nel mese della prima guida dell'allievo.
  * Le due cifre restano salvate entrambe: cambiare criterio non perde l'altra.
+ *
+ * Tariffa esame (REG-459): prezzo fisso per ogni esame prenotato a un allievo,
+ * voce "Esame" distinta dalle guide (anche per le patenti a percorso).
  * Vedi docs/features/consorzio.md.
  */
 
@@ -22,6 +25,8 @@ export type ConsorzioPricing = {
   hourlyByCategory: Partial<Record<string, number>>;
   billingModeByCategory: Partial<Record<string, ConsorzioBillingMode>>;
   courseByCategory: Partial<Record<string, number>>;
+  /** € per esame; null = non impostata (l'esame vale 0). */
+  examFee: number | null;
   lateCancellationCutoffHours: number;
   lateCancellationPenaltyPct: number;
   guideRequestMinLeadHours: number;
@@ -56,6 +61,7 @@ export function parseConsorzioPricing(limits: Record<string, unknown>): Consorzi
     hourlyByCategory: readAmounts(raw.hourlyByCategory),
     billingModeByCategory,
     courseByCategory: readAmounts(raw.courseByCategory),
+    examFee: isAmount(raw.examFee) ? raw.examFee : null,
     lateCancellationCutoffHours:
       typeof raw.lateCancellationCutoffHours === "number"
         ? raw.lateCancellationCutoffHours
@@ -109,3 +115,8 @@ export function coursePrice(
 /** "YYYY-MM" (UTC, come i confini mese della Fatturazione). */
 export const billingMonthOf = (date: Date): string =>
   `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+
+/** Prezzo di un esame (0 se la tariffa esame non è impostata). */
+export function examPrice(pricing: ConsorzioPricing): number {
+  return pricing.examFee ?? 0;
+}
