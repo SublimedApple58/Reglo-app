@@ -448,8 +448,10 @@ export default function InstructorsTab({
     { key: "malattia" as const, label: "Malattia" },
     { key: "ferie" as const, label: "Ferie" },
     { key: "autonoma" as const, label: "Gestione autonoma" },
-    { key: "codice" as const, label: "Codice" },
+    // Chiave e card QR hanno senso solo per chi gestisce i propri allievi.
+    ...(selected.autonomousMode ? [{ key: "codice" as const, label: "Codice" }] : []),
   ];
+  const activeTab = tab === "codice" && !selected.autonomousMode ? "disp" : tab;
 
   return (
     <div data-testid="instructors-pane">
@@ -482,7 +484,7 @@ export default function InstructorsTab({
             onClick={() => setTab(t.key)}
             className={cn(
               "-mb-px cursor-pointer select-none whitespace-nowrap border-b-[2.5px] px-px pb-3 text-[15px] transition-colors",
-              tab === t.key ? "border-[#222222] font-semibold text-[#222222]" : "border-transparent font-medium text-[#6a6a6a] hover:text-[#222222]",
+              activeTab === t.key ? "border-[#222222] font-semibold text-[#222222]" : "border-transparent font-medium text-[#6a6a6a] hover:text-[#222222]",
             )}
           >
             {t.label}
@@ -490,8 +492,8 @@ export default function InstructorsTab({
         ))}
       </div>
 
-      <div className={tab === "codice" ? "max-w-[720px]" : "max-w-[680px]"}>
-        {tab === "disp" && (
+      <div className={activeTab === "codice" ? "max-w-[720px]" : "max-w-[680px]"}>
+        {activeTab === "disp" && (
           <DisponibilitaTab
             instructor={selected}
             weekly={instructorWeeklyAvailability[selected.id] ?? null}
@@ -501,14 +503,14 @@ export default function InstructorsTab({
             toast={toast}
           />
         )}
-        {tab === "malattia" && (
+        {activeTab === "malattia" && (
           <MalattiaTab instructor={selected} refreshAgenda={refreshAgenda} toast={toast} />
         )}
-        {tab === "ferie" && (
+        {activeTab === "ferie" && (
           <FerieTab instructor={selected} refreshAgenda={refreshAgenda} toast={toast} />
         )}
-        {tab === "codice" && <CodiceTab instructorId={selected.id} />}
-        {tab === "autonoma" && (
+        {activeTab === "codice" && <CodiceTab instructorId={selected.id} />}
+        {activeTab === "autonoma" && (
           <AutonomaTab
             instructor={selected}
             instructors={instructors}
@@ -2060,24 +2062,6 @@ function AutonomaTab({
 
       {autonomous && (
         <div>
-          {/* Codice invito (funzionalità reale, non nel proto: resta discreta qui) */}
-          {instructor.inviteCode ? (
-            <div className="mb-4 flex items-center gap-3 rounded-[12px] border border-[#e8e8e8] bg-[#fafafa] px-4 py-3">
-              <span className="text-[13px] font-medium text-[#6a6a6a]">Codice istruttore</span>
-              <span className="text-sm font-bold tracking-wider text-[#222222]">{instructor.inviteCode}</span>
-              <button
-                type="button"
-                className="ml-auto cursor-pointer text-xs font-semibold text-[#222222] transition-opacity hover:opacity-70"
-                onClick={() => {
-                  void navigator.clipboard.writeText(instructor.inviteCode ?? "");
-                  toast.success({ description: "Codice copiato." });
-                }}
-              >
-                Copia
-              </button>
-            </div>
-          ) : null}
-
           {/* Durata guide */}
           <div className="border-t border-[#f0f0f0] py-5">
             <div className="text-[15px] font-semibold text-[#222222]">Durata guide</div>

@@ -6,7 +6,8 @@ import { instructorLinkUrl } from "@/lib/autoscuole/instructor-initials";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { InstructorQrCardDialog } from "@/components/pages/Autoscuole/instructor-qr/InstructorQrCardDialog";
 
-// REG-451 — scheda "Codice" del dettaglio istruttore (prototipo `QR Istruttore.html`):
+// REG-451 — scheda "Codice" del dettaglio istruttore (prototipo `QR Istruttore.html`),
+// visibile solo con la gestione autonoma attiva: chiave dell'istruttore + Copia,
 // riga "Card QR da stampare" + Utilizza (apre l'anteprima) e nota sullo scotch.
 
 const AMAZON_POCKET_URL = "https://www.amazon.it/s?k=porta+tessera+adesivo+trasparente+cruscotto+auto";
@@ -17,33 +18,70 @@ export function CodiceTab({ instructorId }: { instructorId: string }) {
   const toast = useFeedbackToast();
   const [open, setOpen] = React.useState(false);
   const [card, setCard] = React.useState<CardData | null>(null);
-  const [loading, setLoading] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
+  const [copied, setCopied] = React.useState(false);
 
-  const openPreview = async () => {
-    if (card) {
-      setOpen(true);
-      return;
-    }
-    setLoading(true);
-    const res = await getInstructorQrCard({ instructorId });
-    setLoading(false);
-    if (!res.success || !res.data) {
-      toast.error({ description: res.message ?? "Impossibile preparare la card." });
-      return;
-    }
-    setCard(res.data);
-    setOpen(true);
-  };
-
+  // La scheda esiste solo per gli istruttori in gestione autonoma: la chiave serve
+  // subito (riga in alto), quindi la card si prepara all'apertura del tab.
   React.useEffect(() => {
+    let active = true;
     setCard(null);
     setOpen(false);
+    setCopied(false);
+    setLoading(true);
+    getInstructorQrCard({ instructorId }).then((res) => {
+      if (!active) return;
+      setLoading(false);
+      if (res.success && res.data) setCard(res.data);
+      else toast.error({ description: res.message ?? "Impossibile recuperare il codice." });
+    });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instructorId]);
+
+  const copyCode = () => {
+    if (!card) return;
+    void navigator.clipboard.writeText(card.code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div id="istr-tab-codice" data-testid="instructor-codice-tab" className="flex flex-col">
       {/* Come le altre schede del dettaglio: il contenuto parte subito sotto i tab (mb-6), niente padding extra sopra. */}
       <div className="flex items-center justify-between gap-7 border-b border-[#ececf0] pb-[22px]">
+        <div className="max-w-[440px]">
+          <div className="text-[15px] font-semibold leading-[normal] text-[#222222]">Chiave istruttore</div>
+          <div className="mt-[5px] text-[13px] font-medium leading-[1.55] text-[#929292]">
+            Chi si registra con questa chiave viene iscritto all’autoscuola e assegnato direttamente a questo
+            istruttore.
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          {card ? (
+            <span
+              data-testid="instructor-key-value"
+              className="rounded-[10px] border border-[#dddddd] bg-[#f7f7f7] px-3.5 py-[9px] text-[16px] font-bold leading-[normal] tracking-[2px] text-[#222222] [font-variant-numeric:tabular-nums]"
+            >
+              {card.code}
+            </span>
+          ) : (
+            <span aria-hidden className="block h-[40px] w-[112px] animate-pulse rounded-[10px] bg-[#f0f0f2]" />
+          )}
+          <button
+            type="button"
+            onClick={copyCode}
+            disabled={!card}
+            className="flex min-w-[92px] shrink-0 cursor-pointer select-none items-center justify-center rounded-[12px] border-[1.5px] border-[#dddddd] bg-white px-[18px] py-[11px] text-[14px] font-medium leading-[normal] text-[#222222] transition-[background] duration-150 hover:bg-[#f7f7f7] disabled:cursor-default disabled:opacity-60"
+          >
+            {copied ? "Copiato ✓" : "Copia"}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-7 border-b border-[#ececf0] py-[22px]">
         <div className="max-w-[560px]">
           <div className="text-[15px] font-semibold leading-[normal] text-[#222222]">Card QR da stampare</div>
           <div className="mt-[5px] text-[13px] font-medium leading-[1.55] text-[#929292]">
@@ -52,10 +90,10 @@ export function CodiceTab({ instructorId }: { instructorId: string }) {
         </div>
         <button
           type="button"
-          onClick={() => void openPreview()}
-          disabled={loading}
+          onClick={() => card && setOpen(true)}
+          disabled={!card}
           aria-busy={loading}
-          className="flex shrink-0 cursor-pointer select-none items-center gap-2.5 rounded-[12px] border-[1.5px] border-[#dddddd] bg-white px-[18px] py-[11px] text-[14px] font-medium leading-[normal] text-[#222222] transition-[background] duration-150 hover:bg-[#f7f7f7] disabled:cursor-default"
+          className="flex shrink-0 cursor-pointer select-none items-center gap-2.5 rounded-[12px] border-[1.5px] border-[#dddddd] bg-white px-[18px] py-[11px] text-[14px] font-medium leading-[normal] text-[#222222] transition-[background] duration-150 hover:bg-[#f7f7f7] disabled:cursor-default disabled:opacity-60"
         >
           Utilizza
         </button>

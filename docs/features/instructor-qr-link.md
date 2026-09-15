@@ -1,7 +1,7 @@
 # Card QR istruttore → associazione allievo (REG-451)
 
 ## Cosa fa
-Ogni istruttore ha una **card QR da stampare** (Impostazioni → Istruttori → Gestisci → scheda **Codice** → **Utilizza**). L'allievo la inquadra e viene associato a quell'istruttore (`CompanyMember.assignedInstructorId`). Design 1:1 dal prototipo `QR Istruttore.html` (misurato sul render: scheda Codice, modale 640×790, card verticale 392×651 e orizzontale 600×380, voce Novità 640×1461).
+Ogni istruttore **in gestione autonoma** ha una **card QR da stampare** (Impostazioni → Istruttori → Gestisci → scheda **Codice** → **Utilizza**). La scheda Codice compare SOLO con `autonomousMode=true` e in alto mostra la **chiave istruttore** (`inviteCode`) con Copia (spostata qui dalla scheda Gestione autonoma). Il backend dell'associazione via QR resta aperto a qualsiasi istruttore attivo: le card già stampate continuano a funzionare. L'allievo la inquadra e viene associato a quell'istruttore (`CompanyMember.assignedInstructorId`). Design 1:1 dal prototipo `QR Istruttore.html` (misurato sul render: scheda Codice, modale 640×790, card verticale 392×651 e orizzontale 600×380, voce Novità 640×1461).
 
 Il QR codifica `<origin>/i/<CODICE>` (origin del browser che genera la card: prod `app.reglo.it`, staging `staging.reglo.it`). Il codice è `AutoscuolaInstructor.inviteCode`, lo stesso del signup (vedi instructor-clusters.md), generato al volo se manca.
 

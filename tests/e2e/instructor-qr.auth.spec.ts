@@ -17,11 +17,34 @@ test.describe("Card QR istruttore", () => {
 
     await page.goto("/it/user/autoscuole?tab=settings&pane=instructors");
     const codiceTab = page.getByTestId("instructor-codice-tab");
-    await expect(async () => {
-      await page.getByRole("button", { name: "Gestisci" }).first().click();
-      await page.getByRole("button", { name: "Codice", exact: true }).click();
-      await expect(codiceTab).toBeVisible({ timeout: 3_000 });
-    }).toPass({ timeout: 120_000 });
+    // La scheda Codice esiste solo per gli istruttori in gestione autonoma.
+    const gestisci = page.getByRole("button", { name: "Gestisci" });
+    await expect(gestisci.first()).toBeVisible({ timeout: 120_000 });
+    const count = await gestisci.count();
+    let withCodice = 0;
+    let withoutCodice = 0;
+    for (let i = 0; i < count; i++) {
+      await gestisci.nth(i).click();
+      await expect(page.getByRole("button", { name: "Disponibilità", exact: true })).toBeVisible({ timeout: 30_000 });
+      if (await page.getByRole("button", { name: "Codice", exact: true }).count()) {
+        withCodice++;
+        break;
+      }
+      withoutCodice++;
+      await page.getByTestId("instructors-pane").getByRole("button", { name: "Istruttori" }).click();
+    }
+    expect(withCodice, "serve almeno un istruttore in gestione autonoma").toBe(1);
+    console.log(`istruttori senza scheda Codice prima di quello autonomo: ${withoutCodice}`);
+    await page.getByRole("button", { name: "Codice", exact: true }).click();
+    await expect(codiceTab).toBeVisible();
+
+    // Chiave dell'istruttore + Copia.
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const keyValue = codiceTab.getByTestId("instructor-key-value");
+    await expect(keyValue).toHaveText(/^[A-Z0-9]{6}$/, { timeout: 30_000 });
+    await codiceTab.getByRole("button", { name: "Copia" }).click();
+    await expect(codiceTab.getByRole("button", { name: "Copiato ✓" })).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe((await keyValue.textContent())?.trim());
 
     await expect(codiceTab.getByText("Card QR da stampare")).toBeVisible();
     await expect(codiceTab.getByText("Lo scotch non è incluso")).toBeVisible();
