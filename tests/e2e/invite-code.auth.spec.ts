@@ -39,22 +39,18 @@ test.describe("Allievi — chiave di accesso", () => {
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe("Reglo - Scarica l'app.pdf");
 
-    // Chiavi istruttori autonomi: nascoste di default, lista nel pannello affiancato.
-    const keysToggle = dialog.getByTestId("instructor-keys-toggle");
-    if (await keysToggle.count()) {
-      await expect(page.getByTestId("instructor-key-row")).toHaveCount(0);
-      await keysToggle.click();
-      const panel = page.getByTestId("instructor-keys-panel");
-      await expect(panel).toBeVisible();
-      await expect(panel.getByTestId("instructor-key-row").first()).toBeVisible();
-      await expect(keysToggle).toHaveAttribute("aria-expanded", "true");
-      // Esc chiude prima il pannello, il dialog resta aperto.
+    // Le chiavi dei singoli istruttori non sono nel dialog: una nota porta alla sezione Istruttori.
+    await expect(dialog.getByTestId("instructor-key-row")).toHaveCount(0);
+    const keysLink = dialog.getByTestId("instructor-keys-link");
+    if (await keysLink.count()) {
+      await expect(keysLink).toHaveText("Per consultare le chiavi dei singoli istruttori vai nella sezione Istruttori");
+      await keysLink.click();
+      await expect(dialog).toBeHidden();
+      await expect(page).toHaveURL(/tab=settings.*pane=instructors/, { timeout: 60_000 });
+      await expect(page.getByTestId("instructors-pane")).toBeVisible({ timeout: 60_000 });
+    } else {
       await page.keyboard.press("Escape");
-      await expect(panel).toBeHidden();
-      await expect(dialog).toBeVisible();
+      await expect(dialog).toBeHidden();
     }
-
-    await page.keyboard.press("Escape");
-    await expect(dialog).toBeHidden();
   });
 });
