@@ -21,6 +21,7 @@ import { getDefaultAutoscuolaRole, deriveCompanyMemberRole, isInstructor } from 
 import { isLicenseCategory, isTransmission } from '@/lib/autoscuole/license';
 import { operationallyCancelAppointmentsByResource } from '@/lib/autoscuole/operational-cancellation';
 import { deleteAndAnonymizeUserAccount, releaseEmailIfOrphaned } from '@/lib/account-deletion';
+import { buildPlaceholderEmail } from '@/lib/users/placeholder-email';
 
 // Sign in the user with credentials
 export async function signInWithCredentials(
@@ -573,8 +574,16 @@ export async function updateUser(user: z.infer<typeof updateUserSchema>) {
 export async function createCompanyUser(input: {
   companyId: string;
   name: string;
-  email: string;
-  password: string;
+  /**
+   * Facoltativa SOLO per gli allievi di un consorzio (REG-464): senza email
+   * l'account nasce con un indirizzo segnaposto e senza password, quindi non
+   * accede all'app. Per tutti gli altri ruoli resta obbligatoria.
+   */
+  email?: string;
+  /** Obbligatoria se c'è un'email: senza password l'account non potrebbe accedere. */
+  password?: string;
+  /** Telefono dell'allievo — l'unico recapito quando l'email non c'è. */
+  phone?: string;
   autoscuolaRole: 'OWNER' | 'INSTRUCTOR_OWNER' | 'INSTRUCTOR' | 'STUDENT';
   // Student-only (ignored for other roles): license path + optional
   // assignment to an autonomous instructor.
@@ -602,7 +611,24 @@ export async function createCompanyUser(input: {
       throw new Error('Solo gli admin possono creare utenti.');
     }
 
-    const email = input.email.trim().toLowerCase();
+    const typedEmail = input.email?.trim().toLowerCase() ?? '';
+    const typedPhone = input.phone?.trim() ?? '';
+    if (typedPhone && !/^[+()\-\s\d]{5,25}$/.test(typedPhone)) {
+      throw new Error('Numero di telefono non valido.');
+    }
+
+    // Allievo di consorzio senza credenziali: bastano nome e telefono, l'app
+    // non è obbligatoria per lui (REG-464). Fuori da quel caso email e
+    // password restano obbligatorie come prima.
+    const credentialsOptional =
+      input.autoscuolaRole === 'STUDENT' && Boolean(input.consorzioSchoolId);
+    if (!typedEmail) {
+      if (!credentialsOptional) throw new Error("L'email è obbligatoria.");
+      if (!typedPhone) throw new Error('Senza email serve almeno un numero di telefono.');
+    }
+    if (typedEmail && !input.password) {
+      throw new Error("Con un'email serve anche una password per l'accesso all'app.");
+    }
 
     // Students get their license path at creation (falling back to the
     // autoscuola's configured default, like the mobile self-registration).
@@ -710,10 +736,16 @@ export async function createCompanyUser(input: {
 
     // Orphaned accounts (deleted from the Directory but still holding the
     // email) get anonymized on the spot so the address can be reused.
-    const emailFree = await releaseEmailIfOrphaned(email);
-    if (!emailFree) throw new Error('Esiste già un account con questa email.');
+    if (typedEmail) {
+      const emailFree = await releaseEmailIfOrphaned(typedEmail);
+      if (!emailFree) throw new Error('Esiste già un account con questa email.');
+    }
 
-    const hashedPassword = await hash(input.password);
+    // Senza email: indirizzo segnaposto univoco e nessuna password (l'account
+    // esiste in gestionale ma non può accedere finché non gli si danno
+    // credenziali). Vedi lib/users/placeholder-email.ts.
+    const email = typedEmail || buildPlaceholderEmail(crypto.randomUUID());
+    const hashedPassword = input.password ? await hash(input.password) : null;
 
     await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -721,6 +753,7 @@ export async function createCompanyUser(input: {
           name: input.name.trim(),
           email,
           password: hashedPassword,
+          phone: typedPhone || null,
           role: 'user',
           activeCompanyId: input.companyId,
         },

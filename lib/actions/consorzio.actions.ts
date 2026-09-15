@@ -23,6 +23,7 @@ import {
 } from "@/lib/consorzio/pricing";
 import { resolveConsortiumGuideRequestNotification } from "@/lib/autoscuole/notifications";
 import { requireConsortium } from "@/lib/service-access";
+import { displayEmail } from "@/lib/users/placeholder-email";
 import { formatError } from "@/lib/utils";
 
 // Server actions della sezione consorzio (autoscuole consorziate, codici
@@ -796,9 +797,13 @@ export async function rejectConsorzioGuideRequest(requestId: string) {
 export type ConsorzioStudentDetail = {
   userId: string;
   name: string;
+  /** Null quando l'allievo non ha credenziali d'app (email segnaposto, REG-464). */
+  email: string | null;
+  phone: string | null;
   schoolName: string | null;
   schoolCity: string | null;
   licenseCategory: string | null;
+  transmission: string | null;
   lessonsCount: number;
   certifiedMinutes: number;
   codes: Array<{ id: string; code: string; description: string | null }>;
@@ -840,7 +845,8 @@ export async function getConsorzioStudentDetail(userId: string) {
       select: {
         userId: true,
         licenseCategory: true,
-        user: { select: { name: true } },
+        transmission: true,
+        user: { select: { name: true, email: true, phone: true } },
         consorzioSchool: { select: { name: true, city: true } },
         consorzioAccountingCodes: {
           select: { code: { select: { id: true, code: true, description: true } } },
@@ -931,9 +937,12 @@ export async function getConsorzioStudentDetail(userId: string) {
     const detail: ConsorzioStudentDetail = {
       userId: member.userId,
       name: member.user.name ?? "—",
+      email: displayEmail(member.user.email),
+      phone: member.user.phone,
       schoolName: member.consorzioSchool?.name ?? null,
       schoolCity: member.consorzioSchool?.city ?? null,
       licenseCategory: member.licenseCategory,
+      transmission: member.transmission,
       lessonsCount: guideAppointments.length,
       certifiedMinutes,
       codes: member.consorzioAccountingCodes.map((link) => link.code),

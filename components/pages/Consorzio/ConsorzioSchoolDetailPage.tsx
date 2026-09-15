@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
 import { ChevronLeft, Plus } from "lucide-react";
 
-import { AdminUsersCreateDialog } from "@/components/pages/AdminUsers/AdminUsersCreateDialog";
+import { ConsorzioStudentCreateDialog } from "@/components/pages/Consorzio/ConsorzioStudentCreateDialog";
 import { ConsorzioStudentDrawer } from "@/components/pages/Consorzio/ConsorzioStudentDrawer";
 import {
   AlertDialog,
@@ -613,16 +613,13 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Aggiungi allievo (dialog condiviso Directory, in modalità consorzio) */}
-      <AdminUsersCreateDialog
+      {/* Aggiungi allievo — dialog dedicato consorzio (REG-460/464) */}
+      <ConsorzioStudentCreateDialog
         open={addStudentOpen}
         onOpenChange={setAddStudentOpen}
-        fixedAutoscuolaRole="STUDENT"
-        title="Aggiungi allievo"
-        description={`Nuovo allievo di ${school.name}.`}
-        consorzioSchoolId={schoolId}
+        schoolId={schoolId}
+        schoolName={school.name}
         accountingCodes={codes}
-        defaultLicenseCategory="C"
         onCreated={() => void load()}
       />
 

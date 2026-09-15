@@ -6,6 +6,17 @@ import { DetailPanel } from "@/components/ui/detail-panel";
 import { FadeIn } from "@/components/ui/fade-in";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { EditStudentLicenseDialog } from "@/components/pages/Autoscuole/dialogs/EditStudentLicenseDialog";
+import {
+  Pill,
+  StudentAvatar,
+  blueLinkClass,
+  sectionLabelClass,
+  splitFullName,
+} from "@/components/pages/Autoscuole/student-detail-ui";
+import { updateStudentPhone } from "@/lib/actions/autoscuole.actions";
+import { TRANSMISSION_LABELS, type Transmission } from "@/lib/autoscuole/license";
+import { cn } from "@/lib/utils";
 import {
   getConsorzioStudentDetail,
   setConsorzioMemberAccountingCodes,
@@ -13,14 +24,13 @@ import {
 } from "@/lib/actions/consorzio.actions";
 
 /**
- * Drawer laterale dettaglio allievo (dal dettaglio autoscuola consorziata):
- * usa il componente CONDIVISO DetailPanel (stesso drawer della sezione Allievi
- * — 600px, backdrop, slide 220ms, Escape) col contenuto 1:1 dal prototipo
- * Consorzi.html: header avatar 50 navy + nome 21/700; stat 3× (border 1.5
- * #EBEBEB r14); CODICI CONTABILI con righe code/descrizione e picker chip
- * "CODICE · Desc" (assegnati navy op.55, disponibili #F2F2F2); GUIDE
- * CERTIFICATE con badge Certificata/Da certificare. REG-459/462: RIEPILOGO
- * COSTI (guide / percorso / esami + totale) e lista ESAMI con prezzo.
+ * Drawer laterale dettaglio allievo del consorzio.
+ *
+ * REG-465: stessa forma del dettaglio allievo delle autoscuole normali —
+ * `DetailPanel` con header centrato (avatar 96, nome, recapito, pill) e tab
+ * Riepilogo / Guide / Costi — costruito sui primitivi condivisi in
+ * `student-detail-ui`. Restano consorzio-only i CODICI CONTABILI (vedi e
+ * assegna) e il riepilogo costi verso l'autoscuola (REG-459/462).
  * Vedi docs/features/consorzio.md.
  */
 
@@ -35,6 +45,7 @@ const formatLessonWhen = (iso: string): string => {
   const day = date.toLocaleDateString("it-IT", {
     day: "numeric",
     month: "short",
+    year: "numeric",
     timeZone: "Europe/Rome",
   });
   const time = date.toLocaleTimeString("it-IT", {
@@ -51,72 +62,50 @@ const formatMoney = (value: number): string =>
 const plural = (count: number, one: string, many: string) =>
   `${count} ${count === 1 ? one : many}`;
 
-const initialsOf = (name: string): string =>
-  name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((word) => word[0]?.toUpperCase() ?? "")
-    .join("");
-
-/** X di chiusura/rimozione come nel proto (svg 1.5, colore parametrico). */
-function XIcon({ size, color }: { size: number; color: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 12 12" fill="none">
-      <path d="M2 2l8 8M10 2l-8 8" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
+type DrawerTab = "summary" | "lessons" | "costs";
 
 /** Skeleton del contenuto drawer mentre carica il dettaglio allievo. */
 function DrawerSkeleton() {
   return (
-    <div className="px-[34px] pb-10 pt-[30px]">
-      <div className="mb-6 flex items-start justify-between">
-        <div className="flex min-w-0 items-center gap-3.5">
-          <Skeleton className="size-[50px] shrink-0 rounded-full" />
-          <div className="space-y-2">
-            <Skeleton className="h-5 w-44 rounded" />
-            <Skeleton className="h-3 w-56 max-w-full rounded" />
-          </div>
+    <>
+      <div className="border-b border-[#dddddd] px-6 pt-6">
+        <div className="mb-5 flex flex-col items-center pt-2">
+          <Skeleton className="size-24 rounded-full" />
+          <Skeleton className="mt-4 h-5 w-44 rounded" />
+          <Skeleton className="mt-2 h-3 w-36 rounded" />
         </div>
-        <Skeleton className="size-[30px] shrink-0 rounded-full" />
+        <div className="flex items-stretch gap-6 pb-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-4 flex-1 rounded" />
+          ))}
+        </div>
       </div>
-      <div className="mb-[30px] grid grid-cols-3 gap-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="rounded-[14px] border-[1.5px] border-[#ebebeb] p-4">
-            <Skeleton className="h-7 w-10 rounded" />
-            <Skeleton className="mt-2 h-3 w-20 max-w-full rounded" />
-          </div>
-        ))}
+      <div className="space-y-3 p-6">
+        <Skeleton className="h-24 w-full rounded-2xl" />
+        <Skeleton className="h-24 w-full rounded-2xl" />
+        <Skeleton className="h-56 w-full rounded-2xl" />
       </div>
-      <Skeleton className="mb-3 h-3 w-32 rounded" />
-      {Array.from({ length: 2 }).map((_, i) => (
-        <div
-          key={i}
-          className="mb-2 flex items-center gap-3 rounded-[12px] border-[1.5px] border-[#ebebeb] px-4 py-[13px]"
-        >
-          <Skeleton className="h-3.5 w-24 rounded" />
-          <Skeleton className="h-3 w-40 max-w-full flex-1 rounded" />
-          <Skeleton className="size-6 shrink-0 rounded-full" />
-        </div>
-      ))}
-      <Skeleton className="mb-3 mt-8 h-3 w-32 rounded" />
-      {Array.from({ length: 2 }).map((_, i) => (
-        <div key={i} className="flex items-center justify-between gap-4 border-b border-[#f0f0f0] py-3 last:border-b-0">
-          <div className="space-y-1.5">
-            <Skeleton className="h-3.5 w-28 rounded" />
-            <Skeleton className="h-3 w-44 max-w-full rounded" />
-          </div>
-          <div className="flex items-center gap-3">
-            <Skeleton className="h-3.5 w-6 rounded" />
-            <Skeleton className="h-[22px] w-20 rounded-full" />
-          </div>
-        </div>
-      ))}
+    </>
+  );
+}
+
+/** Riga "etichetta + valore" dell'anagrafica (come nel drawer autoscuole). */
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <p className="mb-0.5 text-[12px] font-medium text-[#929292]">{label}</p>
+      {children}
     </div>
   );
 }
+
+const emptyRowClass = "pt-8 text-center text-[13px] font-medium text-[#929292]";
 
 export function ConsorzioStudentDrawer({
   userId,
@@ -126,13 +115,18 @@ export function ConsorzioStudentDrawer({
   /** Null = chiuso. */
   userId: string | null;
   onClose: () => void;
-  /** Dopo add/remove codici (per aggiornare la tabella sotto). */
+  /** Dopo add/remove codici o modifiche anagrafiche (per aggiornare la tabella sotto). */
   onChanged?: () => void;
 }) {
   const toast = useFeedbackToast();
   const [detail, setDetail] = React.useState<ConsorzioStudentDetail | null>(null);
+  const [tab, setTab] = React.useState<DrawerTab>("summary");
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
+  const [licenseDialogOpen, setLicenseDialogOpen] = React.useState(false);
+  const [editingPhone, setEditingPhone] = React.useState(false);
+  const [phoneDraft, setPhoneDraft] = React.useState("");
+  const [phoneSaving, setPhoneSaving] = React.useState(false);
 
   React.useEffect(() => {
     if (!userId) {
@@ -140,12 +134,20 @@ export function ConsorzioStudentDrawer({
       setPickerOpen(false);
       return;
     }
+    setTab("summary");
+    setEditingPhone(false);
     void getConsorzioStudentDetail(userId).then((res) => {
       if (res.success) setDetail(res.data);
       else toast.error({ description: res.message });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
+
+  const refresh = async () => {
+    if (!userId) return;
+    const res = await getConsorzioStudentDetail(userId);
+    if (res.success) setDetail(res.data);
+  };
 
   const saveCodes = async (codeIds: string[]) => {
     if (!userId) return;
@@ -156,311 +158,464 @@ export function ConsorzioStudentDrawer({
       toast.error({ description: res.message });
       return;
     }
-    const refreshed = await getConsorzioStudentDetail(userId);
-    if (refreshed.success) setDetail(refreshed.data);
+    await refresh();
+    onChanged?.();
+  };
+
+  const savePhone = async () => {
+    if (!userId || phoneSaving) return;
+    setPhoneSaving(true);
+    const res = await updateStudentPhone({ studentId: userId, phone: phoneDraft });
+    setPhoneSaving(false);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile aggiornare il numero." });
+      return;
+    }
+    setDetail((prev) => (prev ? { ...prev, phone: res.data?.phone ?? null } : prev));
+    setEditingPhone(false);
+    toast.success({ description: res.message ?? "Numero aggiornato." });
     onChanged?.();
   };
 
   const assignedIds = new Set(detail?.codes.map((code) => code.id) ?? []);
+  const nameParts = detail ? splitFullName(detail.name) : { firstName: "", lastName: "" };
+  const toCertifyMinutes = detail
+    ? detail.lessons.reduce(
+        (sum, lesson) => sum + (lesson.certified ? 0 : lesson.durationMinutes),
+        0,
+      )
+    : 0;
 
-  return (
-    <DetailPanel
-      open={Boolean(userId)}
-      onOpenChange={(next) => {
-        if (!next) onClose();
-      }}
-      testId="student-drawer"
-      className="[line-height:normal]"
-    >
-      {!detail ? (
-        <DrawerSkeleton />
-      ) : (
-        <FadeIn>
-          <div className="px-[34px] pb-10 pt-[30px]">
-            {/* Header */}
-            <div className="mb-6 flex items-start justify-between">
-              <div className="flex min-w-0 items-center gap-3.5">
-                <div className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-[#1a1a2e] text-[16px] font-bold text-white">
-                  {initialsOf(detail.name)}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[21px] font-bold tracking-[-0.3px] text-[#222222]">
-                    {detail.name}
-                  </div>
-                  <div className="mt-0.5 truncate text-[13px] font-medium text-[#929292]">
-                    {[detail.schoolName, detail.schoolCity].filter(Boolean).join(" · ") || "—"}
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                aria-label="Chiudi dettaglio allievo"
-                onClick={onClose}
-                className="flex h-[30px] w-[30px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#f5f5f5] transition-colors hover:bg-[#ececec]"
-              >
-                <XIcon size={11} color="#555555" />
-              </button>
-            </div>
-
-            {/* Stat */}
-            <div className="mb-[30px] grid grid-cols-3 gap-3">
-              {[
-                { value: String(detail.lessonsCount), label: "guide superiori" },
-                { value: formatHours(detail.certifiedMinutes), label: "ore certificate" },
-                { value: detail.licenseCategory ?? "—", label: "categoria" },
-              ].map((card) => (
-                <div key={card.label} className="rounded-[14px] border-[1.5px] border-[#ebebeb] p-4">
-                  <div className="text-[24px] font-bold tracking-[-0.5px] text-[#222222]">
-                    {card.value}
-                  </div>
-                  <div className="mt-0.5 text-[12px] font-medium text-[#929292]">{card.label}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Codici contabili */}
-            <div className="mb-8">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="text-[11px] font-bold uppercase tracking-[0.8px] text-[#929292]">
-                  Codici contabili
-                </div>
+  const renderSummary = (data: ConsorzioStudentDetail) => (
+    <>
+      {/* Anagrafica */}
+      <section className="border-b border-[#f2f2f2] pb-7">
+        <p className={sectionLabelClass}>Anagrafica</p>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3.5">
+          <Field label="Nome">
+            <p className="text-sm font-medium text-foreground">{data.name}</p>
+          </Field>
+          <Field label="Email">
+            <p className="break-all text-sm font-medium text-foreground">{data.email || "—"}</p>
+          </Field>
+          <Field label="Telefono">
+            {editingPhone ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="tel"
+                  autoFocus
+                  value={phoneDraft}
+                  onChange={(e) => setPhoneDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void savePhone();
+                    if (e.key === "Escape") setEditingPhone(false);
+                  }}
+                  placeholder="+39 333 123 4567"
+                  disabled={phoneSaving}
+                  className="w-full max-w-[170px] rounded-lg border border-[#e2e2e6] bg-white px-2.5 py-1.5 text-sm font-medium text-foreground outline-none focus:border-foreground/40 disabled:opacity-60"
+                />
                 <button
                   type="button"
-                  onClick={() => setPickerOpen((prev) => !prev)}
-                  className="cursor-pointer select-none text-[13px] font-semibold text-[#1a1a2e]"
+                  className={blueLinkClass}
+                  disabled={phoneSaving}
+                  onClick={() => void savePhone()}
                 >
-                  Aggiungi codice
+                  {phoneSaving ? "…" : "Salva"}
+                </button>
+                <button
+                  type="button"
+                  className="text-[13px] font-medium text-[#929292] hover:text-foreground disabled:opacity-60"
+                  disabled={phoneSaving}
+                  onClick={() => setEditingPhone(false)}
+                >
+                  Annulla
                 </button>
               </div>
-
-              {detail.codes.length === 0 ? (
-                <div className="rounded-[12px] border-[1.5px] border-dashed border-[#e2e2e2] p-4 text-center">
-                  <div className="text-[13px] font-medium text-[#b0b0b0]">
-                    Nessun codice assegnato a questo allievo
-                  </div>
-                </div>
-              ) : (
-                detail.codes.map((code) => (
-                  <div
-                    key={code.id}
-                    className="mb-2 flex items-center gap-3 rounded-[12px] border-[1.5px] border-[#ebebeb] px-4 py-[13px]"
-                  >
-                    <div className="min-w-[130px] text-[14px] font-bold tabular-nums text-[#1a1a2e]">
-                      {code.code}
-                    </div>
-                    <div className="flex-1 text-[13px] font-medium text-[#6a6a6a]">
-                      {code.description ?? ""}
-                    </div>
-                    <button
-                      type="button"
-                      aria-label={`Rimuovi ${code.code}`}
-                      disabled={busy}
-                      onClick={() =>
-                        void saveCodes(detail.codes.filter((c) => c.id !== code.id).map((c) => c.id))
-                      }
-                      className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-[#f5f5f5]"
-                    >
-                      <XIcon size={10} color="#a0a0a0" />
-                    </button>
-                  </div>
-                ))
-              )}
-
-              {pickerOpen && (
-                <div className="mt-2.5">
-                  <div className="mb-2 text-[12.5px] font-medium text-[#929292]">
-                    Scegli dall&apos;elenco del consorzio
-                  </div>
-                  <div className="mb-3 flex flex-wrap gap-1.5">
-                    {detail.allCodes.map((code) => {
-                      const assigned = assignedIds.has(code.id);
-                      const label = code.description
-                        ? `${code.code} · ${code.description}`
-                        : code.code;
-                      return (
-                        <span
-                          key={code.id}
-                          onClick={() => {
-                            if (assigned || busy) return;
-                            void saveCodes([...assignedIds, code.id] as string[]);
-                          }}
-                          className={
-                            assigned
-                              ? "select-none rounded-[999px] bg-[#1a1a2e] px-[11px] py-1.5 text-[12.5px] font-semibold text-white opacity-55"
-                              : "cursor-pointer select-none rounded-[999px] bg-[#f2f2f2] px-[11px] py-1.5 text-[12.5px] font-semibold text-[#444444] hover:bg-[#e9e9e9]"
-                          }
-                        >
-                          {label}
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Riepilogo costi verso l'autoscuola */}
-            <div className="mb-8" data-testid="student-costs">
-              <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.8px] text-[#929292]">
-                Riepilogo costi
-              </div>
-              <div className="rounded-[14px] border-[1.5px] border-[#ebebeb] px-4 py-1">
-                {[
-                  {
-                    key: "guides",
-                    label: "Guide",
-                    sub: plural(detail.costs.guides.count, "guida", "guide"),
-                    value: detail.costs.guides.includedInCourse
-                      ? "Incluse nel percorso"
-                      : formatMoney(detail.costs.guides.amount),
-                    muted: detail.costs.guides.includedInCourse,
-                  },
-                  ...(detail.costs.course
-                    ? [
-                        {
-                          key: "course",
-                          label: "Percorso completo",
-                          sub: `Prezzo unico ${detail.costs.course.category}${
-                            detail.costs.course.settled ? " · saldato" : ""
-                          }`,
-                          value: formatMoney(detail.costs.course.amount),
-                          muted: false,
-                        },
-                      ]
-                    : []),
-                  {
-                    key: "exams",
-                    label: "Esami",
-                    sub: plural(detail.costs.exams.count, "esame", "esami"),
-                    value: formatMoney(detail.costs.exams.amount),
-                    muted: false,
-                  },
-                ].map((row) => (
-                  <div
-                    key={row.key}
-                    data-testid={`student-cost-${row.key}`}
-                    className="flex items-center justify-between gap-4 border-b border-[#f0f0f0] py-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-[14px] font-semibold text-[#222222]">{row.label}</div>
-                      <div className="mt-0.5 text-[12.5px] font-medium text-[#929292]">{row.sub}</div>
-                    </div>
-                    <span
-                      className={
-                        row.muted
-                          ? "shrink-0 text-[13px] font-semibold text-[#a0a0a0]"
-                          : "shrink-0 text-[14px] font-bold tabular-nums text-[#222222]"
-                      }
-                    >
-                      {row.value}
-                    </span>
-                  </div>
-                ))}
-                <div className="flex items-center justify-between gap-4 py-3">
-                  <span className="text-[14px] font-bold text-[#222222]">Totale</span>
-                  <span
-                    data-testid="student-cost-total"
-                    className="text-[16px] font-extrabold tabular-nums tracking-[-0.3px] text-[#222222]"
-                  >
-                    {formatMoney(detail.costs.total)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Guide certificate */}
-            <div>
-              <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.8px] text-[#929292]">
-                Guide certificate
-              </div>
-              {detail.lessons.length === 0 ? (
-                <div className="rounded-[12px] border-[1.5px] border-dashed border-[#e2e2e2] p-4 text-center">
-                  <div className="text-[13px] font-medium text-[#b0b0b0]">
-                    Nessuna guida col consorzio finora
-                  </div>
-                </div>
-              ) : (
-                detail.lessons.map((lesson) => (
-                  <div
-                    key={lesson.appointmentId}
-                    className="flex items-center justify-between gap-4 border-b border-[#f0f0f0] py-3 last:border-b-0"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-[14px] font-semibold text-[#222222]">
-                        {formatLessonWhen(lesson.startsAt)}
-                      </div>
-                      <div className="mt-0.5 truncate text-[13px] font-medium text-[#929292]">
-                        {[lesson.vehicleName, lesson.instructorName].filter(Boolean).join(" · ") ||
-                          "—"}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <span className="text-[14px] font-semibold text-[#222222]">
-                        {formatHours(lesson.durationMinutes)}
-                      </span>
-                      <span
-                        className="inline-flex rounded-[999px] px-2.5 py-1 text-[11.5px] font-bold"
-                        style={
-                          lesson.certified
-                            ? { background: "#E4F4E7", color: "#1F6B2A" }
-                            : { background: "#FCEFC7", color: "#8A6D1A" }
-                        }
-                      >
-                        {lesson.certified ? "Certificata" : "Da certificare"}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Esami (REG-459): voce distinta dalle guide */}
-            {detail.exams.length > 0 && (
-              <div className="mt-8" data-testid="student-exams">
-                <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.8px] text-[#929292]">
-                  Esami
-                </div>
-                {detail.exams.map((exam) => (
-                  <div
-                    key={exam.appointmentId}
-                    className="flex items-center justify-between gap-4 border-b border-[#f0f0f0] py-3 last:border-b-0"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-[14px] font-semibold text-[#222222]">
-                        <span
-                          className="inline-flex rounded-[6px] px-[7px] py-[3px] text-[11px] font-bold"
-                          style={{ background: "#F0E9FF", color: "#5B3FB0" }}
-                        >
-                          Esame
-                        </span>
-                        {formatLessonWhen(exam.startsAt)}
-                      </div>
-                      <div className="mt-0.5 truncate text-[13px] font-medium text-[#929292]">
-                        {[exam.vehicleName, exam.instructorName].filter(Boolean).join(" · ") || "—"}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <span className="text-[14px] font-bold tabular-nums text-[#222222]">
-                        {formatMoney(exam.price)}
-                      </span>
-                      <span
-                        className="inline-flex rounded-[999px] px-2.5 py-1 text-[11.5px] font-bold"
-                        style={
-                          exam.settled
-                            ? { background: "#E4F4E7", color: "#1F6B2A" }
-                            : { background: "#FCEFC7", color: "#8A6D1A" }
-                        }
-                      >
-                        {exam.settled ? "Saldato" : "Da saldare"}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+            ) : (
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-foreground">{data.phone || "—"}</p>
+                <button
+                  type="button"
+                  className={blueLinkClass}
+                  onClick={() => {
+                    setPhoneDraft(data.phone ?? "");
+                    setEditingPhone(true);
+                  }}
+                >
+                  {data.phone ? "Modifica" : "Aggiungi"}
+                </button>
               </div>
             )}
+          </Field>
+          <Field label="Autoscuola">
+            <p className="text-sm font-medium text-foreground">
+              {[data.schoolName, data.schoolCity].filter(Boolean).join(" · ") || "—"}
+            </p>
+          </Field>
+          <Field label="Percorso patente">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-foreground">
+                {data.licenseCategory
+                  ? `${data.licenseCategory} · ${
+                      TRANSMISSION_LABELS[data.transmission as Transmission] ??
+                      data.transmission ??
+                      "—"
+                    }`
+                  : "—"}
+              </p>
+              <button
+                type="button"
+                className={blueLinkClass}
+                onClick={() => setLicenseDialogOpen(true)}
+              >
+                Modifica
+              </button>
+            </div>
+          </Field>
+          <Field label="Accesso all'app">
+            <Pill tone={data.email ? "green" : "gray"}>
+              {data.email ? "Attivo" : "Non attivo"}
+            </Pill>
+          </Field>
+        </div>
+      </section>
+
+      {/* Codici contabili — la parte consorzio-only */}
+      <section className="border-b border-[#f2f2f2] py-7">
+        <div className="mb-4 flex items-center justify-between">
+          <p className={cn(sectionLabelClass, "mb-0")}>Codici contabili</p>
+          <button
+            type="button"
+            className={blueLinkClass}
+            onClick={() => setPickerOpen((prev) => !prev)}
+          >
+            {pickerOpen ? "Chiudi" : "Aggiungi codice"}
+          </button>
+        </div>
+
+        {data.codes.length === 0 ? (
+          <p className="text-[13px] font-medium text-[#929292]">
+            Nessun codice assegnato a questo allievo.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {data.codes.map((code) => (
+              <div
+                key={code.id}
+                className="flex items-center gap-3 rounded-[10px] bg-[#f8f8f8] px-3.5 py-2.5"
+              >
+                <span className="text-[13px] font-semibold tabular-nums text-foreground">
+                  {code.code}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-[#929292]">
+                  {code.description ?? ""}
+                </span>
+                <button
+                  type="button"
+                  aria-label={`Rimuovi ${code.code}`}
+                  disabled={busy}
+                  onClick={() =>
+                    void saveCodes(data.codes.filter((c) => c.id !== code.id).map((c) => c.id))
+                  }
+                  className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-[#ececec] disabled:opacity-50"
+                >
+                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                    <path
+                      d="M2 2l8 8M10 2l-8 8"
+                      stroke="#8a8a8a"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+            ))}
           </div>
-        </FadeIn>
+        )}
+
+        {pickerOpen && (
+          <div className="mt-4">
+            <p className="mb-2 text-[12px] font-medium text-[#929292]">
+              Scegli dall&apos;elenco del consorzio
+            </p>
+            <div className="flex max-h-[132px] flex-wrap gap-1.5 overflow-y-auto">
+              {data.allCodes.map((code) => {
+                const assigned = assignedIds.has(code.id);
+                const label = code.description ? `${code.code} · ${code.description}` : code.code;
+                return (
+                  <button
+                    key={code.id}
+                    type="button"
+                    disabled={assigned || busy}
+                    onClick={() => void saveCodes([...assignedIds, code.id])}
+                    className={cn(
+                      "select-none rounded-full px-[11px] py-1.5 text-[12.5px] font-semibold transition-colors",
+                      assigned
+                        ? "cursor-default bg-[#1a1a2e] text-white opacity-55"
+                        : "cursor-pointer bg-[#f2f2f2] text-[#444444] hover:bg-[#e9e9e9] disabled:opacity-50",
+                    )}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Attività col consorzio */}
+      <section className="py-7">
+        <p className={sectionLabelClass}>Attività col consorzio</p>
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { value: String(data.lessonsCount), label: "guide superiori" },
+            { value: formatHours(data.certifiedMinutes), label: "ore certificate" },
+            { value: formatHours(toCertifyMinutes), label: "da certificare" },
+          ].map((card) => (
+            <div key={card.label} className="rounded-[14px] border border-[#ebebeb] px-4 py-3.5">
+              <p className="text-[22px] font-bold tracking-[-0.4px] text-foreground">{card.value}</p>
+              <p className="mt-0.5 text-[12px] font-medium text-[#929292]">{card.label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    </>
+  );
+
+  const renderLessons = (data: ConsorzioStudentDetail) => {
+    const rows = [
+      ...data.lessons.map((lesson) => ({ kind: "guide" as const, ...lesson })),
+      ...data.exams.map((exam) => ({ kind: "exam" as const, ...exam })),
+    ].sort((a, b) => (a.startsAt < b.startsAt ? 1 : -1));
+
+    if (rows.length === 0) {
+      return <p className={emptyRowClass}>Nessuna guida col consorzio finora.</p>;
+    }
+
+    return (
+      <div>
+        {rows.map((row) => (
+          <div
+            key={row.appointmentId}
+            data-testid={`student-lesson-${row.kind}`}
+            className="flex items-center justify-between gap-4 border-b border-[#f2f2f2] py-3.5 last:border-b-0"
+          >
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                {row.kind === "exam" && (
+                  <span
+                    className="inline-flex rounded-[6px] px-[7px] py-[3px] text-[11px] font-bold"
+                    style={{ background: "#F0E9FF", color: "#5B3FB0" }}
+                  >
+                    Esame
+                  </span>
+                )}
+                <p className="text-sm font-semibold text-foreground">
+                  {formatLessonWhen(row.startsAt)}
+                </p>
+              </div>
+              <p className="mt-0.5 truncate text-[12.5px] font-medium text-[#929292]">
+                {[row.vehicleName, row.instructorName].filter(Boolean).join(" · ") || "—"}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-3">
+              <span className="text-[13px] font-semibold tabular-nums text-foreground">
+                {row.kind === "exam" ? formatMoney(row.price) : formatHours(row.durationMinutes)}
+              </span>
+              {row.kind === "exam" ? (
+                <Pill tone={row.settled ? "green" : "amber"}>
+                  {row.settled ? "Saldato" : "Da saldare"}
+                </Pill>
+              ) : (
+                <Pill tone={row.certified ? "green" : "amber"}>
+                  {row.certified ? "Certificata" : "Da certificare"}
+                </Pill>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderCosts = (data: ConsorzioStudentDetail) => (
+    <section data-testid="student-costs">
+      <p className={sectionLabelClass}>Riepilogo costi</p>
+      <div className="rounded-[14px] border border-[#ebebeb] px-4 py-1">
+        {[
+          {
+            key: "guides",
+            label: "Guide",
+            sub: plural(data.costs.guides.count, "guida", "guide"),
+            value: data.costs.guides.includedInCourse
+              ? "Incluse nel percorso"
+              : formatMoney(data.costs.guides.amount),
+            muted: data.costs.guides.includedInCourse,
+          },
+          ...(data.costs.course
+            ? [
+                {
+                  key: "course",
+                  label: "Percorso completo",
+                  sub: `Prezzo unico ${data.costs.course.category}${
+                    data.costs.course.settled ? " · saldato" : ""
+                  }`,
+                  value: formatMoney(data.costs.course.amount),
+                  muted: false,
+                },
+              ]
+            : []),
+          {
+            key: "exams",
+            label: "Esami",
+            sub: plural(data.costs.exams.count, "esame", "esami"),
+            value: formatMoney(data.costs.exams.amount),
+            muted: false,
+          },
+        ].map((row) => (
+          <div
+            key={row.key}
+            data-testid={`student-cost-${row.key}`}
+            className="flex items-center justify-between gap-4 border-b border-[#f2f2f2] py-3"
+          >
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">{row.label}</p>
+              <p className="mt-0.5 text-[12.5px] font-medium text-[#929292]">{row.sub}</p>
+            </div>
+            <span
+              className={
+                row.muted
+                  ? "shrink-0 text-[13px] font-semibold text-[#a0a0a0]"
+                  : "shrink-0 text-sm font-bold tabular-nums text-foreground"
+              }
+            >
+              {row.value}
+            </span>
+          </div>
+        ))}
+        <div className="flex items-center justify-between gap-4 py-3">
+          <span className="text-sm font-bold text-foreground">Totale</span>
+          <span
+            data-testid="student-cost-total"
+            className="text-[16px] font-extrabold tabular-nums tracking-[-0.3px] text-foreground"
+          >
+            {formatMoney(data.costs.total)}
+          </span>
+        </div>
+      </div>
+      <p className="mt-3 text-[12px] font-medium leading-[1.5] text-[#a3a3a3]">
+        È quanto il consorzio fattura all&apos;autoscuola per questo allievo. Gli importi già
+        congelati in Fatturazione non cambiano più.
+      </p>
+    </section>
+  );
+
+  return (
+    <>
+      <DetailPanel
+        open={Boolean(userId)}
+        onOpenChange={(next) => {
+          if (!next) onClose();
+        }}
+        testId="student-drawer"
+      >
+        {!detail ? (
+          <DrawerSkeleton />
+        ) : (
+          <FadeIn>
+            {/* Header — stesso impianto del dettaglio allievo autoscuole */}
+            <div className="border-b border-[#dddddd] px-6 pt-6">
+              <div className="relative mb-5 flex flex-col items-center pt-2 text-center">
+                <button
+                  type="button"
+                  aria-label="Chiudi dettaglio allievo"
+                  onClick={onClose}
+                  className="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#f2f2f2]"
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path
+                      d="M3 3l8 8M11 3l-8 8"
+                      stroke="#6a6a6a"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
+                <StudentAvatar
+                  student={{ id: detail.userId, ...nameParts }}
+                  size={96}
+                />
+                <div className="mt-4">
+                  <p className="text-lg font-bold tracking-[-0.2px] text-foreground">
+                    {detail.name}
+                  </p>
+                  <p className="mt-0.5 text-[13px] font-medium text-[#929292]">
+                    {detail.email || detail.phone || "Nessun recapito"}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+                    {detail.schoolName && <Pill tone="gray">{detail.schoolName}</Pill>}
+                    {detail.licenseCategory && <Pill tone="blue">{detail.licenseCategory}</Pill>}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-stretch">
+                {(
+                  [
+                    { key: "summary" as const, label: "Riepilogo" },
+                    { key: "lessons" as const, label: "Guide" },
+                    { key: "costs" as const, label: "Costi" },
+                  ]
+                ).map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => setTab(item.key)}
+                    className={cn(
+                      "flex-1 cursor-pointer select-none border-b-2 px-2 py-3 text-center text-sm transition-colors",
+                      tab === item.key
+                        ? "border-[#222222] font-semibold text-foreground"
+                        : "border-transparent font-medium text-[#6a6a6a] hover:text-foreground",
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-6">
+              {tab === "summary" && renderSummary(detail)}
+              {tab === "lessons" && renderLessons(detail)}
+              {tab === "costs" && renderCosts(detail)}
+            </div>
+          </FadeIn>
+        )}
+      </DetailPanel>
+
+      {detail && (
+        <EditStudentLicenseDialog
+          open={licenseDialogOpen}
+          onOpenChange={setLicenseDialogOpen}
+          studentId={detail.userId}
+          studentName={detail.name}
+          currentLicenseCategory={detail.licenseCategory}
+          currentTransmission={detail.transmission}
+          onSuccess={(next) => {
+            setDetail((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    licenseCategory: next.licenseCategory,
+                    transmission: next.transmission,
+                  }
+                : prev,
+            );
+            void refresh();
+            onChanged?.();
+          }}
+        />
       )}
-    </DetailPanel>
+    </>
   );
 }

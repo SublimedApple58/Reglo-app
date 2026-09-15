@@ -98,6 +98,15 @@ import { FadeIn } from "@/components/ui/fade-in";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { AutoscuoleLateCancellationsPanel } from "./AutoscuoleLateCancellationsPanel";
 import { NeverAccessedListMark } from "./NeverAccessedNudge";
+import {
+  Pill,
+  StudentAvatar,
+  avatarColor,
+  blueLinkClass,
+  initialsOf,
+  sectionLabelClass,
+  type PillTone,
+} from "./student-detail-ui";
 
 type StudentProfile = {
   id: string;
@@ -482,43 +491,6 @@ const formatDate = (value: string | Date, withTime = false) => {
 
 /* ── Redesign helpers ─────────────────────────────────────────────── */
 
-const AVATAR_COLORS = ["#222222", "#3f3f3f", "#6a6a6a", "#460479", "#428bff", "#1a7f50", "#c13515", "#b45309"];
-
-const avatarColor = (id: string) => {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
-};
-
-const initialsOf = (firstName: string, lastName: string) =>
-  `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
-
-type PillTone = "green" | "red" | "amber" | "violet" | "blue" | "gray" | "pink";
-
-const PILL_TONES: Record<PillTone, string> = {
-  green: "border-[#c5e8d4] bg-[#f0faf4] text-[#1a7f50]",
-  red: "border-[#fad4cc] bg-[#fff4f2] text-[#c13515]",
-  amber: "border-[#f0e060] bg-[#fffce0] text-[#7a6a00]",
-  violet: "border-[#e2d0fa] bg-[#f3e8ff] text-[#7c3aed]",
-  blue: "border-[#c5d8fa] bg-[#f0f4ff] text-[#1a4fa0]",
-  gray: "border-[#dddddd] bg-[#f7f7f7] text-[#929292]",
-  pink: "border-[#f0c8df] bg-[#fdf0f6] text-[#92174d]",
-};
-
-function Pill({ tone, className, children }: { tone: PillTone; className?: string; children: React.ReactNode }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-[3px] text-[12px] font-semibold",
-        PILL_TONES[tone],
-        className,
-      )}
-    >
-      {children}
-    </span>
-  );
-}
-
 const PHASE_BADGES: Record<NonNullable<Student["studentPhase"]>, { label: string; tone: PillTone }> = {
   AWAITING: { label: "In attesa", tone: "amber" },
   TEORIA: { label: "Teoria", tone: "blue" },
@@ -541,10 +513,6 @@ function daysReadyLabel(examReadyAt?: string | null): string | null {
 const listButtonClass =
   "cursor-pointer select-none whitespace-nowrap rounded-[8px] border border-[#dddddd] bg-white px-3.5 py-[7px] text-[13px] font-medium text-[#222222] transition-colors hover:border-[#cdcdcd] hover:bg-[#f2f2f2] disabled:cursor-default disabled:opacity-50";
 
-/** Link-azione blu inline (proto #428bff) */
-const blueLinkClass =
-  "cursor-pointer text-[12px] font-medium text-[#428bff] hover:underline disabled:cursor-default disabled:opacity-50";
-
 const redLinkClass =
   "cursor-pointer text-[12px] font-medium text-[#dc2626] hover:underline disabled:cursor-default disabled:opacity-50";
 
@@ -557,8 +525,6 @@ const formatNoticeGiven = (startsAt: Date, cancelledAt: Date) => {
   if (h > 0) return `${h}h`;
   return `${m}min`;
 };
-
-const sectionLabelClass = "mb-4 text-[12px] font-semibold text-[#929292]";
 
 /** Skeleton primo caricamento: rispecchia la vera lista allievi (toolbar + righe hairline con avatar, testo, pill e bottone) */
 function StudentListSkeleton() {
@@ -634,43 +600,6 @@ const getTheoryCountdown = (theoryExamAt: string | null | undefined) => {
 /** Pallino stato pagamenti accanto all'avatar (soglie invariate) */
 const unpaidDotColor = (manualUnpaid: number) =>
   manualUnpaid >= 5 ? "#EF4444" : manualUnpaid >= 2 ? "#F59E0B" : manualUnpaid >= 1 ? "#FACC15" : "#22C55E";
-
-function StudentAvatar({
-  student,
-  size = 40,
-  photoUrl: photoUrlProp,
-}: {
-  student: { id: string; firstName: string; lastName: string };
-  size?: number;
-  photoUrl?: string | null;
-}) {
-  const fetchedPhotoUrl = useUserPhotoUrl(student.id);
-  const photoUrl = photoUrlProp ?? fetchedPhotoUrl;
-  if (photoUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={photoUrl}
-        alt={`${student.firstName} ${student.lastName}`}
-        className="shrink-0 rounded-full object-cover"
-        style={{ width: size, height: size }}
-      />
-    );
-  }
-  return (
-    <div
-      className="flex shrink-0 items-center justify-center rounded-full font-bold text-white"
-      style={{
-        width: size,
-        height: size,
-        background: avatarColor(student.id),
-        fontSize: size >= 96 ? 30 : size >= 56 ? 20 : 12,
-      }}
-    >
-      {initialsOf(student.firstName, student.lastName)}
-    </div>
-  );
-}
 
 function EmptyList({ title = "Nessun risultato", subtitle = "Nessun allievo trovato" }: { title?: string; subtitle?: string }) {
   return (
