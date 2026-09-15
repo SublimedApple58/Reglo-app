@@ -63,6 +63,7 @@ export function ConsorzioPrezziPane() {
     getConsorzioPricing().then((res) => {
       if (res.success) {
         setPricing(res.data);
+        latestRef.current = res.data;
         const next: Record<string, string> = {};
         for (const category of CONSORTIUM_LICENSE_CATEGORIES) {
           for (const field of ["hourlyByCategory", "courseByCategory"] as const) {
@@ -77,33 +78,47 @@ export function ConsorzioPrezziPane() {
     });
   }, []);
 
+  // Ultimo listino voluto + coda dei salvataggi: ogni invio manda lo stato più
+  // recente e parte solo quando il precedente è finito, così due tocchi rapidi
+  // (es. A ore → Percorso) non arrivano al server in ordine invertito.
+  const latestRef = React.useRef<ConsorzioPricing | null>(null);
+  const queueRef = React.useRef<Promise<void>>(Promise.resolve());
+
+  const send = React.useCallback(async () => {
+    const next = latestRef.current;
+    if (!next) return;
+    const amounts = (field: AmountField) =>
+      Object.fromEntries(
+        CONSORTIUM_LICENSE_CATEGORIES.map((category) => [category, next[field][category] ?? null]),
+      ) as Record<ConsortiumLicenseCategory, number | null>;
+    const res = await updateConsorzioPricing({
+      hourlyByCategory: amounts("hourlyByCategory"),
+      courseByCategory: amounts("courseByCategory"),
+      billingModeByCategory: Object.fromEntries(
+        CONSORTIUM_LICENSE_CATEGORIES.map((category) => [
+          category,
+          next.billingModeByCategory[category] ?? "hourly",
+        ]),
+      ) as Record<ConsortiumLicenseCategory, ConsorzioBillingMode>,
+      examFee: next.examFee,
+      lateCancellationCutoffHours: next.lateCancellationCutoffHours,
+      lateCancellationPenaltyPct: next.lateCancellationPenaltyPct,
+      guideRequestMinLeadHours: next.guideRequestMinLeadHours,
+    });
+    if (!res.success) toast.error({ description: res.message });
+  }, [toast]);
+
+  /** Applica una modifica al listino più recente e la mette in coda di salvataggio. */
   const persist = React.useCallback(
-    async (next: ConsorzioPricing) => {
+    (update: (current: ConsorzioPricing) => ConsorzioPricing) => {
+      const current = latestRef.current;
+      if (!current) return;
+      const next = update(current);
+      latestRef.current = next;
       setPricing(next);
-      const amounts = (field: AmountField) =>
-        Object.fromEntries(
-          CONSORTIUM_LICENSE_CATEGORIES.map((category) => [
-            category,
-            next[field][category] ?? null,
-          ]),
-        ) as Record<ConsortiumLicenseCategory, number | null>;
-      const res = await updateConsorzioPricing({
-        hourlyByCategory: amounts("hourlyByCategory"),
-        courseByCategory: amounts("courseByCategory"),
-        billingModeByCategory: Object.fromEntries(
-          CONSORTIUM_LICENSE_CATEGORIES.map((category) => [
-            category,
-            next.billingModeByCategory[category] ?? "hourly",
-          ]),
-        ) as Record<ConsortiumLicenseCategory, ConsorzioBillingMode>,
-        examFee: next.examFee,
-        lateCancellationCutoffHours: next.lateCancellationCutoffHours,
-        lateCancellationPenaltyPct: next.lateCancellationPenaltyPct,
-        guideRequestMinLeadHours: next.guideRequestMinLeadHours,
-      });
-      if (!res.success) toast.error({ description: res.message });
+      queueRef.current = queueRef.current.then(send, send);
     },
-    [toast],
+    [send],
   );
 
   const commitAmount = (field: AmountField, category: ConsortiumLicenseCategory) => {
@@ -117,10 +132,12 @@ export function ConsorzioPrezziPane() {
         : undefined;
     setDrafts((prev) => ({ ...prev, [key]: value !== undefined ? String(value) : "" }));
     if (value === pricing[field][category]) return;
-    const nextMap = { ...pricing[field] };
-    if (value === undefined) delete nextMap[category];
-    else nextMap[category] = value;
-    void persist({ ...pricing, [field]: nextMap });
+    persist((current) => {
+      const nextMap = { ...current[field] };
+      if (value === undefined) delete nextMap[category];
+      else nextMap[category] = value;
+      return { ...current, [field]: nextMap };
+    });
   };
 
   const commitExamFee = () => {
@@ -133,16 +150,16 @@ export function ConsorzioPrezziPane() {
         : null;
     setDrafts((prev) => ({ ...prev, examFee: value !== null ? String(value) : "" }));
     if (value === pricing.examFee) return;
-    void persist({ ...pricing, examFee: value });
+    persist((current) => ({ ...current, examFee: value }));
   };
 
   const setMode = (category: ConsortiumLicenseCategory, mode: ConsorzioBillingMode) => {
     if (!pricing) return;
     if ((pricing.billingModeByCategory[category] ?? "hourly") === mode) return;
-    void persist({
-      ...pricing,
-      billingModeByCategory: { ...pricing.billingModeByCategory, [category]: mode },
-    });
+    persist((current) => ({
+      ...current,
+      billingModeByCategory: { ...current.billingModeByCategory, [category]: mode },
+    }));
   };
 
   if (loading || !pricing) {
@@ -164,7 +181,7 @@ export function ConsorzioPrezziPane() {
             <Select
               value={String(pricing.guideRequestMinLeadHours)}
               onValueChange={(value) =>
-                void persist({ ...pricing, guideRequestMinLeadHours: Number(value) })
+                persist((current) => ({ ...current, guideRequestMinLeadHours: Number(value) }))
               }
             >
               <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-[12px] border-[#e6e6e6] bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-none">
@@ -194,7 +211,7 @@ export function ConsorzioPrezziPane() {
             <Select
               value={String(pricing.lateCancellationCutoffHours)}
               onValueChange={(value) =>
-                void persist({ ...pricing, lateCancellationCutoffHours: Number(value) })
+                persist((current) => ({ ...current, lateCancellationCutoffHours: Number(value) }))
               }
             >
               <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-[12px] border-[#e6e6e6] bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-none">
@@ -214,7 +231,7 @@ export function ConsorzioPrezziPane() {
             <Select
               value={String(pricing.lateCancellationPenaltyPct)}
               onValueChange={(value) =>
-                void persist({ ...pricing, lateCancellationPenaltyPct: Number(value) })
+                persist((current) => ({ ...current, lateCancellationPenaltyPct: Number(value) }))
               }
             >
               <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-[12px] border-[#e6e6e6] bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-none">

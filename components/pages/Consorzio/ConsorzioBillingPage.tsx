@@ -517,13 +517,13 @@ export function ConsorzioBillingPage() {
                         )}
                         {lesson.includedInCourse && lesson.price === 0 ? (
                           <span
-                            className="w-[60px] shrink-0 text-right text-[12.5px] font-semibold text-[#a0a0a0]"
+                            className="w-[76px] shrink-0 text-right text-[12.5px] font-semibold text-[#a0a0a0]"
                             title="Compresa nel prezzo unico del percorso"
                           >
                             Incluso
                           </span>
                         ) : (
-                          <span className="w-[60px] shrink-0 text-right text-[14px] font-bold text-[#222222]">
+                          <span className="w-[76px] shrink-0 text-right text-[14px] font-bold text-[#222222]">
                             {formatMoney(lesson.price)}
                           </span>
                         )}
