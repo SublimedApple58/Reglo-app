@@ -77,9 +77,11 @@ export const LICENSE_CATEGORY_LABELS: Record<LicenseCategory, string> = {
  * le modelliamo come pseudo-categorie per non introdurre una seconda dimensione
  * su allievi/veicoli/tariffe. I picker delle autoscuole normali e del mobile
  * restano su B/BE + moto: le categorie superiori NON devono comparire lì.
- * Ordine = ordine di visualizzazione nella tabella Prezzi (dal prototipo).
+ * La BE (auto + rimorchio) c'è anche qui: i consorzi la fanno con i loro
+ * rimorchi (REG-456). Ordine = ordine di visualizzazione nella tabella Prezzi.
  */
 export const CONSORTIUM_LICENSE_CATEGORIES = [
+  "BE",
   "C",
   "CE",
   "D",
@@ -97,6 +99,7 @@ export const CONSORTIUM_LICENSE_INFO: Record<
   ConsortiumLicenseCategory,
   { title: string; description: string }
 > = {
+  BE: { title: "Auto con rimorchio", description: "Autovettura con rimorchio oltre 750 kg." },
   C: { title: "Autocarro oltre 3,5 t", description: "Veicoli merci sopra le 3,5 tonnellate." },
   CE: { title: "Autoarticolato e autotreno", description: "Motrice con semirimorchio o rimorchio." },
   D: { title: "Autobus", description: "Trasporto persone oltre 8 posti." },
@@ -136,7 +139,7 @@ export const AUTOSCUOLA_LICENSE_CATEGORIES = [
 
 /**
  * Lista categorie per i picker UI in base alla modalità della company:
- * consorzio → superiori + qualificazioni; autoscuola → lista storica.
+ * consorzio → BE + superiori + qualificazioni; autoscuola → lista storica.
  */
 export function licenseCategoriesForMode(
   consortium: boolean,

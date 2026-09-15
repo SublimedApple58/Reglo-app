@@ -4,7 +4,7 @@
 
 ## Cos'è
 
-Tipo di account per i **consorzi di autoscuole** (mezzi pesanti condivisi, patenti superiori C/CE/D/DE + C1/D1/CQC/ADR): il consorzio ha la propria agenda/istruttori/veicoli/allievi e contabilizza le guide verso le **autoscuole consorziate**, che oggi sono record anagrafici gestiti dal consorzio (non account Reglo — quello è il futuro step "affiliate").
+Tipo di account per i **consorzi di autoscuole** (mezzi pesanti condivisi, patenti superiori C/CE/D/DE + C1/D1/CQC/ADR, più la BE): il consorzio ha la propria agenda/istruttori/veicoli/allievi e contabilizza le guide verso le **autoscuole consorziate**, che oggi sono record anagrafici gestiti dal consorzio (non account Reglo — quello è il futuro step "affiliate").
 
 **Architettura**: il consorzio è una normale `Company` in "modalità consorzio" — `limits.accountKind = "consorzio"` sul servizio AUTOSCUOLE (stesso pattern di [secretary-only.md](secretary-only.md), mutuamente esclusivi). Tutta la macchina per-company (agenda, appuntamenti, veicoli, istruttori, disponibilità, festivi, notifiche) è riusata 1:1 senza modifiche.
 
@@ -52,7 +52,7 @@ Il prezzo è **calcolato live in Fatturazione** finché la guida non viene certi
 
 Aggiunte alla lista canonica `LICENSE_CATEGORIES` (`lib/autoscuole/license.ts`), bucket `pro`, match veicolo **stretto** (self-match, nessuna gerarchia — mappa eligibilità CQC/ADR da confermare col consorzio). CQC/ADR sono qualificazioni modellate come pseudo-categorie (evita una seconda dimensione su member/veicoli/tariffe).
 
-**Gating picker**: `licenseCategoriesForMode(consortium)` → consorzio = `CONSORTIUM_LICENSE_CATEGORIES` (C, CE, D, DE, C1, D1, CQC, ADR con titoli/descrizioni in `CONSORTIUM_LICENSE_INFO`), autoscuole normali = `AUTOSCUOLA_LICENSE_CATEGORIES` (lista storica). Punto unico di verità UI: `LicenseCategorySelectItems.tsx` (usato da StudentsPage, ResourcesPage×2, VehiclesTab, EditStudentLicenseDialog, AdminUsersCreateDialog). Gli `z.enum(LICENSE_CATEGORIES)` server restano permissivi. Il mobile NON vede mai le categorie nuove (STUDENT_LICENSE_CATEGORIES invariata; allievi consorzio non invitati sull'app in fase 1).
+**Gating picker**: `licenseCategoriesForMode(consortium)` → consorzio = `CONSORTIUM_LICENSE_CATEGORIES` (BE, C, CE, D, DE, C1, D1, CQC, ADR — BE aggiunta con REG-456 con titoli/descrizioni in `CONSORTIUM_LICENSE_INFO`), autoscuole normali = `AUTOSCUOLA_LICENSE_CATEGORIES` (lista storica). Punto unico di verità UI: `LicenseCategorySelectItems.tsx` (usato da StudentsPage, ResourcesPage×2, VehiclesTab, EditStudentLicenseDialog, AdminUsersCreateDialog). Gli `z.enum(LICENSE_CATEGORIES)` server restano permissivi. Il mobile NON vede mai le categorie nuove (STUDENT_LICENSE_CATEGORIES invariata; allievi consorzio non invitati sull'app in fase 1).
 
 ## File
 

@@ -13,7 +13,7 @@ import { isConsortium } from "@/lib/services";
 /**
  * Opzioni <SelectItem> per i picker "Categoria patente", filtrate in base alla
  * modalità della company attiva: consorzio → superiori + qualificazioni
- * (C/CE/D/DE/C1/D1/CQC/ADR), autoscuola → lista storica (B/BE/C/CE/D/DE + moto).
+ * (BE/C/CE/D/DE/C1/D1/CQC/ADR), autoscuola → lista storica (B/BE/C/CE/D/DE + moto).
  * Un solo punto di verità così le categorie consorzio non compaiono mai nei
  * picker delle autoscuole normali (e viceversa).
  */

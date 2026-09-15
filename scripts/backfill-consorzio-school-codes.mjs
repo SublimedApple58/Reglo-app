@@ -100,7 +100,7 @@ const STUDENT_LAST = [
   "Sanguineti", "Traverso", "Bruzzone", "Repetto", "Canepa", "Parodi",
   "Bertolotto", "Cevasco", "Musso", "Pittaluga", "Ansaldo", "Grondona",
 ];
-const STUDENT_CATEGORIES = ["C", "CE", "D", "DE", "C1", "D1", "CQC", "ADR"];
+const STUDENT_CATEGORIES = ["BE", "C", "CE", "D", "DE", "C1", "D1", "CQC", "ADR"];
 
 const OWNERS = [
   "Marco Rossi", "Laura Bianchi", "Paolo Ferrari", "Chiara Gallo", "Andrea Costa",
