@@ -82,6 +82,16 @@ test.describe("Card QR istruttore", () => {
     await expect.poll(() => page.evaluate(() => (window as unknown as { __printed: number }).__printed)).toBe(1);
     await expect(page.locator("#__print-sheet [data-testid='qr-card-horiz']")).toHaveCount(1);
     await expect(page.locator("#__print-sheet").getByText("taglia qui")).toHaveCount(2);
+    // Chrome stampa senza "Grafica in background" di default: il foglio forza
+    // i colori di sfondo, altrimenti la card esce bianca (bug stampa REG-451).
+    await page.emulateMedia({ media: "print" });
+    const printAdjust = await page.evaluate(() => {
+      const card = document.querySelector("#__print-sheet [data-testid='qr-card-horiz']") as HTMLElement;
+      const cs = getComputedStyle(card) as CSSStyleDeclaration & { webkitPrintColorAdjust?: string };
+      return cs.printColorAdjust || cs.webkitPrintColorAdjust;
+    });
+    expect(printAdjust).toBe("exact");
+    await page.emulateMedia({ media: "screen" });
 
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();

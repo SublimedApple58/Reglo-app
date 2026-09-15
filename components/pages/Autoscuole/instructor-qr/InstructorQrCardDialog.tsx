@@ -22,6 +22,12 @@ const PRINT_CSS = `@media print {
   html, body { background: #ffffff !important; }
   body > *:not(#${PRINT_SHEET_ID}) { display: none !important; }
   #${PRINT_SHEET_ID} { display: block !important; }
+  /* Chrome stampa senza "Grafica in background" di default: senza questo spariscono
+     sfondo navy, foto e riquadro bianco del QR e il testo bianco resta su bianco. */
+  #${PRINT_SHEET_ID}, #${PRINT_SHEET_ID} * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
 }`;
 
 export function InstructorQrCardDialog({

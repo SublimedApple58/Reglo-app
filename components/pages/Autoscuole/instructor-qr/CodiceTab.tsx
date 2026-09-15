@@ -41,8 +41,9 @@ export function CodiceTab({ instructorId }: { instructorId: string }) {
   }, [instructorId]);
 
   return (
-    <div id="istr-tab-codice" data-testid="instructor-codice-tab" className="flex flex-col pt-2">
-      <div className="flex items-center justify-between gap-7 border-b border-[#ececf0] py-[22px]">
+    <div id="istr-tab-codice" data-testid="instructor-codice-tab" className="flex flex-col">
+      {/* Come le altre schede del dettaglio: il contenuto parte subito sotto i tab (mb-6), niente padding extra sopra. */}
+      <div className="flex items-center justify-between gap-7 border-b border-[#ececf0] pb-[22px]">
         <div className="max-w-[560px]">
           <div className="text-[15px] font-semibold leading-[normal] text-[#222222]">Card QR da stampare</div>
           <div className="mt-[5px] text-[13px] font-medium leading-[1.55] text-[#929292]">
