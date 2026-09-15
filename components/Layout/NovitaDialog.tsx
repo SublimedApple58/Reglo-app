@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import { Lightbulb } from "lucide-react";
 import { createPortal } from "react-dom";
 
-export type NovitaEntryKey = "pagellino" | "foto-firma" | "agenda-pausa" | "veicoli" | "istruttori";
+export type NovitaEntryKey = "qr-istruttore" | "pagellino" | "foto-firma" | "agenda-pausa" | "veicoli" | "istruttori";
 
 // "agenda-pausa" non è gestita da NovitaDialog: la voce apre il dialog dedicato
 // AgendaPauseNewsDialog (splash + video). Lo shell la intercetta prima.
 export const NOVITA_ENTRIES: Array<{ key: NovitaEntryKey; title: string; latest?: boolean }> = [
-  { key: "pagellino", title: "Pagellino personalizzabile", latest: true },
+  { key: "qr-istruttore", title: "Card QR dell'istruttore", latest: true },
+  { key: "pagellino", title: "Pagellino personalizzabile" },
   { key: "foto-firma", title: "Foto e firme digitali" },
   { key: "agenda-pausa", title: "Richieste agenda in pausa" },
   { key: "veicoli", title: "Modulo veicoli (moto)" },
@@ -115,7 +116,77 @@ export function NovitaDialog({
           </button>
         </div>
 
-        <div className={`overflow-y-auto px-8 pt-7 ${entry === "pagellino" ? "pb-[34px]" : "pb-9"}`}>
+        <div className={`overflow-y-auto px-8 pt-7 ${entry === "pagellino" || entry === "qr-istruttore" ? "pb-[34px]" : "pb-9"}`}>
+          {entry === "qr-istruttore" && (
+            <>
+              <div className="mb-1.5 text-[13px] font-semibold leading-[normal] text-[#929292]">13 settembre 2026</div>
+              <div className="mb-[22px] text-[26px] font-bold leading-[normal] tracking-[-0.4px] text-[#222222]">
+                Card QR dell&apos;istruttore
+              </div>
+              <div className="mb-[26px] overflow-hidden rounded-2xl bg-[#eceef2]">
+                <img src="/images/novita/card-qr-istruttore.jpg" alt="" className="block w-full" />
+              </div>
+              <p className="mb-[26px] text-[15px] font-medium leading-[1.6] text-[#444444]">
+                Ogni istruttore ha ora una <b className="font-bold text-[#222222]">card con il proprio QR</b>, da
+                stampare e lasciare in macchina. L&apos;allievo la inquadra dall&apos;app e viene{" "}
+                <b className="font-bold text-[#222222]">associato a quell&apos;istruttore</b> in un tocco — niente
+                codici da dettare, niente passaggi in segreteria.
+              </p>
+              <div className="mb-4 text-[16px] font-bold leading-[normal] text-[#222222]">Come funziona</div>
+              <div className="mb-[26px] flex flex-col gap-[14px]">
+                <StepRow num={1}>
+                  Apri il profilo dell&apos;istruttore, scheda <b className="font-bold text-[#222222]">Codice</b>, e
+                  premi <b className="font-bold text-[#222222]">Utilizza</b>.
+                </StepRow>
+                <StepRow num={2}>
+                  Scegli <b className="font-bold text-[#222222]">verticale o orizzontale</b> e lo sfondo che
+                  preferisci, poi scarica il PNG o stampa: esce già su A4 con le linee di taglio.
+                </StepRow>
+                <StepRow num={3}>
+                  L&apos;allievo, con Reglo già installato, inquadra il QR:{" "}
+                  <b className="font-bold text-[#222222]">
+                    conferma e da quel momento le sue guide sono seguite da quell&apos;istruttore
+                  </b>
+                  . Se ne aveva già uno, può scegliere se cambiare.
+                </StepRow>
+              </div>
+              <div className="mb-[26px] border-t border-[#f0f0f0]" />
+              <div className="mb-1.5 text-[13px] font-semibold leading-[normal] text-[#929292]">Dietro le quinte</div>
+              <div className="mb-4 text-[20px] font-bold leading-[normal] tracking-[-0.3px] text-[#222222]">
+                Ispirazioni da grande schermo 🍿
+              </div>
+              <p className="mb-[18px] text-[15px] font-medium leading-[1.6] text-[#444444]">
+                Per lo sfondo della card abbiamo scelto{" "}
+                <b className="font-bold text-[#222222]">sei scene di cinema con un&apos;auto protagonista</b>. Ogni
+                istruttore sceglie la sua.
+              </p>
+              <div className="mb-[26px] grid grid-cols-3 gap-2.5">
+                {[
+                  ["/images/qr-card/film-goldfinger.jpg", "Goldfinger", "1964"],
+                  ["/images/qr-card/film-bttf.jpg", "Ritorno al futuro", "1985"],
+                  ["/images/qr-card/film-scarface.jpg", "Scarface", "1983"],
+                  ["/images/qr-card/film-fast.jpg", "Fast & Furious", "2001"],
+                  ["/images/qr-card/film-batman.jpg", "Batman Begins", "2005"],
+                  ["/images/qr-card/film-wolf.jpg", "The Wolf of Wall Street", "2013"],
+                ].map(([src, title, year]) => (
+                  <div key={title} className="flex flex-col gap-1.5">
+                    <div className="aspect-[3/2] overflow-hidden rounded-[12px] bg-[#eceef2]">
+                      <img src={src} alt="" className="block size-full object-cover" />
+                    </div>
+                    <div className="text-[12px] font-semibold leading-[normal] text-[#222222]">
+                      {title} <span className="font-medium text-[#929292]">· {year}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <GoButton
+                label="Vai agli istruttori"
+                onClick={() => go("/user/autoscuole?tab=settings&pane=instructors")}
+                className="leading-[normal]"
+              />
+            </>
+          )}
+
           {entry === "pagellino" && (
             <>
               <div className="mb-1.5 text-[13px] font-semibold leading-[normal] text-[#929292]">13 settembre 2026</div>

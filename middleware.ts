@@ -24,6 +24,12 @@ const isPublicRoute = (req: NextRequest) => {
     return true;
   }
 
+  // QR istruttore (REG-451): la card stampata punta a /i/<codice>, letta anche
+  // dalla fotocamera di chi non ha l'app o non è loggato sul web.
+  if (normalizedPath.startsWith('/i/')) {
+    return true;
+  }
+
   // Pagina "Reglo in numeri": pubblica perché protetta dal token nell'URL
   // (32 byte random + noindex), non da una sessione.
   if (normalizedPath.startsWith('/investor/')) {

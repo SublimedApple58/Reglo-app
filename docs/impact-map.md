@@ -115,6 +115,13 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Exam creation (agenda web + mobile)**: differenzia pronti/non-pronti nel picker (badge + ordine); NON vincola la creazione
 - → **Mobile**: contratto `examReady`/`examReadyAt`/`studentPhase` su `AutoscuolaStudent` + array `students` di `getInstructorSettings`; toggle in `StudentNotesDetailScreen`
 
+### Card QR istruttore (REG-451)
+- → **Instructor Clusters**: riusa `AutoscuolaInstructor.inviteCode` (lazy `ensureInstructorInviteCode`) e scrive `CompanyMember.assignedInstructorId` — se l'istruttore è autonomo l'allievo diventa "locked" alle sue impostazioni.
+- → **Cache**: l'associazione invalida il segmento AGENDA.
+- → **Mobile**: deep link `associa-istruttore?code=` + API `/api/autoscuole/me/instructor-link` (contratto in `features/instructor-qr-link.md`).
+- → **Middleware**: `/i/*` è pubblico.
+- → **Novità**: voce `qr-istruttore` in `NovitaDialog`.
+
 ### Pagellino di valutazione (REG-443)
 - → **Appointments**: i punteggi viaggiano dentro `updateAutoscuolaAppointmentDetails` (campo `evaluations`) e vivono in `AutoscuolaAppointmentEvaluation`; `AutoscuolaAppointment.rating` (valutazione complessiva) resta invariato e indipendente
 - → **Impostazioni/limits**: l'interruttore è `limits.evaluationSheetEnabled` sul CompanyService AUTOSCUOLE → dietro la cache Redis SETTINGS, invalidata da `saveEvaluationSheet`

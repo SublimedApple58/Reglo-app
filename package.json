@@ -69,6 +69,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "dequal": "^2.0.3",
+    "html-to-image": "1.11.11",
     "jotai": "^2.12.5",
     "lucide-react": "^0.456.0",
     "make-cancellable-promise": "^2.0.0",

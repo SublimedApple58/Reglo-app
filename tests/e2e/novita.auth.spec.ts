@@ -16,9 +16,10 @@ test.describe("Novità — pagellino", () => {
       await expect(item).toBeVisible({ timeout: 3_000 });
     }).toPass({ timeout: 60_000 });
 
-    // È la voce "latest" in cima alla timeline.
-    const firstEntry = page.getByRole("menuitem").filter({ hasText: /Pagellino personalizzabile|Foto e firme digitali/ }).first();
-    await expect(firstEntry).toHaveText("Pagellino personalizzabile");
+    // In cima alla timeline c'è la voce più recente (card QR, REG-451), poi il pagellino.
+    const entries = page.getByRole("menuitem").filter({ hasText: /Card QR dell'istruttore|Pagellino personalizzabile|Foto e firme digitali/ });
+    await expect(entries.nth(0)).toHaveText("Card QR dell'istruttore");
+    await expect(entries.nth(1)).toHaveText("Pagellino personalizzabile");
 
     await item.click();
     const dialog = page.getByTestId("novita-dialog");
@@ -34,5 +35,25 @@ test.describe("Novità — pagellino", () => {
     await expect(dialog).toBeHidden();
     await expect(page).toHaveURL(/tab=settings&pane=evaluation/, { timeout: 60_000 });
     await expect(page.getByRole("heading", { name: "Pagellino" }).first()).toBeVisible({ timeout: 60_000 });
+  });
+
+  test("card QR dell'istruttore: dialog e CTA verso gli istruttori @novita", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/it/user/autoscuole?tab=students");
+    const item = page.getByRole("menuitem", { name: "Card QR dell'istruttore" });
+    await expect(async () => {
+      await page.keyboard.press("Escape");
+      await page.getByRole("button", { name: "Menu" }).click();
+      await expect(item).toBeVisible({ timeout: 3_000 });
+    }).toPass({ timeout: 60_000 });
+    await item.click();
+    const dialog = page.getByTestId("novita-dialog");
+    await expect(dialog.getByText("Card QR dell'istruttore")).toBeVisible();
+    await expect(dialog.getByText("Ispirazioni da grande schermo 🍿")).toBeVisible();
+    await expect(dialog.locator("img")).toHaveCount(7);
+    await dialog.getByRole("button", { name: "Vai agli istruttori" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page).toHaveURL(/tab=settings&pane=instructors/, { timeout: 60_000 });
+    await expect(page.getByTestId("instructors-pane")).toBeVisible({ timeout: 60_000 });
   });
 });

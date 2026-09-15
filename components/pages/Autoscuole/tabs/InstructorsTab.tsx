@@ -48,6 +48,7 @@ import {
   type WeeklySchedule,
 } from "@/lib/autoscuole/weekly-schedule";
 import { cn } from "@/lib/utils";
+import { CodiceTab } from "@/components/pages/Autoscuole/instructor-qr/CodiceTab";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -370,7 +371,7 @@ export default function InstructorsTab({
 }: InstructorsTabProps) {
   const toast = useFeedbackToast();
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
-  const [tab, setTab] = React.useState<"disp" | "malattia" | "ferie" | "autonoma">("disp");
+  const [tab, setTab] = React.useState<"disp" | "malattia" | "ferie" | "autonoma" | "codice">("disp");
 
   const selectedIndex = instructors.findIndex((i) => i.id === selectedId);
   const selected = selectedIndex >= 0 ? instructors[selectedIndex] : null;
@@ -447,6 +448,7 @@ export default function InstructorsTab({
     { key: "malattia" as const, label: "Malattia" },
     { key: "ferie" as const, label: "Ferie" },
     { key: "autonoma" as const, label: "Gestione autonoma" },
+    { key: "codice" as const, label: "Codice" },
   ];
 
   return (
@@ -488,7 +490,7 @@ export default function InstructorsTab({
         ))}
       </div>
 
-      <div className="max-w-[680px]">
+      <div className={tab === "codice" ? "max-w-[720px]" : "max-w-[680px]"}>
         {tab === "disp" && (
           <DisponibilitaTab
             instructor={selected}
@@ -505,6 +507,7 @@ export default function InstructorsTab({
         {tab === "ferie" && (
           <FerieTab instructor={selected} refreshAgenda={refreshAgenda} toast={toast} />
         )}
+        {tab === "codice" && <CodiceTab instructorId={selected.id} />}
         {tab === "autonoma" && (
           <AutonomaTab
             instructor={selected}
