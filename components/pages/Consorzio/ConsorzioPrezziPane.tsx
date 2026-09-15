@@ -259,7 +259,7 @@ export function ConsorzioPrezziPane() {
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2.5 py-3">
           <span
-            className="flex h-[30px] min-w-[46px] shrink-0 items-center justify-center rounded-[9px] px-2.5 text-[12px] font-bold tracking-[0.2px]"
+            className="flex h-[30px] min-w-[54px] shrink-0 items-center justify-center rounded-[9px] px-2.5 text-[12px] font-bold tracking-[0.2px]"
             style={{ background: "#F0E9FF", border: "1px solid #E2D6FB", color: "#5B3FB0" }}
           >
             Esame
@@ -314,7 +314,7 @@ export function ConsorzioPrezziPane() {
                 className="flex flex-wrap items-center gap-x-4 gap-y-2.5 py-3"
               >
                 <span
-                  className="flex h-[30px] min-w-[46px] shrink-0 items-center justify-center rounded-[9px] px-2.5 text-[13px] font-bold"
+                  className="flex h-[30px] min-w-[54px] shrink-0 items-center justify-center rounded-[9px] px-2.5 text-[13px] font-bold"
                   style={{ background: "#EEF0F6", border: "1px solid #DCDCE6", color: "#1A1A2E" }}
                 >
                   {category}

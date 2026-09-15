@@ -479,7 +479,7 @@ export function ConsorzioBillingPage() {
                         {lesson.kind === "exam" && <LineKindTag label="Esame" tone="exam" />}
                         <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#929292]">
                           {lesson.kind === "course"
-                            ? "Percorso completo · prezzo unico"
+                            ? "Prezzo unico · guide incluse"
                             : [
                                 lesson.kind === "exam" ? null : `${lesson.durationMinutes} min`,
                                 lesson.instructorName,
