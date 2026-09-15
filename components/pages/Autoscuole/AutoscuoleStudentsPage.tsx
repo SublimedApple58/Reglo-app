@@ -81,6 +81,7 @@ import { StudentMediaSection } from "@/components/pages/Autoscuole/StudentMediaS
 import { useUserPhotoUrl, invalidateUserPhoto } from "@/components/ui/user-photo";
 import { ChangeStudentPhaseDialog } from "@/components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog";
 import { EditStudentLicenseDialog } from "@/components/pages/Autoscuole/dialogs/EditStudentLicenseDialog";
+import { InviteCodeDialog } from "@/components/pages/Autoscuole/dialogs/InviteCodeDialog";
 import {
   LICENSE_CATEGORIES,
   LICENSE_CATEGORY_LABELS,
@@ -3027,7 +3028,7 @@ export function AutoscuoleStudentsPage({
                 {inviteCode && (
                   <button
                     type="button"
-                    title="Codice autoscuola"
+                    title="Chiave di accesso"
                     onClick={() => setInviteCodeOpen(true)}
                     className="flex size-9 shrink-0 cursor-pointer items-center justify-center text-[#929292] transition-colors hover:text-foreground"
                   >
@@ -3260,70 +3261,15 @@ export function AutoscuoleStudentsPage({
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog: codici di accesso ── */}
-      <Dialog open={inviteCodeOpen} onOpenChange={setInviteCodeOpen}>
-        <DialogContent className="sm:max-w-[440px]">
-          <DialogHeader>
-            <DialogTitle>Codice autoscuola</DialogTitle>
-            <DialogDescription>
-              Condividi questo codice per dare accesso a Reglo. Al momento della registrazione,
-              chi utilizza questo codice verrà automaticamente associato alla tua autoscuola.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center justify-between rounded-[12px] border border-[#dddddd] bg-[#f7f7f7] px-4 py-3.5">
-            <div className="flex items-center gap-2.5">
-              <KeyRound className="size-4 text-[#929292]" strokeWidth={1.9} />
-              <span className="text-[12px] font-medium text-[#929292]">Il tuo codice</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-lg font-bold tracking-[2px] text-foreground">{inviteCode}</span>
-              <button
-                type="button"
-                onClick={() => inviteCode && copyCode(inviteCode)}
-                className="cursor-pointer select-none rounded-[8px] border border-[#cfcfdc] bg-navy-50 px-3 py-1.5 text-[13px] font-semibold text-navy-900 transition-colors hover:bg-[#e2e2e8]"
-              >
-                {copiedCode === inviteCode ? "Copiato!" : "Copia"}
-              </button>
-            </div>
-          </div>
-          {autonomousInstructors.some((instr) => instr.inviteCode) && (
-            <div className="mt-1">
-              <p className="mb-1 text-[12px] font-semibold text-[#929292]">Chiavi istruttori autonomi</p>
-              <p className="mb-3 text-[12px] font-medium text-[#929292]">
-                Chi si registra con la chiave di un istruttore viene iscritto all&apos;autoscuola e
-                assegnato direttamente a lui.
-              </p>
-              <div className="overflow-hidden rounded-[12px] border border-[#dddddd]">
-                {autonomousInstructors
-                  .filter((instr) => instr.inviteCode)
-                  .map((instr, idx, arr) => (
-                    <div
-                      key={instr.id}
-                      className={cn(
-                        "flex items-center justify-between gap-3 bg-white px-4 py-3",
-                        idx < arr.length - 1 && "border-b border-[#f2f2f2]",
-                      )}
-                    >
-                      <span className="truncate text-[13px] font-semibold text-foreground">{instr.name}</span>
-                      <div className="flex shrink-0 items-center gap-3">
-                        <span className="text-[15px] font-bold tracking-[2px] text-foreground">
-                          {instr.inviteCode}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => copyCode(instr.inviteCode!)}
-                          className="cursor-pointer select-none rounded-[8px] border border-[#dddddd] bg-white px-2.5 py-1 text-[12px] font-semibold text-foreground transition-colors hover:bg-[#f2f2f2]"
-                        >
-                          {copiedCode === instr.inviteCode ? "Copiato!" : "Copia"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* ── Dialog: chiave di accesso (REG-407) ── */}
+      <InviteCodeDialog
+        open={inviteCodeOpen}
+        onOpenChange={setInviteCodeOpen}
+        inviteCode={inviteCode}
+        autonomousInstructors={autonomousInstructors}
+        copiedCode={copiedCode}
+        onCopy={copyCode}
+      />
 
       {/* ── Detail panel ── */}
       <DetailPanel

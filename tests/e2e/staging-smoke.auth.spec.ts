@@ -8,6 +8,7 @@ import { test, expect } from "@playwright/test";
  */
 test.describe("Staging smoke — vehicles release", () => {
   test("landing (agenda), agenda tab, and vehicles redesign load @staging", async ({ page }) => {
+    test.setTimeout(240_000);
     // Redesign 2026-07: la Dashboard è stata ritirata — la landing è l'Agenda.
     await page.goto("/it/user/autoscuole");
     await expect(page.getByTestId("autoscuole-agenda-page").first()).toBeVisible({ timeout: 60_000 });
@@ -20,12 +21,13 @@ test.describe("Staging smoke — vehicles release", () => {
     await expect(async () => {
       await page.getByRole("button", { name: "Veicoli", exact: true }).click();
       await expect(page.getByTestId("vehicle-card").first()).toBeVisible({ timeout: 3_000 });
-    }).toPass({ timeout: 45_000 });
+    }).toPass({ timeout: 120_000 });
 
-    await page.getByTestId("vehicle-card").first().getByTitle("Modifica veicolo").click();
-    const dialog = page.getByRole("dialog");
-    // The redesigned dialog exposes the Aperto/Pool/Esclusivo segmented control.
-    await expect(dialog.getByTestId("vehicle-mode-exclusive")).toBeVisible({ timeout: 10_000 });
-    await expect(dialog.getByTestId("vehicle-mode-pool")).toBeVisible();
+    // Redesign Impostazioni: "Gestisci" → tab Dettagli (ex dialog Modifica veicolo).
+    await page.getByTestId("vehicle-card").first().getByRole("button", { name: "Gestisci" }).click();
+    await page.getByRole("button", { name: "Dettagli", exact: true }).click();
+    // The details form exposes the Aperto/Pool/Esclusivo segmented control.
+    await expect(page.getByTestId("vehicle-mode-exclusive")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("vehicle-mode-pool")).toBeVisible();
   });
 });

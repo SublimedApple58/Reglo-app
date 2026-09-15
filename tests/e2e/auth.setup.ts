@@ -1,5 +1,6 @@
 import path from "path";
 import { test as setup, expect } from "@playwright/test";
+import { NEWS_SEEN_KEYS } from "./news-seen";
 
 // Must match OWNER_STORAGE_STATE in playwright.config.ts.
 const OWNER_STORAGE_STATE = path.join(__dirname, ".auth/owner.json");
@@ -35,6 +36,11 @@ setup("authenticate as owner", async ({ page, baseURL }) => {
   await expect(page.getByTestId("autoscuole-agenda-page").first()).toBeVisible({
     timeout: 60_000,
   });
+
+  // Le news "una volta per dispositivo" (AutoscuoleShell, localStorage) coprono
+  // la pagina con un dialog modale e intercettano i click di ogni spec: le
+  // marchiamo come già viste nello storageState condiviso.
+  await page.evaluate((keys) => keys.forEach((k) => localStorage.setItem(k, "1")), NEWS_SEEN_KEYS);
 
   await page.context().storageState({ path: OWNER_STORAGE_STATE });
 });

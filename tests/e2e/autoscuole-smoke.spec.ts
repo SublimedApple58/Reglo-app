@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { markNewsSeen } from "./news-seen";
 
 const userEmail = process.env.E2E_USER_EMAIL;
 const userPassword = process.env.E2E_USER_PASSWORD;
@@ -10,6 +11,10 @@ test.describe("Autoscuole smoke", () => {
     missingCredentials,
     "E2E_USER_EMAIL/E2E_USER_PASSWORD non configurati per smoke test.",
   );
+
+  test.beforeEach(async ({ page }) => {
+    await markNewsSeen(page);
+  });
 
   test("login e navigazione agenda/allievi/pagamenti @smoke", async ({ page }, testInfo) => {
     test.setTimeout(180_000);
@@ -305,10 +310,10 @@ test.describe("Autoscuole smoke", () => {
 
     // ── "Notifica slot disponibili domani" è migrata in Promemoria e notifiche ──
     await page.goto("/it/user/autoscuole?tab=settings&pane=reminders");
-    const remindersCard = page.getByText("Notifica slot vuoti").first();
-    await expect(remindersCard).toBeVisible({ timeout: 30000 });
-    await remindersCard.click(); // apre l'accordion
-    await expect(page.getByText("Notifica slot disponibili domani")).toBeVisible();
+    // Redesign: sezione flat in fondo al pane (niente più card/accordion "Notifica slot vuoti").
+    await expect(page.getByText("Notifica slot disponibili domani").first()).toBeVisible({
+      timeout: 30000,
+    });
     // flip → auto-save senza errori → restore
     const slotToggle = page
       .locator("div")
