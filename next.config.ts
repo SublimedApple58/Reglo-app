@@ -66,6 +66,23 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns,
   },
+  async headers() {
+    return [
+      {
+        // Foglio QR del dialog "Chiave di accesso" (REG-407). Vercel serve i
+        // file statici con `filename=<nome del file>`, che vince sull'attributo
+        // `download` del link: fissiamo qui il nome del prototipo. Resta
+        // `inline`, così la miniatura apre il PDF in una scheda.
+        source: '/file/reglo-scarica-app.pdf',
+        headers: [
+          {
+            key: 'Content-Disposition',
+            value: `inline; filename="Reglo - Scarica l'app.pdf"; filename*=UTF-8''Reglo%20-%20Scarica%20l%27app.pdf`,
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default withNextIntl(nextConfig);
