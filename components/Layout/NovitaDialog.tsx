@@ -2,15 +2,16 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
-import { Lightbulb, X } from "lucide-react";
+import { Lightbulb } from "lucide-react";
 import { createPortal } from "react-dom";
 
-export type NovitaEntryKey = "foto-firma" | "agenda-pausa" | "veicoli" | "istruttori";
+export type NovitaEntryKey = "pagellino" | "foto-firma" | "agenda-pausa" | "veicoli" | "istruttori";
 
 // "agenda-pausa" non è gestita da NovitaDialog: la voce apre il dialog dedicato
 // AgendaPauseNewsDialog (splash + video). Lo shell la intercetta prima.
 export const NOVITA_ENTRIES: Array<{ key: NovitaEntryKey; title: string; latest?: boolean }> = [
-  { key: "foto-firma", title: "Foto e firme digitali", latest: true },
+  { key: "pagellino", title: "Pagellino personalizzabile", latest: true },
+  { key: "foto-firma", title: "Foto e firme digitali" },
   { key: "agenda-pausa", title: "Richieste agenda in pausa" },
   { key: "veicoli", title: "Modulo veicoli (moto)" },
   { key: "istruttori", title: "Gestione autonoma degli istruttori" },
@@ -100,19 +101,59 @@ export function NovitaDialog({
         aria-modal="true"
         data-testid="novita-dialog"
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-[#f0f0f0] bg-white px-6 py-4">
-          <span className="text-[13px] font-semibold tracking-[0.2px] text-[#929292]">Novità</span>
+        <div className="flex shrink-0 items-center justify-between border-b border-[#f0f0f0] bg-white px-6 py-[17px]">
+          <span className="text-[13px] font-semibold leading-[normal] tracking-[0.2px] text-[#929292]">Novità</span>
           <button
             type="button"
             onClick={onClose}
             aria-label="Chiudi"
-            className="flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-full bg-[#f5f5f5] transition-colors hover:bg-[#ececec]"
+            className="flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-full bg-[#f5f5f5] transition-colors duration-150 hover:bg-[#e7e7e7]"
           >
-            <X className="size-3.5 text-[#6a6a6a]" strokeWidth={1.7} />
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
+              <path d="M3 3l8 8M11 3l-8 8" stroke="#6a6a6a" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
           </button>
         </div>
 
-        <div className="overflow-y-auto px-8 pb-9 pt-7">
+        <div className={`overflow-y-auto px-8 pt-7 ${entry === "pagellino" ? "pb-[34px]" : "pb-9"}`}>
+          {entry === "pagellino" && (
+            <>
+              <div className="mb-1.5 text-[13px] font-semibold leading-[normal] text-[#929292]">13 settembre 2026</div>
+              <div className="mb-[22px] text-[26px] font-bold leading-[normal] tracking-[-0.4px] text-[#222222]">
+                Il pagellino è tuo
+              </div>
+              <div className="mb-[26px] overflow-hidden rounded-2xl bg-[#eceef2]">
+                <img src="/images/novita/pagellino.jpg" alt="" className="block w-full" />
+              </div>
+              <p className="mb-[26px] text-[15px] font-medium leading-[1.6] text-[#444444]">
+                Ogni autoscuola insegna a modo suo: adesso anche il pagellino. Scegli tu{" "}
+                <b className="font-bold text-[#222222]">quali voci valutare</b> e con quale scala, e
+                l&apos;istruttore assegna un <b className="font-bold text-[#222222]">punteggio a ogni guida</b>,
+                voce per voce — in pochi secondi, appena scende dall&apos;auto.
+              </p>
+              <div className="mb-4 text-[16px] font-bold leading-[normal] text-[#222222]">Come si configura</div>
+              <div className="mb-[26px] flex flex-col gap-[14px]">
+                <StepRow num={1}>
+                  Vai in <b className="font-bold text-[#222222]">Configurazione → Pagellino</b> e crei le voci
+                  di valutazione: partenze, parcheggio, rotonde, sicurezza — quelle che contano per te.
+                </StepRow>
+                <StepRow num={2}>
+                  Le <b className="font-bold text-[#222222]">riordini col trascinamento</b> e scegli la scala
+                  per ciascuna (es. da 1 a 5).
+                </StepRow>
+                <StepRow num={3}>
+                  Dal momento in cui salvi, <b className="font-bold text-[#222222]">tutti i tuoi istruttori</b>{" "}
+                  vedono il pagellino aggiornato.
+                </StepRow>
+              </div>
+              <GoButton
+                label="Vai al pagellino"
+                onClick={() => go("/user/autoscuole?tab=settings&pane=evaluation")}
+                className="leading-[normal]"
+              />
+            </>
+          )}
+
           {entry === "veicoli" && (
             <>
               <div className="mb-1.5 text-[13px] font-semibold text-[#929292]">12 luglio 2026</div>

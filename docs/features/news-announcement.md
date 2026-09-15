@@ -32,3 +32,9 @@ Design 1:1 dal prototipo `News.html` (fatto dall'utente). Nessun asset video: le
 - Web-only: gli istruttori usano il mobile, non sono il target.
 - Lista Novità (`NOVITA_ENTRIES`): **foto-firma** (latest, "Foto e firme digitali", 4 ago, badge "Disponibile da lunedì" — niente video: due sotto-sezioni firma digitale / foto profilo allievo, ognuna con immagine di copertina da `public/images/novita/{firma-allievo,foto-profilo-allievo}.jpg`) + **agenda-pausa** + **veicoli** + **istruttori**. Rimossa "Guide di gruppo".
 - Card veicoli/istruttori **allineate 1:1 al prototipo** `Dashboard.dc.html`: titolo "Modulo veicoli per le moto" (12 lug) / "Gestione autonoma degli istruttori" (10 lug), step numerati, CTA "Vai ai veicoli/istruttori" (`?tab=settings&pane=vehicles|instructors`). L'istruttori include la sezione "In evidenza → Parco Allievi" con un 2° video. Video in `public/videos/novita/{veicoli,istruttori,parco-allievi}.mp4` (1920×1080 H.264), cornice ratio naturale su `#eceef2`.
+
+## Changelog Novità (`NovitaDialog`)
+
+Le altre voci del menu hamburger → Novità sono schede statiche in `components/Layout/NovitaDialog.tsx` (`NOVITA_ENTRIES`, la prima con `latest: true` ha il pallino navy). Per aggiungerne una: nuova chiave in `NovitaEntryKey`, voce in cima a `NOVITA_ENTRIES` (spostando `latest`), blocco `entry === "<chiave>"` nel corpo e asset in `public/images/novita/`.
+
+- **Pagellino personalizzabile** (`pagellino`, REG-453, 2026-09-15): replica 1:1 del prototipo `Novita Pagellino.html` — data 13 settembre 2026, copertina `public/images/novita/pagellino.jpg` (ricavata dal PNG del prototipo: 1280px, JPEG), 3 passi e CTA "Vai al pagellino" → `?tab=settings&pane=evaluation`. L'header del dialog (padding 17px, X SVG da 13px) è stato allineato al prototipo per tutte le voci. e2e: `tests/e2e/novita.auth.spec.ts`.
