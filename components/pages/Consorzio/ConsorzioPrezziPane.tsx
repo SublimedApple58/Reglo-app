@@ -18,9 +18,8 @@ import {
 import {
   getConsorzioPricing,
   updateConsorzioPricing,
-  type ConsorzioPricing,
 } from "@/lib/actions/consorzio.actions";
-import type { ConsorzioBillingMode } from "@/lib/consorzio/pricing";
+import type { ConsorzioBillingMode, ConsorzioPricing } from "@/lib/consorzio/pricing";
 import { cn } from "@/lib/utils";
 
 /**

@@ -977,8 +977,6 @@ const pricingSchema = z.object({
   guideRequestMinLeadHours: z.number().int().min(0).max(336),
 });
 
-export type { ConsorzioPricing };
-
 const readPricing = (
   company: { services?: Array<{ serviceKey: string; limits: unknown }> | null },
 ): ConsorzioPricing => {
