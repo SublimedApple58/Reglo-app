@@ -13,7 +13,9 @@ import {
   DEFAULT_AGENDA_COLOR_CRITERION,
   DURATION_COLOR_ENTRIES,
   LICENSE_COLOR_ENTRIES,
+  LICENSE_COLOR_GROUPS,
   agendaBlockStyle,
+  resolveColorOverride,
   asAgendaColorExceptions,
   type AgendaColorCriterion,
   type AgendaColorEntry,
@@ -306,6 +308,37 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
 
   const entriesForCriterion: AgendaColorEntry[] =
     criterion === "patente" ? LICENSE_COLOR_ENTRIES : DURATION_COLOR_ENTRIES;
+  const entriesByKey = new Map(entriesForCriterion.map((entry) => [entry.key, entry]));
+
+  // Chip di una voce colore: tocca → picker. Le sotto-patenti senza colore
+  // proprio mostrano quello ereditato dalla madre (C/D).
+  const renderColorChip = (entry: AgendaColorEntry) => {
+    const own = overrides[criterion]?.[entry.key] ?? null;
+    const effective = resolveColorOverride(entry, overrides[criterion]);
+    return (
+      <ColorSwatchPicker
+        key={entry.key}
+        value={own}
+        title={`Colore per ${entry.label}`}
+        resetLabel={entry.parent ? "Come la patente madre" : "Colore standard"}
+        onSelect={(hex) => saveOverride(criterion, entry.key, hex)}
+        renderTrigger={({ saving }) => (
+          <button
+            type="button"
+            title={entry.label}
+            data-testid={`color-chip-${entry.key}`}
+            className={cn(
+              "cursor-pointer rounded-full px-3 py-1.5 text-[12px] font-semibold text-[#3a3a3a] ring-1 ring-inset ring-black/5 transition hover:ring-black/25",
+              saving && "animate-pulse opacity-60",
+            )}
+            style={{ backgroundColor: agendaBlockStyle(entry, effective).backgroundColor }}
+          >
+            {entry.short}
+          </button>
+        )}
+      />
+    );
+  };
 
   // Eccezioni pertinenti al criterio attivo (le altre restano salvate ma
   // né mostrate né applicate finché non si torna a un criterio compatibile).
@@ -402,7 +435,7 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
                       style={{
                         backgroundColor: agendaBlockStyle(
                           entry,
-                          overrides[option.value]?.[entry.key],
+                          resolveColorOverride(entry, overrides[option.value]),
                         ).backgroundColor,
                       }}
                     >
@@ -452,35 +485,29 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
             Tocca una voce per cambiarne il colore. &laquo;Colore standard&raquo; ripristina la
             palette Reglo.
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {entriesForCriterion.map((entry) => (
-              <ColorSwatchPicker
-                key={entry.key}
-                value={overrides[criterion]?.[entry.key] ?? null}
-                title={`Colore per ${entry.label}`}
-                resetLabel="Colore standard"
-                onSelect={(hex) => saveOverride(criterion, entry.key, hex)}
-                renderTrigger={({ saving }) => (
-                  <button
-                    type="button"
-                    title={entry.label}
-                    className={cn(
-                      "cursor-pointer rounded-full px-3 py-1.5 text-[12px] font-semibold text-[#3a3a3a] ring-1 ring-inset ring-black/5 transition hover:ring-black/25",
-                      saving && "animate-pulse opacity-60",
-                    )}
-                    style={{
-                      backgroundColor: agendaBlockStyle(
-                        entry,
-                        overrides[criterion]?.[entry.key],
-                      ).backgroundColor,
-                    }}
-                  >
-                    {entry.short}
-                  </button>
-                )}
-              />
-            ))}
-          </div>
+          {criterion === "patente" ? (
+            <div className="mt-3 flex flex-col gap-2.5" data-testid="license-color-groups">
+              {LICENSE_COLOR_GROUPS.map((group) => (
+                <div key={group.label} className="flex flex-wrap items-center gap-2">
+                  <span className="w-[104px] shrink-0 text-[12px] font-semibold text-[#929292]">
+                    {group.label}
+                  </span>
+                  {group.keys.map((key) => {
+                    const entry = entriesByKey.get(key);
+                    return entry ? renderColorChip(entry) : null;
+                  })}
+                </div>
+              ))}
+              <p className="mt-1 text-[12px] font-medium leading-normal text-[#a8a8a8]">
+                CE, C1, C1E e CQC hanno il colore della C, DE, D1 e D1E quello della D, finché non
+                li personalizzi.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {entriesForCriterion.map((entry) => renderColorChip(entry))}
+            </div>
+          )}
         </div>
       )}
 

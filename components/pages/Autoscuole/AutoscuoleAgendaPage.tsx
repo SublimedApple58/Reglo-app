@@ -84,11 +84,12 @@ import {
   AGENDA_COLOR_EXCEPTIONS,
   DEFAULT_AGENDA_COLOR_CRITERION,
   DURATION_COLOR_ENTRIES,
-  LICENSE_COLOR_ENTRIES,
   agendaBlockStyle,
   asAgendaColorExceptions,
   durationColorEntry,
   licenseColorEntryForTag,
+  licenseLegendEntries,
+  resolveColorOverride,
   type AgendaColorCriterion,
   type AgendaColorExceptions,
   type AgendaColorOverrides,
@@ -1084,7 +1085,7 @@ export function AutoscuoleAgendaPage({
       }
       if (agendaColorCriterion === "patente") {
         const entry = licenseColorEntryForTag(licenseTag);
-        return agendaBlockStyle(entry, agendaColorOverrides.patente?.[entry.key]);
+        return agendaBlockStyle(entry, resolveColorOverride(entry, agendaColorOverrides.patente));
       }
       const start = toDate(item.startsAt);
       const end = getAppointmentEnd(item);
@@ -5016,18 +5017,19 @@ export function AutoscuoleAgendaPage({
               </p>
               <div className="space-y-1.5">
                 {(agendaColorCriterion === "patente"
-                  ? LICENSE_COLOR_ENTRIES
-                  : DURATION_COLOR_ENTRIES
-                ).map((entry) => (
+                  ? licenseLegendEntries(agendaColorOverrides.patente)
+                  : DURATION_COLOR_ENTRIES.map((entry) => ({
+                      entry,
+                      label: entry.label,
+                      overrideHex: agendaColorOverrides.durata?.[entry.key] ?? null,
+                    }))
+                ).map(({ entry, label, overrideHex }) => (
                   <div key={entry.key} className="flex items-center gap-3">
                     <div
                       className="h-5 w-8 rounded-md"
-                      style={agendaBlockStyle(
-                        entry,
-                        agendaColorOverrides[agendaColorCriterion]?.[entry.key],
-                      )}
+                      style={agendaBlockStyle(entry, overrideHex)}
                     />
-                    <span className="text-xs text-foreground">{entry.label}</span>
+                    <span className="text-xs text-foreground">{label}</span>
                   </div>
                 ))}
               </div>

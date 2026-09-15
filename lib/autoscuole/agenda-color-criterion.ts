@@ -46,6 +46,13 @@ export type AgendaColorEntry = {
   short: string;
   bgHex: string;
   shadowRgba: string;
+  /**
+   * Voce "madre" (solo patenti): finché il titolare non personalizza questa
+   * voce, prende il colore — standard o personalizzato — della madre. Così CE,
+   * C1… restano del colore della C come prima di REG-461, ma si possono
+   * distinguere quando serve.
+   */
+  parent?: string;
 };
 
 const ENTRY = (
@@ -54,7 +61,8 @@ const ENTRY = (
   short: string,
   bgHex: string,
   shadowRgba: string,
-): AgendaColorEntry => ({ key, label, short, bgHex, shadowRgba });
+  parent?: string,
+): AgendaColorEntry => ({ key, label, short, bgHex, shadowRgba, ...(parent ? { parent } : {}) });
 
 /** Bucket del criterio "durata" (default storici dei blocchi). */
 export const DURATION_COLOR_ENTRIES: AgendaColorEntry[] = [
@@ -65,6 +73,17 @@ export const DURATION_COLOR_ENTRIES: AgendaColorEntry[] = [
   ENTRY("d90plus", "Oltre 90 minuti", "> 90", "#FBD9DD", "rgba(244,63,94,0.22)"),
 ];
 
+const C_BG = "#FCEFC7";
+const C_SHADOW = "rgba(245,158,11,0.22)";
+const D_BG = "#F9DDF3";
+const D_SHADOW = "rgba(217,70,239,0.22)";
+
+/**
+ * Una voce per OGNI patente gestita da Reglo (REG-461), speciali comprese
+ * (C1/C1E/D1/D1E, qualificazioni CQC e ADR). Le sotto-categorie ereditano il
+ * colore della madre finché non vengono personalizzate (`parent`), la CQC
+ * pure (prima finiva nella C); l'ADR, che prima non aveva colore, ha il suo.
+ */
 export const LICENSE_COLOR_ENTRIES: AgendaColorEntry[] = [
   ENTRY("b", "Patente B", "B", "#E3EEFF", "rgba(59,130,246,0.22)"),
   ENTRY("autom", "Cambio automatico (B autom., …)", "B autom.", "#CFFAFE", "rgba(6,182,212,0.22)"),
@@ -73,12 +92,42 @@ export const LICENSE_COLOR_ENTRIES: AgendaColorEntry[] = [
   ENTRY("a1", "Patente A1", "A1", "#D6F5E3", "rgba(16,185,129,0.22)"),
   ENTRY("a2", "Patente A2", "A2", "#FFE8D1", "rgba(249,115,22,0.22)"),
   ENTRY("a", "Patente A", "A", "#FBD9DD", "rgba(244,63,94,0.22)"),
-  ENTRY("c", "Patente C / CE", "C", "#FCEFC7", "rgba(245,158,11,0.22)"),
-  ENTRY("d", "Patente D / DE", "D", "#F9DDF3", "rgba(217,70,239,0.22)"),
+  ENTRY("c", "Patente C", "C", C_BG, C_SHADOW),
+  ENTRY("ce", "Patente CE", "CE", C_BG, C_SHADOW, "c"),
+  ENTRY("c1", "Patente C1", "C1", C_BG, C_SHADOW, "c"),
+  ENTRY("c1e", "Patente C1E", "C1E", C_BG, C_SHADOW, "c"),
+  ENTRY("d", "Patente D", "D", D_BG, D_SHADOW),
+  ENTRY("de", "Patente DE", "DE", D_BG, D_SHADOW, "d"),
+  ENTRY("d1", "Patente D1", "D1", D_BG, D_SHADOW, "d"),
+  ENTRY("d1e", "Patente D1E", "D1E", D_BG, D_SHADOW, "d"),
+  ENTRY("cqc", "CQC (carta di qualificazione)", "CQC", C_BG, C_SHADOW, "c"),
+  ENTRY("adr", "ADR (merci pericolose)", "ADR", "#E4E8EE", "rgba(71,85,105,0.2)"),
   ENTRY("none", "Patente non impostata", "Nessuna", "#F3F4F8", "rgba(100,116,139,0.16)"),
 ];
 
 const licenseEntryByKey = new Map(LICENSE_COLOR_ENTRIES.map((e) => [e.key, e]));
+
+/** Gruppi del pannello "Personalizza i colori" (criterio patente). */
+export const LICENSE_COLOR_GROUPS: Array<{ label: string; keys: string[] }> = [
+  { label: "Auto", keys: ["b", "autom", "be"] },
+  { label: "Moto", keys: ["am", "a1", "a2", "a"] },
+  { label: "Camion", keys: ["c", "ce", "c1", "c1e"] },
+  { label: "Autobus", keys: ["d", "de", "d1", "d1e"] },
+  { label: "Qualificazioni", keys: ["cqc", "adr"] },
+  { label: "Altro", keys: ["none"] },
+];
+
+/**
+ * Colore personalizzato effettivo di una voce: il suo override, altrimenti
+ * quello della voce madre (patenti). `null` = colore standard.
+ */
+export function resolveColorOverride(
+  entry: AgendaColorEntry,
+  overrides: Record<string, string> | undefined,
+): string | null {
+  if (!overrides) return null;
+  return overrides[entry.key] ?? (entry.parent ? overrides[entry.parent] ?? null : null);
+}
 
 /** Bucket durata per minuti (stesse soglie storiche). Il cambio automatico
  * non è più un bucket: è l'eccezione "automatic" (attiva di default). */
@@ -91,10 +140,10 @@ export function durationColorEntry(minutes: number): AgendaColorEntry {
 }
 
 /**
- * Risolve il tag patente mostrato sui blocchi agenda ("B", "B autom.", "AM", …
- * da studentLicenseById) nella voce colore. Il suffisso " autom." vince sulla
- * categoria: distinguere B da B automatica è NATIVO di questo criterio
- * (per il criterio durata invece esiste l'eccezione "automatic").
+ * Risolve il tag patente mostrato sui blocchi agenda ("B", "B autom.", "AM",
+ * "C1E", … da studentLicenseById) nella voce colore. Il suffisso " autom."
+ * vince sulla categoria: distinguere B da B automatica è NATIVO di questo
+ * criterio (per il criterio durata invece esiste l'eccezione "automatic").
  */
 export function licenseColorEntryForTag(
   tag: string | null | undefined,
@@ -104,15 +153,45 @@ export function licenseColorEntryForTag(
   const t = tag.trim().toUpperCase();
   if (!t) return none;
   if (t.includes("AUTOM")) return licenseEntryByKey.get("autom")!;
+  const category = t.split(/\s+/)[0];
+  const exact = licenseEntryByKey.get(category.toLowerCase());
+  if (exact && exact.key !== "none" && exact.key !== "autom") return exact;
+  // Tag non canonici: prefisso (come prima di REG-461).
   if (t.startsWith("AM")) return licenseEntryByKey.get("am")!;
   if (t.startsWith("A1")) return licenseEntryByKey.get("a1")!;
   if (t.startsWith("A2")) return licenseEntryByKey.get("a2")!;
+  if (t.startsWith("AD")) return licenseEntryByKey.get("adr")!;
   if (t.startsWith("A")) return licenseEntryByKey.get("a")!;
   if (t.startsWith("BE")) return licenseEntryByKey.get("be")!;
   if (t.startsWith("B")) return licenseEntryByKey.get("b")!;
   if (t.startsWith("C")) return licenseEntryByKey.get("c")!;
   if (t.startsWith("D")) return licenseEntryByKey.get("d")!;
   return none;
+}
+
+/**
+ * Voci per la legenda dell'agenda: le sotto-categorie che hanno lo stesso
+ * colore effettivo della madre si fondono nella sua riga ("Patente C · CE ·
+ * C1"), così la legenda resta corta finché nessuno le personalizza.
+ */
+export function licenseLegendEntries(
+  overrides: Record<string, string> | undefined,
+): Array<{ entry: AgendaColorEntry; label: string; overrideHex: string | null }> {
+  const effective = (entry: AgendaColorEntry) =>
+    resolveColorOverride(entry, overrides) ?? entry.bgHex;
+  const rows: Array<{ entry: AgendaColorEntry; label: string; overrideHex: string | null }> = [];
+  const byKey = new Map<string, (typeof rows)[number]>();
+  for (const entry of LICENSE_COLOR_ENTRIES) {
+    const parentRow = entry.parent ? byKey.get(entry.parent) : undefined;
+    if (parentRow && effective(entry) === effective(parentRow.entry)) {
+      parentRow.label = `${parentRow.label} · ${entry.short}`;
+      continue;
+    }
+    const row = { entry, label: entry.label, overrideHex: resolveColorOverride(entry, overrides) };
+    rows.push(row);
+    byKey.set(entry.key, row);
+  }
+  return rows;
 }
 
 // ─── Eccezioni pre-costruite ──────────────────────────────────────────────────

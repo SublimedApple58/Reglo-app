@@ -41,8 +41,15 @@ colore istruttore tinge avatar/bande/stampa, NON i blocchi.
   (categoria allievo + suffisso " autom."). Il suffisso automatico vince sulla
   categoria → ciano dedicato (stesso hex del criterio durata): è così che una
   B automatica si distingue da una B. Famiglie: B blu, BE indaco, AM lime,
-  A1 smeraldo, A2 arancio, A rosa, C/CE ambra, D/DE fucsia, patente non
-  impostata grigio. Esami (viola), gruppi (teal/arancio), blocchi istruttore
+  A1 smeraldo, A2 arancio, A rosa, C ambra, D fucsia, ADR ardesia, patente non
+  impostata grigio. **REG-461**: una voce per OGNI patente gestita (anche
+  CE/C1/C1E, DE/D1/D1E, CQC, ADR): le sotto-categorie hanno `parent` (C o D;
+  la CQC ha C) ed ereditano colore standard E override della madre finché non
+  vengono personalizzate (`resolveColorOverride`). Nel pannello le chip sono
+  raggruppate (`LICENSE_COLOR_GROUPS`: Auto, Moto, Camion, Autobus,
+  Qualificazioni, Altro); la legenda agenda fonde nella riga della madre le
+  sotto-categorie con lo stesso colore (`licenseLegendEntries`). Mirror mobile:
+  `reglo-mobile/src/utils/agendaColors.ts`. Esami (viola), gruppi (teal/arancio), blocchi istruttore
   e stati no_show/cancelled (grigio) restano invariati.
 - Colori personalizzabili per voce (entrambi i criteri): l'hex scelto dalla
   palette del picker viene declinato in tinta soft (alpha 0.20) + ombra in
