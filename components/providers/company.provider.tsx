@@ -47,6 +47,7 @@ export function CompanyDataProvider({
   const [refresh, setRefresh] = useAtom(companyRefreshAtom);
   const requestIdRef = useRef(0);
   const hasInitial = Boolean(initialCompany);
+  const syncedCompanyIdRef = useRef(initialCompany?.id ?? null);
 
   const loadCompany = useCallback(async () => {
     const requestId = requestIdRef.current + 1;
@@ -73,6 +74,18 @@ export function CompanyDataProvider({
     if (hasInitial) return;
     void loadCompany();
   }, [hasInitial, loadCompany]);
+
+  useEffect(() => {
+    // Il server ha cambiato azienda mentre il provider era montato (è il caso
+    // di un altro account). `useHydrateAtoms` idrata una volta sola per store,
+    // quindi qui il dato nuovo va scritto a mano, altrimenti l'app resterebbe
+    // sull'account precedente fino al refresh (REG-466).
+    const id = initialCompany?.id ?? null;
+    if (!initialCompany || id === syncedCompanyIdRef.current) return;
+    syncedCompanyIdRef.current = id;
+    setCompany(initialCompany);
+    setCompanyList(initialCompanies ?? []);
+  }, [initialCompany, initialCompanies, setCompany, setCompanyList]);
 
   useEffect(() => {
     if (!refresh) return;
