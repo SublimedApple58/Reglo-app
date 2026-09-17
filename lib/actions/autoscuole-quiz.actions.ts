@@ -1383,3 +1383,229 @@ export async function startExamSchedaSession(
     return { success: false, message: formatError(error) };
   }
 }
+
+// ── getQuizStudentDetailForStaff (dettaglio allievo web, REG-445) ─────────────
+// Vista "situazione quiz" del singolo allievo per il titolare/staff dal dettaglio
+// allievo in web app. Stessi numeri della home quiz mobile (readinessScore ed
+// examPassRate calcolati con la stessa formula) + due blocchi in più pensati per
+// chi insegna: progressi per argomento e domande più sbagliate.
+// NB: niente `export type` in un file "use server" — il tipo vive lato client.
+
+const MOST_WRONG_QUESTIONS_LIMIT = 8;
+
+export async function getQuizStudentDetailForStaff(studentId: string) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+
+    // Uno studente può leggere solo la propria situazione.
+    if (isStudent(membership.autoscuolaRole) && studentId !== membership.userId) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+
+    const studentMembership = await prisma.companyMember.findFirst({
+      where: {
+        companyId: membership.companyId,
+        userId: studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      select: { quizSeatGrantedAt: true, studentPhase: true },
+    });
+
+    if (!studentMembership) {
+      return { success: false, message: "Allievo non trovato." };
+    }
+
+    const cacheKey = await buildAutoscuoleCacheKey({
+      companyId: membership.companyId,
+      segment: AUTOSCUOLE_CACHE_SEGMENTS.QUIZ,
+      scope: hashCacheInput({ action: "studentDetailStaff", studentId }),
+    });
+    const cached = await readAutoscuoleCache<unknown>(cacheKey);
+    if (cached) return { success: true, data: cached };
+
+    const [sessions, chapters, questionStats] = await Promise.all([
+      prisma.quizSession.findMany({
+        where: {
+          companyId: membership.companyId,
+          studentId,
+          status: { not: "abandoned" },
+        },
+        orderBy: { startedAt: "desc" },
+        select: {
+          id: true,
+          mode: true,
+          status: true,
+          passed: true,
+          correctCount: true,
+          wrongCount: true,
+          totalQuestions: true,
+          startedAt: true,
+          completedAt: true,
+        },
+      }),
+      prisma.quizChapter.findMany({
+        orderBy: { chapterNumber: "asc" },
+        include: { _count: { select: { questions: true } } },
+      }),
+      prisma.quizStudentQuestionStat.findMany({
+        where: { companyId: membership.companyId, studentId },
+        select: {
+          questionId: true,
+          timesAnswered: true,
+          timesCorrect: true,
+          lastAnsweredAt: true,
+          question: { select: { chapterId: true } },
+        },
+      }),
+    ]);
+
+    // ── Simulazioni d'esame (REG-446: % simulazioni superate) ──
+    const examSessions = sessions.filter(
+      (s) => s.mode === "EXAM" && s.status === "completed",
+    );
+    const examsPassed = examSessions.filter((s) => s.passed === true).length;
+    const examsFailed = examSessions.filter((s) => s.passed === false).length;
+    const examsTaken = examsPassed + examsFailed;
+    const examPassRate = examsTaken > 0 ? Math.round((examsPassed / examsTaken) * 100) : 0;
+
+    // ── Argomenti (capitoli ministeriali) ──
+    const statsByChapter = new Map<string, { attempted: number; correct: number }>();
+    for (const stat of questionStats) {
+      const chapterId = stat.question.chapterId;
+      const entry = statsByChapter.get(chapterId) ?? { attempted: 0, correct: 0 };
+      entry.attempted += 1;
+      entry.correct += stat.timesCorrect > 0 ? 1 : 0;
+      statsByChapter.set(chapterId, entry);
+    }
+
+    const chaptersProgress = chapters.map((chapter) => {
+      const entry = statsByChapter.get(chapter.id) ?? { attempted: 0, correct: 0 };
+      return {
+        id: chapter.id,
+        chapterNumber: chapter.chapterNumber,
+        description: chapter.description,
+        totalQuestions: chapter._count.questions,
+        attemptedCount: entry.attempted,
+        correctCount: entry.correct,
+        correctRate:
+          entry.attempted > 0 ? Math.round((entry.correct / entry.attempted) * 100) : null,
+      };
+    });
+
+    const weakChapters = chaptersProgress
+      .filter((chapter) => chapter.attemptedCount > 0 && (chapter.correctRate ?? 100) < 70)
+      .sort((a, b) => (a.correctRate ?? 0) - (b.correctRate ?? 0))
+      .slice(0, 5)
+      .map((chapter) => ({
+        chapterNumber: chapter.chapterNumber,
+        description: chapter.description,
+        correctRate: chapter.correctRate ?? 0,
+      }));
+
+    // ── Domande più sbagliate ──
+    const wrongRanked = questionStats
+      .map((stat) => ({
+        questionId: stat.questionId,
+        timesAnswered: stat.timesAnswered,
+        timesWrong: Math.max(0, stat.timesAnswered - stat.timesCorrect),
+        lastAnsweredAt: stat.lastAnsweredAt,
+      }))
+      .filter((stat) => stat.timesWrong > 0)
+      .sort(
+        (a, b) =>
+          b.timesWrong - a.timesWrong ||
+          b.lastAnsweredAt.getTime() - a.lastAnsweredAt.getTime(),
+      )
+      .slice(0, MOST_WRONG_QUESTIONS_LIMIT);
+
+    const wrongQuestions = wrongRanked.length
+      ? await prisma.quizQuestion.findMany({
+          where: { id: { in: wrongRanked.map((stat) => stat.questionId) } },
+          select: {
+            id: true,
+            questionText: true,
+            correctAnswer: true,
+            chapter: { select: { chapterNumber: true, description: true } },
+          },
+        })
+      : [];
+    const wrongQuestionById = new Map(wrongQuestions.map((q) => [q.id, q]));
+
+    const mostWrongQuestions = wrongRanked.flatMap((stat) => {
+      const question = wrongQuestionById.get(stat.questionId);
+      if (!question) return [];
+      return [
+        {
+          id: question.id,
+          questionText: question.questionText,
+          correctAnswer: question.correctAnswer,
+          chapterNumber: question.chapter.chapterNumber,
+          chapterDescription: question.chapter.description,
+          timesAnswered: stat.timesAnswered,
+          timesWrong: stat.timesWrong,
+          lastAnsweredAt: stat.lastAnsweredAt.toISOString(),
+        },
+      ];
+    });
+
+    // ── Copertura / accuratezza / prontezza (stessa formula della home mobile) ──
+    const totalQuestions = chapters.reduce((sum, ch) => sum + ch._count.questions, 0);
+    const totalAttempted = questionStats.length;
+    const totalCorrectQuestions = questionStats.filter((s) => s.timesCorrect > 0).length;
+
+    const attemptedPct = totalQuestions > 0 ? totalAttempted / totalQuestions : 0;
+    const correctPct = totalAttempted > 0 ? totalCorrectQuestions / totalAttempted : 0;
+    const last3Exams = examSessions.slice(0, 3);
+    const last3PassedPct =
+      last3Exams.length > 0
+        ? last3Exams.filter((s) => s.passed === true).length / last3Exams.length
+        : 0;
+    const readinessScore = Math.round(attemptedPct * 30 + correctPct * 40 + last3PassedPct * 30);
+
+    const lastActivity = questionStats.reduce<Date | null>((latest, stat) => {
+      if (!latest || stat.lastAnsweredAt > latest) return stat.lastAnsweredAt;
+      return latest;
+    }, null);
+
+    const recentSessions = sessions.slice(0, 8).map((s) => ({
+      id: s.id,
+      mode: s.mode,
+      status: s.status,
+      passed: s.passed,
+      correctCount: s.correctCount,
+      wrongCount: s.wrongCount,
+      totalQuestions: s.totalQuestions,
+      completedAt: s.completedAt?.toISOString() ?? null,
+      startedAt: s.startedAt.toISOString(),
+    }));
+
+    const data = {
+      hasQuizAccess: studentMembership.quizSeatGrantedAt !== null,
+      quizSeatGrantedAt: studentMembership.quizSeatGrantedAt?.toISOString() ?? null,
+      studentPhase: studentMembership.studentPhase,
+      totalSessions: sessions.length,
+      examsTaken,
+      examsPassed,
+      examsFailed,
+      examPassRate,
+      readinessScore,
+      coverage: {
+        totalQuestions,
+        attemptedCount: totalAttempted,
+        correctCount: totalCorrectQuestions,
+        attemptedPct: Math.round(attemptedPct * 100),
+        accuracyPct: Math.round(correctPct * 100),
+      },
+      lastActivityAt: lastActivity?.toISOString() ?? null,
+      chaptersProgress,
+      weakChapters,
+      mostWrongQuestions,
+      recentSessions,
+    };
+
+    await writeAutoscuoleCache(cacheKey, data, CACHE_TTL);
+    return { success: true, data };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}

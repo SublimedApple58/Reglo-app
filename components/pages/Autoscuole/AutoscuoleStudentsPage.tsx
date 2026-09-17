@@ -17,6 +17,11 @@ import {
   type StudentEvaluationAggregate,
 } from "@/lib/autoscuole/evaluation-sheet";
 import { getEvaluationSheet } from "@/lib/actions/autoscuole-evaluation.actions";
+import { getQuizStudentDetailForStaff } from "@/lib/actions/autoscuole-quiz.actions";
+import {
+  StudentQuizPanel,
+  type StudentQuizDetail,
+} from "@/components/pages/Autoscuole/StudentQuizPanel";
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { PageHeader } from "@/components/ui/page-header";
 import { SegmentedPill } from "@/components/ui/segmented-pill";
@@ -661,6 +666,8 @@ function TablePager({
 }
 
 type PhaseTab = "attesa" | "teoria" | "pratica" | "patentati";
+/** Tab del drawer allievo. "quiz" = REG-445. */
+type DrawerTab = "summary" | "quiz" | "lessons" | "notes";
 type PraticaSubTab = "lista" | "cancellazioni";
 
 const PHASE_SUBTITLES: Record<PhaseTab, string> = {
@@ -768,7 +775,15 @@ export function AutoscuoleStudentsPage({
   });
 
   // Panel tabs
-  const [drawerTab, setDrawerTab] = React.useState<"summary" | "lessons" | "notes">("summary");
+  const [drawerTab, setDrawerTab] = React.useState<DrawerTab>("summary");
+  // Situazione quiz (REG-445): caricata pigramente all'apertura del tab "Quiz",
+  // così il dettaglio di un allievo in PRATICA non paga una query che non guarda.
+  const [quizDetail, setQuizDetail] = React.useState<StudentQuizDetail | null>(null);
+  const [quizDetailLoading, setQuizDetailLoading] = React.useState(false);
+  const quizDetailRequestRef = React.useRef(0);
+  /** Allievo per cui la situazione quiz è già stata richiesta: evita che un
+   *  errore di rete faccia ripartire la fetch a ogni render. */
+  const quizRequestedForRef = React.useRef<string | null>(null);
   // Foto profilo dell'allievo: sostituisce le iniziali nell'avatar del drawer.
   const [drawerPhotoUrl, setDrawerPhotoUrl] = React.useState<string | null>(null);
   const [drawerPhotoUploading, setDrawerPhotoUploading] = React.useState(false);
@@ -1090,12 +1105,42 @@ export function AutoscuoleStudentsPage({
     toast.success({ description: "Dettagli salvati." });
   };
 
+  /**
+   * Situazione quiz dell'allievo (REG-445). Chiamata solo quando il tab "Quiz"
+   * è davvero aperto: gli altri tab non devono pagarne il costo.
+   */
+  const loadQuizDetail = React.useCallback(
+    async (studentId: string) => {
+      const requestId = quizDetailRequestRef.current + 1;
+      quizDetailRequestRef.current = requestId;
+      quizRequestedForRef.current = studentId;
+      setQuizDetailLoading(true);
+      setQuizDetail(null);
+      const res = await getQuizStudentDetailForStaff(studentId);
+      if (requestId !== quizDetailRequestRef.current) return;
+      if (!res.success || !res.data) {
+        toast.error({
+          description: res.message ?? "Impossibile caricare la situazione quiz.",
+        });
+        setQuizDetailLoading(false);
+        return;
+      }
+      setQuizDetail(res.data as StudentQuizDetail);
+      setQuizDetailLoading(false);
+    },
+    [toast],
+  );
+
   const openStudentDetail = React.useCallback(
     (studentId: string) => {
       setSelectedStudentId(studentId);
       setDrawerTab("summary");
       setDrawerPhotoUrl(null);
       setLessonFilter("all");
+      setQuizDetail(null);
+      quizDetailRequestRef.current += 1;
+      quizRequestedForRef.current = null;
+      setQuizDetailLoading(false);
       setPanelOpen(true);
       void loadRegister(studentId);
       void loadCredits(studentId);
@@ -1116,7 +1161,50 @@ export function AutoscuoleStudentsPage({
     setCreditsInput("1");
     setDrawerTab("summary");
     setDrawerPhotoUrl(null);
+    quizDetailRequestRef.current += 1;
+    quizRequestedForRef.current = null;
+    setQuizDetail(null);
+    setQuizDetailLoading(false);
   }, []);
+
+  // Fetch pigra della situazione quiz: solo all'apertura del tab, una volta per
+  // allievo. Senza fase teoria attiva il pannello è un placeholder puro e non
+  // serve interrogare il backend.
+  React.useEffect(() => {
+    if (drawerTab !== "quiz" || !selectedStudentId || !theoryPhaseEnabled) return;
+    if (quizRequestedForRef.current === selectedStudentId) return;
+    void loadQuizDetail(selectedStudentId);
+  }, [drawerTab, selectedStudentId, theoryPhaseEnabled, loadQuizDetail]);
+
+  /**
+   * Tab del drawer allievo per fase (REG-445).
+   * - AWAITING/TEORIA: l'allievo non guida ancora → Riepilogo + Quiz, senza la
+   *   reportistica guide/note che a quel punto sarebbe vuota.
+   * - PRATICA/PATENTATO (dal foglio rosa in poi): Quiz resta e si AGGIUNGONO
+   *   guide e note, quindi convivono.
+   */
+  const drawerTabs = React.useMemo(() => {
+    const phase = register?.studentPhase ?? "PRATICA";
+    const beforeDriving = phase === "AWAITING" || phase === "TEORIA";
+    const tabs: Array<{ key: DrawerTab; label: string }> = [
+      { key: "summary", label: "Riepilogo" },
+      { key: "quiz", label: "Quiz" },
+    ];
+    if (!beforeDriving) {
+      const notesCount = register
+        ? register.lessons.filter((lesson) => lesson.notes?.trim()).length
+        : 0;
+      tabs.push({ key: "lessons", label: "Guide" });
+      tabs.push({ key: "notes", label: notesCount ? `Note (${notesCount})` : "Note" });
+    }
+    return tabs;
+  }, [register]);
+
+  // La fase può cambiare col drawer aperto: se il tab attivo sparisce, torna al
+  // riepilogo invece di mostrare un pannello vuoto.
+  React.useEffect(() => {
+    if (!drawerTabs.some((tab) => tab.key === drawerTab)) setDrawerTab("summary");
+  }, [drawerTabs, drawerTab]);
 
   /** Upload foto profilo dal drawer (staff, al posto dell'allievo). */
   const handleDrawerPhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -3307,11 +3395,7 @@ export function AutoscuoleStudentsPage({
             </div>
           </div>
           <div className="flex items-stretch">
-            {([
-              { key: "summary" as const, label: "Riepilogo" },
-              { key: "lessons" as const, label: "Guide" },
-              { key: "notes" as const, label: register ? `Note${register.lessons.filter(l => l.notes?.trim()).length ? ` (${register.lessons.filter(l => l.notes?.trim()).length})` : ""}` : "Note" },
-            ]).map((tab) => (
+            {drawerTabs.map((tab) => (
               <button
                 key={tab.key}
                 type="button"
@@ -3339,6 +3423,13 @@ export function AutoscuoleStudentsPage({
           ) : register ? (
             <>
               {drawerTab === "summary" && renderPanelSummary()}
+              {drawerTab === "quiz" && (
+                <StudentQuizPanel
+                  loading={quizDetailLoading}
+                  detail={quizDetail}
+                  theoryPhaseEnabled={theoryPhaseEnabled}
+                />
+              )}
               {drawerTab === "lessons" && renderPanelLessons()}
               {drawerTab === "notes" && renderPanelNotes()}
             </>
