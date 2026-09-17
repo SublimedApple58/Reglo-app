@@ -196,7 +196,7 @@ export function AgendaPrintDialog({
             <button
               type="button"
               onClick={() => window.print()}
-              className="inline-flex cursor-pointer items-center gap-2 rounded-[10px] bg-white px-4 py-[9px] text-[13px] font-semibold text-[#1a1a2e] transition-opacity hover:opacity-90"
+              className="inline-flex cursor-pointer items-center gap-2 rounded-[10px] bg-white px-4 py-[9px] text-[13px] font-semibold text-[#111111] transition-opacity hover:opacity-90"
             >
               <Printer className="size-4" strokeWidth={1.9} />
               Stampa / Salva PDF
@@ -222,7 +222,7 @@ export function AgendaPrintDialog({
             {/* Intestazione foglio */}
             <div className="mb-5 flex items-start justify-between gap-6 border-b border-[#e6e6e6] pb-4">
               <div>
-                <div className="text-[22px] font-bold leading-tight tracking-[-0.3px] text-[#1a1a2e]">
+                <div className="text-[22px] font-bold leading-tight tracking-[-0.3px] text-[#111111]">
                   Agenda
                 </div>
                 <div className="mt-1 text-[14px] font-medium text-[#555]">
@@ -272,12 +272,12 @@ export function AgendaPrintDialog({
                         key={col.key}
                         className="flex-1 border-b-2 pb-1.5 text-center"
                         style={{
-                          borderColor: col.highlight ? "#1a1a2e" : "#e6e6e6",
+                          borderColor: col.highlight ? "#111111" : "#e6e6e6",
                         }}
                       >
                         <div
                           className="truncate text-[12.5px] font-semibold"
-                          style={{ color: col.highlight ? "#1a1a2e" : "#333" }}
+                          style={{ color: col.highlight ? "#111111" : "#333" }}
                         >
                           {col.label}
                         </div>
@@ -327,7 +327,7 @@ export function AgendaPrintDialog({
                           className="relative flex-1 rounded-[4px]"
                           style={{
                             backgroundColor: col.highlight
-                              ? "rgba(26,26,46,0.02)"
+                              ? "rgba(17, 17, 17,0.02)"
                               : undefined,
                           }}
                         >

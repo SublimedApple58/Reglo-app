@@ -47,7 +47,7 @@ const POLL_MS = 1500;
  * Giallo brand esplicito: il token `accent` del DS è un grigio neutro di
  * superficie, NON il giallo — su una barra chiara la CTA sparirebbe. */
 const ACCENT_BTN =
-  "bg-[#FACC15] text-[#1a1a2e] border border-transparent hover:bg-[#FACC15]/85";
+  "bg-[#FACC15] text-[#111111] border border-transparent hover:bg-[#FACC15]/85";
 
 /** Riga conteggi giusto / sbagliato / non risposto. */
 function CountsRow({

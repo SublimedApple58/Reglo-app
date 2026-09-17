@@ -153,7 +153,7 @@ export function FeedbackDialog({
                         className={cn(
                           "cursor-pointer rounded-[20px] border-[1.5px] px-3.5 py-1.5 text-[13px] font-semibold transition-all",
                           selected
-                            ? "border-navy-900 bg-[#eeeef4] text-navy-900"
+                            ? "border-navy-900 bg-[#f0f0f0] text-navy-900"
                             : "border-[#dddddd] bg-white text-[#444444] hover:border-[#c1c1c1]",
                         )}
                       >
@@ -179,7 +179,7 @@ export function FeedbackDialog({
               type="button"
               onClick={() => void submit()}
               disabled={rating === 0 || submitting}
-              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-[12px] bg-gradient-to-br from-[#2d2d4a] to-[#1a1a2e] py-3.5 text-[15px] font-semibold text-white shadow-[0_6px_18px_rgba(26,26,46,0.35)] transition-opacity hover:opacity-95 disabled:cursor-default disabled:opacity-50"
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-[12px] bg-gradient-to-br from-[#2b2b2b] to-[#111111] py-3.5 text-[15px] font-semibold text-white shadow-[0_6px_18px_rgba(17, 17, 17,0.35)] transition-opacity hover:opacity-95 disabled:cursor-default disabled:opacity-50"
             >
               {submitting ? <LoadingDots className="min-h-[1.5em]" /> : "Invia feedback"}
             </button>

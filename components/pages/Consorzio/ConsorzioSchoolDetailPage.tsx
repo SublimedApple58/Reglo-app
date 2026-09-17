@@ -48,7 +48,7 @@ import {
  * 16px radius bordo #EBEBEB con righe label 13/valore 14; stat card 14px radius
  * con numeri 26/700 −0.6 (verde #1F6B2A, ambra); tabella Allievi con righe h61,
  * avatar 32 navy, badge patente pill azzurra #EEF4FF/#2A6FDB, chip codici
- * #EEF0F6/#1A1A2E. Vedi docs/features/consorzio.md.
+ * #F0F0F0/#111111. Vedi docs/features/consorzio.md.
  */
 
 type SchoolData = {
@@ -446,7 +446,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
                 className="grid cursor-pointer grid-cols-[1.6fr_90px_1fr_110px_70px_1.2fr] items-center gap-x-3.5 rounded-[10px] border-b border-[#f2f2f2] px-4 py-3.5 transition-colors hover:bg-[#fafafa]"
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1a1a2e] text-[11px] font-bold text-white">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#111111] text-[11px] font-bold text-white">
                     {initialsOf(student.name)}
                   </div>
                   <span className="truncate text-[14px] font-semibold text-[#222222]">
@@ -482,7 +482,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
                       <span
                         key={code.id}
                         className="inline-flex px-2 py-[3px] text-[11.5px] font-bold"
-                        style={{ background: "#EEF0F6", color: "#1A1A2E", borderRadius: 6 }}
+                        style={{ background: "#F0F0F0", color: "#111111", borderRadius: 6 }}
                       >
                         {code.code}
                       </span>

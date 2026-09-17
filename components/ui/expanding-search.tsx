@@ -37,9 +37,9 @@ export function ExpandingSearch({
           animate={{ width, opacity: 1 }}
           exit={{ width: 34, opacity: 0, transition: { duration: 0.2, ease: [0.4, 0, 0.7, 0.2] } }}
           transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-          className="flex h-[38px] shrink-0 items-center gap-2 overflow-hidden rounded-full border-[1.5px] border-[#1a1a2e] bg-white px-3.5 shadow-[0_2px_8px_rgba(26,26,46,0.15)]"
+          className="flex h-[38px] shrink-0 items-center gap-2 overflow-hidden rounded-full border-[1.5px] border-[#111111] bg-white px-3.5 shadow-[0_2px_8px_rgba(17, 17, 17,0.15)]"
         >
-          <Search className="size-[15px] shrink-0 text-[#1a1a2e]" strokeWidth={1.8} />
+          <Search className="size-[15px] shrink-0 text-[#111111]" strokeWidth={1.8} />
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

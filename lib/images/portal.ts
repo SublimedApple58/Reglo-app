@@ -97,7 +97,7 @@ export const rasterizeSignature = async (input: {
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" ` +
     `viewBox="0 0 ${width} ${height}">` +
-    `<g fill="none" stroke="#1a1a2e" stroke-width="${strokeWidth}" ` +
+    `<g fill="none" stroke="#111111" stroke-width="${strokeWidth}" ` +
     `stroke-linecap="round" stroke-linejoin="round">${paths}</g></svg>`;
 
   const buffer = await sharp(Buffer.from(svg), {

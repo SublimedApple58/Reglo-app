@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
  * Sub-tab "Prezzi" di Prenotazioni e allievi (solo consorzio) — misure 1:1 dal
  * prototipo Consorzi.html (computed styles): titoli sezione 15/600, descrizioni
  * 14/500 #929292, label campo 14/500 #444, select 49px radius 12 bordo #E6E6E6,
- * badge categoria 30px #EEF0F6 bordo #DCDCE6, input tariffa 230×46 con suffisso
+ * badge categoria 30px #F0F0F0 bordo #DEDEDE, input tariffa 230×46 con suffisso
  * "€ / ora" interno. Prezzo guida = durata/60 × tariffa oraria.
  * REG-462: per ogni patente il criterio è "A ore" o "Percorso" (prezzo unico
  * per il percorso completo dell'allievo, guide incluse). Le due cifre sono
@@ -315,7 +315,7 @@ export function ConsorzioPrezziPane() {
               >
                 <span
                   className="flex h-[30px] min-w-[54px] shrink-0 items-center justify-center rounded-[9px] px-2.5 text-[13px] font-bold"
-                  style={{ background: "#EEF0F6", border: "1px solid #DCDCE6", color: "#1A1A2E" }}
+                  style={{ background: "#F0F0F0", border: "1px solid #DEDEDE", color: "#111111" }}
                 >
                   {category}
                 </span>

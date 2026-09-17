@@ -38,7 +38,7 @@ export function ToggleChip({
           ? "px-2 py-0.5 text-[11px]"
           : "px-3 py-1.5 text-xs",
         active
-          ? "border-[#9fc3f0] bg-[#cfe0fb] font-semibold text-[#1a2b45]"
+          ? "border-[#b0b0b0] bg-[#e6e6e6] font-semibold text-[#111111]"
           : "border-border bg-white text-muted-foreground hover:border-[#929292] hover:text-foreground",
         disabled && "pointer-events-none opacity-40",
         className,

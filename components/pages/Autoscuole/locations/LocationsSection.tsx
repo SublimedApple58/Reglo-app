@@ -188,7 +188,7 @@ export function LocationsSection() {
           <button
             type="button"
             onClick={startEditSede}
-            className="inline-flex cursor-pointer items-center justify-center rounded-[10px] bg-[#1a1a2e] px-[26px] py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-[#2d2d4a]"
+            className="inline-flex cursor-pointer items-center justify-center rounded-[10px] bg-[#111111] px-[26px] py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-[#2b2b2b]"
           >
             Imposta la sede
           </button>

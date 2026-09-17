@@ -229,7 +229,7 @@ function RecordingPlayer({ url, durationSec }: { url: string; durationSec: numbe
           <div
             key={i}
             className="w-[3px] shrink-0 rounded-[2px] transition-colors"
-            style={{ height: h, backgroundColor: i < litBars ? "#1a1a2e" : "#c7c7cc" }}
+            style={{ height: h, backgroundColor: i < litBars ? "#111111" : "#c7c7cc" }}
           />
         ))}
       </div>

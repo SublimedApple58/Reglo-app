@@ -148,7 +148,7 @@ export function ProposeSlotDialog({
                     className={cn(
                       "cursor-pointer rounded-full border px-[18px] py-[10px] text-[13.5px] font-semibold transition-colors",
                       active
-                        ? "border-[#1a1a2e] bg-[#1a1a2e] text-white"
+                        ? "border-[#111111] bg-[#111111] text-white"
                         : "border-[#e2e2e2] bg-white text-[#6a6a6a] hover:border-[#c9c9c9]",
                     )}
                   >
@@ -196,7 +196,7 @@ export function ProposeSlotDialog({
               type="button"
               disabled={submitting}
               onClick={onSubmit}
-              className="flex min-w-[143px] cursor-pointer items-center justify-center rounded-[32px] bg-[#1a1a2e] px-[26px] py-[13px] text-[14px] font-bold text-white transition-colors hover:bg-[#12122a] disabled:opacity-40"
+              className="flex min-w-[143px] cursor-pointer items-center justify-center rounded-[32px] bg-[#111111] px-[26px] py-[13px] text-[14px] font-bold text-white transition-colors hover:bg-[#000000] disabled:opacity-40"
             >
               {submitting ? <LoadingDots className="min-h-[17px]" /> : "Proponi orario"}
             </button>

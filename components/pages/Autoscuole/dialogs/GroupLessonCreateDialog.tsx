@@ -871,7 +871,7 @@ export function GroupLessonCreateDialog({
         <AlertDialogFooter>
           <AlertDialogCancel>Annulla</AlertDialogCancel>
           <AlertDialogAction
-            className="bg-[#1a1a2e] hover:bg-[#0f0f22]"
+            className="bg-[#111111] hover:bg-[#000000]"
             onClick={() => {
               setPastConfirmOpen(false);
               void handleCreate({ confirmedPast: true });

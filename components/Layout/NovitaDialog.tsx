@@ -21,7 +21,7 @@ export const NOVITA_ENTRIES: Array<{ key: NovitaEntryKey; title: string; latest?
 function StepRow({ num, children }: { num: number; children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-[13px]">
-      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#eeeef4] text-[13px] font-bold text-navy-900">
+      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#f0f0f0] text-[13px] font-bold text-navy-900">
         {num}
       </div>
       <div className="pt-0.5 text-[14.5px] font-medium leading-[1.5] text-[#444444]">{children}</div>
@@ -51,7 +51,7 @@ function GoButton({ label, onClick, className }: { label: string; onClick: () =>
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex cursor-pointer items-center gap-2 rounded-[14px] bg-[#1a1a2e] px-6 py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-[#2d2d4a] ${className ?? ""}`}
+      className={`inline-flex cursor-pointer items-center gap-2 rounded-[14px] bg-[#111111] px-6 py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-[#2b2b2b] ${className ?? ""}`}
     >
       {label}
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">

@@ -16,7 +16,7 @@ const KEY_PATH =
   "M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z";
 
 const CHIP_BUTTON =
-  "flex h-8 min-w-[72px] shrink-0 cursor-pointer select-none items-center justify-center rounded-[8px] border border-[#cfcfdc] bg-[#eeeef4] px-3 text-[13px] font-semibold text-[#1a1a2e] transition-[background] duration-150 hover:bg-[#e2e2ea]";
+  "flex h-8 min-w-[72px] shrink-0 cursor-pointer select-none items-center justify-center rounded-[8px] border border-[#d4d4d4] bg-[#f0f0f0] px-3 text-[13px] font-semibold text-[#111111] transition-[background] duration-150 hover:bg-[#e2e2ea]";
 
 type AutonomousInstructor = { id: string; name: string; inviteCode: string | null };
 
@@ -138,7 +138,7 @@ export function InviteCodeDialog({
               height="14"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="#1a1a2e"
+              stroke="#111111"
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"

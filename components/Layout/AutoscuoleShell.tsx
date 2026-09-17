@@ -392,7 +392,7 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                             className={cn(
                               "relative z-[1] mt-0.5 h-[13px] w-[13px] shrink-0 rounded-full border-2",
                               item.latest
-                                ? "border-navy-900 bg-[#eef0f6]"
+                                ? "border-navy-900 bg-[#f0f0f0]"
                                 : "border-[#c4c4c4] bg-white",
                             )}
                           />

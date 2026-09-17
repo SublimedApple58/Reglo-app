@@ -57,7 +57,7 @@ export function NeverAccessedListMark({ hasPhone }: { hasPhone: boolean }) {
         height={22}
         className="drop-shadow-sm"
       />
-      <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-50 w-52 -translate-x-1/2 translate-y-1 rounded-lg bg-[#1a1a2e] px-3 py-2 text-[11.5px] leading-snug text-white opacity-0 shadow-xl transition-all duration-150 group-hover:translate-y-0 group-hover:opacity-100">
+      <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-50 w-52 -translate-x-1/2 translate-y-1 rounded-lg bg-[#111111] px-3 py-2 text-[11.5px] leading-snug text-white opacity-0 shadow-xl transition-all duration-150 group-hover:translate-y-0 group-hover:opacity-100">
         {hasPhone
           ? "Account creato ma mai usato: non riceve i promemoria delle guide. Contattalo tu."
           : "Account creato ma mai usato. Nessun numero registrato: non puoi avvisarlo da qui."}

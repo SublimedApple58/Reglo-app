@@ -223,7 +223,7 @@ export function InstructorQrCardDialog({
                 <span
                   className={cn(
                     "block h-[38px] w-14 overflow-hidden rounded-[8px] border-2 bg-cover bg-center",
-                    f.key === film.key ? "border-[#1a1a2e]" : "border-transparent",
+                    f.key === film.key ? "border-[#111111]" : "border-transparent",
                   )}
                   style={{ backgroundImage: `url(${f.src})` }}
                 />
@@ -273,7 +273,7 @@ export function InstructorQrCardDialog({
             <button
               type="button"
               onClick={() => void downloadPng()}
-              className="flex h-[46px] cursor-pointer select-none items-center justify-center gap-2 rounded-[12px] bg-[#1a1a2e] px-[26px] text-[14px] font-semibold leading-[normal] text-white transition-[background] duration-150 hover:bg-[#2b2b45]"
+              className="flex h-[46px] cursor-pointer select-none items-center justify-center gap-2 rounded-[12px] bg-[#111111] px-[26px] text-[14px] font-semibold leading-[normal] text-white transition-[background] duration-150 hover:bg-[#2b2b2b]"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M12 3v12" />
@@ -285,9 +285,9 @@ export function InstructorQrCardDialog({
             <button
               type="button"
               onClick={printCard}
-              className="flex h-12 cursor-pointer select-none items-center justify-center gap-2 rounded-[12px] border border-[#cfcfdc] bg-[#eeeef4] px-[26px] text-[14px] font-semibold leading-[normal] text-[#1a1a2e] transition-[background] duration-150 hover:bg-[#e2e2ea]"
+              className="flex h-12 cursor-pointer select-none items-center justify-center gap-2 rounded-[12px] border border-[#d4d4d4] bg-[#f0f0f0] px-[26px] text-[14px] font-semibold leading-[normal] text-[#111111] transition-[background] duration-150 hover:bg-[#e2e2ea]"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1a1a2e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111111" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M7 8V4.5A1.5 1.5 0 0 1 8.5 3h7A1.5 1.5 0 0 1 17 4.5V8" />
                 <path d="M7 16H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
                 <rect x="7" y="13" width="10" height="8" rx="1.5" />

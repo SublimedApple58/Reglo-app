@@ -18,7 +18,7 @@
 import React from "react";
 
 const FONT = "var(--font-geist-sans), Figtree, -apple-system, sans-serif";
-const NAVY = "#1a1a2e";
+const NAVY = "#111111";
 const PINK = "#be1250";
 
 const clamp01 = (t: number) => (t < 0 ? 0 : t > 1 ? 1 : t);
@@ -255,7 +255,7 @@ function RoadScene({ progress: p, localTime }: SceneProps) {
           <polyline points={ALL_STR} fill="none" stroke="#ffffff" strokeWidth="15" strokeLinecap="round" strokeLinejoin="round" />
           <polyline points={ALL_STR} fill="none" stroke="#c6c0b0" strokeWidth="4" strokeDasharray="1 15" strokeLinecap="round" />
           {routeProg > 0.001 && (
-            <polyline points={partialStr(dist)} fill="none" stroke="#9fc3f0" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
+            <polyline points={partialStr(dist)} fill="none" stroke="#b0b0b0" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
           )}
           <circle cx={RPTS[0][0]} cy={RPTS[0][1]} r="12" fill="#2a6fdb" stroke="#ffffff" strokeWidth="4" />
           {done && (
@@ -396,7 +396,7 @@ function FlowScene({ progress: p }: SceneProps) {
                 background: "#ffffff",
                 border: n.ok === false && badge > 0.3 ? "1.5px solid #f3c0c8" : "1.5px solid #e2e2ea",
                 borderRadius: 16,
-                boxShadow: "0 10px 26px rgba(26,26,46,0.08)",
+                boxShadow: "0 10px 26px rgba(17, 17, 17,0.08)",
                 display: "flex",
                 alignItems: "center",
                 gap: 12,
@@ -588,7 +588,7 @@ function DragScene({ progress: p, localTime }: SceneProps) {
           transformOrigin: "0 0",
         }}
       >
-        <div style={{ position: "absolute", left: WL.x, top: WL.y, width: WL.w, height: WL.h, background: "#ffffff", borderRadius: 20, boxShadow: "0 30px 80px rgba(26,26,46,0.18)", overflow: "hidden" }}>
+        <div style={{ position: "absolute", left: WL.x, top: WL.y, width: WL.w, height: WL.h, background: "#ffffff", borderRadius: 20, boxShadow: "0 30px 80px rgba(17, 17, 17,0.18)", overflow: "hidden" }}>
           <div style={{ height: 46, background: "#f7f7f7", borderBottom: "1px solid #ececec", display: "flex", alignItems: "center", padding: "0 16px", gap: 8 }}>
             <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#ff5f57" }} />
             <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#febc2e" }} />
@@ -599,7 +599,7 @@ function DragScene({ progress: p, localTime }: SceneProps) {
             <span style={{ fontSize: 19, fontWeight: 800, color: "#222222", letterSpacing: "-0.4px" }}>Guide</span>
           </div>
         </div>
-        <div style={{ position: "absolute", left: WR.x, top: WR.y, width: WR.w, height: WR.h, background: "#f4f6fa", borderRadius: 20, boxShadow: "0 30px 80px rgba(26,26,46,0.18)", overflow: "hidden" }}>
+        <div style={{ position: "absolute", left: WR.x, top: WR.y, width: WR.w, height: WR.h, background: "#f4f6fa", borderRadius: 20, boxShadow: "0 30px 80px rgba(17, 17, 17,0.18)", overflow: "hidden" }}>
           <div style={{ height: 46, background: "#f7f7f7", borderBottom: "1px solid #ececec", display: "flex", alignItems: "center", padding: "0 16px", gap: 8 }}>
             <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#ff5f57" }} />
             <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#febc2e" }} />
@@ -622,7 +622,7 @@ function DragScene({ progress: p, localTime }: SceneProps) {
         <RCard x={SLOT_L[2].x} y={card3y} name="Sara Neri" sub="Guida · Sab 11:30" color={["#dcfce7", "#15803d"]} />
         <RCard x={TARGET.x} y={260} name="Luca Marino" sub="Guida certificata" color={["#ede9fe", "#5b21b6"]} />
         {targetPulse > 0 && (
-          <div style={{ position: "absolute", left: TARGET.x, top: TARGET.y, width: CW, height: CH, border: "2px dashed #9fc3f0", background: "rgba(207,224,251,0.3)", borderRadius: 16, boxSizing: "border-box", opacity: targetPulse }} />
+          <div style={{ position: "absolute", left: TARGET.x, top: TARGET.y, width: CW, height: CH, border: "2px dashed #b0b0b0", background: "rgba(207,224,251,0.3)", borderRadius: 16, boxSizing: "border-box", opacity: targetPulse }} />
         )}
         <RCard
           x={cardPos[0]}
@@ -632,7 +632,7 @@ function DragScene({ progress: p, localTime }: SceneProps) {
           color={["#fce7f0", PINK]}
           extra={{
             transform: `rotate(${rot}deg) scale(${sc})`,
-            boxShadow: lift > 0.05 ? `0 ${10 + 22 * lift}px ${20 + 30 * lift}px rgba(26,26,46,${0.1 + 0.16 * lift})` : "0 4px 14px rgba(0,0,0,0.05)",
+            boxShadow: lift > 0.05 ? `0 ${10 + 22 * lift}px ${20 + 30 * lift}px rgba(17, 17, 17,${0.1 + 0.16 * lift})` : "0 4px 14px rgba(0,0,0,0.05)",
             zIndex: 5,
           }}
         >

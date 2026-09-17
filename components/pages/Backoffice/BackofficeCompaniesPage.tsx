@@ -1063,7 +1063,7 @@ export default function BackofficeCompaniesPage({
                     </TableCell>
                     <TableCell>
                       {hasVoice ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-[#eaf2fd] px-2 py-0.5 text-[10px] font-semibold text-[#1a2b45]">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-[#f0f0f0] px-2 py-0.5 text-[10px] font-semibold text-[#111111]">
                           <Phone className="h-3 w-3" />
                           Attiva
                         </span>

@@ -206,7 +206,7 @@ function AccordionSection({
         )}
       >
         <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#eef0f6]">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f0f0f0]">
             <Icon className="h-4 w-4 text-navy-900" />
           </span>
           <div>
@@ -806,7 +806,7 @@ function SettingsTab({
                       key={option.value}
                       className={cn(
                         "rounded-[12px] border-[1.5px] p-[13px] transition-colors",
-                        isRequired ? "border-[#9fc3f0] bg-[#eaf2fd]" : "border-[#e8e8e8] bg-white",
+                        isRequired ? "border-[#b0b0b0] bg-[#f0f0f0]" : "border-[#e8e8e8] bg-white",
                       )}
                     >
                       {/* Header proto: cerchio check + label, click = obbligatorio */}
@@ -822,17 +822,17 @@ function SettingsTab({
                         <span
                           className={cn(
                             "flex size-5 shrink-0 items-center justify-center rounded-full transition-colors",
-                            isRequired ? "bg-[#cfe0fb]" : "border-[1.5px] border-[#dcdcdc]",
+                            isRequired ? "bg-[#e6e6e6]" : "border-[1.5px] border-[#dcdcdc]",
                           )}
                         >
                           {isRequired && (
-                            <Check className="size-3 text-[#1a2b45]" strokeWidth={2.4} />
+                            <Check className="size-3 text-[#111111]" strokeWidth={2.4} />
                           )}
                         </span>
                         <span
                           className={cn(
                             "text-[13.5px] font-semibold",
-                            isRequired ? "text-[#1a2b45]" : "text-[#444444]",
+                            isRequired ? "text-[#111111]" : "text-[#444444]",
                           )}
                         >
                           {option.label}

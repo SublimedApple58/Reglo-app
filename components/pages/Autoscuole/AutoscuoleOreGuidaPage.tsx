@@ -240,7 +240,7 @@ function InstructorHoursCard({ entry, weekLabel }: { entry: InstructorHoursEntry
               title={day.totalMinutes > 0 ? `${day.dayLabel}: ${formatMinutesAsHours(day.totalMinutes)}` : undefined}
               className={cn(
                 "flex-1 rounded-t-[3px]",
-                day.totalMinutes > 0 ? "bg-[#1a1a2e]" : "bg-[#f7f7f7]",
+                day.totalMinutes > 0 ? "bg-[#111111]" : "bg-[#f7f7f7]",
               )}
               style={{ height: `${height}px` }}
             />

@@ -163,7 +163,7 @@ function StarRatingInput({
   size?: string;
 }) {
   const current = value ?? 0;
-  const onColor = gold ? "#facc15" : "#1a1a2e";
+  const onColor = gold ? "#facc15" : "#111111";
   return (
     <div className="flex items-center gap-1.5">
       {Array.from({ length: total }, (_, i) => i + 1).map((star) => {
@@ -1137,12 +1137,12 @@ export function EditAppointmentDialog({
                       className={cn(
                         "flex cursor-pointer items-center gap-2 rounded-[10px] border-[1.5px] px-3 py-2 text-left transition-colors disabled:opacity-50",
                         active
-                          ? "border-[#1a1a2e] bg-[#f4f4f8]"
+                          ? "border-[#111111] bg-[#f2f2f2]"
                           : "border-slate-200 bg-white hover:border-slate-300",
                       )}
                     >
                       <Icon
-                        className={cn("size-4 shrink-0", active ? "text-[#1a1a2e]" : "text-slate-400")}
+                        className={cn("size-4 shrink-0", active ? "text-[#111111]" : "text-slate-400")}
                         aria-hidden
                       />
                       <span className="flex min-w-0 flex-col">
@@ -1378,7 +1378,7 @@ export function EditAppointmentDialog({
                     className={cn(
                       "cursor-pointer rounded-[10px] border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50",
                       on
-                        ? "border-[#1a1a2e] bg-[#1a1a2e] text-white"
+                        ? "border-[#111111] bg-[#111111] text-white"
                         : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
                     )}
                   >

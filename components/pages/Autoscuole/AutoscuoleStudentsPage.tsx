@@ -171,7 +171,7 @@ function EvaluationAverages({ aggregate }: { aggregate: StudentEvaluationAggrega
       <p className={sectionLabelClass}>Pagellino · media su tutte le guide</p>
       <div className="rounded-[14px] border border-[#ececec] bg-white px-4 pb-3 pt-3.5">
         <div className="mb-3 flex items-baseline justify-between gap-3">
-          <span className="text-[20px] font-bold leading-none tracking-[-0.4px] text-[#1a1a2e]">
+          <span className="text-[20px] font-bold leading-none tracking-[-0.4px] text-[#111111]">
             {aggregate.average != null ? (
               <>
                 {fmt(aggregate.average)}
@@ -194,7 +194,7 @@ function EvaluationAverages({ aggregate }: { aggregate: StudentEvaluationAggrega
             key={item.itemId}
             className={cn("flex items-center gap-3 py-[7px]", i > 0 && "border-t border-[#f6f6f8]")}
           >
-            <span className="w-[168px] shrink-0 text-[12.5px] font-medium text-[#1a1a2e]">
+            <span className="w-[168px] shrink-0 text-[12.5px] font-medium text-[#111111]">
               {item.label}
               {item.archived ? (
                 <span className="font-normal text-[#a3a3ad]"> (non più in uso)</span>
@@ -206,7 +206,7 @@ function EvaluationAverages({ aggregate }: { aggregate: StudentEvaluationAggrega
                 style={{ width: `${(item.average / item.scaleMax) * 100}%` }}
               />
             </span>
-            <span className="w-[34px] text-right text-[12.5px] font-bold text-[#1a1a2e]">
+            <span className="w-[34px] text-right text-[12.5px] font-bold text-[#111111]">
               {fmt(item.average)}
             </span>
             <span className="w-[62px] text-right text-[11.5px] font-medium text-[#929292]">
@@ -218,7 +218,7 @@ function EvaluationAverages({ aggregate }: { aggregate: StudentEvaluationAggrega
           <p className="mt-2.5 border-t border-[#f6f6f8] pt-2 text-[11.5px] font-medium text-[#929292]">
             {aggregate.weakest ? (
               <>
-                Voce più bassa: <span className="font-semibold text-[#1a1a2e]">{aggregate.weakest.label}</span>{" "}
+                Voce più bassa: <span className="font-semibold text-[#111111]">{aggregate.weakest.label}</span>{" "}
                 ({fmt(aggregate.weakest.average)}/{aggregate.weakest.scaleMax} su {aggregate.weakest.count}{" "}
                 {aggregate.weakest.count === 1 ? "guida" : "guide"})
               </>
@@ -2738,7 +2738,7 @@ export function AutoscuoleStudentsPage({
                                 className={cn(
                                   "cursor-pointer rounded-full px-3 py-1 text-[12.5px] font-medium transition-colors",
                                   active
-                                    ? "bg-[#1a1a2e] text-white"
+                                    ? "bg-[#111111] text-white"
                                     : "bg-white text-[#6a6a6a] ring-1 ring-[#e2e2e6] hover:bg-[#f2f2f4]",
                                 )}
                               >

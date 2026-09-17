@@ -29,10 +29,10 @@ export const QR_CARD_FILMS: QrCardFilm[] = [
   { key: "batman", src: "/images/qr-card/film-batman.jpg", title: "Batman Begins", year: "2005", posV: "58% 58%", posH: "62% 55%" },
 ];
 
-const NAVY = "#1a1a2e";
+const NAVY = "#111111";
 const FADE_V =
-  "linear-gradient(180deg, rgba(26,26,46,0.55) 0%, rgba(26,26,46,0) 30%, rgba(26,26,46,0) 62%, #1a1a2e 100%)";
-const FADE_H = `linear-gradient(90deg, rgba(26,26,46,0) 30%, rgba(26,26,46,0.18) 48%, rgba(26,26,46,0.45) 64%, rgba(26,26,46,0.75) 80%, rgba(26,26,46,0.94) 92%, #1a1a2e 100%), ${FADE_V}`;
+  "linear-gradient(180deg, rgba(17, 17, 17,0.55) 0%, rgba(17, 17, 17,0) 30%, rgba(17, 17, 17,0) 62%, #111111 100%)";
+const FADE_H = `linear-gradient(90deg, rgba(17, 17, 17,0) 30%, rgba(17, 17, 17,0.18) 48%, rgba(17, 17, 17,0.45) 64%, rgba(17, 17, 17,0.75) 80%, rgba(17, 17, 17,0.94) 92%, #111111 100%), ${FADE_V}`;
 
 function Mark() {
   return (
@@ -54,7 +54,7 @@ function Arrow() {
 
 function RolePill() {
   return (
-    <span className="inline-flex h-[22px] items-center rounded-full border border-white/45 bg-[rgba(26,26,46,0.35)] px-2.5 text-[10px] font-bold uppercase leading-none tracking-[1.2px] text-white">
+    <span className="inline-flex h-[22px] items-center rounded-full border border-white/45 bg-[rgba(17, 17, 17,0.35)] px-2.5 text-[10px] font-bold uppercase leading-none tracking-[1.2px] text-white">
       Istruttore
     </span>
   );

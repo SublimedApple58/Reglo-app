@@ -2456,7 +2456,7 @@ export function AutoscuoleResourcesPage({
                 className={cn(
                   "flex min-w-[150px] select-none items-center justify-center gap-[7px] rounded-[50px] px-[26px] py-3 text-sm font-semibold text-white transition-colors",
                   newVehicleName.trim() && !creatingVehicle
-                    ? "cursor-pointer bg-[#1a1a2e] hover:bg-[#2d2d4a]"
+                    ? "cursor-pointer bg-[#111111] hover:bg-[#2b2b2b]"
                     : "cursor-not-allowed bg-[#c4c4d4]",
                 )}
               >
@@ -2706,7 +2706,7 @@ function AvailabilityCalendar({
                 isSelected
                   ? "bg-navy-900 text-white"
                   : isToday
-                    ? "bg-[#eeeef4] text-navy-900 border border-[#cfcfdc]"
+                    ? "bg-[#f0f0f0] text-navy-900 border border-[#d4d4d4]"
                     : "text-foreground hover:bg-gray-100",
               )}
             >
@@ -2725,7 +2725,7 @@ function AvailabilityCalendar({
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-foreground capitalize">{selectedDayLabel}</span>
             {hasOverrideOnSelected && (
-              <span className="rounded-full bg-[#eeeef4] border border-[#cfcfdc] px-2 py-0.5 text-[10px] font-medium text-navy-900">Override</span>
+              <span className="rounded-full bg-[#f0f0f0] border border-[#d4d4d4] px-2 py-0.5 text-[10px] font-medium text-navy-900">Override</span>
             )}
           </div>
           <div
@@ -2736,7 +2736,7 @@ function AvailabilityCalendar({
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDayEnabled(!dayEnabled); } }}
             className={cn(
               "flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2 transition-colors",
-              dayEnabled ? "border-[#cfcfdc] bg-[#eeeef4]" : "border-border bg-white",
+              dayEnabled ? "border-[#d4d4d4] bg-[#f0f0f0]" : "border-border bg-white",
             )}
           >
             <span className="text-xs font-medium text-foreground">Disponibile</span>

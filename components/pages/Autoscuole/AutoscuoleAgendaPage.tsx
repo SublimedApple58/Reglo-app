@@ -2797,7 +2797,7 @@ export function AutoscuoleAgendaPage({
               >
                 <LayoutGrid className="size-4" strokeWidth={1.6} />
                 {(viewPrefs.days.length < 7 || viewPrefs.startHour !== 0 || viewPrefs.endHour !== 24 || viewPrefs.weekMode !== "classic" || columnsByVehicle) && (
-                  <span className="absolute right-1 top-1 size-[7px] rounded-full bg-[#1a1a2e]" />
+                  <span className="absolute right-1 top-1 size-[7px] rounded-full bg-[#111111]" />
                 )}
               </button>
             </PopoverPrimitive.Trigger>
@@ -2829,7 +2829,7 @@ export function AutoscuoleAgendaPage({
                               onClick={() => setViewPrefs((p) => ({ ...p, columnsBy: opt.key }))}
                               className={cn(
                                 "h-8 flex-1 cursor-pointer rounded-lg px-2 text-[12px] font-semibold transition-colors",
-                                on ? "bg-[#1a1a2e] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
+                                on ? "bg-[#111111] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
                               )}
                             >
                               {opt.label}
@@ -2862,7 +2862,7 @@ export function AutoscuoleAgendaPage({
                             }}
                             className={cn(
                               "h-8 flex-1 cursor-pointer rounded-lg px-2 text-[12px] font-semibold transition-colors",
-                              on ? "bg-[#1a1a2e] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
+                              on ? "bg-[#111111] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
                             )}
                           >
                             {opt.label}
@@ -2893,7 +2893,7 @@ export function AutoscuoleAgendaPage({
                             }
                             className={cn(
                               "h-8 min-w-[44px] cursor-pointer rounded-lg px-2.5 text-[12.5px] font-semibold transition-colors",
-                              on ? "bg-[#1a1a2e] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
+                              on ? "bg-[#111111] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
                             )}
                           >
                             {label}
@@ -2927,7 +2927,7 @@ export function AutoscuoleAgendaPage({
                   <div className="flex items-center justify-end border-t border-[#f0f0f0] pt-3">
                     <button
                       type="button"
-                      className="cursor-pointer text-[13px] font-semibold text-[#1a1a2e] underline underline-offset-2 hover:opacity-70"
+                      className="cursor-pointer text-[13px] font-semibold text-[#111111] underline underline-offset-2 hover:opacity-70"
                       onClick={() => {
                         setViewPrefs(DEFAULT_VIEW_PREFS);
                         setWeekStart(weekAnchor(new Date(), DEFAULT_VIEW_PREFS.weekMode));
@@ -3008,7 +3008,7 @@ export function AutoscuoleAgendaPage({
                     <SlidersHorizontal className="size-4 text-[#888888]" strokeWidth={1.6} />
                     <span className="text-[13px] font-medium text-[#555555]">Filtri</span>
                     {hasActiveFilters && (
-                      <span className="absolute right-1 top-1 size-[7px] rounded-full bg-[#1a1a2e]" />
+                      <span className="absolute right-1 top-1 size-[7px] rounded-full bg-[#111111]" />
                     )}
                   </button>
                 </DropdownMenuTrigger>
@@ -3021,7 +3021,7 @@ export function AutoscuoleAgendaPage({
                       onClick={() => { setFiltersMenuOpen(false); setFilterEditor({ kind: entry.kind, value: entry.value }); }}
                     >
                       {entry.label}
-                      {entry.active && <span className="ml-auto size-[7px] rounded-full bg-[#1a1a2e]" />}
+                      {entry.active && <span className="ml-auto size-[7px] rounded-full bg-[#111111]" />}
                     </button>
                   ))}
                   {hasActiveFilters && (
@@ -3029,7 +3029,7 @@ export function AutoscuoleAgendaPage({
                       <div className="my-1 border-t border-[#f0f0f0]" />
                       <button
                         type="button"
-                        className="flex w-full cursor-pointer items-center rounded-lg px-3 py-[9px] text-[13px] font-medium text-[#1a1a2e] transition-colors hover:bg-[#eeeef4]"
+                        className="flex w-full cursor-pointer items-center rounded-lg px-3 py-[9px] text-[13px] font-medium text-[#111111] transition-colors hover:bg-[#f0f0f0]"
                         onClick={() => { setFiltersMenuOpen(false); setInstructorFilter([]); setVehicleFilter([]); setTypeFilter([]); setStatusFilter([]); }}
                       >
                         Rimuovi filtri
@@ -3148,7 +3148,7 @@ export function AutoscuoleAgendaPage({
             <button
               type="button"
               onClick={() => setOutOfAvailSheetOpen(true)}
-              className="flex shrink-0 cursor-pointer select-none items-center justify-center rounded-full bg-[#1a1a2e] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#2d2d4a]"
+              className="flex shrink-0 cursor-pointer select-none items-center justify-center rounded-full bg-[#111111] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#2b2b2b]"
             >
               Gestisci
             </button>
@@ -5953,7 +5953,7 @@ export function AutoscuoleAgendaPage({
           <AlertDialogFooter>
             <AlertDialogCancel>Annulla</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-[#1a1a2e] hover:bg-[#0f0f22]"
+              className="bg-[#111111] hover:bg-[#000000]"
               onClick={() => {
                 setPastConfirmOpen(false);
                 void handleCreate({ allowPast: true });

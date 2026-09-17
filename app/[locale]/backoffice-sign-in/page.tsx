@@ -34,9 +34,9 @@ export default function BackofficeSignInPage() {
   return (
     <div className="relative flex min-h-svh items-center justify-center bg-gray-50/50 px-6 py-10">
       {/* Brand gradient blurs */}
-      <div className="pointer-events-none absolute -left-24 top-12 h-72 w-72 rounded-full bg-[#1a1a2e]/10 blur-[100px]" />
-      <div className="pointer-events-none absolute -right-24 bottom-12 h-72 w-72 rounded-full bg-[#cfe0fb]/50 blur-[100px]" />
-      <div className="pointer-events-none absolute left-1/2 top-1/3 h-48 w-48 -translate-x-1/2 rounded-full bg-[#9fc3f0]/20 blur-[80px]" />
+      <div className="pointer-events-none absolute -left-24 top-12 h-72 w-72 rounded-full bg-[#111111]/10 blur-[100px]" />
+      <div className="pointer-events-none absolute -right-24 bottom-12 h-72 w-72 rounded-full bg-[#e6e6e6]/50 blur-[100px]" />
+      <div className="pointer-events-none absolute left-1/2 top-1/3 h-48 w-48 -translate-x-1/2 rounded-full bg-[#b0b0b0]/20 blur-[80px]" />
 
       <div className="w-full max-w-md space-y-8">
         {/* Brand header */}

@@ -181,7 +181,7 @@ export function ConsorzioSchoolsPage() {
           <button
             type="button"
             onClick={() => setAddOpen(true)}
-            className="flex cursor-pointer items-center gap-2 rounded-full bg-[#1a1a2e] px-[18px] py-[11px] text-sm font-semibold text-white transition-colors hover:bg-[#12122a]"
+            className="flex cursor-pointer items-center gap-2 rounded-full bg-[#111111] px-[18px] py-[11px] text-sm font-semibold text-white transition-colors hover:bg-[#000000]"
           >
             <Plus className="h-4 w-4" />
             Aggiungi autoscuola
@@ -244,7 +244,7 @@ export function ConsorzioSchoolsPage() {
                     {school.accountingCode ? (
                       <span
                         className="inline-flex max-w-full truncate px-2 py-[3px] text-[11.5px] font-bold"
-                        style={{ background: "#EEF0F6", color: "#1A1A2E", borderRadius: 6 }}
+                        style={{ background: "#F0F0F0", color: "#111111", borderRadius: 6 }}
                       >
                         {school.accountingCode}
                       </span>

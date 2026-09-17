@@ -33,7 +33,7 @@ import {
  * del prototipo Consorzi.html (computed styles estratti): titolo 28/700 −0.4,
  * totali 14.5, navigatore mese con frecce circolari 30px, search pill 320×39,
  * chip codici 12.5/600 (attivo navy, inattivo #F2F2F2), gruppi scuola h68 con
- * avatar 40, righe guida h44 (badge patente e chip codici #EEF0F6/#1A1A2E,
+ * avatar 40, righe guida h44 (badge patente e chip codici #F0F0F0/#111111,
  * quadratini saldata/fattura 16px), placeholder mese futuro con sfera di
  * cristallo. Voci percorso (REG-462): riga con tag "Percorso" e prezzo unico;
  * le guide di quella patente mostrano "Incluso" al posto del prezzo. Esami
@@ -80,7 +80,7 @@ const initialsOf = (name: string): string =>
     .map((word) => word[0]?.toUpperCase() ?? "")
     .join("");
 
-/** Chip codice contabile (navy su #EEF0F6, radius 6 — dal prototipo). */
+/** Chip codice contabile (navy su #F0F0F0, radius 6 — dal prototipo). */
 function CodeChip({ code, small }: { code: string; small?: boolean }) {
   return (
     <span
@@ -88,7 +88,7 @@ function CodeChip({ code, small }: { code: string; small?: boolean }) {
         "inline-flex font-bold",
         small ? "px-[7px] py-[3px] text-[11px]" : "px-2 py-[3px] text-[11.5px]",
       )}
-      style={{ background: "#EEF0F6", color: "#1A1A2E", borderRadius: 6 }}
+      style={{ background: "#F0F0F0", color: "#111111", borderRadius: 6 }}
     >
       {code}
     </span>
@@ -335,7 +335,7 @@ export function ConsorzioBillingPage() {
             <span className="h-3 w-3 rounded-[3px]" style={{ background: "#1F6B2A" }} /> Saldata
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded-[3px]" style={{ background: "#1A1A2E" }} /> Fattura
+            <span className="h-3 w-3 rounded-[3px]" style={{ background: "#111111" }} /> Fattura
             inviata
           </span>
         </div>
@@ -352,7 +352,7 @@ export function ConsorzioBillingPage() {
           className={cn(
             "cursor-pointer rounded-[999px] px-[11px] py-1.5 text-[12.5px] font-semibold transition-colors",
             codeFilter === null
-              ? "bg-[#1a1a2e] text-white"
+              ? "bg-[#111111] text-white"
               : "bg-[#f2f2f2] text-[#444444] hover:bg-[#e9e9e9]",
           )}
         >
@@ -366,7 +366,7 @@ export function ConsorzioBillingPage() {
             className={cn(
               "cursor-pointer rounded-[999px] px-[11px] py-1.5 text-[12.5px] font-semibold transition-colors",
               codeFilter === code.id
-                ? "bg-[#1a1a2e] text-white"
+                ? "bg-[#111111] text-white"
                 : "bg-[#f2f2f2] text-[#444444] hover:bg-[#e9e9e9]",
             )}
           >
@@ -468,7 +468,7 @@ export function ConsorzioBillingPage() {
                         {lesson.licenseCategory ? (
                           <span
                             className="inline-flex shrink-0 px-2 py-[3px] text-[11.5px] font-bold"
-                            style={{ background: "#EEF0F6", color: "#1A1A2E", borderRadius: 6 }}
+                            style={{ background: "#F0F0F0", color: "#111111", borderRadius: 6 }}
                           >
                             {lesson.licenseCategory}
                           </span>
@@ -550,7 +550,7 @@ export function ConsorzioBillingPage() {
                             className="h-[15px] w-[15px] cursor-pointer rounded-[4px] transition-colors"
                             style={
                               lesson.invoiceSent
-                                ? { background: "#1A1A2E" }
+                                ? { background: "#111111" }
                                 : { border: "1.5px solid #D9D9D9", background: "#fff" }
                             }
                           />
@@ -596,7 +596,7 @@ export function ConsorzioBillingPage() {
                   }
                   className={cn(
                     "cursor-pointer rounded-[999px] px-[11px] py-1.5 text-[12.5px] font-semibold transition-colors",
-                    active ? "bg-[#1a1a2e] text-white" : "bg-[#f2f2f2] text-[#444444] hover:bg-[#e9e9e9]",
+                    active ? "bg-[#111111] text-white" : "bg-[#f2f2f2] text-[#444444] hover:bg-[#e9e9e9]",
                   )}
                 >
                   {code.code}

@@ -29,7 +29,7 @@ import { LegendDot } from "./KpiPrimitives";
 // - `isAnimationActive` lasciato ai default di recharts (~400ms in ingresso)
 // ───────────────────────────────────────────────────────────────────────────
 
-const NAVY = "#1a1a2e";
+const NAVY = "#111111";
 const GREY = "#b6b6c2";
 const GREEN = "#22C55E";
 const RED = "#e0796f";
@@ -64,7 +64,7 @@ function ChartTooltip({
   if (!rows.length) return null;
   const sum = rows.reduce((n, row) => n + (row.value ?? 0), 0);
   return (
-    <div className="pointer-events-none min-w-[168px] rounded-xl border border-[#ececec] bg-white/97 p-3 shadow-[0_12px_32px_-16px_rgba(26,26,46,0.4)] backdrop-blur">
+    <div className="pointer-events-none min-w-[168px] rounded-xl border border-[#ececec] bg-white/97 p-3 shadow-[0_12px_32px_-16px_rgba(17, 17, 17,0.4)] backdrop-blur">
       <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#9a9a9a]">
         {label}
       </p>
@@ -75,7 +75,7 @@ function ChartTooltip({
               <span className="size-2 rounded-full" style={{ backgroundColor: row.color }} />
               {row.name}
             </span>
-            <span className="text-[12.5px] font-semibold tabular-nums text-[#1a1a2e]">
+            <span className="text-[12.5px] font-semibold tabular-nums text-[#111111]">
               {formatter
                 ? formatter(row.value ?? 0, String(row.dataKey ?? ""))
                 : formatInt(row.value ?? 0)}
@@ -85,7 +85,7 @@ function ChartTooltip({
         {total && rows.length > 1 && (
           <div className="flex items-center justify-between gap-4 border-t border-[#f0f0f3] pt-1.5">
             <span className="text-[12px] font-medium text-[#9a9a9a]">Totale</span>
-            <span className="text-[12.5px] font-semibold tabular-nums text-[#1a1a2e]">
+            <span className="text-[12.5px] font-semibold tabular-nums text-[#111111]">
               {formatInt(sum)}
             </span>
           </div>
@@ -282,7 +282,7 @@ export function DevicesDonut({
         </PieChart>
       </ResponsiveContainer>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-[22px] font-semibold leading-none tabular-nums text-[#1a1a2e]">
+        <span className="text-[22px] font-semibold leading-none tabular-nums text-[#111111]">
           {formatInt(total)}
         </span>
         <span className="mt-1 text-[11px] font-medium text-[#9a9a9a]">dispositivi</span>

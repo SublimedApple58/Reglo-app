@@ -244,7 +244,7 @@ export function InstructorPublicationEditor({
               className={cn(
                 "shrink-0 rounded-2xl border px-3 py-2 text-left transition-colors",
                 sel
-                  ? "border-[#1A1A2E] bg-[#1A1A2E]"
+                  ? "border-[#111111] bg-[#111111]"
                   : pub
                     ? "border-emerald-200 bg-emerald-50 hover:bg-emerald-100"
                     : "border-border bg-gray-100 hover:bg-gray-200/70",
@@ -287,7 +287,7 @@ export function InstructorPublicationEditor({
           type="button"
           size="sm"
           variant={isPublished ? "outline" : "default"}
-          className={cn("rounded-full", !isPublished && "bg-[#1A1A2E] text-white hover:bg-black")}
+          className={cn("rounded-full", !isPublished && "bg-[#111111] text-white hover:bg-black")}
           disabled={actionPending || loading}
           onClick={handlePublishToggle}
         >

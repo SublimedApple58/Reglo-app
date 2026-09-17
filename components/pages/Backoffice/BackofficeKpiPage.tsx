@@ -205,7 +205,7 @@ export function BackofficeKpiPage({
       </motion.header>
 
       {/* ── Filtro periodo (resta in vista mentre si scorre) ── */}
-      <div className="sticky top-16 z-20 -mx-4 mt-5 border-b border-[#eeeef2] bg-[#fbfbfc] px-4 py-3 shadow-[0_6px_16px_-14px_rgba(26,26,46,0.5)] lg:-mx-6 lg:px-6">
+      <div className="sticky top-16 z-20 -mx-4 mt-5 border-b border-[#eeeef2] bg-[#fbfbfc] px-4 py-3 shadow-[0_6px_16px_-14px_rgba(17, 17, 17,0.5)] lg:-mx-6 lg:px-6">
         <div className="flex flex-wrap items-center gap-3">
           <SegmentedControl
             value={showCustom ? "custom" : preset}
@@ -234,7 +234,7 @@ export function BackofficeKpiPage({
           )}
           {loading && (
             <span className="inline-flex items-center gap-2 text-[12.5px] font-medium text-[#9a9a9a]">
-              <span className="size-1.5 animate-pulse rounded-full bg-[#1a1a2e]" />
+              <span className="size-1.5 animate-pulse rounded-full bg-[#111111]" />
               aggiorno…
             </span>
           )}
@@ -424,12 +424,12 @@ export function BackofficeKpiPage({
               ].map((row) => (
                 <div key={row.label} className="flex items-start justify-between gap-4 py-3.5 first:pt-0 last:pb-0">
                   <div className="min-w-0">
-                    <dt className="text-[13.5px] font-semibold text-[#1a1a2e]">{row.label}</dt>
+                    <dt className="text-[13.5px] font-semibold text-[#111111]">{row.label}</dt>
                     <dd className="mt-0.5 text-[12px] font-medium text-[#9a9a9a]">{row.hint}</dd>
                   </div>
                   <span
                     className={cn(
-                      "shrink-0 text-[17px] font-semibold tabular-nums text-[#1a1a2e]",
+                      "shrink-0 text-[17px] font-semibold tabular-nums text-[#111111]",
                       row.alarm && "text-[#b42318]",
                     )}
                   >
@@ -471,7 +471,7 @@ export function BackofficeKpiPage({
                         <span className="truncate text-[13px] font-medium text-[#4a4a55]">
                           {source.label}
                         </span>
-                        <span className="shrink-0 text-[13px] font-semibold tabular-nums text-[#1a1a2e]">
+                        <span className="shrink-0 text-[13px] font-semibold tabular-nums text-[#111111]">
                           {formatInt(source.count)}
                           <span className="ml-1.5 text-[11.5px] font-medium text-[#9a9a9a]">
                             {formatPercent(share)}
@@ -480,7 +480,7 @@ export function BackofficeKpiPage({
                       </div>
                       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#f2f2f5]">
                         <motion.div
-                          className="h-full rounded-full bg-[#1a1a2e]"
+                          className="h-full rounded-full bg-[#111111]"
                           initial={reduce ? false : { width: 0 }}
                           animate={{ width: `${Math.max(share * 100, 2)}%` }}
                           transition={{ duration: 0.5, ease: "easeOut" }}
@@ -530,10 +530,10 @@ export function BackofficeKpiPage({
               ].map((row) => (
                 <div key={row.label} className="flex items-start justify-between gap-4 py-3.5 first:pt-0 last:pb-0">
                   <div>
-                    <dt className="text-[13.5px] font-semibold text-[#1a1a2e]">{row.label}</dt>
+                    <dt className="text-[13.5px] font-semibold text-[#111111]">{row.label}</dt>
                     <dd className="mt-0.5 text-[12px] font-medium text-[#9a9a9a]">{row.hint}</dd>
                   </div>
-                  <span className="shrink-0 text-[17px] font-semibold tabular-nums text-[#1a1a2e]">
+                  <span className="shrink-0 text-[17px] font-semibold tabular-nums text-[#111111]">
                     {row.value}
                   </span>
                 </div>
@@ -582,7 +582,7 @@ export function BackofficeKpiPage({
                     >
                       <td className="px-6 py-3">
                         <div className="flex items-center gap-2">
-                          <span className={cn("truncate text-[13.5px] font-semibold", idle ? "text-[#6a6a6a]" : "text-[#1a1a2e]")}>
+                          <span className={cn("truncate text-[13.5px] font-semibold", idle ? "text-[#6a6a6a]" : "text-[#111111]")}>
                             {company.name}
                           </span>
                           {company.kind !== "autoscuola" && (
@@ -601,7 +601,7 @@ export function BackofficeKpiPage({
                         <div className="flex items-center gap-2.5">
                           <div className="h-1.5 w-full max-w-[120px] overflow-hidden rounded-full bg-[#f2f2f5]">
                             <motion.div
-                              className={cn("h-full rounded-full", idle ? "bg-[#e4e4e9]" : "bg-[#1a1a2e]")}
+                              className={cn("h-full rounded-full", idle ? "bg-[#e4e4e9]" : "bg-[#111111]")}
                               initial={reduce ? false : { width: 0 }}
                               animate={{ width: `${(company.lessons / maxLessons) * 100}%` }}
                               transition={{ duration: 0.5, ease: "easeOut" }}
@@ -651,13 +651,13 @@ export function BackofficeKpiPage({
               {kpis.features.map((feature) => (
                 <li key={feature.key} className={cn(feature.companies === 0 && "opacity-55")}>
                   <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-[13px] font-semibold text-[#1a1a2e]">
+                    <span className="text-[13px] font-semibold text-[#111111]">
                       {feature.label}
                       <span className="ml-2 text-[12px] font-medium text-[#9a9a9a]">
                         {feature.description}
                       </span>
                     </span>
-                    <span className="shrink-0 text-[13px] font-semibold tabular-nums text-[#1a1a2e]">
+                    <span className="shrink-0 text-[13px] font-semibold tabular-nums text-[#111111]">
                       {feature.companies}
                       <span className="ml-1 text-[11.5px] font-medium text-[#9a9a9a]">
                         autoscuole · {formatInt(feature.events)} volte
@@ -666,7 +666,7 @@ export function BackofficeKpiPage({
                   </div>
                   <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#f2f2f5]">
                     <motion.div
-                      className="h-full rounded-full bg-[#1a1a2e]"
+                      className="h-full rounded-full bg-[#111111]"
                       initial={reduce ? false : { width: 0 }}
                       animate={{ width: `${(feature.companies / maxFeature) * 100}%` }}
                       transition={{ duration: 0.5, ease: "easeOut" }}
@@ -708,7 +708,7 @@ export function BackofficeKpiPage({
                           transition={{ duration: 0.5, ease: "easeOut" }}
                         />
                       </div>
-                      <span className="w-8 shrink-0 text-right text-[12.5px] font-semibold tabular-nums text-[#1a1a2e]">
+                      <span className="w-8 shrink-0 text-right text-[12.5px] font-semibold tabular-nums text-[#111111]">
                         {version.count}
                       </span>
                     </li>

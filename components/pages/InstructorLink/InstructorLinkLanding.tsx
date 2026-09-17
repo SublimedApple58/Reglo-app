@@ -83,7 +83,7 @@ export function InstructorLinkLanding({
           <div className="flex size-[104px] animate-[pop_0.5s_ease-out_both] items-center justify-center rounded-full bg-[#d9f2f4] text-[38px] font-extrabold tracking-[-0.5px] text-[#0e7490]">
             {initials}
           </div>
-          <div className="absolute -bottom-1 -right-1 flex size-[34px] items-center justify-center rounded-full border-[3px] border-white bg-[#1a1a2e]">
+          <div className="absolute -bottom-1 -right-1 flex size-[34px] items-center justify-center rounded-full border-[3px] border-white bg-[#111111]">
             {QR_BADGE}
           </div>
         </div>
@@ -104,7 +104,7 @@ export function InstructorLinkLanding({
           <a
             href={openUrl}
             data-testid="instructor-link-open-app"
-            className="flex h-[52px] items-center justify-center rounded-[16px] bg-[#1a1a2e] text-[16px] font-bold text-white transition-colors hover:bg-[#2d2d4a]"
+            className="flex h-[52px] items-center justify-center rounded-[16px] bg-[#111111] text-[16px] font-bold text-white transition-colors hover:bg-[#2b2b2b]"
           >
             Apri nell&apos;app Reglo
           </a>

@@ -16,56 +16,58 @@
 
 ---
 
-## 2. Palette Condivisa (Identica al Mobile)
+## 2. Palette — bianco/nero (2026-09)
 
-### Regola d'oro: **70 / 20 / 10**
+> **Attenzione:** questa sezione fino al 2026-09-17 descriveva ancora il rosa
+> `#EC4899` della prima versione, rimosso dal codice col redesign Airbnb di
+> luglio (che aveva introdotto il navy `#1a1a2e`). Ora l'accento è **nero
+> neutro**. Il mobile NON è allineato: vedi §10.
 
-- **70% neutri** — bianco, grigi, testo scuro
-- **20% rosa** — CTA, accenti interattivi, focus state
-- **10% giallo** — highlight informativi, selezioni, stati attivi
+### Regola
 
-### CSS Variables (definite in `assets/styles/globals.css` → `:root`)
+Superfici neutre (bianco → grigi), **accento nero**, colore riservato a ciò che
+porta informazione: verde/rosso/giallo per gli stati, e le palette **categoriche**
+(colonne istruttore in agenda, blocchi guida per durata e per patente, avatar).
+Quelle non vanno mai neutralizzate: il colore lì *è* il dato.
+
+### CSS Variables (`assets/styles/globals.css` → `:root`)
 
 **Brand:**
 | Variable | Hex | Uso |
 |----------|-----|-----|
-| `--primary` | `#EC4899` | CTA, sidebar active, focus ring, chart-1 |
-| `--accent` | `#FACC15` | Highlight, badge warning, chip attivi |
-| `--destructive` | `#EF4444` | Errori, azioni distruttive |
+| `--primary` | `#111111` | CTA, tab attivo, FAB, focus ring, chart-1 |
+| `--accent` | `#f7f7f7` | Superficie tenue, hover di riga |
+| `--destructive` | `#c13515` | Errori, azioni distruttive |
 | `--positive` | `#22C55E` | Successo, conferme |
+
+Nero pieno `#000000` no: `#111111` lascia spazio a un hover **più chiaro**
+(`#2b2b2b`) senza sembrare spento, e resta distinto dal testo `#222222`.
 
 **Superfici:**
 | Variable | Hex |
 |----------|-----|
 | `--background` | `#FFFFFF` |
-| `--foreground` | `#1F2937` |
+| `--foreground` | `#222222` |
 | `--card` | `#FFFFFF` |
-| `--secondary` | `#F8FAFC` |
-| `--muted` | `#F8FAFC` |
-| `--muted-foreground` | `#6B7280` |
-| `--border` | `#E5E7EB` |
-| `--input` | `#E2E8F0` |
-| `--ring` | `#EC4899` |
+| `--secondary` | `#f7f7f7` |
+| `--muted` | `#f7f7f7` |
+| `--muted-foreground` | `#6a6a6a` |
+| `--border` | `#dddddd` |
+| `--input` | `#dddddd` |
+| `--ring` | `#222222` |
 
-**Scale Rosa (Pink):**
-| Variable | Hex | Tailwind class |
-|----------|-----|---------------|
-| `--pink-50` | `#FDF2F8` | `bg-pink-50` |
-| `--pink-100` | `#FCE7F3` | `bg-pink-100` |
-| `--pink-200` | `#FBCFE8` | `bg-pink-200` |
-| `--pink-500` | `#EC4899` | `bg-pink-500` |
-| `--pink-600` | `#DB2777` | `bg-pink-600` |
-| `--pink-700` | `#BE185D` | `bg-pink-700` |
+**Scala accento** (nome `navy-*` storico, valori neutri — rinominarla in `ink-*`
+è un refactor a parte):
+| Variable | Hex | Tailwind class | Uso |
+|----------|-----|---------------|-----|
+| `--navy-900` | `#111111` | `bg-navy-900` | CTA, testo enfatico |
+| `--navy-800` | `#2b2b2b` | `bg-navy-800` | Hover della CTA |
+| `--navy-700` | `#333333` | `bg-navy-700` | Toni medi |
+| `--navy-100` | `#e3e3e3` | `bg-navy-100` | Bordi tenui |
+| `--navy-50` | `#f0f0f0` | `bg-navy-50` | Superfici chiare, chip |
 
-**Scale Giallo (Yellow):**
-| Variable | Hex | Tailwind class |
-|----------|-----|---------------|
-| `--yellow-50` | `#FEFCE8` | `bg-yellow-50` |
-| `--yellow-100` | `#FEF9C3` | `bg-yellow-100` |
-| `--yellow-200` | `#FEF08A` | `bg-yellow-200` |
-| `--yellow-400` | `#FACC15` | `bg-yellow-400` |
-| `--yellow-600` | `#CA8A04` | `bg-yellow-600` |
-| `--yellow-700` | `#A16207` | `bg-yellow-700` |
+**Giallo** (`--yellow-*`) resta per gli highlight informativi. La scala
+`--pink-*` è ancora definita ma **non più usata dal codice**.
 
 ---
 
@@ -118,8 +120,8 @@ Definite in `tailwind.config.ts` e come CSS variables:
 |-------|--------|---------------|-----|
 | `shadow-card` | `0 2px 8px rgba(0,0,0,0.08)` | `shadow-card` | Card default |
 | `shadow-card-primary` | `0 4px 12px rgba(0,0,0,0.12)` | `shadow-card-primary` | Card primary |
-| `shadow-cta` | `0 6px 12px rgba(236,72,153,0.3)` | `shadow-cta` | CTA rosa |
-| `shadow-accent` | `0 10px 20px rgba(180,83,9,0.35)` | `shadow-accent` | Card accent gialle |
+| `shadow-cta` | `0 6px 12px rgba(17,17,17,0.18)` | `shadow-cta` | CTA nera |
+| `shadow-accent` | `0 10px 20px rgba(17,17,17,0.18)` | `shadow-accent` | Card in evidenza |
 | `shadow-dropdown` | `0 8px 16px rgba(0,0,0,0.1)` | `shadow-dropdown` | Menu dropdown |
 | `shadow-drawer` | `0 -6px 18px rgba(0,0,0,0.12)` | `shadow-drawer` | Sheet/drawer |
 | `shadow-toast-*` | Vari per tone | `shadow-toast-success/danger/info` | Toast feedback |
@@ -216,24 +218,25 @@ CSS variables per animazioni in `globals.css`:
 
 ## 10. Mapping Mobile ↔ Web
 
-I token sono allineati tra le due piattaforme:
+> **I token NON sono più allineati.** Il passaggio a bianco/nero del 2026-09-17
+> ha riguardato **solo il web**, su richiesta esplicita. Il mobile è rimasto
+> alla palette precedente. Quando il mobile verrà allineato, `colors.primary`
+> in `reglo-mobile/src/theme/colors.ts` va portato a `#111111` e questa
+> tabella riallineata.
 
-| Mobile (`src/theme/`) | Web (CSS variable) | Valore |
-|-----------------------|-------------------|--------|
-| `colors.primary` | `--primary` | `#EC4899` |
-| `colors.accent` | `--accent` | `#FACC15` |
-| `colors.destructive` | `--destructive` | `#EF4444` |
+| Mobile (`src/theme/`) | Web (CSS variable) | Valore web |
+|-----------------------|-------------------|-----------|
+| `colors.primary` | `--primary` | `#111111` (mobile: da allineare) |
+| `colors.destructive` | `--destructive` | `#c13515` |
 | `colors.positive` | `--positive` | `#22C55E` |
-| `colors.textPrimary` | `--foreground` | `#1F2937` |
-| `colors.textSecondary` | `--muted-foreground` | `#6B7280` |
-| `colors.border` | `--border` | `#E5E7EB` |
+| `colors.textPrimary` | `--foreground` | `#222222` |
+| `colors.textSecondary` | `--muted-foreground` | `#6a6a6a` |
+| `colors.border` | `--border` | `#dddddd` |
 | `colors.surface` | `--card` | `#FFFFFF` |
 | `colors.background` | `--background` | `#FFFFFF` |
 | `typography.title` (28/700) | `.ds-title` | 28px/700 |
 | `typography.subtitle` (18/600) | `.ds-subtitle` | 18px/600 |
 | `typography.body` (15/500) | `.ds-body` | 15px/500 |
 | `typography.caption` (12/600) | `.ds-caption` | 12px/600 |
-| `radii.sm` (20) | `--radius` | 20px |
+| `radii.sm` (20) | `--radius` | 14px (divergente) |
 | `radii.lg` (35) | `--radius-card-primary` | 35px |
-
-Se cambi un colore brand o un token, **aggiorna entrambe le piattaforme**.

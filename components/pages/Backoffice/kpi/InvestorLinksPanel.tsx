@@ -105,7 +105,7 @@ export function InvestorLinksPanel() {
           type="button"
           onClick={() => void create()}
           disabled={!label.trim() || creating}
-          className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-[#1a1a2e] px-3.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-default disabled:opacity-40"
+          className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-[#111111] px-3.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-default disabled:opacity-40"
         >
           {creating ? <LoadingDots className="text-white" /> : <Plus className="size-4" strokeWidth={2.5} />}
           Crea link
@@ -144,7 +144,7 @@ export function InvestorLinksPanel() {
                       <span
                         className={cn(
                           "truncate text-[13.5px] font-semibold",
-                          dead ? "text-[#9a9a9a] line-through" : "text-[#1a1a2e]",
+                          dead ? "text-[#9a9a9a] line-through" : "text-[#111111]",
                         )}
                       >
                         {link.label}

@@ -69,15 +69,15 @@
   --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
   --shadow-card-primary: 0 4px 12px rgba(0, 0, 0, 0.08);
   --shadow-panel: rgba(0, 0, 0, 0.02) 0 0 0 1px, rgba(0, 0, 0, 0.04) 0 2px 6px 0, rgba(0, 0, 0, 0.1) 0 4px 8px 0;
-  --shadow-cta: 0 6px 12px rgba(26, 26, 46, 0.18);
-  --shadow-accent: 0 10px 20px rgba(26, 26, 46, 0.18);
+  --shadow-cta: 0 6px 12px rgba(17, 17, 17, 0.18);
+  --shadow-accent: 0 10px 20px rgba(17, 17, 17, 0.18);
   --shadow-dropdown: rgba(0, 0, 0, 0.14) 0 8px 32px;
   --shadow-drawer: 0 -6px 18px rgba(0, 0, 0, 0.12);
   --shadow-toast-success: 0 8px 16px rgba(22, 163, 74, 0.3);
   --shadow-toast-danger: 0 8px 16px rgba(220, 38, 38, 0.3);
-  --shadow-toast-info: 0 8px 16px rgba(15, 23, 42, 0.3);
+  --shadow-toast-info: 0 8px 16px rgba(17, 17, 17, 0.3);
 
-  /* Scala navy (accento redesign) */
+  /* Scala dell'accento (valori neutri, nome storico — vedi :root) */
   --color-navy-50: var(--navy-50);
   --color-navy-100: var(--navy-100);
   --color-navy-700: var(--navy-700);
@@ -89,8 +89,10 @@
   /* Radii — 14px base (container Airbnb; sm=10 input, lg=14 card, xl=18) */
   --radius: 0.875rem;
 
-  /* Brand — redesign Airbnb 2026-07: accento navy, superfici neutre */
-  --primary: #1a1a2e;
+  /* Brand — palette bianco/nero 2026-09: l'accento era il navy #1a1a2e,
+     ora è il nero neutro #111111. Nero pieno no: #111111 lascia spazio a
+     uno stato hover più chiaro (#2b2b2b) senza sembrare spento. */
+  --primary: #111111;
   --primary-foreground: #FFFFFF;
   --accent: #f7f7f7;
   --accent-foreground: #222222;
@@ -116,29 +118,30 @@
   --input: #dddddd;
   --ring: #222222;
 
-  /* Charts — neutri + navy */
-  --chart-1: #1a1a2e;
+  /* Charts — neutri + nero */
+  --chart-1: #111111;
   --chart-2: #6a6a6a;
   --chart-3: #22C55E;
-  --chart-4: #eeeef4;
+  --chart-4: #f0f0f0;
   --chart-5: #f2f2f2;
 
   /* Sidebar */
   --sidebar: #FFFFFF;
   --sidebar-foreground: #222222;
-  --sidebar-primary: #1a1a2e;
+  --sidebar-primary: #111111;
   --sidebar-primary-foreground: #FFFFFF;
   --sidebar-accent: #f7f7f7;
   --sidebar-accent-foreground: #222222;
   --sidebar-border: #dddddd;
   --sidebar-ring: #222222;
 
-  /* Scala navy (accento redesign) */
-  --navy-900: #1a1a2e;
-  --navy-800: #2d2d4a;
-  --navy-700: #33334d;
-  --navy-100: #e2e2e8;
-  --navy-50: #eeeef4;
+  /* Scala dell'accento. Il nome `navy` è storico: i valori sono neutri dal
+     passaggio a bianco/nero. Rinominarla in `ink` è un refactor a parte. */
+  --navy-900: #111111;
+  --navy-800: #2b2b2b;
+  --navy-700: #333333;
+  --navy-100: #e3e3e3;
+  --navy-50: #f0f0f0;
 
   /* Grigi Airbnb diretti */
   --gray-hairline: #dddddd;
@@ -214,8 +217,8 @@
     -webkit-font-smoothing: antialiased;
   }
   ::selection {
-    background: #cfe0fb;
-    color: #1a2b45;
+    background: #e6e6e6;
+    color: #111111;
   }
 }
 

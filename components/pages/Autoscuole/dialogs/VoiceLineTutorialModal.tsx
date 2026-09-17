@@ -375,7 +375,7 @@ export function VoiceLineTutorialModal({
                     >
                       <X className="size-3.5 text-[#6a6a6a]" strokeWidth={1.8} />
                     </button>
-                    <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-[#eef0f6]">
+                    <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-[#f0f0f0]">
                       <HelpCircle className="size-7 text-navy-900" strokeWidth={1.6} />
                     </div>
                     <div className="mb-1.5 text-xl font-bold text-[#222222]">Hai problemi a collegarla?</div>

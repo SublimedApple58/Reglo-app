@@ -99,7 +99,7 @@ export function ResourceCard({
  */
 export function SlotPill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-full border border-[#cfe0fb] bg-[#eaf2fd] px-2.5 py-1 text-xs font-semibold text-[#1a2b45]">
+    <span className="rounded-full border border-[#e6e6e6] bg-[#f0f0f0] px-2.5 py-1 text-xs font-semibold text-[#111111]">
       {children}
     </span>
   );

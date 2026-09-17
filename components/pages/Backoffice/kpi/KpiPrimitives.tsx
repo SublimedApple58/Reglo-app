@@ -101,7 +101,7 @@ export function DeltaPill({
 export function Sparkline({
   values,
   className,
-  stroke = "#1a1a2e",
+  stroke = "#111111",
 }: {
   values: number[];
   className?: string;
@@ -197,7 +197,7 @@ export function KpiCard({
       initial={reduce ? false : { opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.32, delay: Math.min(index * 0.045, 0.3), ease: "easeOut" }}
-      className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-[#ececec] bg-white p-5 transition-shadow duration-200 hover:shadow-[0_10px_30px_-18px_rgba(26,26,46,0.35)]"
+      className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-[#ececec] bg-white p-5 transition-shadow duration-200 hover:shadow-[0_10px_30px_-18px_rgba(17, 17, 17,0.35)]"
     >
       <div>
         <p className="text-[11px] font-semibold uppercase tracking-[0.09em] text-[#9a9a9a]">
@@ -207,7 +207,7 @@ export function KpiCard({
           {loading ? (
             <Skeleton className="h-9 w-24" />
           ) : (
-            <span className="text-[30px] font-semibold leading-none tracking-[-0.02em] text-[#1a1a2e] tabular-nums">
+            <span className="text-[30px] font-semibold leading-none tracking-[-0.02em] text-[#111111] tabular-nums">
               {prefix}
               {formatted}
               {suffix && (
@@ -267,7 +267,7 @@ export function KpiSection({
     >
       <header className="flex flex-wrap items-start justify-between gap-3 px-6 pt-5">
         <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold text-[#1a1a2e]">{title}</h2>
+          <h2 className="text-[15px] font-semibold text-[#111111]">{title}</h2>
           {subtitle && (
             <p className="mt-1 max-w-[62ch] text-[12.5px] font-medium leading-normal text-[#9a9a9a]">
               {subtitle}
@@ -295,7 +295,7 @@ export function LegendDot({
     <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#6a6a6a]">
       <span className="size-2 rounded-full" style={{ backgroundColor: color }} />
       {label}
-      {value && <span className="font-semibold tabular-nums text-[#1a1a2e]">{value}</span>}
+      {value && <span className="font-semibold tabular-nums text-[#111111]">{value}</span>}
     </span>
   );
 }

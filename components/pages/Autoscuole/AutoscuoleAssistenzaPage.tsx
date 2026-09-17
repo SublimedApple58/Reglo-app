@@ -100,7 +100,7 @@ function FaqPathCard({ path }: { path: Faq["path"] }) {
   return (
     <div className="mt-2 rounded-[14px] border border-[#ececec] bg-white px-[17px] py-[15px] shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <div className="mb-[13px] flex items-center gap-[7px]">
-        <span className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#1a1a2e]">
+        <span className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#111111]">
           Percorso
         </span>
         <span className="text-[13px] font-bold text-foreground">{path.title}</span>
@@ -112,8 +112,8 @@ function FaqPathCard({ path }: { path: Faq["path"] }) {
               <ChevronRight className="mt-[13px] size-[13px] shrink-0 text-[#d4d4d4]" strokeWidth={2.4} />
             )}
             <div className="flex w-[66px] flex-col items-center gap-[7px]">
-              <div className="flex size-[38px] shrink-0 items-center justify-center rounded-[11px] bg-[#eeeef4]">
-                <step.icon className="size-[18px] text-[#1a1a2e]" strokeWidth={1.8} />
+              <div className="flex size-[38px] shrink-0 items-center justify-center rounded-[11px] bg-[#f0f0f0]">
+                <step.icon className="size-[18px] text-[#111111]" strokeWidth={1.8} />
               </div>
               <div className="text-center text-[11px] font-semibold leading-[1.25] text-[#444444]">
                 {step.label}

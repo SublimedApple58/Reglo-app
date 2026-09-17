@@ -877,7 +877,7 @@ export function GroupLessonManageDialog({
                             type="button"
                             disabled={busy}
                             onClick={() => handleSaveNote(p.appointmentId)}
-                            className="flex min-w-[96px] cursor-pointer items-center justify-center rounded-full bg-[#1a1a2e] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#2d2d4a] disabled:opacity-60"
+                            className="flex min-w-[96px] cursor-pointer items-center justify-center rounded-full bg-[#111111] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#2b2b2b] disabled:opacity-60"
                           >
                             {busy ? <LoadingDots className="scale-[0.6]" /> : "Salva nota"}
                           </button>
@@ -940,7 +940,7 @@ export function GroupLessonManageDialog({
                     type="button"
                     disabled={busy}
                     onClick={handleInvite}
-                    className="flex min-w-[84px] shrink-0 cursor-pointer select-none items-center justify-center rounded-full bg-[#1a1a2e] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#2d2d4a] disabled:opacity-60"
+                    className="flex min-w-[84px] shrink-0 cursor-pointer select-none items-center justify-center rounded-full bg-[#111111] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#2b2b2b] disabled:opacity-60"
                   >
                     {inviting ? <LoadingDots className="scale-[0.6]" /> : "Invita"}
                   </button>

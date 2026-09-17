@@ -351,7 +351,7 @@ export function ConsorzioStudentDrawer({
                     className={cn(
                       "select-none rounded-full px-[11px] py-1.5 text-[12.5px] font-semibold transition-colors",
                       assigned
-                        ? "cursor-default bg-[#1a1a2e] text-white opacity-55"
+                        ? "cursor-default bg-[#111111] text-white opacity-55"
                         : "cursor-pointer bg-[#f2f2f2] text-[#444444] hover:bg-[#e9e9e9] disabled:opacity-50",
                     )}
                   >

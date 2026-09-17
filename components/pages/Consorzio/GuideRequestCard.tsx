@@ -158,7 +158,7 @@ export function GuideRequestCard({
             type="button"
             disabled={responding || !instructorId}
             onClick={onAccept}
-            className="mt-5 flex w-full cursor-pointer items-center justify-center rounded-[32px] bg-[#1a1a2e] px-[22px] py-3 text-[14.5px] font-bold text-white transition-colors hover:bg-[#12122a] disabled:opacity-40"
+            className="mt-5 flex w-full cursor-pointer items-center justify-center rounded-[32px] bg-[#111111] px-[22px] py-3 text-[14.5px] font-bold text-white transition-colors hover:bg-[#000000] disabled:opacity-40"
           >
             {responding ? <LoadingDots className="min-h-[18px]" /> : "Accetta"}
           </button>

@@ -135,7 +135,7 @@ function RolePill({ role }: { role: AutoscuolaRole }) {
         "whitespace-nowrap rounded-[20px] border px-2.5 py-[3px] text-xs font-semibold",
         isStudent
           ? "border-[#e5e5e5] bg-[#f7f7f7] text-[#6a6a6a]"
-          : "border-[#cfcfdc] bg-[#eef0f6] text-navy-900",
+          : "border-[#d4d4d4] bg-[#f0f0f0] text-navy-900",
       )}
     >
       {ROLE_LABELS[role]}

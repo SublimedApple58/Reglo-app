@@ -347,7 +347,7 @@ export function LocationFormDialog({
             className={cn(
               "flex min-w-[128px] select-none items-center justify-center gap-[7px] rounded-[50px] px-[26px] py-3 text-sm font-semibold text-white transition-colors",
               canSubmit
-                ? "cursor-pointer bg-[#1a1a2e] hover:bg-[#2d2d4a]"
+                ? "cursor-pointer bg-[#111111] hover:bg-[#2b2b2b]"
                 : "cursor-not-allowed bg-[#c4c4d4]",
             )}
           >

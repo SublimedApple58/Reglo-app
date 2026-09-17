@@ -374,7 +374,7 @@ export function ConsorzioStudentCreateDialog({
                           className={cn(
                             "cursor-pointer select-none rounded-full px-[11px] py-1.5 text-[12.5px] font-semibold transition-colors",
                             active
-                              ? "bg-[#1a1a2e] text-white hover:bg-[#2d2d4a]"
+                              ? "bg-[#111111] text-white hover:bg-[#2b2b2b]"
                               : "bg-[#f2f2f2] text-[#444444] hover:bg-[#e9e9e9]",
                           )}
                         >
@@ -449,7 +449,7 @@ export function ConsorzioStudentCreateDialog({
               className={cn(
                 "flex min-w-[148px] select-none items-center justify-center gap-[7px] rounded-[50px] px-[26px] py-3 text-sm font-semibold text-white transition-colors",
                 canSubmit
-                  ? "cursor-pointer bg-[#1a1a2e] hover:bg-[#2d2d4a]"
+                  ? "cursor-pointer bg-[#111111] hover:bg-[#2b2b2b]"
                   : "cursor-not-allowed bg-[#c4c4d4]",
               )}
             >
