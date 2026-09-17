@@ -34,7 +34,7 @@ export function BrandCarousel() {
         {RING.map((tile, i) => (
           <div
             key={i}
-            className="absolute inset-0 flex flex-col items-center justify-center gap-4 rounded-[22px] border border-white/10 bg-[#23233b]"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-4 rounded-[22px] border border-white/10 bg-[#232323]"
             style={{
               transform: `rotateY(${i * STEP_DEG}deg) translateZ(${RADIUS_PX}px)`,
               backfaceVisibility: "hidden",
