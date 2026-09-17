@@ -46,6 +46,7 @@ Il pannello ha tre placeholder, in ordine di precedenza:
 | Server action | `lib/actions/autoscuole-quiz.actions.ts` → `getQuizStudentDetailForStaff(studentId)` |
 | Pannello + tipo `StudentQuizDetail` | `components/pages/Autoscuole/StudentQuizPanel.tsx` |
 | Drawer allievo (tab + fetch pigra) | `components/pages/Autoscuole/AutoscuoleStudentsPage.tsx` (`DrawerTab`, `drawerTabs`, `loadQuizDetail`) |
+| Icone argomenti (Fluent 3D, stesse del mobile) | `lib/autoscuole/quiz-chapter-icons.ts` + `public/images/3d/chapters/chapter-NN.png` |
 
 ## `getQuizStudentDetailForStaff`
 
@@ -84,6 +85,25 @@ va cambiata in entrambe.
 
 > **NB**: `autoscuole-quiz.actions.ts` è un file `"use server"` → niente
 > `export type`. Il tipo `StudentQuizDetail` vive in `StudentQuizPanel.tsx`.
+
+## Icone degli argomenti
+
+Ogni argomento mostra la **stessa icona che l'allievo vede in app mobile**:
+Microsoft Fluent Emoji 3D, PNG 256x256, copiate da
+`reglo-mobile/assets/icons/chapters/chapter-NN.png` a
+`public/images/3d/chapters/`. Il mapping è per `chapterNumber` (1-25), la stessa
+chiave di `CHAPTER_ICONS` in `reglo-mobile/src/screens/TopicListScreen.tsx`.
+
+Le icone compaiono in tre punti: righe di "Situazione per argomento" (36px),
+chip "Argomenti da rivedere" (20px) e riga capitolo sotto le domande più
+sbagliate (16px).
+
+Fuori dai 25 capitoli ministeriali (per esempio i capitoli demo di staging)
+`quizChapterIconSrc` torna `null` e si ricade sul numero dentro un cerchio
+grigio — stesso fallback del mobile.
+
+**Se su mobile cambia un'icona di capitolo, va ricopiata anche qui**: i due set
+sono duplicati, non condivisi.
 
 ## Performance
 

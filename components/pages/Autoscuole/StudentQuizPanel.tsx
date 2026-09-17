@@ -5,6 +5,7 @@ import { BookOpen, GraduationCap, Lock, Target, TrendingUp } from "lucide-react"
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { quizChapterIconSrc } from "@/lib/autoscuole/quiz-chapter-icons";
 import { Pill, sectionLabelClass } from "./student-detail-ui";
 
 /**
@@ -111,6 +112,43 @@ function ProgressBar({ value, tone }: { value: number; tone: string }) {
         style={{ width: `${Math.max(0, Math.min(100, value))}%`, background: tone }}
       />
     </div>
+  );
+}
+
+/**
+ * Icona dell'argomento: stessa Fluent 3D usata dall'app mobile per lo stesso
+ * capitolo. Fuori dai 25 capitoli ministeriali (capitoli demo) si ricade sul
+ * numero in un cerchio, come fa `TopicListScreen` su mobile.
+ */
+function ChapterIcon({
+  chapterNumber,
+  size,
+}: {
+  chapterNumber: number;
+  size: number;
+}) {
+  const src = quizChapterIconSrc(chapterNumber);
+  if (!src) {
+    return (
+      <span
+        className="flex shrink-0 items-center justify-center rounded-full bg-[#f2f2f2] font-bold text-[#6a6a6a]"
+        style={{ width: size, height: size, fontSize: Math.round(size * 0.4) }}
+      >
+        {chapterNumber}
+      </span>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      width={size}
+      height={size}
+      loading="lazy"
+      className="shrink-0"
+      style={{ width: size, height: size }}
+    />
   );
 }
 
@@ -304,8 +342,9 @@ export function StudentQuizPanel({
             {detail.weakChapters.map((chapter) => (
               <span
                 key={chapter.chapterNumber}
-                className="inline-flex items-center gap-1.5 rounded-full border border-[#fad4cc] bg-[#fff4f2] px-3 py-1 text-xs font-medium text-[#c13515]"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#fad4cc] bg-[#fff4f2] py-1 pl-1.5 pr-3 text-xs font-medium text-[#c13515]"
               >
+                <ChapterIcon chapterNumber={chapter.chapterNumber} size={20} />
                 {chapter.description}
                 <span className="font-semibold">{chapter.correctRate}%</span>
               </span>
@@ -326,24 +365,26 @@ export function StudentQuizPanel({
             {attemptedChapters.map((chapter) => {
               const rate = chapter.correctRate ?? 0;
               return (
-                <div key={chapter.id}>
-                  <div className="mb-1.5 flex items-baseline justify-between gap-3">
-                    <p className="truncate text-[13px] font-medium text-foreground">
-                      <span className="text-[#929292]">{chapter.chapterNumber}.</span>{" "}
-                      {chapter.description}
+                <div key={chapter.id} className="flex items-center gap-3">
+                  <ChapterIcon chapterNumber={chapter.chapterNumber} size={36} />
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                      <p className="truncate text-[13px] font-medium text-foreground">
+                        {chapter.description}
+                      </p>
+                      <span
+                        className="shrink-0 text-[12px] font-semibold"
+                        style={{ color: rateTone(rate) }}
+                      >
+                        {rate}%
+                      </span>
+                    </div>
+                    <ProgressBar value={rate} tone={rateTone(rate)} />
+                    <p className="mt-1 text-[11px] font-medium text-[#929292]">
+                      {chapter.correctCount}/{chapter.attemptedCount} corrette ·{" "}
+                      {chapter.attemptedCount}/{chapter.totalQuestions} domande viste
                     </p>
-                    <span
-                      className="shrink-0 text-[12px] font-semibold"
-                      style={{ color: rateTone(rate) }}
-                    >
-                      {rate}%
-                    </span>
                   </div>
-                  <ProgressBar value={rate} tone={rateTone(rate)} />
-                  <p className="mt-1 text-[11px] font-medium text-[#929292]">
-                    {chapter.correctCount}/{chapter.attemptedCount} corrette ·{" "}
-                    {chapter.attemptedCount}/{chapter.totalQuestions} domande viste
-                  </p>
                 </div>
               );
             })}
@@ -368,7 +409,8 @@ export function StudentQuizPanel({
                   <Pill tone={question.correctAnswer ? "green" : "gray"}>
                     Risposta: {question.correctAnswer ? "Vero" : "Falso"}
                   </Pill>
-                  <span className="text-[11px] font-medium text-[#929292]">
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#929292]">
+                    <ChapterIcon chapterNumber={question.chapterNumber} size={16} />
                     {question.chapterDescription}
                   </span>
                 </div>
