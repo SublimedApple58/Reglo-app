@@ -3427,7 +3427,7 @@ export function AutoscuoleStudentsPage({
                 <StudentQuizPanel
                   loading={quizDetailLoading}
                   detail={quizDetail}
-                  theoryPhaseEnabled={theoryPhaseEnabled}
+                  theoryPhaseEnabled={quizCtx === null ? null : theoryPhaseEnabled}
                 />
               )}
               {drawerTab === "lessons" && renderPanelLessons()}

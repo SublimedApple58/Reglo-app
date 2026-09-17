@@ -93,9 +93,15 @@ const formatDate = (iso: string | null) =>
       })
     : "—";
 
-/** Verde ≥ 80, ambra ≥ 60, rosso sotto. Stessa soglia usata per i capitoli deboli. */
+/** Accuratezza per argomento: verde ≥ 80, ambra ≥ 60, rosso sotto (70 = soglia
+ *  "argomento debole", quindi sotto i 70 si vede già rosso o ambra). */
 const rateTone = (rate: number) =>
   rate >= 80 ? "#1a7f50" : rate >= 60 ? "#b45309" : "#c13515";
+
+/** Prontezza esame: stesse soglie della pill (≥70 pronto, ≥40 in preparazione),
+ *  così barra ed etichetta non si contraddicono. */
+const readinessTone = (score: number) =>
+  score >= 70 ? "#1a7f50" : score >= 40 ? "#b45309" : "#c13515";
 
 function ProgressBar({ value, tone }: { value: number; tone: string }) {
   return (
@@ -160,10 +166,13 @@ export function StudentQuizPanel({
 }: {
   loading: boolean;
   detail: StudentQuizDetail | null;
-  /** `'TEORIA' ∈ limits.phasesEnabled` dell'autoscuola. */
-  theoryPhaseEnabled: boolean;
+  /** `'TEORIA' ∈ limits.phasesEnabled` dell'autoscuola. `null` = contesto
+   *  licenze non ancora caricato: si mostra lo skeleton, non il placeholder,
+   *  altrimenti un'autoscuola CON la teoria attiva vedrebbe un lampo di
+   *  "fase teoria non attiva". */
+  theoryPhaseEnabled: boolean | null;
 }) {
-  if (loading) {
+  if (loading || theoryPhaseEnabled === null) {
     return (
       <div className="space-y-3">
         <Skeleton className="h-24 w-full rounded-2xl" />
@@ -174,7 +183,7 @@ export function StudentQuizPanel({
   }
 
   // 1. Autoscuola senza fase teoria: il quiz non fa parte del suo percorso.
-  if (!theoryPhaseEnabled) {
+  if (theoryPhaseEnabled === false) {
     return (
       <PlaceholderCard
         icon={<Lock className="size-5 text-[#929292]" strokeWidth={1.7} />}
@@ -241,7 +250,10 @@ export function StudentQuizPanel({
               <Pill tone="red">Indietro</Pill>
             )}
           </div>
-          <ProgressBar value={detail.readinessScore} tone={rateTone(detail.readinessScore)} />
+          <ProgressBar
+            value={detail.readinessScore}
+            tone={readinessTone(detail.readinessScore)}
+          />
         </div>
       </section>
 
