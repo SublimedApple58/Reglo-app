@@ -273,6 +273,14 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Communications**: invia il codice OTP via `sendDynamicEmail` (Resend) dentro `after()`.
 - → **Mobile**: `PasswordResetScreen` consuma le 3 route; auto-login via `SessionContext.applyAuthPayload`.
 
+### Login web (`/[locale]/sign-in`)
+- → **Auth & RBAC**: `signInWithCredentials` + `auth()`; il redesign 2026-09-17 ha cambiato SOLO la presentazione — sessione, `activeCompanyId` e redirect a `/select-company` invariati.
+- → **Sign-up**: la pagina è uscita da `(auth)` ed è in `(signin)` (URL invariato), così `/sign-up` tiene il suo `(auth)/layout.tsx` + `BrandCarousel`. Chi modifica `(auth)/layout.tsx` NON tocca più il login.
+- → **E2E (`tests/e2e/login-stato-client.spec.ts`)**: il test guida questo form. L'aria-label dell'occhio password non deve contenere "password", altrimenti `getByLabel("Password")` matcha 2 elementi (strict mode violation).
+- → **Sito marketing (`reglo-landing`)**: dipendenza bidirezionale. Il sito punta a `https://app.reglo.it/sign-in` (`src/site/routes.ts`, `/accedi` redirige); la pagina rimanda a `reglo.it` e `reglo.it/assistenza` via `marketing-links.ts` (`NEXT_PUBLIC_MARKETING_URL`). Testi recensioni e foto sono DUPLICATI dal sito, non importati: vanno riallineati a mano.
+- → **Password Reset (mobile)**: "Recupera la password" è oggi un link all'assistenza — sul web il flusso NON esiste, solo su mobile. Se si costruisce il reset web, riusare `lib/auth/password-reset.ts` e cambiare `marketing-links.ts`.
+- → **Design System**: usa valori del design marketing (radius 12, input più alti), non i token `PROTO_*`. Eccezione voluta e limitata a questa pagina.
+
 ### Login as admin (impersonazione autoscuola)
 - → **Auth & Session**: nuovo provider NextAuth `impersonation` in `auth.ts` (consuma un grant firmato HMAC, `lib/impersonation-grant.ts`); i callback `jwt`/`session` portano il claim `impersonation` (solo nel cookie dell'operatore Reglo).
 - → **Company Context**: `getActiveCompanyContext` onora `session.impersonation.companyId` con priorità e **non** persiste `activeCompanyId` in impersonazione (minimo impatto sull'owner reale).
