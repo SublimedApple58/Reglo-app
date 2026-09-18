@@ -7,6 +7,7 @@ When modifying a feature, read its connected features to verify nothing breaks.
 Each entry: **Feature** → list of features it connects to, with reason.
 
 ### Appointments
+- → **Pausa tra le guide (REG-484)**: ogni guida prenotata crea subito dopo di sé un `AutoscuolaInstructorBlock` `reason="lesson_buffer"` sull'istruttore (`createLessonBufferBlock`, chiamato da `createAutoscuolaAppointment`, `createAutoscuolaAppointmentBatch`, `createBookingRequest`, `respondWaitlistOffer`). **Il blocco non segue la guida**: annullo/spostamento/rimozione lo lasciano orfano, va tolto a mano. Vedi `features/lesson-buffer.md`
 - → **Payments**: cancel refunds credits (`refundLessonCreditIfEligible`; l'annullo web `annulFutureAppointment` rende il credito via `adjustStudentLessonCredits` o azzera l'importo `waived`), confirm consumes credits, settlement charges Stripe, `coverAppointmentWithLessonCredit` applica 1 credito a una guida da pagare
 - → **Repositioning (retired)**: cancel now cancels only — no reposition/proposal (`queueOperationalRepositionForAppointment` is cancel-only behind `REPOSITIONING_ENABLED=false`)
 - → **Notifications**: push on create/cancel/reschedule/propose (l'annullo web via `annulFutureAppointment` notifica con reason `owner_delete`)
@@ -360,3 +361,9 @@ autoscuole-reminders.ts → communications.ts →
   processCaseDeadlines (pink sheet, medical expiry alerts)
   processPendingRepositions → repositioning.ts → slot-matcher.ts
 ```
+
+### Pausa tra le guide (REG-484)
+- → **Appointments**: nasce a ogni creazione di guida (4 flussi), mai su esami/guide di gruppo
+- → **Availability / Booking Engine**: nessuna modifica ai motori — la pausa è un normale blocco istruttore, quindi lista slot, mappa giorni, slot-matcher, waitlist e guard di creazione la vedono già
+- → **Instructor Absences**: stesso modello `AutoscuolaInstructorBlock`, `reason` diverso (`lesson_buffer` vs `sick_leave`/`ferie`/`theory_lesson`)
+- → **Cache**: il setting vive in `CompanyService.limits`, il salvataggio invalida AGENDA + SETTINGS

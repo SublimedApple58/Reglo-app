@@ -17,6 +17,8 @@ export async function POST(request: Request) {
     types: payload.types,
     skipWeeklyLimitCheck: payload.skipWeeklyLimitCheck === true,
     allowPast: payload.allowPast === true,
+    // REG-484: l'istruttore ha confermato di rinunciare alla pausa.
+    confirmNoBuffer: payload.confirmNoBuffer === true,
   });
   return NextResponse.json(res, { status: res.success ? 200 : 400 });
 }
