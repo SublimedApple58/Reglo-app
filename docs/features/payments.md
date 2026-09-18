@@ -19,7 +19,33 @@ Lesson credit ledger, Stripe payment processing, payment plans, penalties, invoi
 - Invoicing: `processAutoscuolaInvoiceFinalization()` — push to Fatture-in-Cloud
 - Mobile: `getMobileStudentPaymentProfile()`, `getMobileStudentPaymentHistory()`, `preparePayNow()`, `finalizePayNow()`
 - Stripe methods: `createStudentSetupIntent()`, `confirmStudentPaymentMethod()`, `removeStudentPaymentMethod()`
-- Manual: `setManualPaymentStatus()` — admin override
+- Manual: `setManualPaymentStatus()` — segna una guida pagata / da pagare
+
+## Tracciamento pagamento manuale (staff)
+
+`setManualPaymentStatus({ appointmentId, status })` scrive `manualPaymentStatus`
+(`"paid" | "unpaid" | null`) e rifiuta le guide a pagamento **automatico**
+(`paymentRequired && manualPaymentStatus == null` → si saldano dalla sezione
+Pagamenti). Consumata da due superfici:
+
+- **Web** — dettaglio allievo (`AutoscuoleStudentsPage`, tab "Guide"), server action diretta.
+- **Mobile (REG-450)** — `PATCH /api/autoscuole/appointments/[id]/manual-payment`,
+  wrapper sottile sulla stessa azione: permessi e guardie stanno tutti
+  nell'azione, così la regola non diverge tra le due.
+
+**Permessi**: `canManageLessonPayments` = admin ∨ OWNER ∨ INSTRUCTOR — permesso
+**scoped**, più largo di `canManageStudentCredits` (admin ∨ OWNER) che governa i
+crediti (`adjustStudentLessonCredits`, `coverAppointmentWithLessonCredit`). Un
+istruttore segna una guida pagata ma non tocca il ledger crediti, ed è ristretto
+alle **proprie** guide (`appointment.instructorId`), come in
+`updateAutoscuolaAppointmentDetails`. A differenza di quella, qui una guida
+`cancelled` resta segnabile: è il caso della penale tardiva "da pagare".
+
+**Regola gemella**: `isLessonUnpaid` / `isCompanyManualMode`
+(`lib/autoscuole/unpaid-auto-block.ts`) sono duplicate client-side in
+`reglo-mobile/src/utils/lessonPayments.ts`. Vanno cambiate **insieme**: la stessa
+definizione alimenta il badge web, il contatore `manualUnpaid` della lista
+allievi e il blocco automatico delle prenotazioni per debito.
 
 ## Credit ledger reasons
 `grant`, `consume`, `refund`, `swap_refund`, `swap_consume`, `manual_grant`, `manual_revoke`
