@@ -17,6 +17,17 @@ import {
   upsertDefaultLocation,
   LocationAuthzError,
 } from "@/lib/autoscuole/locations";
+import { LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
+
+/**
+ * Tipi di patente serviti dal luogo (REG-409). Lista chiusa: il picker mostra
+ * il sottoinsieme giusto per autoscuola/consorzio, ma l'action accetta ogni
+ * categoria nota così un consorzio non viene bloccato dal picker dell'altro.
+ */
+const licenseCategoriesSchema = z
+  .array(z.enum(LICENSE_CATEGORIES))
+  .max(LICENSE_CATEGORIES.length)
+  .optional();
 
 const locationCoreSchema = z.object({
   name: z.string().min(2).max(80),
@@ -25,6 +36,7 @@ const locationCoreSchema = z.object({
   latitude: z.number().min(-90).max(90).nullable().optional(),
   longitude: z.number().min(-180).max(180).nullable().optional(),
   placeId: z.string().max(255).nullable().optional(),
+  licenseCategories: licenseCategoriesSchema,
 });
 
 const createSchema = locationCoreSchema;
@@ -40,6 +52,7 @@ const updateDefaultSchema = z.object({
   latitude: z.number().min(-90).max(90).nullable().optional(),
   longitude: z.number().min(-180).max(180).nullable().optional(),
   placeId: z.string().max(255).nullable().optional(),
+  licenseCategories: licenseCategoriesSchema,
 });
 
 async function invalidate(companyId: string) {
@@ -75,6 +88,7 @@ export async function createAutoscuolaLocation(input: z.infer<typeof createSchem
       latitude: parsed.latitude ?? null,
       longitude: parsed.longitude ?? null,
       placeId: parsed.placeId ?? null,
+      licenseCategories: parsed.licenseCategories,
     });
     await invalidate(membership.companyId);
     return { success: true, data: location };
@@ -99,6 +113,7 @@ export async function updateAutoscuolaLocation(input: z.infer<typeof updateSchem
       latitude: parsed.latitude,
       longitude: parsed.longitude,
       placeId: parsed.placeId,
+      licenseCategories: parsed.licenseCategories,
     });
     await invalidate(membership.companyId);
     return { success: true, data: location };
@@ -141,6 +156,7 @@ export async function updateDefaultAutoscuolaLocation(
       latitude: parsed.latitude ?? null,
       longitude: parsed.longitude ?? null,
       placeId: parsed.placeId ?? null,
+      licenseCategories: parsed.licenseCategories,
     });
     await invalidate(membership.companyId);
     return { success: true, data: location };

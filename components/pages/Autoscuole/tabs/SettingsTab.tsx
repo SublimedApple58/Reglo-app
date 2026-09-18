@@ -114,6 +114,8 @@ export type SettingsTabProps = {
    * (usata dall'overlay "Impostazioni dell'account" del redesign).
    */
   section?: SettingsSectionKey;
+  /** Account consorzio: cambia la lista patenti del picker "Sede e luoghi". */
+  consortium?: boolean;
   // Reminders (pane auto-save: ogni modifica persiste subito il campo toccato)
   studentReminderMinutes: string;
   studentReminderMorningEnabled: boolean;
@@ -604,6 +606,7 @@ function SettingsTab({
   toggleConstraintDay,
   updateConstraintWindow,
   section,
+  consortium = false,
 }: SettingsTabProps) {
   const standalone = Boolean(section);
   const show = (key: SettingsSectionKey) => !section || section === key;
@@ -938,7 +941,7 @@ function SettingsTab({
           onToggle={() => toggleSection("locations")}
           standalone={standalone}
         >
-          <LocationsSection />
+          <LocationsSection consortium={consortium} />
         </AccordionSection>
         )}
       </div>

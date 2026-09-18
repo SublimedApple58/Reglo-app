@@ -147,6 +147,33 @@ export function licenseCategoriesForMode(
   return consortium ? CONSORTIUM_LICENSE_CATEGORIES : AUTOSCUOLA_LICENSE_CATEGORIES;
 }
 
+/**
+ * Le stesse categorie di `licenseCategoriesForMode`, raggruppate per famiglia:
+ * serve ai picker che mostrano TUTTE le patenti insieme (assegnazione luogo →
+ * tipi di patente, REG-409), dove una lista piatta di 10-16 chip è illeggibile.
+ * I gruppi vuoti per la modalità corrente non vengono restituiti.
+ */
+const LICENSE_CATEGORY_GROUP_DEFS: Array<{
+  label: string;
+  categories: readonly LicenseCategory[];
+}> = [
+  { label: "Auto", categories: ["B", "BE"] },
+  { label: "Moto", categories: ["AM", "A1", "A2", "A"] },
+  { label: "Camion", categories: ["C", "CE", "C1", "C1E"] },
+  { label: "Autobus", categories: ["D", "DE", "D1", "D1E"] },
+  { label: "Qualificazioni", categories: ["CQC", "ADR"] },
+];
+
+export function licenseCategoryGroupsForMode(
+  consortium: boolean,
+): Array<{ label: string; categories: LicenseCategory[] }> {
+  const allowed = new Set<string>(licenseCategoriesForMode(consortium));
+  return LICENSE_CATEGORY_GROUP_DEFS.map((group) => ({
+    label: group.label,
+    categories: group.categories.filter((c) => allowed.has(c)),
+  })).filter((group) => group.categories.length > 0);
+}
+
 export const TRANSMISSION_LABELS: Record<Transmission, string> = {
   manual: "Manuale",
   automatic: "Automatico",

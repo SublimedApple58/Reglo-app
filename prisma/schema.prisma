@@ -554,19 +554,24 @@ model AutoscuolaAppointment {
 }
 
 model AutoscuolaLocation {
-  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId       String    @db.Uuid
-  createdByUserId String?   @db.Uuid
-  name            String
-  address         String?
-  latitude        Decimal?  @db.Decimal(10, 7)
-  longitude       Decimal?  @db.Decimal(10, 7)
-  placeId         String?
-  isDefault       Boolean   @default(false)
-  isPrecise       Boolean   @default(false)
-  archivedAt      DateTime? @db.Timestamp(6)
-  createdAt       DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt       DateTime  @updatedAt
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId         String    @db.Uuid
+  createdByUserId   String?   @db.Uuid
+  name              String
+  address           String?
+  latitude          Decimal?  @db.Decimal(10, 7)
+  longitude         Decimal?  @db.Decimal(10, 7)
+  placeId           String?
+  isDefault         Boolean   @default(false)
+  isPrecise         Boolean   @default(false)
+  /// Tipi di patente serviti da questo luogo (REG-409): creando una guida, il
+  /// campo "Luogo" si precompila con il luogo assegnato alla patente della
+  /// guida. Una categoria appartiene a UN solo luogo per company (esclusività
+  /// applicata in transazione da `setLocationLicenseCategories`).
+  licenseCategories String[]  @default([])
+  archivedAt        DateTime? @db.Timestamp(6)
+  createdAt         DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt         DateTime  @updatedAt
 
   company           Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
   createdByUser     User?                   @relation("AutoscuolaLocationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)

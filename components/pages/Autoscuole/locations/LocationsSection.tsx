@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { ExternalLink, MapPin, Pencil, Trash2 } from "lucide-react";
 
@@ -20,6 +20,7 @@ type Location = {
   placeId: string | null;
   isDefault: boolean;
   isPrecise: boolean;
+  licenseCategories: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -31,7 +32,7 @@ function toNumber(value: string | number | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export function LocationsSection() {
+export function LocationsSection({ consortium = false }: { consortium?: boolean }) {
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<{
@@ -62,6 +63,22 @@ export function LocationsSection() {
 
   const sede = locations.find((l) => l.isDefault) ?? null;
   const customs = locations.filter((l) => !l.isDefault);
+
+  // Categoria patente → nome del luogo che se l'è presa, escluso quello in
+  // modifica: il picker della modale marca i chip già assegnati altrove
+  // (cliccabili comunque — selezionarli sposta la patente qui).
+  const takenCategories = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const loc of locations) {
+      if (editing?.initial?.id && loc.id === editing.initial.id) continue;
+      for (const category of loc.licenseCategories ?? []) map[category] = loc.name;
+    }
+    return map;
+  }, [locations, editing]);
+
+  const anyLicenseAssigned = locations.some(
+    (l) => (l.licenseCategories ?? []).length > 0,
+  );
 
   // La registrazione crea SEMPRE una sede default automatica ("Sede {nome}",
   // senza indirizzo né posizione): per l'onboarding conta come NON configurata
@@ -109,6 +126,7 @@ export function LocationsSection() {
         latitude: values.latitude,
         longitude: values.longitude,
         placeId: values.placeId,
+        licenseCategories: values.licenseCategories,
       }),
     });
     const json = await res.json();
@@ -141,6 +159,7 @@ export function LocationsSection() {
             latitude: toNumber(sede.latitude),
             longitude: toNumber(sede.longitude),
             placeId: sede.placeId,
+            licenseCategories: sede.licenseCategories ?? [],
           }
         : undefined,
     });
@@ -148,6 +167,38 @@ export function LocationsSection() {
   /** Etichetta secondaria come nel proto: indirizzo se preciso, altrimenti "Posizione generica". */
   const addressLabel = (loc: Location) =>
     loc.isPrecise && loc.address ? loc.address : "Posizione generica";
+
+  /**
+   * Riepilogo dei tipi di patente serviti dal luogo (REG-409). Il segnaposto
+   * "Nessuna patente assegnata" compare solo se l'autoscuola usa la funzione
+   * (almeno un luogo assegnato): chi non la usa non si ritrova la lista
+   * puntellata di placeholder vuoti.
+   */
+  const licenseTags = (loc: Location) => {
+    const categories = loc.licenseCategories ?? [];
+    if (categories.length === 0) {
+      if (!anyLicenseAssigned) return null;
+      return (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <span className="rounded-[6px] border border-dashed border-[#dcdcdc] px-2 py-[3px] text-[11px] font-semibold text-[#b4b4b4]">
+            Nessuna patente assegnata
+          </span>
+        </div>
+      );
+    }
+    return (
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {categories.map((category) => (
+          <span
+            key={category}
+            className="rounded-[6px] bg-[#eef0f6] px-2 py-[3px] text-[11px] font-bold tracking-[0.2px] text-[#3c4257]"
+          >
+            {category}
+          </span>
+        ))}
+      </div>
+    );
+  };
 
   if (loading) {
     return (
@@ -198,6 +249,8 @@ export function LocationsSection() {
             open
             mode={editing.mode}
             initialValue={editing.initial}
+            consortium={consortium}
+            takenCategories={takenCategories}
             onClose={() => setEditing(null)}
             onSubmit={async (values) => {
               await handleUpdateDefault(values);
@@ -224,6 +277,7 @@ export function LocationsSection() {
           </div>
           <div className="mt-2.5 text-[13px] font-medium text-foreground">{sede.name}</div>
           <div className="mt-0.5 text-xs font-medium text-[#929292]">{addressLabel(sede)}</div>
+          {licenseTags(sede)}
         </div>
         <button
           type="button"
@@ -261,7 +315,7 @@ export function LocationsSection() {
             {customs.map((loc) => (
               <div
                 key={loc.id}
-                className="flex items-center justify-between gap-3 rounded-[10px] border border-[#eeeeee] bg-[#fafafa] px-4 py-3.5"
+                className="flex items-start justify-between gap-3 rounded-[10px] border border-[#eeeeee] bg-[#fafafa] px-4 py-3.5"
               >
                 <div className="flex min-w-0 items-start gap-2.5">
                   <MapPin className="mt-0.5 size-4 shrink-0 text-navy-900" strokeWidth={1.6} />
@@ -270,6 +324,7 @@ export function LocationsSection() {
                     <div className="mt-0.5 truncate text-xs font-medium text-[#929292]">
                       {addressLabel(loc)}
                     </div>
+                    {licenseTags(loc)}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
@@ -297,6 +352,7 @@ export function LocationsSection() {
                           latitude: toNumber(loc.latitude),
                           longitude: toNumber(loc.longitude),
                           placeId: loc.placeId,
+                          licenseCategories: loc.licenseCategories ?? [],
                         },
                       })
                     }
@@ -325,6 +381,8 @@ export function LocationsSection() {
           open
           mode={editing.mode}
           initialValue={editing.initial}
+          consortium={consortium}
+          takenCategories={takenCategories}
           onClose={() => setEditing(null)}
           onSubmit={async (values) => {
             if (editing.mode === "default") {

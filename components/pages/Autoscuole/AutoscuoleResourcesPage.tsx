@@ -2141,6 +2141,7 @@ export function AutoscuoleResourcesPage({
   const renderSettingsSection = (section: SettingsSectionKey) => (
           <SettingsTab
             section={section}
+            consortium={consortium}
             expandedSection={expandedSection}
             toggleSection={toggleSection}
             studentReminderMinutes={studentReminderMinutes}
