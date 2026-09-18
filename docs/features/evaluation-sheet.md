@@ -194,11 +194,33 @@ deroga esplicita al design system mono-navy (`StarRating` prop `tone="gold"`) pe
 piattaforme identiche. La deroga vale SOLO per il pagellino: la valutazione complessiva su mobile
 resta navy.
 
-## Fuori scope (v1)
+## L'allievo vede il proprio pagellino (2026-09-18)
 
-L'allievo **non** vede il pagellino nella sua app: resta interno all'autoscuola. Conseguenza
-accettata: nel suo storico le guide nuove non mostrano alcuna valutazione, perché la stellina che
-vedeva prima non viene più compilata.
+Non è più fuori scope: nella sezione **Note** dell'app allievo (`StudentMyNotesScreen`)
+l'allievo vede il proprio pagellino — media aggregata per voce e pagellino della singola
+guida — con lo stesso aggregatore (`aggregateStudentEvaluations`) e la stessa lettura che
+ha l'istruttore nel dettaglio allievo.
 
-Restano da decidere: la statistica "voto medio" nella scheda allievo mobile (oggi media delle
-stelline storiche, si congela col tempo) e se aprire il pagellino all'allievo.
+**Permesso**: nessun setting nuovo, vale `studentNotesEnabled` (lo stesso che decide se
+l'allievo vede le note sul suo conto). La tab Note è già gated da `useStudentNotesEnabled`
+in `app/(tabs)/_layout.tsx`, e il backend non manda proprio le valutazioni col flag spento.
+
+**Backend**: il ramo `light` di `getAutoscuolaAppointmentsFiltered` — quello che serve l'app
+allievo — ometteva `evaluations` di proposito. Ora le seleziona sempre (uno spread
+condizionale dentro il `select` rompe l'inferenza di Prisma) e le restituisce **solo** se
+`studentNotesEnabled` è attivo, con la stessa forma del ramo full
+(`{itemId,label,scaleMax,score,notApplicable}`).
+
+**Guardia di scoping (fix di sicurezza dello stesso giro)**: la action prendeva `studentId`
+dalla query string senza verificarlo, quindi un ALLIEVO poteva leggere guide, note, penali e
+motivi di annullamento di un altro allievo della stessa autoscuola. Ora, se il chiamante è
+uno studente, `where.studentId` è forzato al suo `userId`. Tutti gli schermi allievo
+passavano già il proprio id: nessun cambio di comportamento.
+
+**Allineamento della sezione Note**: la stellina singola storica (`AutoscuolaAppointment.rating`,
+non più compilata da nessuno dal 2026-09-10) compare ora **solo** sulle guide senza punteggi
+pagellino, come già fanno web e scheda istruttore. La lista include anche le guide valutate
+ma senza testo, che prima sparivano.
+
+Resta da decidere: la statistica "voto medio" nella scheda allievo mobile (oggi media delle
+stelline storiche, si congela col tempo).
