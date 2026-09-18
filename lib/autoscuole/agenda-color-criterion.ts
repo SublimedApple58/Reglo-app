@@ -321,16 +321,15 @@ const flattenOnWhite = (rgb: [number, number, number], alpha: number): string =>
  * Stile inline del blocco agenda per una voce. Senza override usa i pastelli
  * di default; con override l'hex (palette satura del picker) viene declinato
  * in tinta soft + ombra in tinta, così testo e badge restano leggibili.
- * In più porta le custom property lette da `.agenda-card` (globals.css):
- * bordo nella tinta della voce + ombra, così il blocco si stacca sempre dalla
- * banda colorata della colonna istruttore (REG-468).
+ * In più porta la custom property letta da `.agenda-card` (globals.css):
+ * l'ombra in tinta che, insieme all'alone bianco, stacca il blocco dalla banda
+ * colorata della colonna istruttore (REG-468).
  */
 export function agendaBlockStyle(
   entry: AgendaColorEntry,
   overrideHex?: string | null,
 ): React.CSSProperties {
-  const rgb = overrideHex ? hexToRgbTriple(overrideHex) : rgbFromRgba(entry.shadowRgba);
-  const ring = rgb ? `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.5)` : "rgba(15, 23, 42, 0.18)";
+  const rgb = overrideHex ? hexToRgbTriple(overrideHex) : null;
   const backgroundColor = overrideHex
     ? rgb
       ? flattenOnWhite(rgb, 0.2)
@@ -339,7 +338,6 @@ export function agendaBlockStyle(
   const shadow = overrideHex ? instructorColorAlpha(overrideHex, 0.22) : entry.shadowRgba;
   return {
     backgroundColor,
-    "--agenda-card-ring": ring,
     "--agenda-card-shadow": shadow,
   } as React.CSSProperties;
 }

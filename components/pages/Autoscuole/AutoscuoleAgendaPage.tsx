@@ -166,8 +166,8 @@ const groupLessonTint = (item: { groupLessonKind?: string | null }) => {
   const moto = item.groupLessonKind === "moto";
   return {
     card: moto
-      ? "bg-[#FFEDD5] [--agenda-card-ring:rgba(249,115,22,0.5)] [--agenda-card-shadow:rgba(249,115,22,0.22)]"
-      : "bg-[#ECFDF5] [--agenda-card-ring:rgba(16,185,129,0.5)] [--agenda-card-shadow:rgba(16,185,129,0.22)]",
+      ? "bg-[#FFEDD5] [--agenda-card-shadow:rgba(249,115,22,0.22)]"
+      : "bg-[#ECFDF5] [--agenda-card-shadow:rgba(16,185,129,0.22)]",
     badge: moto
       ? "border-orange-200 bg-orange-200/60 text-orange-700"
       : "border-teal-200 bg-teal-200/60 text-teal-700",
@@ -3678,7 +3678,7 @@ export function AutoscuoleAgendaPage({
                               ? guideBlockColorStyle(item, licenseTag)
                               : null;
                           const instrCardClass = isExamInstr
-                            ? "bg-[#F5F0FF] [--agenda-card-ring:rgba(139,92,246,0.5)] [--agenda-card-shadow:rgba(139,92,246,0.22)]"
+                            ? "bg-[#F5F0FF] [--agenda-card-shadow:rgba(139,92,246,0.22)]"
                             : isGroupLessonInstr
                               ? glTintInstr.card
                               : instrColorStyle
@@ -3796,7 +3796,7 @@ export function AutoscuoleAgendaPage({
                                 <button
                                   key={`exam-instr-${eg.key}`}
                                   type="button"
-                                  className="agenda-card absolute left-0.5 right-0.5 z-20 flex flex-col justify-start overflow-hidden rounded-[8px] bg-[#F5F0FF] [--agenda-card-ring:rgba(139,92,246,0.5)] [--agenda-card-shadow:rgba(139,92,246,0.22)] text-[9px] leading-tight text-left cursor-pointer hover:bg-[#EDE4FF] transition-colors"
+                                  className="agenda-card absolute left-0.5 right-0.5 z-20 flex flex-col justify-start overflow-hidden rounded-[8px] bg-[#F5F0FF] [--agenda-card-shadow:rgba(139,92,246,0.22)] text-[9px] leading-tight text-left cursor-pointer hover:bg-[#EDE4FF] transition-colors"
                                   style={{ top: 0 }}
                                   onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
                                 >
@@ -3818,7 +3818,7 @@ export function AutoscuoleAgendaPage({
                               <button
                                 key={`exam-instr-${eg.key}`}
                                 type="button"
-                                className="agenda-card absolute left-0.5 right-0.5 z-10 flex flex-col justify-start overflow-hidden rounded-[8px] bg-[#F5F0FF] [--agenda-card-ring:rgba(139,92,246,0.5)] [--agenda-card-shadow:rgba(139,92,246,0.22)] text-[9px] leading-tight text-left cursor-pointer hover:bg-[#EDE4FF] transition-colors"
+                                className="agenda-card absolute left-0.5 right-0.5 z-10 flex flex-col justify-start overflow-hidden rounded-[8px] bg-[#F5F0FF] [--agenda-card-shadow:rgba(139,92,246,0.22)] text-[9px] leading-tight text-left cursor-pointer hover:bg-[#EDE4FF] transition-colors"
                                 style={{ top, height }}
                                 onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
                               >
@@ -4197,7 +4197,7 @@ export function AutoscuoleAgendaPage({
                           ? guideBlockColorStyle(item, licenseTag)
                           : null;
                       const dayCardClass = isExamDay
-                        ? "bg-[#F5F0FF] [--agenda-card-ring:rgba(139,92,246,0.5)] [--agenda-card-shadow:rgba(139,92,246,0.22)]"
+                        ? "bg-[#F5F0FF] [--agenda-card-shadow:rgba(139,92,246,0.22)]"
                         : isGroupLessonDay
                           ? glTintDay.card
                           : dayColorStyle
@@ -4365,7 +4365,7 @@ export function AutoscuoleAgendaPage({
                           <button
                             key={`exam-day-grid-${eg.key}`}
                             type="button"
-                            className="agenda-card absolute left-1 right-1 z-10 flex flex-col justify-start overflow-hidden rounded-[10px] bg-[#F5F0FF] text-left text-[11px] leading-tight [--agenda-card-ring:rgba(139,92,246,0.5)] [--agenda-card-shadow:rgba(139,92,246,0.22)] transition-colors hover:bg-[#EDE4FF] cursor-pointer"
+                            className="agenda-card absolute left-1 right-1 z-10 flex flex-col justify-start overflow-hidden rounded-[10px] bg-[#F5F0FF] text-left text-[11px] leading-tight [--agenda-card-shadow:rgba(139,92,246,0.22)] transition-colors hover:bg-[#EDE4FF] cursor-pointer"
                             style={{ top, height }}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -4435,7 +4435,7 @@ export function AutoscuoleAgendaPage({
                             <DropdownMenuTrigger asChild>
                               <button
                                 type="button"
-                                className="agenda-card absolute left-1 right-1 z-[8] flex flex-col justify-start overflow-hidden rounded-[10px] bg-[#F3F4F8] [--agenda-card-ring:rgba(100,116,139,0.38)] p-2 text-left text-[11px] transition hover:bg-[#E7E9F1]"
+                                className="agenda-card absolute left-1 right-1 z-[8] flex flex-col justify-start overflow-hidden rounded-[10px] bg-[#F3F4F8] p-2 text-left text-[11px] transition hover:bg-[#E7E9F1]"
                                 style={{ top, height }}
                                 onClick={(e) => e.stopPropagation()}
                               >
@@ -6210,26 +6210,26 @@ function formatBlockReason(reason: string | null | undefined) {
 function blockTint(reason: string | null | undefined): { card: string; text: string } {
   switch ((reason ?? "").trim()) {
     case "sick_leave":
-      return { card: "bg-[#FFF1E9] [--agenda-card-ring:rgba(194,65,12,0.45)] [--agenda-card-shadow:rgba(194,65,12,0.18)] hover:bg-[#FFE3D3]", text: "text-[#C2410C]" };
+      return { card: "bg-[#FFF1E9] [--agenda-card-shadow:rgba(194,65,12,0.18)] hover:bg-[#FFE3D3]", text: "text-[#C2410C]" };
     case "ferie":
-      return { card: "bg-[#DDF3F0] [--agenda-card-ring:rgba(15,118,110,0.45)] [--agenda-card-shadow:rgba(15,118,110,0.18)] hover:bg-[#C9ECE7]", text: "text-[#0F766E]" };
+      return { card: "bg-[#DDF3F0] [--agenda-card-shadow:rgba(15,118,110,0.18)] hover:bg-[#C9ECE7]", text: "text-[#0F766E]" };
     case "lesson_buffer":
       // Pausa fra due guide (REG-484): grigio tenue a righine — c'è, occupa,
-      // ma non deve gridare come una malattia o una lezione teorica. Bordo
-      // ancora più tenue delle altre tinte (REG-468), stessa famiglia grigia.
+      // ma non deve gridare come una malattia o una lezione teorica: ombra
+      // (REG-468) più tenue delle altre tinte, stessa famiglia grigia.
       return {
-        card: "bg-[#F5F5F7] bg-[image:repeating-linear-gradient(135deg,rgba(110,117,150,0.10)_0,rgba(110,117,150,0.10)_2px,transparent_2px,transparent_9px)] [--agenda-card-ring:rgba(110,117,150,0.32)] [--agenda-card-shadow:rgba(110,117,150,0.14)] hover:bg-[#ECEEF3]",
+        card: "bg-[#F5F5F7] bg-[image:repeating-linear-gradient(135deg,rgba(110,117,150,0.10)_0,rgba(110,117,150,0.10)_2px,transparent_2px,transparent_9px)] [--agenda-card-shadow:rgba(110,117,150,0.14)] hover:bg-[#ECEEF3]",
         text: "text-[#6E7596]",
       };
     case "theory_lesson":
       // Indaco + righe diagonali = "occupato / non prenotabile" a colpo d'occhio.
       // Colore (background-color) + hatch (background-image) impilati in un'unica classe.
       return {
-        card: "bg-[#E6E9FF] bg-[image:repeating-linear-gradient(135deg,rgba(79,70,229,0.13)_0,rgba(79,70,229,0.13)_2px,transparent_2px,transparent_9px)] [--agenda-card-ring:rgba(79,70,229,0.45)] [--agenda-card-shadow:rgba(79,70,229,0.18)] hover:bg-[#DCE0FF]",
+        card: "bg-[#E6E9FF] bg-[image:repeating-linear-gradient(135deg,rgba(79,70,229,0.13)_0,rgba(79,70,229,0.13)_2px,transparent_2px,transparent_9px)] [--agenda-card-shadow:rgba(79,70,229,0.18)] hover:bg-[#DCE0FF]",
         text: "text-[#3730a3]",
       };
     default:
-      return { card: "bg-[#F3F4F8] [--agenda-card-ring:rgba(100,116,139,0.38)] hover:bg-[#E7E9F1]", text: "text-slate-600" };
+      return { card: "bg-[#F3F4F8] hover:bg-[#E7E9F1]", text: "text-slate-600" };
   }
 }
 
@@ -6250,7 +6250,7 @@ function buildLocalDateTime(day: string, time: string) {
 // Guide a CAMBIO AUTOMATICO: colore dedicato (ciano) che SOSTITUISCE quello di
 // durata, così si distinguono a colpo d'occhio. Automatica se il veicolo usato è
 // automatico o, in mancanza, se l'allievo segue il percorso automatico.
-const AUTOMATIC_CLASS = "bg-[#CFFAFE] [--agenda-card-ring:rgba(6,182,212,0.5)] [--agenda-card-shadow:rgba(6,182,212,0.22)]";
+const AUTOMATIC_CLASS = "bg-[#CFFAFE] [--agenda-card-shadow:rgba(6,182,212,0.22)]";
 
 function isAutomaticLesson(appointment: AppointmentRow): boolean {
   return (
@@ -6264,11 +6264,11 @@ function getScheduledDurationClass(appointment: AppointmentRow): string {
   const start = toDate(appointment.startsAt);
   const end = getAppointmentEnd(appointment);
   const dur = Math.round(diffMinutes(end, start));
-  if (dur <= 30) return "bg-[#E3EEFF] [--agenda-card-ring:rgba(59,130,246,0.5)] [--agenda-card-shadow:rgba(59,130,246,0.22)]";
-  if (dur <= 45) return "bg-[#EAF7CE] [--agenda-card-ring:rgba(132,204,22,0.5)] [--agenda-card-shadow:rgba(132,204,22,0.22)]";
-  if (dur <= 60) return "bg-[#FCEFC7] [--agenda-card-ring:rgba(245,158,11,0.5)] [--agenda-card-shadow:rgba(245,158,11,0.22)]";
-  if (dur <= 90) return "bg-[#F9DDF3] [--agenda-card-ring:rgba(217,70,239,0.5)] [--agenda-card-shadow:rgba(217,70,239,0.22)]";
-  return "bg-[#FBD9DD] [--agenda-card-ring:rgba(244,63,94,0.5)] [--agenda-card-shadow:rgba(244,63,94,0.22)]";
+  if (dur <= 30) return "bg-[#E3EEFF] [--agenda-card-shadow:rgba(59,130,246,0.22)]";
+  if (dur <= 45) return "bg-[#EAF7CE] [--agenda-card-shadow:rgba(132,204,22,0.22)]";
+  if (dur <= 60) return "bg-[#FCEFC7] [--agenda-card-shadow:rgba(245,158,11,0.22)]";
+  if (dur <= 90) return "bg-[#F9DDF3] [--agenda-card-shadow:rgba(217,70,239,0.22)]";
+  return "bg-[#FBD9DD] [--agenda-card-shadow:rgba(244,63,94,0.22)]";
 }
 
 function getStatusMeta(

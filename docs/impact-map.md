@@ -176,7 +176,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Instructor Clusters**: saved via `updateAutoscuolaInstructor` (OWNER-only field, stripped for self-instructor like `name`/`status`)
 - → **Aspetto**: il picker colore vive in `AspettoSettingsPane` (Impostazioni → Aspetto); rimosso da `InstructorsTab` (2026-08-10)
 - → **Mobile**: `color` already returned by `GET /api/autoscuole/instructors` + agenda bootstrap (not consumed yet)
-- → **Appointments/Agenda (contrasto, REG-468)**: la banda della colonna è al 7% (palette posizionale `bg-*-50/45`) e ogni card dell'agenda ha `.agenda-card` (`assets/styles/globals.css`) = alone bianco + bordo nella propria tinta. **Se aggiungi un nuovo tipo di blocco in agenda** dagli quella classe e, se ha una tinta sua, le custom property `--agenda-card-ring`/`--agenda-card-shadow`, altrimenti su colonne colorate sparisce
+- → **Appointments/Agenda (contrasto, REG-468)**: la banda della colonna è al 7% (palette posizionale `bg-*-50/45`) e ogni card dell'agenda ha `.agenda-card` (`assets/styles/globals.css`) = solco bianco + alone scuro + ombra in tinta, **senza bordo disegnato**. **Se aggiungi un nuovo tipo di blocco in agenda** dagli quella classe e, se ha una tinta sua, la custom property `--agenda-card-shadow`, altrimenti su colonne colorate sparisce
 
 ### Aspetto (Impostazioni)
 - → **Instructor Colors**: la sezione "Istruttori in agenda" usa `changeInstructorColor` (AutoscuoleResourcesPage) → `updateAutoscuolaInstructor`

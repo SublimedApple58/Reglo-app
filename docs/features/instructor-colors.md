@@ -32,10 +32,11 @@ istruttore.
   (plus the print export).
 - **REG-468** — banda e blocchi non si fondono più: la banda è scesa a alpha
   0.07 (palette posizionale: `bg-*-50/45`, era `/60`) e ogni blocco in agenda
-  ha la classe `.agenda-card` (globals.css) = alone bianco esterno + bordo 1px
-  nella propria tinta. La separazione regge con qualunque accostamento
-  istruttore↔blocco (ferie teal su colonna teal, guida ambra su colonna
-  ambra…). Vedi [appearance-settings.md](appearance-settings.md).
+  ha la classe `.agenda-card` (globals.css) = solco bianco esterno + alone
+  scuro morbido + ombra in tinta. **Niente bordo disegnato** (scelta di
+  Tiziano): la separazione è solo di profondità e regge con qualunque
+  accostamento istruttore↔blocco (ferie teal su colonna teal, guida ambra su
+  colonna ambra…). Vedi [appearance-settings.md](appearance-settings.md).
 - Custom hex → inline styles; unset → legacy Tailwind classes by alphabetical
   index (unchanged look for schools that never pick colors).
 
