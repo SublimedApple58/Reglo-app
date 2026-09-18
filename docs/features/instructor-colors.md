@@ -15,7 +15,7 @@ istruttore.
 
 | File | Role |
 |------|------|
-| `lib/autoscuole/instructor-colors.ts` | Curated palette (16 swatches) + tint derivation (`instructorTintStyles`: band alpha 0.10, avatar alpha 0.16, darkened text) |
+| `lib/autoscuole/instructor-colors.ts` | Curated palette (16 swatches) + tint derivation (`instructorTintStyles`: band alpha 0.07 — era 0.10 fino a REG-468 —, avatar alpha 0.16, darkened text) |
 | `components/ui/color-swatch-picker.tsx` | `ColorSwatchPicker` — custom picker (no native input): 7×7 trigger dot + dropdown swatch grid + "Automatico" reset + `taken` (swatch di altri istruttori disabilitati); awaits `onSelect` with spinner. Usato da `AspettoSettingsPane` (il vecchio `ColorPop` di InstructorsTab è stato rimosso 2026-08-10) |
 | `components/pages/Autoscuole/AutoscuoleResourcesPage.tsx` | `changeInstructorColor` handler → `updateAutoscuolaInstructor({ instructorId, color })` + local state sync |
 | `lib/actions/autoscuole.actions.ts` | `updateInstructorSchema.color` (hex regex, nullable) — OWNER only (stripped for self-instructor); persisted in `updateAutoscuolaInstructor` |
@@ -30,6 +30,12 @@ istruttore.
 - Agenda **event cards keep their duration/type/license palette** — the
   instructor color only tints avatars and the availability background bands
   (plus the print export).
+- **REG-468** — banda e blocchi non si fondono più: la banda è scesa a alpha
+  0.07 (palette posizionale: `bg-*-50/45`, era `/60`) e ogni blocco in agenda
+  ha la classe `.agenda-card` (globals.css) = alone bianco esterno + bordo 1px
+  nella propria tinta. La separazione regge con qualunque accostamento
+  istruttore↔blocco (ferie teal su colonna teal, guida ambra su colonna
+  ambra…). Vedi [appearance-settings.md](appearance-settings.md).
 - Custom hex → inline styles; unset → legacy Tailwind classes by alphabetical
   index (unchanged look for schools that never pick colors).
 

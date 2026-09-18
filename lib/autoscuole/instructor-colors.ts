@@ -49,8 +49,10 @@ export const instructorColorText = (hex: string): string => {
 
 /** Inline styles for the agenda derived from a stored hex. */
 export const instructorTintStyles = (hex: string) => ({
-  /** Availability band behind the column (very soft). */
-  band: { backgroundColor: instructorColorAlpha(hex, 0.10) } as const,
+  /** Availability band behind the column (very soft). REG-468: 0.10 → 0.07,
+   * la banda resta riconoscibile ma non compete più con i pastelli dei
+   * blocchi che ci stanno sopra (l'identità forte è l'avatar in testata). */
+  band: { backgroundColor: instructorColorAlpha(hex, 0.07) } as const,
   /** Avatar circle with initials. */
   avatar: {
     backgroundColor: instructorColorAlpha(hex, 0.16),

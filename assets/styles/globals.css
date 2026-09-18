@@ -519,3 +519,16 @@
   60% { transform: scale(1.08); opacity: 1; }
   100% { transform: scale(1); }
 }
+
+/* REG-468 — I blocchi dell'agenda devono staccarsi dalla banda colorata della
+   colonna istruttore (prima un blocco ambra su colonna ambra spariva). Ogni
+   card ha alone bianco esterno + bordo nella propria tinta: la separazione
+   regge con qualunque accostamento di colori. Le tinte arrivano dalle custom
+   property, inline per le guide (agendaBlockStyle) o come classe arbitraria
+   per esami/gruppi/blocchi istruttore; i default sono neutri. */
+.agenda-card {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.95),
+    inset 0 0 0 1px var(--agenda-card-ring, rgba(15, 23, 42, 0.18)),
+    0 5px 14px var(--agenda-card-shadow, rgba(15, 23, 42, 0.10));
+}
