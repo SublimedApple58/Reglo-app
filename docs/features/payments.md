@@ -33,13 +33,21 @@ Pagamenti). Consumata da due superfici:
   wrapper sottile sulla stessa azione: permessi e guardie stanno tutti
   nell'azione, così la regola non diverge tra le due.
 
-**Permessi**: `canManageLessonPayments` = admin ∨ OWNER ∨ INSTRUCTOR — permesso
-**scoped**, più largo di `canManageStudentCredits` (admin ∨ OWNER) che governa i
-crediti (`adjustStudentLessonCredits`, `coverAppointmentWithLessonCredit`). Un
-istruttore segna una guida pagata ma non tocca il ledger crediti, ed è ristretto
-alle **proprie** guide (`appointment.instructorId`), come in
-`updateAutoscuolaAppointmentDetails`. A differenza di quella, qui una guida
-`cancelled` resta segnabile: è il caso della penale tardiva "da pagare".
+**Permessi**: `canManageLessonPayments` (`lib/autoscuole/lesson-payments.ts`,
+modulo puro + unit test) = admin ∨ OWNER ∨ INSTRUCTOR_OWNER ∨ INSTRUCTOR —
+permesso **scoped**, più largo di `canManageStudentCredits` (admin ∨ OWNER) che
+governa i crediti (`adjustStudentLessonCredits`,
+`coverAppointmentWithLessonCredit`). Un istruttore segna una guida pagata ma non
+tocca il ledger crediti.
+
+Chi può segnare, segna **qualsiasi** guida dell'allievo, non solo le proprie: la
+firma del permesso non riceve nemmeno l'appuntamento. Fino al 18/09/2026
+l'istruttore era ristretto alle sue guide, per simmetria con
+`updateAutoscuolaAppointmentDetails`; la simmetria era sbagliata — quella governa
+il contenuto **didattico** della guida, questa un fatto **amministrativo**
+dell'allievo, e chi incassa in autoscuola spesso non è l'istruttore che quella
+guida l'ha tenuta. `tests/unit/autoscuole/lesson-payments.test.ts` esiste perché
+la restrizione non rientri per distrazione.
 
 **Regola gemella**: `isLessonUnpaid` / `isCompanyManualMode`
 (`lib/autoscuole/unpaid-auto-block.ts`) sono duplicate client-side in
