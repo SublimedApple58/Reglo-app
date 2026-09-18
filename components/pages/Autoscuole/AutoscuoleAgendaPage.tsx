@@ -73,6 +73,7 @@ import {
 import { cn } from "@/lib/utils";
 import { FieldGroup } from "@/components/ui/field-group";
 import { TRANSMISSION_LABELS, isMotoLicenseCategory, vehicleServesLicense, type Transmission } from "@/lib/autoscuole/license";
+import { resolvePrefilledLocationId } from "@/lib/autoscuole/location-for-license";
 import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, motoLessonTypeLabel, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
 import { instructorTintStyles } from "@/lib/autoscuole/instructor-colors";
 import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
@@ -876,6 +877,12 @@ export function AutoscuoleAgendaPage({
   const fsCols = (n: number) =>
     isAgendaFullscreen ? `56px repeat(${n}, minmax(${fsColMin}px, 1fr))` : undefined;
   const [createOpen, setCreateOpen] = React.useState(false);
+  // Luogo precompilato (REG-392 + REG-409): default dell'allievo → luogo del
+  // tipo di patente della guida (categoria del veicolo se scelto, altrimenti
+  // percorso dell'allievo) → sede. Il flag "toccato" protegge una scelta
+  // manuale dal ricalcolo al cambio veicolo; si azzera al cambio allievo, che
+  // è un cambio di contesto completo.
+  const createLocationTouchedRef = React.useRef(false);
   const [creating, setCreating] = React.useState(false);
   // Conferma "prenotazione nel passato" (vedi handleCreate): teniamo lo start
   // scelto per mostrarlo nell'alert prima di procedere con allowPast.
@@ -913,6 +920,8 @@ export function AutoscuoleAgendaPage({
     address: string | null;
     isDefault: boolean;
     isPrecise: boolean;
+    /** Tipi di patente serviti dal luogo (REG-409). */
+    licenseCategories: string[];
   };
   const [agendaLocations, setAgendaLocations] = React.useState<AgendaLocationOption[]>([]);
   const defaultLocationId = React.useMemo(
@@ -1487,6 +1496,7 @@ export function AutoscuoleAgendaPage({
           address: l.address,
           isDefault: l.isDefault,
           isPrecise: l.isPrecise,
+          licenseCategories: l.licenseCategories ?? [],
         })),
       );
     })();
@@ -1496,11 +1506,17 @@ export function AutoscuoleAgendaPage({
   }, []);
 
   // Pre-populate form.locationId with the default sede whenever the dialog opens
+  // (nessun allievo ancora scelto → la sede è il fallback del resolver REG-409).
   React.useEffect(() => {
     if (createOpen && !form.locationId && defaultLocationId) {
       setForm((prev) => ({ ...prev, locationId: defaultLocationId }));
     }
   }, [createOpen, defaultLocationId, form.locationId]);
+
+  // Ogni apertura del form riparte da un luogo "non toccato a mano".
+  React.useEffect(() => {
+    if (createOpen) createLocationTouchedRef.current = false;
+  }, [createOpen]);
 
   // Auto-scroll to current time on first load
   React.useEffect(() => {
@@ -2055,6 +2071,22 @@ export function AutoscuoleAgendaPage({
   const createStudentRef = React.useRef<HTMLDivElement>(null);
   const createInstructorRef = React.useRef<HTMLDivElement>(null);
   const createVehicleRef = React.useRef<HTMLDivElement>(null);
+
+  const prefillLocationId = React.useCallback(
+    (next: { studentId: string; vehicleId: string }): string => {
+      const student = students.find((s) => s.id === next.studentId) ?? null;
+      const vehicle = vehicles.find((v) => v.id === next.vehicleId) ?? null;
+      return (
+        resolvePrefilledLocationId({
+          locations: agendaLocations,
+          studentDefaultLocationId: student?.defaultLocationId ?? null,
+          student,
+          vehicle,
+        }) ?? ""
+      );
+    },
+    [agendaLocations, students, vehicles],
+  );
   const advanceCreateFocus = (patch: { studentId?: string; instructorId?: string; vehicleId?: string }) => {
     const next = {
       studentId: form.studentId,
@@ -2191,6 +2223,7 @@ export function AutoscuoleAgendaPage({
       duration: "30",
       notes: "",
     });
+    createLocationTouchedRef.current = false;
     toast.success({ description: res.message ?? "Operazione completata." });
     if (Array.isArray((res as { warnings?: string[] }).warnings) && (res as { warnings?: string[] }).warnings?.length) {
       toast.info({
@@ -4729,21 +4762,17 @@ export function AutoscuoleAgendaPage({
                 const student = students.find((s) => s.id === id);
                 const preferredInstructorId = [student?.assignedInstructorId, student?.lastInstructorId]
                   .find((candidate) => candidate && instructors.some((i) => i.id === candidate)) ?? "";
-                // Luogo di default dell'allievo (REG-392): alla selezione dell'allievo
-                // precompila il campo Luogo col suo default (se ancora esistente),
-                // SOVRASCRIVENDO il valore corrente. Una modifica manuale successiva
-                // resta (questo scatta solo al cambio allievo). Se l'allievo non ha un
-                // default, si torna alla sede.
-                const studentDefaultLocationId =
-                  student?.defaultLocationId &&
-                  agendaLocations.some((l) => l.id === student.defaultLocationId)
-                    ? student.defaultLocationId
-                    : (defaultLocationId ?? "");
+                // Luogo (REG-392 + REG-409): il cambio allievo è un cambio di
+                // contesto completo → ricalcolo sempre, azzerando il flag
+                // "toccato a mano". Il veicolo viene resettato qui, quindi la
+                // patente della guida è quella del percorso dell'allievo.
+                createLocationTouchedRef.current = false;
+                const nextLocationId = prefillLocationId({ studentId: id, vehicleId: "" });
                 setForm((prev) => ({
                   ...prev,
                   studentId: id,
                   instructorId: preferredInstructorId || prev.instructorId,
-                  locationId: id ? studentDefaultLocationId : prev.locationId,
+                  locationId: id ? nextLocationId : prev.locationId,
                   vehicleId: "",
                   followVehicleId: "",
                   extraMotoVehicleIds: [],
@@ -4791,7 +4820,16 @@ export function AutoscuoleAgendaPage({
                 <Select
                   value={form.vehicleId}
                   onValueChange={(value) => {
-                    setForm((prev) => ({ ...prev, vehicleId: value }));
+                    // Il veicolo determina la patente della guida (REG-409):
+                    // ricalcolo il luogo, ma solo se non è già stato scelto a
+                    // mano per questo allievo.
+                    setForm((prev) => ({
+                      ...prev,
+                      vehicleId: value,
+                      locationId: createLocationTouchedRef.current
+                        ? prev.locationId
+                        : prefillLocationId({ studentId: prev.studentId, vehicleId: value }),
+                    }));
                     advanceCreateFocus({ vehicleId: value });
                   }}
                 >
@@ -4886,7 +4924,13 @@ export function AutoscuoleAgendaPage({
           {agendaLocations.length > 0 && (
             <div>
               <p className="mb-1.5 text-xs font-semibold text-[#555555]">Luogo</p>
-              <Select value={form.locationId} onValueChange={(value) => setForm((prev) => ({ ...prev, locationId: value }))}>
+              <Select
+                value={form.locationId}
+                onValueChange={(value) => {
+                  createLocationTouchedRef.current = true;
+                  setForm((prev) => ({ ...prev, locationId: value }));
+                }}
+              >
                 <SelectTrigger><SelectValue placeholder="Sede dell'autoscuola" /></SelectTrigger>
                 <SelectContent>
                   {agendaLocations.map((loc) => (

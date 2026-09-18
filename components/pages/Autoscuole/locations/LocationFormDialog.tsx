@@ -12,6 +12,7 @@ import {
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { licenseCategoryGroupsForMode } from "@/lib/autoscuole/license";
 import { cn } from "@/lib/utils";
 
 export type LocationFormValues = {
@@ -21,6 +22,8 @@ export type LocationFormValues = {
   latitude: number | null;
   longitude: number | null;
   placeId: string | null;
+  /** Tipi di patente serviti dal luogo (REG-409). */
+  licenseCategories: string[];
 };
 
 export type LocationFormDialogProps = {
@@ -29,6 +32,13 @@ export type LocationFormDialogProps = {
   mode: "default" | "custom";
   initialValue?: Partial<LocationFormValues> & { id?: string };
   onSubmit: (values: LocationFormValues) => Promise<void>;
+  /** Picker patenti: lista consorzio (C1/D1/CQC/ADR) invece di quella storica. */
+  consortium?: boolean;
+  /**
+   * Categoria → nome del luogo che se l'è già presa (esclusi quelli di questo
+   * luogo). Il chip resta cliccabile: selezionandolo la si sposta qui.
+   */
+  takenCategories?: Record<string, string>;
 };
 
 type Suggestion = {
@@ -56,6 +66,8 @@ export function LocationFormDialog({
   mode,
   initialValue,
   onSubmit,
+  consortium = false,
+  takenCategories = {},
 }: LocationFormDialogProps) {
   const [name, setName] = useState("");
   const [isPrecise, setIsPrecise] = useState(true);
@@ -63,6 +75,7 @@ export function LocationFormDialog({
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [placeId, setPlaceId] = useState<string | null>(null);
+  const [licenseCategories, setLicenseCategories] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -83,6 +96,7 @@ export function LocationFormDialog({
       setLatitude(initialValue?.latitude ?? null);
       setLongitude(initialValue?.longitude ?? null);
       setPlaceId(initialValue?.placeId ?? null);
+      setLicenseCategories(initialValue?.licenseCategories ?? []);
       setSuggestions([]);
     }
   }, [open, mode, initialValue]);
@@ -196,6 +210,7 @@ export function LocationFormDialog({
         latitude: isPrecise ? latitude : null,
         longitude: isPrecise ? longitude : null,
         placeId: isPrecise ? placeId : null,
+        licenseCategories,
       });
       onClose();
     } catch (error) {
@@ -207,6 +222,22 @@ export function LocationFormDialog({
       setSaving(false);
     }
   };
+
+  const licenseGroups = useMemo(
+    () => licenseCategoryGroupsForMode(consortium),
+    [consortium],
+  );
+  const hasTakenCategories = licenseGroups.some((group) =>
+    group.categories.some(
+      (c) => takenCategories[c] && !licenseCategories.includes(c),
+    ),
+  );
+  const toggleLicenseCategory = (category: string) =>
+    setLicenseCategories((prev) =>
+      prev.includes(category)
+        ? prev.filter((c) => c !== category)
+        : [...prev, category],
+    );
 
   const isEditSede = mode === "default";
   const title = isEditSede
@@ -329,6 +360,56 @@ export function LocationFormDialog({
             </div>
           </>
         )}
+
+        {/* ── Tipi di patente serviti dal luogo (REG-409) ── */}
+        <div className="mb-2 mt-5 text-[13px] font-semibold text-foreground">
+          Tipi di patente
+        </div>
+        <div className="mb-2.5 text-xs font-medium leading-[1.45] text-[#a3a3a3]">
+          Le guide di queste patenti partiranno da qui: creando una guida il campo
+          «Luogo» si precompila da solo. Il luogo di default dell&apos;allievo, se
+          impostato, ha comunque la precedenza.
+        </div>
+        <div className="flex flex-col gap-3">
+          {licenseGroups.map((group) => (
+            <div key={group.label}>
+              <div className="mb-[7px] text-[11px] font-bold uppercase tracking-[0.4px] text-[#a3a3a3]">
+                {group.label}
+              </div>
+              <div className="flex flex-wrap gap-[7px]">
+                {group.categories.map((category) => {
+                  const active = licenseCategories.includes(category);
+                  const takenBy = !active ? takenCategories[category] : undefined;
+                  return (
+                    <button
+                      key={category}
+                      type="button"
+                      onClick={() => toggleLicenseCategory(category)}
+                      aria-pressed={active}
+                      title={takenBy ? `Ora assegnata a ${takenBy}` : undefined}
+                      className={cn(
+                        "cursor-pointer select-none rounded-[50px] border-[1.5px] px-3.5 py-[7px] text-[12.5px] font-semibold transition-colors",
+                        active
+                          ? "border-[#1a1a2e] bg-[#1a1a2e] text-white"
+                          : takenBy
+                            ? "border-[#f0f0f0] bg-[#fafafa] text-[#c9c9c9] hover:border-[#dddddd]"
+                            : "border-[#ededed] bg-white text-[#555555] hover:border-[#929292]",
+                      )}
+                    >
+                      {category}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        {hasTakenCategories ? (
+          <div className="mt-2.5 text-xs font-medium leading-[1.45] text-[#a3a3a3]">
+            Le patenti in grigio sono già assegnate a un altro luogo: selezionandole
+            le sposti qui.
+          </div>
+        ) : null}
 
         {/* ── Footer dal proto: Annulla testo + CTA pill navy ── */}
         <div className="mt-[26px] flex items-center justify-end gap-3.5">

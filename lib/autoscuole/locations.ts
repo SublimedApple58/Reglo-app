@@ -35,6 +35,53 @@ export function assertCanManageLocation(
   }
 }
 
+/**
+ * Assegna a un luogo i tipi di patente (REG-409) TOGLIENDOLI agli altri luoghi
+ * della stessa company: una categoria appartiene a un solo luogo, altrimenti il
+ * precompile del campo "Luogo" in creazione guida sarebbe ambiguo.
+ * Le categorie sono normalizzate (trim + maiuscolo) e deduplicate.
+ */
+export async function setLocationLicenseCategories(
+  tx: Prisma.TransactionClient,
+  params: { companyId: string; locationId: string; categories: string[] },
+) {
+  const categories = Array.from(
+    new Set(
+      params.categories
+        .map((c) => c.trim().toUpperCase())
+        .filter((c) => c.length > 0),
+    ),
+  );
+
+  if (categories.length) {
+    // Le categorie rubate agli altri luoghi: Postgres non ha un "array remove
+    // many", quindi si rilegge e riscrive solo chi è davvero toccato.
+    const siblings = await tx.autoscuolaLocation.findMany({
+      where: {
+        companyId: params.companyId,
+        id: { not: params.locationId },
+        licenseCategories: { hasSome: categories },
+      },
+      select: { id: true, licenseCategories: true },
+    });
+    for (const sibling of siblings) {
+      await tx.autoscuolaLocation.update({
+        where: { id: sibling.id },
+        data: {
+          licenseCategories: sibling.licenseCategories.filter(
+            (c) => !categories.includes(c),
+          ),
+        },
+      });
+    }
+  }
+
+  return tx.autoscuolaLocation.update({
+    where: { id: params.locationId },
+    data: { licenseCategories: categories },
+  });
+}
+
 export async function listLocationsForCompany(companyId: string) {
   return prisma.autoscuolaLocation.findMany({
     where: { companyId, archivedAt: null },
@@ -65,6 +112,7 @@ export type CreateLocationInput = {
   latitude?: number | null;
   longitude?: number | null;
   placeId?: string | null;
+  licenseCategories?: string[];
 };
 
 export async function createLocation(input: CreateLocationInput) {
@@ -76,18 +124,26 @@ export async function createLocation(input: CreateLocationInput) {
     }
   }
 
-  return prisma.autoscuolaLocation.create({
-    data: {
+  return prisma.$transaction(async (tx) => {
+    const created = await tx.autoscuolaLocation.create({
+      data: {
+        companyId: input.companyId,
+        createdByUserId: input.createdByUserId,
+        name: input.name.trim(),
+        isPrecise: input.isPrecise,
+        isDefault: false,
+        address: input.isPrecise ? input.address ?? null : null,
+        latitude: input.isPrecise ? toPrismaDecimal(input.latitude) : null,
+        longitude: input.isPrecise ? toPrismaDecimal(input.longitude) : null,
+        placeId: input.isPrecise ? input.placeId ?? null : null,
+      },
+    });
+    if (!input.licenseCategories?.length) return created;
+    return setLocationLicenseCategories(tx, {
       companyId: input.companyId,
-      createdByUserId: input.createdByUserId,
-      name: input.name.trim(),
-      isPrecise: input.isPrecise,
-      isDefault: false,
-      address: input.isPrecise ? input.address ?? null : null,
-      latitude: input.isPrecise ? toPrismaDecimal(input.latitude) : null,
-      longitude: input.isPrecise ? toPrismaDecimal(input.longitude) : null,
-      placeId: input.isPrecise ? input.placeId ?? null : null,
-    },
+      locationId: created.id,
+      categories: input.licenseCategories,
+    });
   });
 }
 
@@ -100,6 +156,7 @@ export type UpdateLocationInput = {
   latitude?: number | null;
   longitude?: number | null;
   placeId?: string | null;
+  licenseCategories?: string[];
 };
 
 export async function updateLocation(input: UpdateLocationInput) {
@@ -148,9 +205,17 @@ export async function updateLocation(input: UpdateLocationInput) {
     data.placeId = null;
   }
 
-  return prisma.autoscuolaLocation.update({
-    where: { id: input.id },
-    data,
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.autoscuolaLocation.update({
+      where: { id: input.id },
+      data,
+    });
+    if (input.licenseCategories === undefined) return updated;
+    return setLocationLicenseCategories(tx, {
+      companyId: existing.companyId,
+      locationId: input.id,
+      categories: input.licenseCategories,
+    });
   });
 }
 
@@ -162,6 +227,7 @@ export type UpdateDefaultLocationInput = {
   latitude?: number | null;
   longitude?: number | null;
   placeId?: string | null;
+  licenseCategories?: string[];
 };
 
 export async function upsertDefaultLocation(input: UpdateDefaultLocationInput) {
@@ -189,19 +255,18 @@ export async function upsertDefaultLocation(input: UpdateDefaultLocationInput) {
     archivedAt: null,
   };
 
-  if (existing) {
-    return prisma.autoscuolaLocation.update({
-      where: { id: existing.id },
-      data,
-    });
-  }
-
-  return prisma.autoscuolaLocation.create({
-    data: {
+  return prisma.$transaction(async (tx) => {
+    const saved = existing
+      ? await tx.autoscuolaLocation.update({ where: { id: existing.id }, data })
+      : await tx.autoscuolaLocation.create({
+          data: { companyId: input.companyId, isDefault: true, ...data },
+        });
+    if (input.licenseCategories === undefined) return saved;
+    return setLocationLicenseCategories(tx, {
       companyId: input.companyId,
-      isDefault: true,
-      ...data,
-    },
+      locationId: saved.id,
+      categories: input.licenseCategories,
+    });
   });
 }
 
@@ -217,9 +282,12 @@ export async function softDeleteLocation(id: string, actor: LocationActor) {
   }
   assertCanManageLocation(actor, existing);
 
+  // Le patenti assegnate si liberano con l'archiviazione: altrimenti un luogo
+  // eliminato terrebbe in ostaggio la categoria e il precompile ricadrebbe in
+  // silenzio sulla sede senza poterla riassegnare altrove (REG-409).
   return prisma.autoscuolaLocation.update({
     where: { id },
-    data: { archivedAt: new Date() },
+    data: { archivedAt: new Date(), licenseCategories: [] },
   });
 }
 

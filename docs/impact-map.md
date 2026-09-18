@@ -30,6 +30,8 @@ Each entry: **Feature** → list of features it connects to, with reason.
 ### Locations (Sede e luoghi)
 - → **Appointments**: guide e prenotazioni selezionano un luogo (default = sede `isDefault`); mostrato agli allievi nel dettaglio guida
 - → **Mobile**: dettaglio guida apre Google Maps quando `isPrecise` (address+coords da Google Places)
+- → **Appointments / Vehicles / License (luogo per tipo di patente, REG-409)**: `AutoscuolaLocation.licenseCategories` assegna a ogni luogo uno o più tipi di patente; in creazione guida il campo "Luogo" si precompila con **precedenza default allievo (REG-392) → luogo della patente → sede** (`lib/autoscuole/location-for-license.ts`, puro e testato). La patente della guida è quella del **veicolo** se selezionato, altrimenti il percorso dell'allievo → **chi tocca `licenseCategory` su veicoli o allievi cambia anche il luogo precompilato**. Una categoria appartiene a un solo luogo per company: l'esclusività è applicata in transazione da `setLocationLicenseCategories`, quindi **ogni nuovo path che scrive un luogo deve passare da lì**, mai da un `update` diretto su `licenseCategories`. Archiviare un luogo libera le sue categorie.
+- **NON connesso (volutamente)**: l'auto-prenotazione dell'allievo da app (`createBookingRequest`, `respondWaitlistOffer`) resta sempre sulla sede — non ha un campo Luogo e ignorava già il default REG-392. Il `BookingForm` del **mobile** non consuma ancora `licenseCategories` (REG-409 chiuso web-only): il campo viaggia già nella risposta di `GET /api/autoscuole/locations`, manca solo il consumo lato app.
 
 ### Availability
 - → **Booking Engine**: `getPublicationModeFilter()` gates student booking; slot-matcher reads weekly/daily/published data
