@@ -100,12 +100,16 @@ Docs: `features/locations.md`, `INDEX.md`, `impact-map.md`.
 
 ## Fuori scope / follow-up
 
-- **Mobile** (`reglo-mobile/src/components/booking/BookingForm.tsx` +
-  `types/regloApi.ts`): applicare la stessa precedenza. Il backend è già pronto.
-- **Auto-prenotazione allievo da app** (`createBookingRequest`,
-  `respondWaitlistOffer`): assegnano sempre la sede e ignorano già il default
-  REG-392. Lasciate invariate di proposito — non hanno un campo "Luogo" da
-  precompilare; da decidere se allinearle.
+- ~~**Mobile**~~ ✅ **fatto 2026-09-19** (`BookingForm` + `types/regloApi.ts` +
+  `src/utils/locationForLicense.ts`, gemello del modulo puro).
+- ~~**Auto-prenotazione allievo da app**~~ ✅ **fatto 2026-09-19**: si è deciso di
+  allinearle. `createBookingRequest` e `respondWaitlistOffer` usano ora
+  `resolveStudentBookingLocationId` (`lib/autoscuole/locations.ts`) invece della
+  query hardcoded sulla sede.
+
+  Entrambi i follow-up sono sul branch `tizianodifelice1/reg-409-luogo-prenotazione-allievo`
+  (presente su **entrambi** i repo) — piano:
+  `reglo-mobile/plans/mobile/reg-409-luogo-per-tipo-patente-mobile.md`.
 - **Cambio automatico**: "B" copre manuale e automatica. Se servisse
   distinguerle (come fa la palette colori agenda con la voce `autom`) va
   aggiunta una seconda dimensione.

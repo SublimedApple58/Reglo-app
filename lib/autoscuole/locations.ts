@@ -3,6 +3,7 @@ import type { AutoscuolaLocation, Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
 
 import { isOwner } from "./roles";
+import { resolvePrefilledLocationId } from "./location-for-license";
 
 export const DEFAULT_LOCATION_LABEL = "Sede dell'autoscuola";
 
@@ -101,6 +102,46 @@ export async function getDefaultLocationId(companyId: string): Promise<string | 
     select: { id: true },
   });
   return loc?.id ?? null;
+}
+
+/**
+ * Luogo di una prenotazione fatta DALL'ALLIEVO dall'app (REG-409 follow-up).
+ *
+ * Applica la stessa precedenza del campo "Luogo" in creazione guida dal web
+ * (`resolvePrefilledLocationId`): default dell'allievo → luogo della patente
+ * della guida → sede. Prima di questo helper le prenotazioni self-service
+ * finivano SEMPRE in sede, ignorando sia REG-392 sia REG-409.
+ *
+ * `vehicleLicenseCategory` è la categoria del veicolo assegnato dal matcher
+ * (è il veicolo a definire che guida è); `null` quando la guida non ha veicolo
+ * o il modulo Veicoli è spento → si ricade sul percorso dell'allievo.
+ */
+export async function resolveStudentBookingLocationId(
+  tx: Prisma.TransactionClient,
+  params: {
+    companyId: string;
+    studentId: string;
+    vehicleLicenseCategory?: string | null;
+  },
+): Promise<string | null> {
+  const [locations, member] = await Promise.all([
+    tx.autoscuolaLocation.findMany({
+      where: { companyId: params.companyId, archivedAt: null },
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+      select: { id: true, isDefault: true, licenseCategories: true },
+    }),
+    tx.companyMember.findFirst({
+      where: { companyId: params.companyId, userId: params.studentId },
+      select: { defaultLocationId: true, licenseCategory: true },
+    }),
+  ]);
+
+  return resolvePrefilledLocationId({
+    locations,
+    studentDefaultLocationId: member?.defaultLocationId ?? null,
+    student: { licenseCategory: member?.licenseCategory ?? null },
+    vehicle: { licenseCategory: params.vehicleLicenseCategory ?? null },
+  });
 }
 
 export type CreateLocationInput = {

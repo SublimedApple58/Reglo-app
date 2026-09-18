@@ -27,6 +27,7 @@ import {
   resolveVehiclesForInstructor,
 } from "@/lib/autoscuole/vehicle-resolution";
 import { vehicleServesLicense } from "@/lib/autoscuole/license";
+import { resolveStudentBookingLocationId } from "@/lib/autoscuole/locations";
 import { isWithinRestrictedWindow, pickRestrictedWindowSlots } from "@/lib/autoscuole/restricted-window";
 import { assignMotoForStudent, eligibleForMotoGroup, hasFreeExactMoto, groupMotoFollowCarRequired, type FleetVehicle } from "@/lib/autoscuole/group-moto";
 import { findFreeGroupFollowCar } from "@/lib/autoscuole/group-follow-assign";
@@ -2541,10 +2542,15 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           throw new Error("Slot non disponibile.");
         }
 
-        // Default location: link student-initiated bookings to the company sede
-        const studentBookingLoc = await tx.autoscuolaLocation.findFirst({
-          where: { companyId: membership.companyId, isDefault: true, archivedAt: null },
-          select: { id: true },
+        // Luogo (REG-409 follow-up): stessa precedenza del campo "Luogo" in
+        // creazione guida dal web — default dell'allievo → luogo della patente
+        // della guida → sede. Prima finiva SEMPRE in sede.
+        const studentBookingLocationId = await resolveStudentBookingLocationId(tx, {
+          companyId: membership.companyId,
+          studentId: payload.studentId,
+          vehicleLicenseCategory: candidate.vehicleId
+            ? (activeVehicles.find((v) => v.id === candidate.vehicleId)?.licenseCategory ?? null)
+            : null,
         });
         return tx.autoscuolaAppointment.create({
           data: {
@@ -2558,7 +2564,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             status: "scheduled",
             instructorId: candidate.instructorId,
             vehicleId: candidate.vehicleId,
-            locationId: studentBookingLoc?.id ?? null,
+            locationId: studentBookingLocationId,
             slotId: studentSlot.id,
             paymentRequired: paymentSnapshot.paymentRequired,
             paymentStatus: paymentSnapshot.paymentStatus,
@@ -4266,10 +4272,18 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
         });
       }
 
-      // Default location: link student-initiated bookings to the company sede
-      const waitlistAcceptLoc = await tx.autoscuolaLocation.findFirst({
-        where: { companyId: membership.companyId, isDefault: true, archivedAt: null },
-        select: { id: true },
+      // Luogo (REG-409 follow-up): stessa precedenza della prenotazione
+      // normale — default dell'allievo → luogo della patente → sede.
+      const waitlistVehicle = assignment.vehicleId
+        ? await tx.autoscuolaVehicle.findFirst({
+            where: { id: assignment.vehicleId, companyId: membership.companyId },
+            select: { licenseCategory: true },
+          })
+        : null;
+      const waitlistLocationId = await resolveStudentBookingLocationId(tx, {
+        companyId: membership.companyId,
+        studentId: payload.studentId,
+        vehicleLicenseCategory: waitlistVehicle?.licenseCategory ?? null,
       });
       const appointment = await tx.autoscuolaAppointment.create({
         data: {
@@ -4286,7 +4300,7 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
           status: "scheduled",
           instructorId: assignment.instructorId,
           vehicleId: assignment.vehicleId,
-          locationId: waitlistAcceptLoc?.id ?? null,
+          locationId: waitlistLocationId,
           slotId: offer.slotId,
           // Reserve every vehicle this lesson uses (primary + follow car), like
           // the main booking flow — busy-builders read this join.

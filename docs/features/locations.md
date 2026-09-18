@@ -37,13 +37,21 @@ creando una guida il campo "Luogo" si precompila di conseguenza.
   (sempre, azzerando il flag) e al cambio **veicolo** (solo se il titolare non
   ha scelto il Luogo a mano — `createLocationTouchedRef`). Toccare il select
   alza il flag; cambiare allievo lo azzera (cambio di contesto completo).
-- **Fuori scope**: l'auto-prenotazione dell'allievo da app (`createBookingRequest`,
-  `respondWaitlistOffer`) continua ad assegnare **sempre la sede** — non ha un
-  campo Luogo da precompilare e già oggi ignora anche il default REG-392.
-- **Mobile**: `GET /api/autoscuole/locations` espone già `licenseCategories`, ma
-  il `BookingForm` dell'agenda istruttore **non lo consuma ancora** (scelta
-  esplicita: REG-409 è stato chiuso web-only). Lì il precompile resta
-  default allievo → sede.
+- **Prenotazione dell'allievo da app** (follow-up 2026-09-19): non ha un campo
+  Luogo, ma non finisce più sempre in sede — `createBookingRequest` e
+  `respondWaitlistOffer` applicano la **stessa precedenza** via
+  `resolveStudentBookingLocationId` (`lib/autoscuole/locations.ts`), che carica
+  luoghi + `CompanyMember.defaultLocationId`/`licenseCategory` e delega al
+  resolver puro. La patente della guida viene dal **veicolo assegnato dal
+  matcher**; senza veicolo (o col modulo Veicoli spento) si ricade sul percorso
+  dell'allievo.
+- **Mobile** (follow-up 2026-09-19): il `BookingForm` dell'agenda
+  istruttore/titolare consuma `licenseCategories` e applica la stessa
+  precedenza, con lo stesso comportamento del web sul ricalcolo (cambio allievo
+  azzera, cambio veicolo rispetta la scelta manuale). La logica è duplicata in
+  `reglo-mobile/src/utils/locationForLicense.ts`, **gemello** di
+  `lib/autoscuole/location-for-license.ts`: le due copie vanno cambiate insieme.
+  Vedi `reglo-mobile/docs/features/locations.md`.
 
 ## Backend — API routes
 
@@ -99,4 +107,4 @@ Create/update/default accettano `licenseCategories?: LicenseCategory[]`
 
 - **Appointments/booking**: il luogo è selezionabile su guide e prenotazioni (default = sede).
 - **Vehicles / License**: la patente della guida (e quindi il luogo precompilato) dipende dal veicolo scelto — chi tocca `licenseCategory` sui veicoli tocca anche questo.
-- **Mobile**: il dettaglio guida mostra il luogo; con `isPrecise` apre Google Maps.
+- **Mobile**: il dettaglio guida mostra il luogo; con `isPrecise` apre Google Maps. Il `BookingForm` precompila il Luogo con la stessa precedenza (`src/utils/locationForLicense.ts`, gemello del modulo puro qui).
