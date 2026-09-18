@@ -90,6 +90,10 @@ import {
   normalizeLessonType as normalizeLessonTypeFromPolicy,
   parseLessonPolicyFromLimits,
 } from "@/lib/autoscuole/lesson-policy";
+import {
+  REQUIRED_LESSONS_COUNT,
+  isMandatoryLessonDuration,
+} from "@/lib/autoscuole/mandatory-lessons";
 
 const createStudentSchema = z.object({
   firstName: z.string().min(1),
@@ -391,7 +395,6 @@ const getOwnInstructorProfile = async (companyId: string, userId: string) =>
     select: { id: true },
   });
 
-const REQUIRED_LESSONS_COUNT = 6;
 const LESSON_TYPE_OPTIONS = LESSON_ALL_ALLOWED_TYPES;
 const LESSON_TYPE_SET = new Set<string>(LESSON_TYPE_OPTIONS);
 const INSTRUCTOR_ALLOWED_STATUSES = new Set(["checked_in", "no_show"]);
@@ -1668,7 +1671,10 @@ const buildDrivingRegisterData = ({
     .map(([type, count]) => ({ type, count }))
     .sort((a, b) => b.count - a.count || a.type.localeCompare(b.type));
 
-  const summaryCount = completedLessons.length;
+  // Obbligo: contano SOLO le guide da 60 minuti (stesso criterio dei flag
+  // dell'agenda). `byLessonType` qui sopra continua invece a contare tutte le
+  // guide completate: è un riepilogo dei tipi svolti, non dell'obbligo.
+  const summaryCount = completedLessons.filter(isMandatoryLessonDuration).length;
 
   return {
     activeCase: activeCase
@@ -2434,10 +2440,9 @@ const buildAppointmentGridFlags = async (
   // mandatory lessons and don't consume one of the 6 slots either.
   const mandatoryIds = new Set<string>();
   const perStudentCount = new Map<string, number>();
-  const SIXTY_MIN_MS = 60 * 60 * 1000;
   for (const g of allGuides) {
     if (!g.studentId) continue; // studentless exam placeholder (not a guide)
-    if (!g.endsAt || g.endsAt.getTime() - g.startsAt.getTime() !== SIXTY_MIN_MS) continue;
+    if (!isMandatoryLessonDuration(g)) continue;
     const n = perStudentCount.get(g.studentId) ?? 0;
     if (n < REQUIRED_LESSONS_COUNT) mandatoryIds.add(g.id);
     perStudentCount.set(g.studentId, n + 1);

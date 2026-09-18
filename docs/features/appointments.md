@@ -109,7 +109,26 @@ Fa **sparire** una guida dallo storico allievo e dall'agenda, senza toccare pena
 - `approveAvailabilityOverride()` — approve out-of-availability booking
 - `createExamEvent()`, `addExamStudent()`, `removeExamStudent()`, `cancelExamEvent()`
 - **Esami senza allievi (2026-07-16)**: un esame si può ora creare **senza selezionare allievi** (le autoscuole spesso non sanno subito chi parteciperà). Non esiste un'entità "esame": è un gruppo di righe `AutoscuolaAppointment` (una per allievo) con `type="esame"`. Per rappresentare un esame vuoto la colonna `AutoscuolaAppointment.studentId` è ora **nullable** (SOLO per gli esami: un esame vuoto = **1 riga segnaposto** con `studentId=null`; ogni altro tipo ha sempre uno studentId — invariante a livello applicativo). Tutte le vie di creazione (`createExamEvent`, `addExamStudent`, API route istruttori `POST /api/autoscuole/exam`, e il mobile che ri-chiama `createExam` sullo stesso slot) passano per l'helper condiviso **`materializeExamSlot()`**: 0 allievi → crea/mantiene 1 segnaposto; aggiungere il **primo** allievo **converte** il segnaposto (niente riga fantasma), gli altri ottengono righe proprie. Identità slot = `(companyId, "esame", startsAt, endsAt, instructorId)`. Il serializer (`mapCaseStudent`) mappa la riga senza allievo su uno **student sintetico** `{ id: "exam-empty[:apptId]", firstName: "Esame" }` così il client non dereferenzia mai `student` null; l'agenda web (`AutoscuoleAgendaPage`, helper `isExamPlaceholder`) e mobile (`weeklyAgenda.isExamPlaceholder`, `exam-manage`, `WeeklyLiveCard`, `WeeklyAgendaView`) escludono i segnaposto da conteggi/liste e mostrano "vuoto"/"Nessun allievo". La rimozione mantiene il guard "non puoi togliere l'ultimo allievo — usa Annulla esame" (si torna a vuoto solo cancellando l'esame). Migrazione: `20260716163809_exam_student_nullable` (solo `DROP NOT NULL`).
-- `getAutoscuolaAppointmentsFiltered()` — lista agenda (light/full); annota ogni guida con `mandatoryLesson` (prime 6 guide individuali **da esattamente 60 minuti** non annullate dell'allievo, `REQUIRED_LESSONS_COUNT`; guide di altra durata non sono obbligatorie e non consumano slot — criterio 2026-06-12) ed `examNextDay` (esame il giorno dopo, da `case.drivingExamAt` o appuntamento esame) via `buildAppointmentGridFlags` — usati dai colori della vista griglia mobile
+### Contatore "x/6" guide obbligatorie
+
+La regola sta in **`lib/autoscuole/mandatory-lessons.ts`** (`REQUIRED_LESSONS_COUNT`,
+`isMandatoryLessonDuration`) ed è usata da entrambi i punti che la mostrano:
+
+- `summary` di `getAutoscuolaStudentDrivingRegister` → contatore del dettaglio allievo web
+- `buildAppointmentGridFlags` → flag `mandatoryLesson` dei colori agenda
+
+**Contano SOLO le guide da esattamente 60 minuti.** Fino al 2026-09-18 il contatore del
+dettaglio allievo contava tutte le guide completate (anche quelle da 30 minuti) mentre
+l'agenda applicava già il criterio dei 60: le due viste si contraddicevano. Ora la regola è
+una sola. `endsAt` nullo non conta (altrove vale 30 minuti, `computeAppointmentEnd`).
+
+`byLessonType` ("Tipi guida completati") continua invece a contare **tutte** le guide
+completate: è un riepilogo dei tipi svolti, non dell'obbligo.
+
+Gemello mobile: `reglo-mobile/src/utils/mandatoryLessons.ts` (usato da
+`StudentNotesDetailScreen` e `InstructorNotesScreen`) — da cambiare insieme.
+
+- `getAutoscuolaAppointmentsFiltered()` — lista agenda (light/full); annota ogni guida con `mandatoryLesson` (prime 6 guide individuali **da esattamente 60 minuti** non annullate dell'allievo, `REQUIRED_LESSONS_COUNT`; guide di altra durata non sono obbligatorie e non consumano slot — criterio 2026-06-12, ora in `lib/autoscuole/mandatory-lessons.ts`) ed `examNextDay` (esame il giorno dopo, da `case.drivingExamAt` o appuntamento esame) via `buildAppointmentGridFlags` — usati dai colori della vista griglia mobile
 - `setExamPriorityOverride()` — manual exam priority toggle
 - `getLateCancellations()`, `resolveLateCancellation()` — late cancel management
 - **Cancellazioni staff dall'agenda web**: dal redesign 2026-07-20 il popover evento ha **un solo CTA** ("Annulla guida" / "Rimuovi dallo storico") che apre `CancelAppointmentDialog`. I vecchi due bottoni "Annulla"/"Cancella" e "Elimina definitivamente" sono stati rimossi dal web. Le action `cancelAutoscuolaAppointment` (`manual_cancel`), `deleteAutoscuolaAppointment` → `operationallyCancelAppointment` (`operational_cancel`) e `permanentlyCancelAutoscuolaAppointment` (`permanent_cancel`) restano SOLO per il mobile (e il trigger owner-notifications sull'annullo allievo). Limiti noti del permanent: nessun guard ruolo/proprietà, slot non liberati, penale non azzerata. Vedi la sezione "Redesign cancellazioni" sopra.
