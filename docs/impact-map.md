@@ -165,6 +165,18 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - ← **Quiz, Aula, Swap, Group lessons, Voice, Pagellino, Pagamenti**: conteggi di adozione per feature (sola lettura, un `groupBy` per feature)
 - Nessun modello nuovo e nessun job: tutto calcolato live dall'action `getBackofficeKpis`
 
+### Instructor Hours (report "Ore guida" web)
+- ← **Appointments**: le ORE del report sono le guide svolte (`completed`/`checked_in`/`no_show`, `esame` escluso). L'OCCUPAZIONE (REG-444) usa un filtro diverso apposta — tutto ciò che non è `cancelled`, esami e guide ancora da svolgere compresi — perché misura quanto dell'agenda è preso, non quanto è stato fatto. Chi tocca gli stati deve guardare ENTRAMBI i filtri: `getInstructorDrivingHoursRange` per le ore, `loadAgendaOccupancy` per l'occupazione
+- **Il futuro non si misura**: l'occupazione è ritagliata a `[inizio periodo, adesso)` e il taglio vale per fasce, blocchi E occupato insieme (`measurementWindow`). Tagliarne solo una parte fa comparire guide future nel conteggio "fuori fascia". Le cancellazioni tardive sono l'eccezione: coprono tutto il periodo, perché sono un evento già avvenuto
+- La pagina web consuma la shape **range** (`?from&to`), la stessa del mobile: `occupancy` e `total.lateCancellationMinutes` sono additivi, il mobile non è toccato. La shape legacy `weekStart` non ha l'occupazione e non è più usata dal web
+- ← **Availability**: le "ore disponibili" vengono da `buildAvailabilityResolver` (settimana tipo + eccezioni giornaliere + settimane pubblicate, che sono override). Stessa fonte dell'agenda a schermo → stesso numero
+- ← **Instructor Absences / Lezione teorica**: ferie, malattia, teoria e blocchi manuali si SOTTRAGGONO dalle ore disponibili (`AutoscuolaInstructorBlock`, criterio di sovrapposizione: un blocco iniziato la settimana prima conta lo stesso)
+- ← **Holidays**: i giorni di chiusura (`AutoscuolaHoliday`) azzerano la disponibilità del giorno
+- ← **Pausa tra le guide (REG-484)**: i blocchi `reason: "lesson_buffer"` sono l'ECCEZIONE — contano come ore OCCUPATE, non come indisponibilità, altrimenti le ore disponibili si accorcerebbero a ogni prenotazione. La separazione sta in `splitBlocksByNature` (`lib/autoscuole/agenda-occupancy.ts`): ogni nuovo `reason` di blocco va classificato lì
+- ← **Group lessons**: i contenitori `scheduled` occupano l'istruttore anche a zero posti (`fetchGroupLessonBusyRows`); gli intervalli si fondono, quindi i posti + il contenitore non contano due volte
+- → **Backoffice KPI**: stessa definizione di saturazione, stessa matematica (`lib/backoffice/agenda-saturation.ts`). Se cambia la definizione qui, il KPI interno e il report del titolare divergono: cambiarli insieme
+- → **Mobile**: NESSUN impatto. Il mobile consuma la shape `InstructorHoursRange` (`?from&to`), che non è stata toccata; `occupancy` vive solo nella shape legacy `InstructorHoursEntry` del web
+
 ### Support Center + Feedback
 - → **Users Directory**: `SupportMessage.senderUserId` / `ProductFeedback.userId` SetNull su delete utente (il nome resta come snapshot `senderName`/`userName`)
 - → **Backoffice**: nuove pagine support/feedback sotto la stessa auth cookie (`requireGlobalAdmin`); header con nav + badge non-letti
