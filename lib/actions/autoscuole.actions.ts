@@ -20,6 +20,7 @@ import {
   buildDeclaredIntervals,
   computeAgendaOccupancy,
   romeNoonDays,
+  splitBlocksByNature,
   type AgendaOccupancy,
   type Interval,
 } from "@/lib/autoscuole/agenda-occupancy";
@@ -11302,8 +11303,21 @@ export async function getInstructorDrivingHours(input: {
     for (const appt of occupancyAppointments) pushBusy(appt.instructorId, appt.startsAt, appt.endsAt);
     for (const gl of groupLessonRows) pushBusy(gl.instructorId, gl.startsAt, gl.endsAt);
 
+    // I blocchi tolgono ore alla disponibilità — TRANNE le pause fra una guida
+    // e l'altra (REG-484), che sono blocchi anche loro ma di un'altra natura:
+    // non sono ore in cui l'istruttore non c'è, sono ore consumate DA una
+    // prenotazione. Se finissero fra le indisponibilità, le ore disponibili si
+    // accorcerebbero a ogni guida prenotata — un denominatore che si muove da
+    // solo, impossibile da spiegare a un titolare. Vanno invece fra le ore
+    // occupate: sono capacità che non si può più vendere. Attaccandosi alla
+    // fine della guida si fondono con essa e non contano due volte.
+    // Le pause fra una guida e l'altra sono blocchi, ma contano come ore
+    // OCCUPATE, non come indisponibilità: vedi `splitBlocksByNature`.
+    const { unavailability, busy: bufferBlocks } = splitBlocksByNature(allBlocks);
+    for (const block of bufferBlocks) pushBusy(block.instructorId, block.startsAt, block.endsAt);
+
     const blocksByInstructor = new Map<string, Interval[]>();
-    for (const block of allBlocks) {
+    for (const block of unavailability) {
       if (!block.instructorId) continue;
       const list = blocksByInstructor.get(block.instructorId) ?? [];
       list.push({ start: block.startsAt.getTime(), end: block.endsAt.getTime() });

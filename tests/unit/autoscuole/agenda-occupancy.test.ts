@@ -3,6 +3,7 @@ import {
   computeAgendaOccupancy,
   romeNoonDays,
   romeYmdKey,
+  splitBlocksByNature,
   sumOccupancy,
   type AvailabilityDayResolver,
 } from "@/lib/autoscuole/agenda-occupancy";
@@ -90,6 +91,54 @@ describe("occupazione agenda — il conto", () => {
 
     const empty = computeAgendaOccupancy({ declared: [], blocks: [], busy: [] });
     expect(empty.declaredMinutes).toBe(0);
+  });
+});
+
+describe("occupazione agenda — pause fra una guida e l'altra (REG-484)", () => {
+  it("separa le pause dalle vere indisponibilità", () => {
+    const { unavailability, busy } = splitBlocksByNature([
+      { reason: "vacation" },
+      { reason: "lesson_buffer" },
+      { reason: "theory_lesson" },
+      { reason: null },
+    ]);
+    expect(unavailability.map((b) => b.reason)).toEqual(["vacation", "theory_lesson", null]);
+    expect(busy.map((b) => b.reason)).toEqual(["lesson_buffer"]);
+  });
+
+  it("la pausa non accorcia le ore disponibili: il denominatore resta fermo", () => {
+    // 4h dichiarate, una guida di 1h con 15' di pausa attaccata dietro.
+    const declared = [iv(rome(14, 9), rome(14, 13))];
+    const lezione = iv(rome(14, 9), rome(14, 10));
+    const pausa = iv(rome(14, 10), rome(14, 10, 15));
+
+    const conPausa = computeAgendaOccupancy({ declared, blocks: [], busy: [lezione, pausa] });
+    const senzaPausa = computeAgendaOccupancy({ declared, blocks: [], busy: [lezione] });
+
+    // Le ore disponibili NON cambiano perché qualcuno ha prenotato.
+    expect(conPausa.availableMinutes).toBe(240);
+    expect(senzaPausa.availableMinutes).toBe(240);
+    // La pausa è capacità consumata: entra fra le occupate.
+    expect(conPausa.busyMinutes).toBe(75);
+    expect(senzaPausa.busyMinutes).toBe(60);
+  });
+
+  it("la pausa attaccata alla guida si fonde con essa, non conta due volte", () => {
+    const out = computeAgendaOccupancy({
+      declared: [iv(rome(14, 9), rome(14, 13))],
+      blocks: [],
+      busy: [iv(rome(14, 9), rome(14, 10)), iv(rome(14, 10), rome(14, 10, 15))],
+    });
+    expect(out.busyMinutes).toBe(75);
+  });
+
+  it("ferie e malattia invece le ore disponibili le tolgono davvero", () => {
+    const out = computeAgendaOccupancy({
+      declared: [iv(rome(14, 9), rome(14, 13))],
+      blocks: [iv(rome(14, 9), rome(14, 11))],
+      busy: [],
+    });
+    expect(out.availableMinutes).toBe(120);
   });
 });
 

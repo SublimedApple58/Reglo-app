@@ -24,6 +24,9 @@ import {
 
 export type { Interval };
 
+/** `reason` delle pause automatiche fra una guida e l'altra (REG-484). */
+export const LESSON_BUFFER_BLOCK_REASON = "lesson_buffer";
+
 /** Cosa sappiamo dirgli dell'agenda di un istruttore in un periodo. */
 export type AgendaOccupancy = {
   /** Fasce dichiarate nel periodo, PRIMA di togliere blocchi e chiusure. */
@@ -109,6 +112,30 @@ export function buildDeclaredIntervals(input: {
     }
   }
   return out;
+}
+
+/**
+ * I blocchi non sono tutti uguali. Ferie, malattia, lezioni teoriche e blocchi
+ * manuali sono ore in cui l'istruttore NON c'è: tolgono disponibilità. Le pause
+ * fra una guida e l'altra (REG-484, `reason: "lesson_buffer"`) sono blocchi
+ * anche loro, ma di un'altra natura — sono ore consumate DA una prenotazione.
+ *
+ * Se finissero fra le indisponibilità, le ore disponibili si accorcerebbero a
+ * ogni guida prenotata: un denominatore che si muove da solo, impossibile da
+ * spiegare a un titolare. Vanno invece fra le ore occupate, perché è capacità
+ * che non si può più vendere. Attaccandosi alla fine della guida si fondono
+ * con essa e non contano due volte.
+ */
+export function splitBlocksByNature<T extends { reason?: string | null }>(
+  blocks: T[],
+): { unavailability: T[]; busy: T[] } {
+  const unavailability: T[] = [];
+  const busy: T[] = [];
+  for (const block of blocks) {
+    if (block.reason === LESSON_BUFFER_BLOCK_REASON) busy.push(block);
+    else unavailability.push(block);
+  }
+  return { unavailability, busy };
 }
 
 /**

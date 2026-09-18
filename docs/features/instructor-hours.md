@@ -54,6 +54,13 @@ mese non ha una barra dove stare e sommare due periodi nella stessa card confond
   Contato a parte, **non** entra nel rapporto (né al numeratore né al denominatore).
   Da non confondere con `outsideWorkingHoursMinutes`, che è un'altra cosa (la finestra
   `workingHoursStart/End` dei settings istruttore) e in pagina non si vede.
+- **Pause fra una guida e l'altra (REG-484)**: sono `AutoscuolaInstructorBlock` con
+  `reason: "lesson_buffer"`, ma **NON** vanno fra le indisponibilità — ci finirebbero
+  per distrazione, visto che sono blocchi. Sono ore consumate *da* una prenotazione:
+  se togliessero disponibilità, le ore disponibili si accorcerebbero a ogni guida
+  prenotata (un denominatore che si muove da solo, impossibile da spiegare a un
+  titolare). Vanno fra le **occupate**. `splitBlocksByNature` fa la separazione ed è
+  il posto da toccare se nasce un altro `reason` di questa natura.
 - **Rapporto sui totali, non media dei rapporti** (`sumOccupancy`): un istruttore con
   due ore dichiarate non deve pesare come uno che ne ha quaranta.
 - Tre stati distinti in UI, e vanno detti diversamente: nessuna fascia dichiarata
@@ -78,5 +85,6 @@ dati già in pagina: nessun endpoint nuovo.
 - **Instructor Clusters / Settings** — `workingHoursStart/End` (the window for "fuori orario") comes from instructor settings.
 - **Lezione teorica** — le ore teoriche compaiono qui come categoria separata (`theoryMinutes`).
 - **Availability / Holidays / Instructor Absences / Group lessons** — alimentano le ore disponibili e occupate (REG-444). Vedi `impact-map.md` → "Instructor Hours".
+- **Pausa tra le guide (REG-484)** — i blocchi `lesson_buffer` contano come ore OCCUPATE, non come indisponibilità (`splitBlocksByNature`). Vedi `features/lesson-buffer.md`.
 - **Backoffice KPI** — stessa matematica e stessa definizione di saturazione: cambiarle insieme o i due numeri divergono.
 - **Mobile** — `reglo-mobile` Ore di guida screen + `more/hours-period` period picker consume the range shape. **`occupancy` NON è nella shape range**: il mobile non è toccato da REG-444.
