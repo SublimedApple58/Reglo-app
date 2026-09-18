@@ -57,13 +57,32 @@ Create/update/default accettano `licenseCategories?: LicenseCategory[]`
 ## Web (pane Impostazioni, redesign 2026-07-12 dal proto #config-tab-sede)
 
 - `components/pages/Autoscuole/locations/LocationsSection.tsx` — pane: onboarding se la sede manca O non è mai stata configurata (illustrazione `public/images/settings/sede-autoscuola.png` 172px + CTA navy "Imposta la sede"), poi card "Sede dell'autoscuola" (link Modifica sottolineato, hover thickness 2) + card "Altri luoghi guida" (Aggiungi, righe #fafafa con pin navy, bottoncini 32px Maps/matita/cestino, empty state grigio).
-- Sezione **"Tipi di patente"** nella modale (REG-409): chip a gruppi
-  (`licenseCategoryGroupsForMode`, in `lib/autoscuole/license.ts`) —
-  Auto/Moto/Camion/Autobus (+ Qualificazioni per i consorzi). Chip grigio =
-  categoria già assegnata a un altro luogo (tooltip col nome, riga di spiegazione
-  sotto i gruppi). Le card della lista mostrano i tag delle patenti assegnate; il
-  segnaposto "Nessuna patente assegnata" compare SOLO se almeno un luogo ha delle
-  categorie, così chi non usa la funzione non vede placeholder vuoti.
+- Sezione **"Tipi di patente"** nella modale (REG-409), in fondo, dopo
+  l'Indirizzo. Il resto della modale NON è toccato.
+  - I gruppi (`licenseCategoryGroupsForMode`, in `lib/autoscuole/license.ts` —
+    Auto/Moto/Camion/Autobus + Qualificazioni per i consorzi) si **impacchettano
+    in orizzontale** (`flex-wrap` sulle celle, non una colonna di sezioni): le 10
+    patenti stanno in due righe. Regge anche la lista consorzio.
+  - **Palette neutra** (richiesta esplicita, 2026-09-18: niente arcobaleno).
+    Non selezionata = tasto su fondo tenue `#f4f5f7` — la superficie dei campi
+    della modale — **senza bordo**: a 28px di altezza il contorno fa più rumore
+    del contenuto. Selezionata = accento nero `#111111` + ombra in tinta scura
+    (la regola "la separazione la fa la profondità", in monocromatico).
+    Già assegnata a un altro luogo = tratteggio diagonale grigio + tooltip col
+    nome del luogo; resta cliccabile e selezionarla sposta la patente qui.
+  - **Contatore** `N ASSEGNATE` in linea col titolo e **hint contestuale** di una
+    riga sola che NOMINA la prima patente presa da un altro luogo (`firstTaken`),
+    invece di ripetere la regola in astratto. Senza conflitti l'hint ricorda che
+    il luogo di default dell'allievo ha la precedenza.
+  - Il riquadro riusa il bordo del box "Posizione precisa" (`1.5px #ededed`,
+    radius 12): nessun contenitore nuovo.
+  - **Storia**: la prima versione era una colonna di gruppi con chip outline e
+    tre righe di spiegazione (bocciata: banale e dispersiva); la seconda usava i
+    colori patente di `LICENSE_COLOR_ENTRIES` (bocciata: troppo colore). Se
+    qualcuno ci ritorna sopra, il vincolo è: denso, neutro, niente tinte.
+- Le card della lista mostrano i tag delle patenti assegnate; il segnaposto
+  "Nessuna patente assegnata" compare SOLO se almeno un luogo ha delle categorie,
+  così chi non usa la funzione non vede placeholder vuoti.
 - La lista categorie dipende da `consortium`, passato
   `AutoscuoleResourcesPage` → `SettingsTab` → `LocationsSection`.
 - `components/pages/Autoscuole/locations/LocationFormDialog.tsx` — modale proto (`sedeModalOpen`): card 480px radius 20, header centrato con illustrazione (sede-autoscuola per la sede, `luogo-guida.png` per i luoghi), X tonda #f7f7f7, input su fondo `#f7f8fa` (focus bordo near-black + fondo bianco), riga toggle "Posizione precisa" (InlineToggle navy), campo Indirizzo con lente + autocomplete **Google Places** (session token, debounce 350ms, `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`; senza chiave il campo è disabilitato con hint), footer Annulla + CTA pill navy `#1a1a2e` ("Salva luogo", grigia `#c4c4d4` finché invalida, `LoadingDots` in salvataggio).

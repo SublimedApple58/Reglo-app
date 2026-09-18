@@ -46,11 +46,21 @@ Additiva, nessun backfill.
   Prisma intera, quindi il campo arriva già a web e mobile.
 
 ### Fase 3 — Web Impostazioni
-`LocationFormDialog` (chip a gruppi; chip grigio = categoria presa da un altro
-luogo, cliccabile per spostarla, con riga di spiegazione) e `LocationsSection`
-(tag sulle card; il segnaposto "Nessuna patente assegnata" compare solo se
-l'autoscuola usa la funzione). Prop `consortium` threaded
+`LocationFormDialog`: sezione "Tipi di patente" in fondo (il resto della modale
+non è toccato — la modifica al file è puramente additiva). Gruppi impacchettati
+in orizzontale, contatore `N ASSEGNATE`, hint contestuale che nomina la patente
+presa da un altro luogo, riquadro col bordo del box "Posizione precisa".
+Palette **neutra**: tasti su fondo tenue, selezione nera con ombra in tinta,
+tratteggio grigio per le patenti di altri luoghi.
+`LocationsSection`: tag sulle card; il segnaposto "Nessuna patente assegnata"
+compare solo se l'autoscuola usa la funzione. Prop `consortium` threaded
 `AutoscuoleResourcesPage` → `SettingsTab` → `LocationsSection`.
+
+**Due giri di design scartati** (feedback in review): la prima versione era una
+colonna di gruppi con chip outline e tre righe di spiegazione — bocciata come
+banale e dispersiva; la seconda portava i colori patente di
+`LICENSE_COLOR_ENTRIES` sui chip — bocciata perché troppo colorata. Vincolo
+finale: **denso e neutro**.
 
 ### Fase 4 — Web agenda
 `AutoscuoleAgendaPage`: `licenseCategories` in `AgendaLocationOption`, helper

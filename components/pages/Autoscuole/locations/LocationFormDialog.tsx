@@ -227,11 +227,19 @@ export function LocationFormDialog({
     () => licenseCategoryGroupsForMode(consortium),
     [consortium],
   );
-  const hasTakenCategories = licenseGroups.some((group) =>
-    group.categories.some(
-      (c) => takenCategories[c] && !licenseCategories.includes(c),
-    ),
-  );
+  // Prima patente che un ALTRO luogo si è preso: l'hint la nomina invece di
+  // ripetere la regola in astratto.
+  const firstTaken = useMemo(() => {
+    for (const group of licenseGroups) {
+      for (const category of group.categories) {
+        const location = takenCategories[category];
+        if (location && !licenseCategories.includes(category)) {
+          return { category, location };
+        }
+      }
+    }
+    return null;
+  }, [licenseGroups, takenCategories, licenseCategories]);
   const toggleLicenseCategory = (category: string) =>
     setLicenseCategories((prev) =>
       prev.includes(category)
@@ -361,22 +369,30 @@ export function LocationFormDialog({
           </>
         )}
 
-        {/* ── Tipi di patente serviti dal luogo (REG-409) ── */}
-        <div className="mb-2 mt-5 text-[13px] font-semibold text-foreground">
-          Tipi di patente
+        {/* ── Tipi di patente serviti dal luogo (REG-409) ──
+            I gruppi si impacchettano in orizzontale (flex-wrap) invece di
+            impilarsi: 10 patenti stanno in due righe. Palette neutra: le
+            patenti non scelte sono TASTI su fondo tenue (#f7f8fa, la stessa
+            superficie dei campi della modale) invece che pillole bordate — a
+            questa dimensione i bordi fanno più rumore del contenuto. La
+            selezione è l'accento nero (--primary) con l'ombra in tinta: la
+            separazione la fa la profondità, non un colore. Già presa da un
+            altro luogo = tratteggio grigio. */}
+        <div className="mt-5 flex items-baseline justify-between gap-2.5">
+          <div className="text-[13px] font-semibold text-foreground">Tipi di patente</div>
+          {licenseCategories.length > 0 && (
+            <div className="text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#9a9a9a]">
+              <span className="text-foreground">{licenseCategories.length}</span> assegnate
+            </div>
+          )}
         </div>
-        <div className="mb-2.5 text-xs font-medium leading-[1.45] text-[#a3a3a3]">
-          Le guide di queste patenti partiranno da qui: creando una guida il campo
-          «Luogo» si precompila da solo. Il luogo di default dell&apos;allievo, se
-          impostato, ha comunque la precedenza.
-        </div>
-        <div className="flex flex-col gap-3">
+        <div className="mt-2 flex flex-wrap gap-x-5 gap-y-[13px] rounded-[12px] border-[1.5px] border-[#ededed] px-[13px] py-[11px]">
           {licenseGroups.map((group) => (
-            <div key={group.label}>
-              <div className="mb-[7px] text-[11px] font-bold uppercase tracking-[0.4px] text-[#a3a3a3]">
+            <div key={group.label} className="min-w-0">
+              <div className="mb-1.5 text-[9.5px] font-bold uppercase tracking-[0.6px] text-[#b6b6b6]">
                 {group.label}
               </div>
-              <div className="flex flex-wrap gap-[7px]">
+              <div className="flex flex-wrap gap-[5px]">
                 {group.categories.map((category) => {
                   const active = licenseCategories.includes(category);
                   const takenBy = !active ? takenCategories[category] : undefined;
@@ -387,13 +403,23 @@ export function LocationFormDialog({
                       onClick={() => toggleLicenseCategory(category)}
                       aria-pressed={active}
                       title={takenBy ? `Ora assegnata a ${takenBy}` : undefined}
-                      className={cn(
-                        "cursor-pointer select-none rounded-[50px] border-[1.5px] px-3.5 py-[7px] text-[12.5px] font-semibold transition-colors",
+                      style={
                         active
-                          ? "border-[#1a1a2e] bg-[#1a1a2e] text-white"
+                          ? { boxShadow: "0 2px 6px rgba(17,17,17,0.22)" }
                           : takenBy
-                            ? "border-[#f0f0f0] bg-[#fafafa] text-[#c9c9c9] hover:border-[#dddddd]"
-                            : "border-[#ededed] bg-white text-[#555555] hover:border-[#929292]",
+                            ? {
+                                backgroundImage:
+                                  "repeating-linear-gradient(135deg,#fafafa,#fafafa 4px,#f0f0f0 4px,#f0f0f0 8px)",
+                              }
+                            : undefined
+                      }
+                      className={cn(
+                        "flex h-7 min-w-[38px] cursor-pointer select-none items-center justify-center rounded-[50px] px-[13px] text-[12.5px] font-bold transition-colors",
+                        active
+                          ? "bg-[#111111] text-white hover:bg-[#2b2b2b]"
+                          : takenBy
+                            ? "text-[#c4c4c4]"
+                            : "bg-[#f4f5f7] text-[#6a6a6a] hover:bg-[#e9eaee] hover:text-[#333333]",
                       )}
                     >
                       {category}
@@ -404,12 +430,17 @@ export function LocationFormDialog({
             </div>
           ))}
         </div>
-        {hasTakenCategories ? (
-          <div className="mt-2.5 text-xs font-medium leading-[1.45] text-[#a3a3a3]">
-            Le patenti in grigio sono già assegnate a un altro luogo: selezionandole
-            le sposti qui.
-          </div>
-        ) : null}
+        <div className="mt-[9px] text-[11.5px] font-medium leading-[1.45] text-[#a3a3a3]">
+          Le guide di queste patenti partono da qui.{" "}
+          {firstTaken ? (
+            <>
+              <span className="font-semibold text-[#7a7a7a]">{firstTaken.category}</span> è su{" "}
+              {firstTaken.location}: selezionala per spostarla.
+            </>
+          ) : (
+            "Il luogo di default dell\u2019allievo, se impostato, ha la precedenza."
+          )}
+        </div>
 
         {/* ── Footer dal proto: Annulla testo + CTA pill navy ── */}
         <div className="mt-[26px] flex items-center justify-end gap-3.5">
