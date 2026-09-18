@@ -19,6 +19,7 @@ import {
   EMPTY_OCCUPANCY,
   buildDeclaredIntervals,
   computeAgendaOccupancy,
+  measurementWindow,
   romeNoonDays,
   splitBlocksByNature,
   type AgendaOccupancy,
@@ -11011,14 +11012,6 @@ export type InstructorHoursEntry = {
     lateCancellationMinutes: number;
     theoryMinutes: number;
     byDay: InstructorHoursDayBreakdown[];
-    /**
-     * Ore dichiarate in agenda vs ore occupate nella settimana (REG-444).
-     * ATTENZIONE: `busyMinutes` NON è `totalMinutes`. Le ore del report sono le
-     * guide SVOLTE (completed/checked_in/no_show, esami esclusi); l'occupazione
-     * misura quanto dell'agenda è preso, quindi conta tutto ciò che non è
-     * annullato — guide ancora da fare comprese, esami e gruppi compresi.
-     */
-    occupancy: AgendaOccupancy;
   };
   monthly: {
     monthLabel: string;
@@ -11049,7 +11042,28 @@ export type InstructorHoursRange = {
   rangeStart: string; // ISO YYYY-MM-DD (inclusive)
   rangeEnd: string; // ISO YYYY-MM-DD (inclusive)
   granularity: "day" | "week";
-  total: { totalMinutes: number; outsideWorkingHoursMinutes: number; appointmentCount: number; theoryMinutes: number };
+  total: {
+    totalMinutes: number;
+    outsideWorkingHoursMinutes: number;
+    appointmentCount: number;
+    theoryMinutes: number;
+    /**
+     * Guide del periodo annullate oltre il preavviso (REG-444). NON si taglia al
+     * presente come l'occupazione: è un evento già avvenuto (l'allievo ha
+     * annullato), non capacità trascorsa — una guida di domani annullata ieri
+     * conta nel periodo che la contiene.
+     */
+    lateCancellationMinutes: number;
+  };
+  /**
+   * Ore dichiarate in agenda vs ore occupate nel periodo (REG-444).
+   * ATTENZIONE: `busyMinutes` NON è `total.totalMinutes`. Le ore del report sono
+   * le guide SVOLTE (completed/checked_in/no_show, esami esclusi); l'occupazione
+   * misura quanto dell'agenda è preso, quindi conta tutto ciò che non è
+   * annullato — guide ancora da svolgere comprese, esami e gruppi compresi.
+   * Misurata solo sulla parte di periodo già trascorsa.
+   */
+  occupancy: AgendaOccupancy;
   buckets: InstructorHoursBucket[];
 };
 
@@ -11200,23 +11214,17 @@ export async function getInstructorDrivingHours(input: {
       },
     });
 
-    // TUTTI i blocchi che toccano il range: le lezioni teoriche servono come
-    // categoria separata nelle ore, gli altri (ferie, malattia, blocchi
-    // manuali) servono a togliere ore dalla disponibilità dichiarata.
-    // Criterio di SOVRAPPOSIZIONE, non `startsAt` dentro il range: un periodo
-    // di ferie iniziato la settimana prima copre comunque questa settimana.
-    const allBlocks = await prisma.autoscuolaInstructorBlock.findMany({
+    // Lezioni teoriche (block `theory_lesson`) nello stesso range — categoria
+    // separata, NON sommata alle ore di guida.
+    const theoryBlocks = await prisma.autoscuolaInstructorBlock.findMany({
       where: {
         companyId,
         instructorId: { in: instructorIds },
-        startsAt: { lt: rangeEnd },
-        endsAt: { gt: rangeStart },
+        reason: "theory_lesson",
+        startsAt: { gte: rangeStart, lt: rangeEnd },
       },
-      select: { instructorId: true, startsAt: true, endsAt: true, reason: true },
+      select: { instructorId: true, startsAt: true, endsAt: true },
     });
-    // Le ore di teoria restano filtrate per `startsAt` dentro il range, come
-    // prima: i conteggi per giorno/mese a valle rifiltrano comunque.
-    const theoryBlocks = allBlocks.filter((b) => b.reason === "theory_lesson");
 
     // Late cancellations: status = 'cancelled' AND cancelledAt > penaltyCutoffAt
     // AND cancellationKind = 'manual_cancel'. We fetch all candidates and then
@@ -11246,101 +11254,6 @@ export async function getInstructorDrivingHours(input: {
         a.penaltyCutoffAt != null &&
         a.cancelledAt.getTime() > a.penaltyCutoffAt.getTime(),
     );
-
-    // ── Occupazione dell'agenda nella settimana (REG-444) ──────────────────
-    // "Quanto delle ore che dichiaro in agenda è davvero preso." Si guarda solo
-    // la SETTIMANA mostrata: il mese non ha una barra dove stare, e sommare due
-    // periodi diversi nella stessa card confonderebbe e basta.
-    //
-    // Occupato = tutto ciò che tiene impegnato l'istruttore e non è annullato:
-    // guide ancora da svolgere comprese (lo slot è venduto), esami compresi
-    // (occupano l'agenda anche se non contano come ore di guida) e contenitori
-    // di guide di gruppo — anche vuoti, perché l'istruttore è comunque lì.
-    const [occupancyAppointments, groupLessonRows, holidays, availabilityResolver] =
-      await Promise.all([
-        prisma.autoscuolaAppointment.findMany({
-          where: {
-            companyId,
-            instructorId: { in: instructorIds },
-            status: { not: "cancelled" },
-            startsAt: { lt: weekEndDate },
-            endsAt: { gt: weekStartDate },
-          },
-          select: { instructorId: true, startsAt: true, endsAt: true },
-        }),
-        fetchGroupLessonBusyRows(companyId, weekStartDate, weekEndDate),
-        prisma.autoscuolaHoliday.findMany({
-          where: { companyId, date: { gte: weekStartDate, lte: weekEndDate } },
-          select: { date: true },
-        }),
-        buildAvailabilityResolver(
-          companyId,
-          "instructor",
-          instructorIds,
-          weekStartDate,
-          weekEndDate,
-        ),
-      ]);
-
-    const weekWindow: Interval = {
-      start: weekStartDate.getTime(),
-      end: weekEndDate.getTime(),
-    };
-    const weekDaysForAvailability = romeNoonDays(weekStartDate, weekEndDate);
-    // `date` è una colonna DATE: si legge in UTC o slitta di un giorno.
-    const closedDays = new Set(holidays.map((h) => h.date.toISOString().slice(0, 10)));
-
-    const busyByInstructor = new Map<string, Interval[]>();
-    const pushBusy = (instructorId: string | null, startsAt: Date, endsAt: Date | null) => {
-      if (!instructorId) return;
-      const start = startsAt.getTime();
-      // Righe vecchie senza `endsAt`: un'ora, come nel resto del report.
-      const end = endsAt && endsAt.getTime() > start ? endsAt.getTime() : start + 60 * 60 * 1000;
-      const list = busyByInstructor.get(instructorId) ?? [];
-      list.push({ start, end });
-      busyByInstructor.set(instructorId, list);
-    };
-    for (const appt of occupancyAppointments) pushBusy(appt.instructorId, appt.startsAt, appt.endsAt);
-    for (const gl of groupLessonRows) pushBusy(gl.instructorId, gl.startsAt, gl.endsAt);
-
-    // I blocchi tolgono ore alla disponibilità — TRANNE le pause fra una guida
-    // e l'altra (REG-484), che sono blocchi anche loro ma di un'altra natura:
-    // non sono ore in cui l'istruttore non c'è, sono ore consumate DA una
-    // prenotazione. Se finissero fra le indisponibilità, le ore disponibili si
-    // accorcerebbero a ogni guida prenotata — un denominatore che si muove da
-    // solo, impossibile da spiegare a un titolare. Vanno invece fra le ore
-    // occupate: sono capacità che non si può più vendere. Attaccandosi alla
-    // fine della guida si fondono con essa e non contano due volte.
-    // Le pause fra una guida e l'altra sono blocchi, ma contano come ore
-    // OCCUPATE, non come indisponibilità: vedi `splitBlocksByNature`.
-    const { unavailability, busy: bufferBlocks } = splitBlocksByNature(allBlocks);
-    for (const block of bufferBlocks) pushBusy(block.instructorId, block.startsAt, block.endsAt);
-
-    const blocksByInstructor = new Map<string, Interval[]>();
-    for (const block of unavailability) {
-      if (!block.instructorId) continue;
-      const list = blocksByInstructor.get(block.instructorId) ?? [];
-      list.push({ start: block.startsAt.getTime(), end: block.endsAt.getTime() });
-      blocksByInstructor.set(block.instructorId, list);
-    }
-
-    const occupancyByInstructor = new Map<string, AgendaOccupancy>();
-    for (const instr of targetInstructors) {
-      const declared = buildDeclaredIntervals({
-        instructorId: instr.id,
-        days: weekDaysForAvailability,
-        resolver: availabilityResolver,
-        closedDays,
-      });
-      occupancyByInstructor.set(
-        instr.id,
-        computeAgendaOccupancy({
-          declared: clampIntervals(declared, weekWindow),
-          blocks: clampIntervals(blocksByInstructor.get(instr.id) ?? [], weekWindow),
-          busy: clampIntervals(busyByInstructor.get(instr.id) ?? [], weekWindow),
-        }),
-      );
-    }
 
     // Build settings map
     const settingsMap = new Map<string, ReturnType<typeof parseInstructorSettings>>();
@@ -11445,7 +11358,6 @@ export async function getInstructorDrivingHours(input: {
           lateCancellationMinutes: weeklyLateCancellationMin,
           theoryMinutes: weeklyTheory,
           byDay: weekDays,
-          occupancy: occupancyByInstructor.get(instr.id) ?? EMPTY_OCCUPANCY,
         },
         monthly: {
           monthLabel,
@@ -11464,6 +11376,131 @@ export async function getInstructorDrivingHours(input: {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Ore dichiarate in agenda vs ore occupate, per gli istruttori di un'autoscuola
+ * in un periodo (REG-444). Unico posto che legge i dati: la aritmetica sta in
+ * `lib/autoscuole/agenda-occupancy.ts`, qui ci sono solo le query.
+ *
+ * **Il futuro non si misura.** Il periodo viene ritagliato a `[inizio, adesso)`
+ * e il taglio vale per TUTTO — fasce, blocchi e occupato — non solo per le ore
+ * disponibili: altrimenti una guida di stasera, che sta dentro le fasce
+ * dichiarate, verrebbe raccontata come lavoro svolto FUORI fascia.
+ */
+async function loadAgendaOccupancy(input: {
+  companyId: string;
+  instructorIds: string[];
+  /** Periodo scelto: inizio incluso, fine ESCLUSA. */
+  periodStart: Date;
+  periodEndExclusive: Date;
+}): Promise<{
+  byInstructor: Map<string, AgendaOccupancy>;
+  /** Fino a quando si è misurato davvero (ISO). Null = periodo non ancora iniziato. */
+  measuredUntil: string | null;
+  /** true quando il periodo scelto si estende oltre la misura. */
+  partial: boolean;
+}> {
+  const { companyId, instructorIds, periodStart, periodEndExclusive } = input;
+  const period: Interval = {
+    start: periodStart.getTime(),
+    end: periodEndExclusive.getTime(),
+  };
+  const window = measurementWindow(period, Date.now());
+  const partial = period.end > (window?.end ?? period.start);
+
+  if (!window || !instructorIds.length) {
+    return {
+      byInstructor: new Map(instructorIds.map((id) => [id, EMPTY_OCCUPANCY])),
+      measuredUntil: window ? new Date(window.end).toISOString() : null,
+      partial,
+    };
+  }
+
+  const windowStart = new Date(window.start);
+  const windowEnd = new Date(window.end);
+
+  // Occupato = tutto ciò che tiene impegnato l'istruttore e non è annullato:
+  // guide ancora da svolgere comprese (lo slot è venduto), esami compresi
+  // (occupano l'agenda anche se non contano come ore di guida) e contenitori di
+  // guide di gruppo — anche vuoti, perché l'istruttore è comunque lì.
+  //
+  // I blocchi si leggono per SOVRAPPOSIZIONE, non per `startsAt` dentro la
+  // finestra: un periodo di ferie iniziato la settimana prima copre comunque
+  // questa.
+  const [busyAppointments, groupLessonRows, holidays, blocks, resolver] = await Promise.all([
+    prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId,
+        instructorId: { in: instructorIds },
+        status: { not: "cancelled" },
+        startsAt: { lt: windowEnd },
+        endsAt: { gt: windowStart },
+      },
+      select: { instructorId: true, startsAt: true, endsAt: true },
+    }),
+    fetchGroupLessonBusyRows(companyId, windowStart, windowEnd),
+    prisma.autoscuolaHoliday.findMany({
+      where: { companyId, date: { gte: windowStart, lte: windowEnd } },
+      select: { date: true },
+    }),
+    prisma.autoscuolaInstructorBlock.findMany({
+      where: {
+        companyId,
+        instructorId: { in: instructorIds },
+        startsAt: { lt: windowEnd },
+        endsAt: { gt: windowStart },
+      },
+      select: { instructorId: true, startsAt: true, endsAt: true, reason: true },
+    }),
+    buildAvailabilityResolver(companyId, "instructor", instructorIds, windowStart, windowEnd),
+  ]);
+
+  const busyByInstructor = new Map<string, Interval[]>();
+  const pushBusy = (instructorId: string | null, startsAt: Date, endsAt: Date | null) => {
+    if (!instructorId) return;
+    const start = startsAt.getTime();
+    // Righe vecchie senza `endsAt`: un'ora, come nel resto del report.
+    const end = endsAt && endsAt.getTime() > start ? endsAt.getTime() : start + 60 * 60 * 1000;
+    const list = busyByInstructor.get(instructorId) ?? [];
+    list.push({ start, end });
+    busyByInstructor.set(instructorId, list);
+  };
+  for (const appt of busyAppointments) pushBusy(appt.instructorId, appt.startsAt, appt.endsAt);
+  for (const gl of groupLessonRows) pushBusy(gl.instructorId, gl.startsAt, gl.endsAt);
+
+  // Le pause fra una guida e l'altra sono blocchi, ma contano come ore
+  // OCCUPATE, non come indisponibilità: vedi `splitBlocksByNature`.
+  const { unavailability, busy: bufferBlocks } = splitBlocksByNature(blocks);
+  for (const block of bufferBlocks) pushBusy(block.instructorId, block.startsAt, block.endsAt);
+
+  const blocksByInstructor = new Map<string, Interval[]>();
+  for (const block of unavailability) {
+    if (!block.instructorId) continue;
+    const list = blocksByInstructor.get(block.instructorId) ?? [];
+    list.push({ start: block.startsAt.getTime(), end: block.endsAt.getTime() });
+    blocksByInstructor.set(block.instructorId, list);
+  }
+
+  // `date` è una colonna DATE: si legge in UTC o slitta di un giorno.
+  const closedDays = new Set(holidays.map((h) => h.date.toISOString().slice(0, 10)));
+  const days = romeNoonDays(windowStart, windowEnd);
+
+  const byInstructor = new Map<string, AgendaOccupancy>();
+  for (const instructorId of instructorIds) {
+    const declared = buildDeclaredIntervals({ instructorId, days, resolver, closedDays });
+    byInstructor.set(
+      instructorId,
+      computeAgendaOccupancy({
+        declared: clampIntervals(declared, window),
+        blocks: clampIntervals(blocksByInstructor.get(instructorId) ?? [], window),
+        busy: clampIntervals(busyByInstructor.get(instructorId) ?? [], window),
+      }),
+    );
+  }
+
+  return { byInstructor, measuredUntil: windowEnd.toISOString(), partial };
+}
+
 
 export async function getInstructorDrivingHoursRange(input: {
   instructorId?: string;
@@ -11556,6 +11593,41 @@ export async function getInstructorDrivingHoursRange(input: {
       select: { instructorId: true, startsAt: true, endsAt: true },
     });
 
+    // Cancellazioni tardive del periodo: `cancelledAt > penaltyCutoffAt`. Il
+    // confronto fra due colonne Prisma non lo sa fare, quindi si filtra in JS.
+    const lateCandidates = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId,
+        instructorId: { in: instructorIds },
+        status: "cancelled",
+        type: { not: "esame" },
+        startsAt: { gte: rangeStartDate, lt: rangeEndExclusive },
+        cancelledAt: { not: null },
+        penaltyCutoffAt: { not: null },
+        cancellationKind: "manual_cancel",
+      },
+      select: {
+        instructorId: true,
+        startsAt: true,
+        endsAt: true,
+        cancelledAt: true,
+        penaltyCutoffAt: true,
+      },
+    });
+    const lateCancelled = lateCandidates.filter(
+      (a) =>
+        a.cancelledAt != null &&
+        a.penaltyCutoffAt != null &&
+        a.cancelledAt.getTime() > a.penaltyCutoffAt.getTime(),
+    );
+
+    const occupancy = await loadAgendaOccupancy({
+      companyId,
+      instructorIds,
+      periodStart: rangeStartDate,
+      periodEndExclusive: rangeEndExclusive,
+    });
+
     const settingsMap = new Map<string, ReturnType<typeof parseInstructorSettings>>();
     for (const instr of targetInstructors) {
       settingsMap.set(instr.id, parseInstructorSettings(instr.settings));
@@ -11630,6 +11702,14 @@ export async function getInstructorDrivingHoursRange(input: {
         }
       }
 
+      const lateMinutes = lateCancelled
+        .filter((a) => a.instructorId === instr.id)
+        .reduce((sum, a) => {
+          const start = a.startsAt.getTime();
+          const end = a.endsAt ? a.endsAt.getTime() : start + 60 * 60 * 1000;
+          return sum + Math.round((end - start) / 60000);
+        }, 0);
+
       return {
         instructorId: instr.id,
         instructorName: instr.name,
@@ -11643,12 +11723,21 @@ export async function getInstructorDrivingHoursRange(input: {
           outsideWorkingHoursMinutes: buckets.reduce((s, b) => s + b.outsideWorkingHoursMinutes, 0),
           appointmentCount: buckets.reduce((s, b) => s + b.appointmentCount, 0),
           theoryMinutes: buckets.reduce((s, b) => s + b.theoryMinutes, 0),
+          lateCancellationMinutes: lateMinutes,
         },
+        occupancy: occupancy.byInstructor.get(instr.id) ?? EMPTY_OCCUPANCY,
         buckets,
       };
     });
 
-    return { success: true, data: results };
+    return {
+      success: true,
+      data: results,
+      // Il futuro non si misura: la pagina lo dice a parole invece di far
+      // credere che un periodo non ancora iniziato sia un'agenda vuota.
+      measuredUntil: occupancy.measuredUntil,
+      partial: occupancy.partial,
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }

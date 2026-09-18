@@ -32,12 +32,28 @@ card istruttore + totale team header. Mobile: card indaco nell'hero. Vedi
 `features/lezione-teorica.md`.
 
 ## Ore disponibili vs occupate (REG-444)
-`weekly.occupancy` (`AgendaOccupancy`) sta nella shape legacy — **solo web**, la shape
-range del mobile non è stata toccata. Calcolata **solo sulla settimana mostrata**: il
-mese non ha una barra dove stare e sommare due periodi nella stessa card confonde.
+`occupancy` (`AgendaOccupancy`) sta sulla shape **range** (`InstructorHoursRange`),
+insieme a `total.lateCancellationMinutes`. Entrambi **additivi**: il mobile legge la
+stessa shape e non se ne accorge. Il calcolo vive in un unico posto,
+`loadAgendaOccupancy` in `autoscuole.actions.ts` (query) + `agenda-occupancy.ts`
+(aritmetica). La shape legacy `InstructorHoursEntry` NON ha l'occupazione: dal
+2026-09-18 la pagina web non la usa più.
+
+### Il futuro non si misura
+Il periodo viene ritagliato a `[inizio, adesso)` (`measurementWindow`) e il taglio vale
+per **tutto** — fasce, blocchi e occupato. Non per tenere il rapporto sotto il 100%:
+a quello pensa già l'intersezione fra occupato e disponibile. Il motivo è un altro, e
+c'è un test che lo fissa: se si tagliassero solo le fasce, una guida di stasera — che
+sta benissimo dentro le fasce dichiarate — verrebbe raccontata come lavoro svolto
+**fuori fascia**.
+
+Un periodo tutto nel futuro non è "un'agenda vuota": `measuredUntil` torna `null`, la
+risposta lo dice (`partial`) e la pagina scrive "Il periodo non è ancora iniziato"
+invece di uno 0% che sembrerebbe un'accusa.
 
 - **Disponibili** = fasce da `buildAvailabilityResolver` (settimana tipo + eccezioni
-  giornaliere; le settimane pubblicate SONO override, quindi ci entrano), materializzate
+  giornaliere; le settimane pubblicate SONO override, quindi ci entrano), ritagliate
+  alla parte di periodo già trascorsa e materializzate
   giorno per giorno sull'orologio **italiano** — le fasce sono ore da orologio, non
   istanti, e il server gira a UTC. Meno ferie/malattia/teoria/blocchi
   (`AutoscuolaInstructorBlock`, criterio di **sovrapposizione**) e meno i giorni di
@@ -66,20 +82,34 @@ mese non ha una barra dove stare e sommare due periodi nella stessa card confond
 - Tre stati distinti in UI, e vanno detti diversamente: nessuna fascia dichiarata
   (`declaredMinutes === 0`), fasce tutte coperte da blocchi (`declaredMinutes > 0`,
   `availableMinutes === 0`), ore vere da riempire.
-- **Niente clamp sul futuro**, a differenza del KPI del backoffice: lì misura la
-  piattaforma a posteriori, qui il titolare guarda la settimana in corso e vuole sapere
-  quanto è già pieno. Le settimane future sono navigabili e sensate.
+- **Le cancellazioni tardive NON si tagliano al presente**, a differenza di tutto il
+  resto: sono un evento già avvenuto (l'allievo ha annullato), non capacità trascorsa.
+  Una guida di domani annullata ieri conta nel periodo che la contiene.
 - La matematica sugli intervalli è condivisa con il KPI (`lib/backoffice/agenda-saturation.ts`):
   **stessa definizione di proposito**, così il numero del titolare e il nostro coincidono.
 
+## Filtro per periodo (REG-444)
+La pagina non è più settimana-per-settimana: `SegmentedControl` con
+**Settimana / Mese / 30 giorni / Personalizzato** (`DatePickerInput` ×2), più le frecce
+‹ › che fanno scorrere il periodo **come è fatto** — una settimana salta di 7 giorni, un
+mese di un mese (non di 30, o il primo del mese si disallinea subito). La pagina chiama
+`?from&to` (shape range); le barre non sono più 7 giorni fissi ma i `buckets` del server
+(giorni fino a 14 di span, poi settimane) su **scala comune a tutte le card**, altrimenti
+barre alte uguali vorrebbero dire ore diverse.
+
+La riga "mese" in fondo alla card **è sparita**: con un periodo arbitrario
+"Settembre 2026 · 64h" non voleva più dire niente. Il preset "Mese" dà lo stesso numero.
+Le cancellazioni tardive si riferiscono al periodo scelto, non più al mese.
+
 ## Export (REG-444, ex REG-447)
-Bottone "Esporta" accanto alla navigazione settimana → `reglo-ore-guida_<lunedì>.csv`.
+Bottone "Esporta" → `reglo-ore-guida_<da>_<a>.csv`.
 CSV con `;` e BOM, **non** `.xlsx`: è quello che l'Excel italiano apre con un doppio
 clic senza procedura di importazione, ed è già il precedente della casa (backoffice →
 Esporta CSV). Zero dipendenze nuove. Le ore escono in **decimale con la virgola**
 (Excel-IT le somma come numeri) con accanto il minutaggio leggibile. Blocchi: riepilogo
-settimana → riga per istruttore → dettaglio per giorno → note. Tutto client-side dai
-dati già in pagina: nessun endpoint nuovo.
+periodo → riga per istruttore → dettaglio per bucket → note. Dichiara anche **fino a
+quando** si è misurata l'occupazione. Tutto client-side dai dati già in pagina: nessun
+endpoint nuovo.
 
 ## Connected features
 - **Instructor Clusters / Settings** — `workingHoursStart/End` (the window for "fuori orario") comes from instructor settings.

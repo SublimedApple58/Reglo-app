@@ -60,6 +60,25 @@ export type AvailabilityDayResolver = {
 const DAY_MS = 86_400_000;
 
 /**
+ * La finestra che si può davvero misurare: il futuro non si misura.
+ * Un'agenda piena di fasce dichiarate per domani farebbe sembrare l'autoscuola
+ * più vuota di quello che è, quindi si guarda solo la parte di periodo già
+ * trascorsa.
+ *
+ * Il taglio vale per TUTTO — fasce, blocchi e occupato — non solo per le ore
+ * disponibili. Non per via del rapporto (l'intersezione lo tiene già sotto
+ * l'1), ma perché una guida di stasera, che sta dentro le fasce dichiarate,
+ * finirebbe altrimenti contata come lavoro svolto FUORI fascia.
+ *
+ * `null` quando il periodo non è ancora iniziato: è un caso diverso da "non ha
+ * fatto niente", e va raccontato con parole diverse.
+ */
+export function measurementWindow(period: Interval, now: number): Interval | null {
+  const end = Math.min(period.end, now);
+  return end > period.start ? { start: period.start, end } : null;
+}
+
+/**
  * Un `Date` a mezzogiorno per ogni giorno di calendario ITALIANO toccato dalla
  * finestra. Mezzogiorno e non mezzanotte: è l'unica ora che nessun cambio di
  * ora legale riesce a spostare nel giorno prima o in quello dopo.

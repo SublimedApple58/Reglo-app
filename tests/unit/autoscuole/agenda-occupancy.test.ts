@@ -1,6 +1,7 @@
 import {
   buildDeclaredIntervals,
   computeAgendaOccupancy,
+  measurementWindow,
   romeNoonDays,
   romeYmdKey,
   splitBlocksByNature,
@@ -91,6 +92,77 @@ describe("occupazione agenda — il conto", () => {
 
     const empty = computeAgendaOccupancy({ declared: [], blocks: [], busy: [] });
     expect(empty.declaredMinutes).toBe(0);
+  });
+});
+
+describe("occupazione agenda — il futuro non si misura", () => {
+  const lun = rome(14, 0);
+  const mar = rome(15, 0);
+
+  it("taglia il periodo al momento attuale", () => {
+    const now = rome(14, 15);
+    expect(measurementWindow({ start: lun, end: mar }, now)).toEqual({ start: lun, end: now });
+  });
+
+  it("un periodo tutto passato resta intero", () => {
+    const now = rome(20, 12);
+    expect(measurementWindow({ start: lun, end: mar }, now)).toEqual({ start: lun, end: mar });
+  });
+
+  it("un periodo non ancora iniziato non è vuoto: non è misurabile", () => {
+    const now = rome(10, 12);
+    expect(measurementWindow({ start: lun, end: mar }, now)).toBeNull();
+  });
+
+  it("il confine esatto (adesso = inizio periodo) non è misurabile", () => {
+    expect(measurementWindow({ start: lun, end: mar }, lun)).toBeNull();
+  });
+
+  it("tagliando tutto il rapporto resta fra 0 e 100", () => {
+    // Fasce 9-17, una guida 9-10 già fatta e una 14-15 ancora da fare.
+    // Adesso sono le 11: si misurano solo 9-11.
+    const now = rome(14, 11);
+    const window = measurementWindow({ start: lun, end: mar }, now)!;
+    const clamp = (list: Array<{ start: number; end: number }>) =>
+      list
+        .map((i) => ({ start: Math.max(i.start, window.start), end: Math.min(i.end, window.end) }))
+        .filter((i) => i.end > i.start);
+
+    const out = computeAgendaOccupancy({
+      declared: clamp([iv(rome(14, 9), rome(14, 17))]),
+      blocks: [],
+      busy: clamp([iv(rome(14, 9), rome(14, 10)), iv(rome(14, 14), rome(14, 15))]),
+    });
+    expect(out.availableMinutes).toBe(120); // 9-11, non 9-17
+    expect(out.busyMinutes).toBe(60); // solo la guida delle 9, non quella delle 14
+    expect(out.ratio).toBeCloseTo(0.5);
+    expect(out.ratio).toBeLessThanOrEqual(1);
+  });
+
+  it("tagliando solo le fasce, le guide future finirebbero contate come fuori fascia", () => {
+    // Il motivo vero per cui il taglio deve valere anche sull'occupato.
+    // L'intersezione tiene già il rapporto sotto l'1, quindi il rischio NON è
+    // sfondare il 100%: è che una guida di stasera, che sta benissimo dentro le
+    // fasce dichiarate, venga raccontata come lavoro fatto fuori orario.
+    const now = rome(14, 11);
+    const window = measurementWindow({ start: lun, end: mar }, now)!;
+    const declaredClamped = [{ start: rome(14, 9), end: Math.min(rome(14, 17), window.end) }];
+    const guidaDiStasera = iv(rome(14, 15), rome(14, 16)); // dentro le fasce 9-17
+
+    const soloDenominatore = computeAgendaOccupancy({
+      declared: declaredClamped,
+      blocks: [],
+      busy: [guidaDiStasera], // NON tagliato: ecco il bug
+    });
+    expect(soloDenominatore.outsideMinutes).toBe(60); // "fuori fascia" falso
+    expect(soloDenominatore.busyMinutes).toBe(0);
+
+    const tagliatoBene = computeAgendaOccupancy({
+      declared: declaredClamped,
+      blocks: [],
+      busy: [], // la guida di stasera è fuori dalla finestra di misura
+    });
+    expect(tagliatoBene.outsideMinutes).toBe(0);
   });
 });
 

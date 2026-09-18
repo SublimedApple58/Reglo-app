@@ -1,4 +1,4 @@
-import type { InstructorHoursEntry } from "@/lib/actions/autoscuole.actions";
+import type { InstructorHoursRange } from "@/lib/actions/autoscuole.actions";
 import { sumOccupancy } from "@/lib/autoscuole/agenda-occupancy";
 
 /**
@@ -30,96 +30,104 @@ const readableHours = (minutes: number) => {
 
 const percentCell = (ratio: number) => (ratio * 100).toFixed(1).replace(".", ",");
 
-const DAY_FMT = new Intl.DateTimeFormat("it-IT", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-  timeZone: "UTC",
-});
-
 export function buildOreGuidaCsv(input: {
-  entries: InstructorHoursEntry[];
-  weekStartISO: string;
-  weekEndISO: string;
-  weekLabel: string;
+  entries: InstructorHoursRange[];
+  range: { from: string; to: string };
+  periodLabel: string;
+  meta: { measuredUntil: string | null; partial: boolean };
 }): string {
   const rows: Array<Array<string | number | null>> = [];
   const push = (...cells: Array<string | number | null>) => rows.push(cells);
 
-  const team = sumOccupancy(input.entries.map((e) => e.weekly.occupancy));
-  const teamDriving = input.entries.reduce((s, e) => s + e.weekly.totalMinutes, 0);
-  const teamTheory = input.entries.reduce((s, e) => s + e.weekly.theoryMinutes, 0);
-  const teamLate = input.entries.reduce((s, e) => s + e.monthly.lateCancellationMinutes, 0);
+  const team = sumOccupancy(input.entries.map((e) => e.occupancy));
+  const teamDriving = input.entries.reduce((s, e) => s + e.total.totalMinutes, 0);
+  const teamTheory = input.entries.reduce((s, e) => s + e.total.theoryMinutes, 0);
+  const teamLate = input.entries.reduce((s, e) => s + e.total.lateCancellationMinutes, 0);
+  const teamFree = Math.max(0, team.availableMinutes - team.busyMinutes);
+  const granularity = input.entries[0]?.granularity ?? "day";
 
   push("Reglo — Ore guida");
-  push("Settimana", `${input.weekStartISO} → ${input.weekEndISO}`, input.weekLabel);
+  push("Periodo", `${input.range.from} → ${input.range.to}`, input.periodLabel);
+  push(
+    "Occupazione misurata fino a",
+    input.meta.measuredUntil
+      ? new Date(input.meta.measuredUntil).toLocaleString("it-IT")
+      : "periodo non ancora iniziato",
+  );
   push("Generato il", new Date().toLocaleString("it-IT"));
   push();
 
-  push("Riepilogo settimana", "Ore (decimali)", "Ore (leggibili)");
+  push("Riepilogo periodo", "Ore (decimali)", "Ore (leggibili)");
   push("Ore di guida svolte", hoursCell(teamDriving), readableHours(teamDriving));
   push("Ore di lezione teorica", hoursCell(teamTheory), readableHours(teamTheory));
   push("Ore disponibili in agenda", hoursCell(team.availableMinutes), readableHours(team.availableMinutes));
   push("Ore occupate in agenda", hoursCell(team.busyMinutes), readableHours(team.busyMinutes));
-  push("Ore libere in agenda", hoursCell(Math.max(0, team.availableMinutes - team.busyMinutes)), readableHours(Math.max(0, team.availableMinutes - team.busyMinutes)));
+  push("Ore libere in agenda", hoursCell(teamFree), readableHours(teamFree));
   push("Ore occupate fuori dalle fasce", hoursCell(team.outsideMinutes), readableHours(team.outsideMinutes));
   push("Agenda occupata (%)", percentCell(team.ratio), `${Math.round(team.ratio * 100)}%`);
+  push("Cancellazioni tardive", hoursCell(teamLate), readableHours(teamLate));
   push();
 
   push(
     "Istruttore",
-    "Ore guida settimana",
-    "Ore teoria settimana",
+    "Ore guida",
+    "Ore teoria",
+    "Guide",
     "Ore disponibili",
     "Ore occupate",
     "Ore libere",
     "Fuori fascia",
     "Agenda occupata (%)",
-    "Cancellazioni tardive (mese)",
-    "Ore guida mese",
-    "Mese",
+    "Cancellazioni tardive",
   );
   for (const entry of input.entries) {
-    const occ = entry.weekly.occupancy;
+    const occ = entry.occupancy;
     push(
       entry.instructorName,
-      hoursCell(entry.weekly.totalMinutes),
-      hoursCell(entry.weekly.theoryMinutes),
+      hoursCell(entry.total.totalMinutes),
+      hoursCell(entry.total.theoryMinutes),
+      entry.total.appointmentCount,
       hoursCell(occ.availableMinutes),
       hoursCell(occ.busyMinutes),
       hoursCell(Math.max(0, occ.availableMinutes - occ.busyMinutes)),
       hoursCell(occ.outsideMinutes),
       occ.availableMinutes > 0 ? percentCell(occ.ratio) : "",
-      hoursCell(entry.monthly.lateCancellationMinutes),
-      hoursCell(entry.monthly.totalMinutes),
-      entry.monthly.monthLabel,
+      hoursCell(entry.total.lateCancellationMinutes),
     );
   }
   push();
 
-  push("Dettaglio per giorno");
-  push("Istruttore", "Giorno", "Ore guida", "Ore teoria", "Guide");
+  push(granularity === "day" ? "Dettaglio per giorno" : "Dettaglio per settimana");
+  push(
+    "Istruttore",
+    granularity === "day" ? "Giorno" : "Settimana dal",
+    "Ore guida",
+    "Ore teoria",
+    "Guide",
+  );
   for (const entry of input.entries) {
-    for (const day of entry.weekly.byDay) {
+    for (const bucket of entry.buckets) {
       push(
         entry.instructorName,
-        DAY_FMT.format(new Date(`${day.date}T12:00:00Z`)),
-        hoursCell(day.totalMinutes),
-        hoursCell(day.theoryMinutes),
-        day.appointmentCount,
+        bucket.startDate,
+        hoursCell(bucket.totalMinutes),
+        hoursCell(bucket.theoryMinutes),
+        bucket.appointmentCount,
       );
     }
   }
 
-  if (teamLate > 0) {
-    push();
-    push("Nota", "Le cancellazioni tardive sono del MESE, non della settimana: non dipendono dagli istruttori.");
-  }
   push();
   push(
     "Nota",
-    "Le ore disponibili sono le fasce che gli istruttori hanno in agenda, al netto di ferie, malattia, lezioni teoriche, blocchi e giorni di chiusura. Sono occupate tutte le guide, gli esami e le guide di gruppo non annullati, comprese quelle ancora da svolgere.",
+    "L'occupazione conta solo le ore GIÀ TRASCORSE del periodo: quelle ancora da venire non sono né occupate né perse. Le ore disponibili sono le fasce che gli istruttori hanno in agenda, al netto di ferie, malattia, lezioni teoriche, blocchi e giorni di chiusura. Sono occupate tutte le guide, gli esami e le guide di gruppo non annullati, comprese quelle ancora da svolgere: per questo le ore occupate non coincidono con le ore di guida svolte.",
   );
+  if (teamLate > 0) {
+    push(
+      "Nota",
+      "Le cancellazioni tardive non dipendono dagli istruttori: sono gli allievi che annullano oltre il preavviso. A differenza dell'occupazione coprono tutto il periodo, non solo la parte trascorsa.",
+    );
+  }
 
   return rows.map((row) => row.map(csvCell).join(";")).join("\n");
 }
