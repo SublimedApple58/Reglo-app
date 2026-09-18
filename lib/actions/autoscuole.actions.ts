@@ -405,6 +405,22 @@ const canManageStudentCredits = (membership: {
   membership.role === "admin" ||
   isOwner(membership.autoscuolaRole);
 
+/**
+ * Permesso SCOPED per il solo tracciamento pagamento manuale (REG-450): segnare
+ * una guida pagata / da pagare. Più largo di `canManageStudentCredits` perché
+ * l'app mobile lo mette in mano anche agli istruttori, che incassano in auto —
+ * ma resta separato apposta: i CREDITI (grant/revoke, "copri con credito")
+ * restano owner/admin, qui si tocca solo `manualPaymentStatus`.
+ * L'istruttore è comunque ristretto alle proprie guide dal chiamante.
+ */
+const canManageLessonPayments = (membership: {
+  role: string;
+  autoscuolaRole: string | null;
+}) =>
+  membership.role === "admin" ||
+  isOwner(membership.autoscuolaRole) ||
+  isInstructor(membership.autoscuolaRole);
+
 const getOwnInstructorProfile = async (companyId: string, userId: string) =>
   prisma.autoscuolaInstructor.findFirst({
     where: {
@@ -10527,18 +10543,49 @@ export async function setManualPaymentStatus(
 ) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    if (!canManageStudentCredits(membership)) {
+    // REG-450: permesso scoped — anche gli istruttori segnano pagata dall'app
+    // mobile. I crediti restano owner/admin (`canManageStudentCredits`).
+    if (!canManageLessonPayments(membership)) {
       return { success: false, message: "Operazione non consentita." };
     }
     const payload = setManualPaymentStatusSchema.parse(input);
 
     const appointment = await prisma.autoscuolaAppointment.findFirst({
       where: { id: payload.appointmentId, companyId: membership.companyId },
-      select: { id: true, paymentRequired: true, manualPaymentStatus: true },
+      select: {
+        id: true,
+        paymentRequired: true,
+        manualPaymentStatus: true,
+        instructorId: true,
+      },
     });
     if (!appointment) {
       return { success: false, message: "Appuntamento non trovato." };
     }
+
+    // L'istruttore incassa le proprie guide, non quelle dei colleghi: stessa
+    // guardia di `updateAutoscuolaAppointmentDetails`. L'owner non è ristretto.
+    // NB: a differenza dei dettagli guida, qui una guida `cancelled` resta
+    // segnabile — è il caso della penale tardiva "da pagare".
+    if (isInstructor(membership.autoscuolaRole) && membership.role !== "admin") {
+      const ownInstructor = await getOwnInstructorProfile(
+        membership.companyId,
+        membership.userId,
+      );
+      if (!ownInstructor) {
+        return {
+          success: false,
+          message: "Profilo istruttore non trovato per questo account.",
+        };
+      }
+      if (appointment.instructorId !== ownInstructor.id) {
+        return {
+          success: false,
+          message: "Puoi segnare il pagamento solo delle tue guide.",
+        };
+      }
+    }
+
     // Block manual marking ONLY for true automatic (Stripe) payments — those have
     // paymentRequired=true AND no manual status, and are settled in the Pagamenti
     // section. Group lessons are "da pagare" manually (paymentRequired=true but

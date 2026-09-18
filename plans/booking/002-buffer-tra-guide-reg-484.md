@@ -1,8 +1,10 @@
 # REG-484 — Buffer configurabile tra una guida e l'altra
 
-> **Stato: implementato** sul branch
-> `tizianodifelice1/reg-484-buffer-configurabile-tra-una-guida-e-laltra` (web) e
-> `tizianodifelice1/reg-484-buffer-tra-guide` (mobile). Non rilasciato.
+> **Stato: su STAGING, verificato.** Web: branch
+> `tizianodifelice1/reg-484-buffer-configurabile-tra-una-guida-e-laltra`,
+> shippato su `staging` il 18/09 (sha `703d3e0`, deploy Vercel READY, nessuna
+> migrazione). Mobile: branch `tizianodifelice1/reg-484-buffer-tra-guide`, non
+> pushato (su quel repo `staging` non esiste). **Prod: non ancora**, serve l'ok.
 > Linear: https://linear.app/reglo/issue/REG-484
 
 ## Cosa è stato fatto
@@ -86,6 +88,15 @@ Il costo, noto e accettato: **il blocco non segue la guida**. Vedi "Limite noto"
 setting spento/acceso, troncamento della finestra e condizione dell'avviso
 (client Prisma finto, nessun DB).
 
+## Una scelta da confermare
+
+L'avviso scatta quando **la pausa intera non ci sta**, non solo quando il buco è
+esatto: con buffer 15' e un impegno 5 minuti dopo la fine della guida,
+l'istruttore vede comunque «Non avrai tempo per una pausa», e confermando la
+pausa nasce troncata a 5'. Una regola sola invece di due casi, e coerente col
+testo del messaggio. Se si preferisce che a spazio parziale non chieda niente e
+tronchi in silenzio, è una riga in `lacksRoomForLessonBuffer`.
+
 ## Limite noto (deciso, non dimenticato)
 
 **La pausa non segue la guida.** Se la guida che l'ha generata viene annullata,
@@ -111,6 +122,18 @@ Altri due comportamenti da tenere a mente:
 - `npx tsc --noEmit` pulito su entrambi i repo (sul mobile resta il solo errore
   pre-esistente di `TabNavigator.tsx`, verificato presente anche su `master`).
 - `next lint` sui file toccati: nessun nuovo warning.
-- **Non ancora provato a mano** su dev/staging: da fare prima del rilascio
-  (accendere il setting, prenotare una guida, vedere il blocco «Pausa» in agenda
-  web e app, provare la guida che riempie il buco).
+- **E2E** `tests/e2e/lesson-buffer.auth.spec.ts`: verde **in locale e su
+  staging.reglo.it**. Copre setting acceso → pausa dopo la guida, prenotazione
+  dentro la pausa rifiutata, pausa troncata sull'impegno successivo, guida che
+  riempie il buco → `LESSON_BUFFER_CONFIRM` senza creare niente, retry con
+  `confirmNoBuffer` → guida senza pausa, blocco «Pausa» leggibile in agenda,
+  setting spento → nessuna pausa. Pulisce e ripristina il setting.
+- Screenshot di staging in `/tmp/hiro-anteprime/reg-484-pausa/`.
+- Verificato dopo i run: `AutoscuolaInstructorBlock` a **0 righe** su staging e
+  setting rimesso a spento — niente residui.
+- Altri e2e: `login-stato-client` fallisce **anche sul commit base** `6aca72a`
+  (pre-esistente, non legato a questa feature); `consorzio-allievi` e
+  `instructor-qr` falliscono solo nel giro completo e passano da soli
+  (interferenza fra test sullo stesso dato).
+- **Mai provato dall'app mobile**: il simulatore lo lancia Tiziano
+  (`npm run ios:staging`).
