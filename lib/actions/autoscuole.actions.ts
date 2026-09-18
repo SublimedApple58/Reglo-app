@@ -31,7 +31,7 @@ import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
-import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
+import { isInstructor, isOwner, isStudent } from "@/lib/autoscuole/roles";
 import { LICENSE_CATEGORIES, TRANSMISSIONS, isMotoLicenseCategory, vehicleServesLicense } from "@/lib/autoscuole/license";
 import { FOLLOW_CAR_CATEGORY, parseFollowCarRulesFromLimits, type FollowCarRules } from "@/lib/autoscuole/follow-car";
 import { MOTO_LESSON_TYPES } from "@/lib/autoscuole/moto-lesson-type";
@@ -2513,6 +2513,25 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
     if (statusFilter) where.status = statusFilter;
     if (typeFilter) where.type = typeFilter;
 
+    // Un ALLIEVO vede solo le proprie guide, qualunque cosa chieda: il
+    // `studentId` arriva dalla query string della route, quindi senza questa
+    // riga un allievo poteva leggere note, penali e motivi di annullamento dei
+    // compagni. Vale a maggior ragione ora che il payload porta il pagellino.
+    const callerIsStudent = isStudent(membership.autoscuolaRole);
+    if (callerIsStudent) where.studentId = membership.userId;
+
+    // Il pagellino raggiunge l'allievo solo se l'autoscuola gli ha aperto le
+    // note sul suo conto: stesso interruttore, nessun setting nuovo.
+    const studentNotesEnabled = await (async () => {
+      if (!callerIsStudent) return true;
+      const service = await prisma.companyService.findFirst({
+        where: { companyId, serviceKey: "AUTOSCUOLE" },
+        select: { limits: true },
+      });
+      const limits = (service?.limits ?? {}) as Record<string, unknown>;
+      return limits.studentNotesEnabled === true;
+    })();
+
     if (input?.light) {
       const appointments = await prisma.autoscuolaAppointment.findMany({
         where,
@@ -2593,6 +2612,20 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
               isPrecise: true,
             },
           },
+          // Pagellino: l'allievo lo vede nella sezione Note dell'app. Selezionato
+          // sempre (uno spread condizionale qui rompe l'inferenza di Prisma) e
+          // SCARTATO nel mapping se l'autoscuola non gli ha aperto le note: il
+          // dato non esce comunque dal server.
+          evaluations: {
+            select: {
+              score: true,
+              notApplicable: true,
+              item: {
+                select: { id: true, label: true, scaleMax: true, position: true },
+              },
+            },
+            orderBy: { item: { position: "asc" } },
+          },
         },
         orderBy: { startsAt: "asc" },
         ...(limit ? { take: limit } : {}),
@@ -2613,6 +2646,16 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
             groupLessonKind: gl?.kind ?? null,
             groupLessonMotoType: gl?.motoLessonType ?? null,
             groupLessonFilled: gl?.filled ?? null,
+            // Stessa forma del ramo full: l'app usa lo stesso aggregatore.
+            evaluations: studentNotesEnabled
+              ? (item.evaluations ?? []).map((e) => ({
+                  itemId: e.item.id,
+                  label: e.item.label,
+                  scaleMax: e.item.scaleMax,
+                  score: e.score,
+                  notApplicable: e.notApplicable,
+                }))
+              : [],
           };
         }),
       };
