@@ -365,7 +365,11 @@ export function EvaluationSheetPane() {
           <span className="text-[12.5px] font-medium text-[#b0b0b0]">
             {items.length === 0
               ? "Nessuna voce: gli istruttori vedranno solo le stelle complessive"
-              : `${items.length} ${items.length === 1 ? "voce" : "voci"} · l'istruttore le compila in pochi secondi`}
+              : `${items.length} ${items.length === 1 ? "voce" : "voci"}${
+                  // Oltre una decina la promessa "in pochi secondi" non regge più:
+                  // il pagellino resta valido, ma non vendiamolo per quello che non è.
+                  items.length <= 12 ? " · l'istruttore le compila in pochi secondi" : ""
+                }`}
           </span>
         </div>
       </div>

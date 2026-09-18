@@ -14,9 +14,19 @@ export type EvaluationScale = (typeof EVALUATION_SCALES)[number];
 
 export const DEFAULT_EVALUATION_SCALE: EvaluationScale = 5;
 
-/** Tetto di voci per autoscuola: oltre, il foglio sul telefono non si compila
- *  più "in pochi secondi" (che è il punto della feature). */
-export const MAX_EVALUATION_ITEMS = 12;
+/** Tetto di voci per autoscuola.
+ *
+ *  Era 12, alzato a 40 il 2026-09-18: 12 era una scelta di UX ("il foglio si
+ *  compila in pochi secondi"), non un limite tecnico, e stava stretto alle
+ *  autoscuole che valutano molte manovre separate.
+ *
+ *  Un tetto resta perché `saveEvaluationSheet` SOSTITUISCE l'intero elenco in
+ *  una transazione: senza un massimo, l'unica validazione sull'input sarebbe
+ *  nessuna. 40 è ampiamente oltre qualunque pagellino reale.
+ *
+ *  Gemella di `MAX_EVALUATION_ITEMS` in
+ *  `reglo-mobile/src/utils/evaluationSheet.ts`: vanno tenute allineate. */
+export const MAX_EVALUATION_ITEMS = 40;
 
 export const MAX_EVALUATION_LABEL_LENGTH = 60;
 

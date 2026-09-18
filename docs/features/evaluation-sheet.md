@@ -51,7 +51,12 @@ ricompare nel foglio SOLO sulle guide che hanno un suo punteggio, marcata "(non 
   fallire il salvataggio dell'istruttore.
 - Vale il vincolo già esistente sulla valutazione: si valuta solo una guida **già
   effettuata** (`checked_in`/`completed`/`no_show`).
-- Max 12 voci per autoscuola: oltre, il foglio non si compila più "in pochi secondi".
+- **Max 40 voci per autoscuola** (era 12 fino al 2026-09-18). Il 12 era una soglia di UX,
+  non un limite tecnico: il pane web cresce in altezza con la pagina, il dialog di
+  compilazione scrolla (`CreateEventPopover`, `overflow-y-auto`) e sul telefono il picker
+  passa da solo al page sheet scrollabile sopra le 7 voci (`LONG_PICKER_THRESHOLD`). Un
+  tetto resta perché `saveEvaluationSheet` sostituisce l'intero elenco in transazione e la
+  `z.array().max()` è l'unica validazione sulla dimensione dell'input.
 - **Chi configura: titolari e istruttori** (`canManageSettings` in `autoscuole-evaluation.actions.ts`
   = `admin || isOwner || isInstructor`). Aperto agli istruttori il 2026-09-12: sono loro a
   compilare il pagellino tutti i giorni, quindi sono loro a sapere quali voci servono. Restano
