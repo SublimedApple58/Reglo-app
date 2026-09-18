@@ -74,6 +74,7 @@ const bookLesson = async (
     startsAt: Date;
     endsAt: Date;
     confirmNoBuffer?: boolean;
+    allowPast?: boolean;
   },
 ) =>
   api.post("/api/autoscuole/appointments", {
@@ -86,6 +87,7 @@ const bookLesson = async (
       type: "guida",
       types: ["guida"],
       ...(body.confirmNoBuffer ? { confirmNoBuffer: true } : {}),
+      ...(body.allowPast ? { allowPast: true } : {}),
     },
   });
 
@@ -101,6 +103,8 @@ test.describe("Pausa tra le guide (REG-484)", () => {
 
     const original = await getSettings(api);
     const createdAppointments: string[] = [];
+    /** Blocchi nati fuori dalla finestra di test (verifica UI su oggi). */
+    const uiCleanup: string[] = [];
 
     try {
       // ── Contesto: chi prenota per chi, e finestra pulita ──────────────────
@@ -112,13 +116,15 @@ test.describe("Pausa tra le guide (REG-484)", () => {
         data: {
           appointments: Array<{ id: string }>;
           instructors: Array<{ id: string; name: string }>;
-          students: Array<{ id: string; name: string }>;
+          students: Array<{ id: string; email: string | null }>;
           instructorBlocks: Array<{ id: string }>;
         };
       }).data;
 
       const instructor = bootstrap.instructors.find((i) => i.name === "Istruttore E2E");
-      const student = bootstrap.students.find((s) => s.name?.includes("Allievo E2E"));
+      // La directory allievi espone firstName/lastName, non `name`: l'email del
+      // seed è l'identificativo stabile.
+      const student = bootstrap.students.find((s) => s.email === "allievo@reglo.it");
       expect(instructor, "istruttore del seed (pnpm seed:e2e:dev)").toBeTruthy();
       expect(student, "allievo del seed (pnpm seed:e2e:dev)").toBeTruthy();
 
@@ -217,8 +223,10 @@ test.describe("Pausa tra le guide (REG-484)", () => {
         "nessuna pausa sopra la guida delle 12:15",
       ).toEqual(["11:00–11:15", "13:15–13:30"]);
 
-      // ── 6. Pausa troncata quando lo spazio è parziale ─────────────────────
-      // 14:00–15:00 con un impegno alle 15:05: la pausa nasce di 5', non 15'.
+      // ── 6. Spazio PARZIALE: avvisa lo stesso, e poi tronca ────────────────
+      // 14:00–15:00 con un impegno alle 15:05 lascia 5 minuti: non sono una
+      // pausa, quindi l'avviso scatta come per il buco esatto (una regola sola
+      // — "la pausa intera non ci sta" — non due casi separati).
       const blockRes = await api.post("/api/autoscuole/instructor-blocks", {
         data: {
           instructorId: instructor!.id,
@@ -229,23 +237,59 @@ test.describe("Pausa tra le guide (REG-484)", () => {
       });
       expect(blockRes.status(), await blockRes.text()).toBe(200);
 
-      const dRes = await bookLesson(api, {
+      const dWarned = await bookLesson(api, {
         studentId: student!.id,
         instructorId: instructor!.id,
         startsAt: at(day, 14, 0),
         endsAt: at(day, 15, 0),
       });
+      expect(dWarned.status()).toBe(400);
+      expect(((await dWarned.json()) as { code?: string }).code).toBe(
+        "LESSON_BUFFER_CONFIRM",
+      );
+
+      // Confermando, la guida nasce e la pausa si prende i 5 minuti che ci sono.
+      const dRes = await bookLesson(api, {
+        studentId: student!.id,
+        instructorId: instructor!.id,
+        startsAt: at(day, 14, 0),
+        endsAt: at(day, 15, 0),
+        confirmNoBuffer: true,
+      });
       expect(dRes.status(), await dRes.text()).toBe(200);
       createdAppointments.push(((await dRes.json()) as { data: { id: string } }).data.id);
 
       blocks = await bufferBlocks(api, windowStart, windowEnd);
-      expect(blocks.map((b) => `${hhmm(b.startsAt)}–${hhmm(b.endsAt)}`)).toContain(
-        "15:00–15:05",
-      );
+      expect(
+        blocks.map((b) => `${hhmm(b.startsAt)}–${hhmm(b.endsAt)}`),
+        "pausa troncata sull'impegno delle 15:05",
+      ).toContain("15:00–15:05");
 
       // ── 7. Il blocco «Pausa» si legge in agenda ───────────────────────────
-      const isoDay = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
-      await page.goto(`/it/user/autoscuole?tab=agenda&day=${isoDay}`);
+      // L'agenda apre sempre sulla settimana corrente e non accetta un giorno
+      // da querystring, quindi questa verifica usa una guida di OGGI (05:00,
+      // ora in cui su dev non c'è mai niente) invece del giorno +45 usato
+      // sopra. `allowPast` copre il caso "sono già passate le 5".
+      const uiStart = at(new Date(), 5, 0);
+      const uiEnd = at(new Date(), 6, 0);
+      const uiRes = await bookLesson(api, {
+        studentId: student!.id,
+        instructorId: instructor!.id,
+        startsAt: uiStart,
+        endsAt: uiEnd,
+        allowPast: true,
+      });
+      expect(uiRes.status(), await uiRes.text()).toBe(200);
+      const uiAppointmentId = ((await uiRes.json()) as { data: { id: string } }).data.id;
+      createdAppointments.push(uiAppointmentId);
+
+      const uiBlocks = await bufferBlocks(api, at(new Date(), 4, 0), at(new Date(), 8, 0));
+      expect(uiBlocks.map((b) => `${hhmm(b.startsAt)}–${hhmm(b.endsAt)}`)).toContain(
+        "06:00–06:15",
+      );
+      uiCleanup.push(...uiBlocks.map((b) => b.id));
+
+      await page.goto("/it/user/autoscuole?tab=agenda");
       await expect(page.getByTestId("autoscuole-agenda-page").first()).toBeVisible({
         timeout: 60_000,
       });
@@ -269,6 +313,9 @@ test.describe("Pausa tra le guide (REG-484)", () => {
       // Pulizia: la finestra torna come l'abbiamo trovata.
       for (const id of createdAppointments) {
         await api.post(`/api/autoscuole/appointments/${id}/permanent-cancel`);
+      }
+      for (const id of uiCleanup) {
+        await api.delete(`/api/autoscuole/instructor-blocks/${id}`);
       }
       const leftoverRes = await api.get("/api/autoscuole/instructor-blocks", {
         params: { from: windowStart.toISOString(), to: windowEnd.toISOString() },
