@@ -298,23 +298,46 @@ export function asAgendaColorOverrides(value: unknown): AgendaColorOverrides {
   return out;
 }
 
+/** [r,g,b] da "rgba(r, g, b, a)" — le ombre delle voci portano la tinta satura. */
+const rgbFromRgba = (rgba: string): [number, number, number] | null => {
+  const m = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(rgba);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+};
+
+const hexToRgbTriple = (hex: string): [number, number, number] | null => {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+
+/** Tinta appiattita su bianco: stesso colore a vista di rgba(hex, alpha) su
+ * sfondo bianco, ma OPACO — sopra la banda della colonna istruttore un blocco
+ * translucido lasciava passare il colore dell'istruttore (REG-468). */
+const flattenOnWhite = (rgb: [number, number, number], alpha: number): string =>
+  `rgb(${rgb.map((c) => Math.round(255 + (c - 255) * alpha)).join(", ")})`;
+
 /**
  * Stile inline del blocco agenda per una voce. Senza override usa i pastelli
  * di default; con override l'hex (palette satura del picker) viene declinato
  * in tinta soft + ombra in tinta, così testo e badge restano leggibili.
+ * In più porta la custom property letta da `.agenda-card` (globals.css):
+ * l'ombra in tinta che, insieme all'alone bianco, stacca il blocco dalla banda
+ * colorata della colonna istruttore (REG-468).
  */
 export function agendaBlockStyle(
   entry: AgendaColorEntry,
   overrideHex?: string | null,
 ): React.CSSProperties {
-  if (!overrideHex) {
-    return {
-      backgroundColor: entry.bgHex,
-      boxShadow: `0 5px 14px ${entry.shadowRgba}`,
-    };
-  }
+  const rgb = overrideHex ? hexToRgbTriple(overrideHex) : null;
+  const backgroundColor = overrideHex
+    ? rgb
+      ? flattenOnWhite(rgb, 0.2)
+      : instructorColorAlpha(overrideHex, 0.2)
+    : entry.bgHex;
+  const shadow = overrideHex ? instructorColorAlpha(overrideHex, 0.22) : entry.shadowRgba;
   return {
-    backgroundColor: instructorColorAlpha(overrideHex, 0.2),
-    boxShadow: `0 5px 14px ${instructorColorAlpha(overrideHex, 0.22)}`,
-  };
+    backgroundColor,
+    "--agenda-card-shadow": shadow,
+  } as React.CSSProperties;
 }

@@ -28,7 +28,12 @@
 Superfici neutre (bianco → grigi), **accento nero**, colore riservato a ciò che
 porta informazione: verde/rosso/giallo per gli stati, e le palette **categoriche**
 (colonne istruttore in agenda, blocchi guida per durata e per patente, avatar).
-Quelle non vanno mai neutralizzate: il colore lì *è* il dato.
+Quelle non vanno mai neutralizzate: il colore lì *è* il dato. Quando due palette
+categoriche si sovrappongono (blocco sopra la colonna istruttore) la separazione
+la fa la **profondità**, non un terzo colore e non un bordo: classe
+`.agenda-card` = solco bianco esterno + alone scuro morbido + ombra in tinta
+(REG-468, vedi
+[features/appearance-settings.md](features/appearance-settings.md)).
 
 ### CSS Variables (`assets/styles/globals.css` → `:root`)
 

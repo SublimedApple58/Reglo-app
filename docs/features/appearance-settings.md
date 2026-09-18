@@ -25,7 +25,7 @@ colore istruttore tinge avatar/bande/stampa, NON i blocchi.
 
 | File | Role |
 |------|------|
-| `lib/autoscuole/agenda-color-criterion.ts` | Costante `AGENDA_COLOR_CRITERIA`, tipo, default, normalizzatori + palette (`DURATION_COLOR_ENTRIES`, `LICENSE_COLOR_ENTRIES`, `durationColorEntry`, `licenseColorEntryForTag`) + `agendaBlockStyle(entry, overrideHex?)` (override → tinta alpha 0.20 + ombra in tinta) — modulo client-safe, condiviso action↔UI |
+| `lib/autoscuole/agenda-color-criterion.ts` | Costante `AGENDA_COLOR_CRITERIA`, tipo, default, normalizzatori + palette (`DURATION_COLOR_ENTRIES`, `LICENSE_COLOR_ENTRIES`, `durationColorEntry`, `licenseColorEntryForTag`) + `agendaBlockStyle(entry, overrideHex?)` (override → tinta alpha 0.20 **appiattita su bianco**, opaca, + custom property `--agenda-card-shadow` letta da `.agenda-card`, REG-468) — modulo client-safe, condiviso action↔UI |
 | `lib/actions/autoscuole-settings.actions.ts` | `agendaColorCriterion` in patch schema, `AutoscuolaSettingsData`, `resolveAutoscuolaSettingsData`, `nextLimits` e risposta di `updateAutoscuolaSettings` |
 | `lib/autoscuole/agenda-instructor-order.ts` | `asAgendaInstructorOrder` (normalizzatore), `agendaInstructorComparator` (ordinati per posizione, gli altri alfabetici in coda) e `sortInstructorsForAgenda` — modulo client-safe condiviso action↔agenda↔pane |
 | `components/pages/Autoscuole/AspettoSettingsPane.tsx` | Il pannello: card radio criterio (anteprima chip override-aware) + link "Personalizza i colori" che apre on-demand la chip strip (una chip pillola per voce del criterio attivo, tap → `ColorSwatchPicker` via `renderTrigger`, reset "Colore standard") + lista "Istruttori in agenda": `Reorder`/`useDragControls` di `motion/react` (drag dalla sola maniglia, ↑/↓ da tastiera), auto-save al rilascio con rollback, link "Ripristina l'ordine alfabetico" + `ColorSwatchPicker` per riga (`taken`) |
@@ -55,6 +55,16 @@ colore istruttore tinge avatar/bande/stampa, NON i blocchi.
   palette del picker viene declinato in tinta soft (alpha 0.20) + ombra in
   tinta così testo/badge restano leggibili; "Colore standard" rimuove
   l'override. I default replicano 1:1 le vecchie classi Tailwind.
+- **REG-468 — contrasto blocco ↔ colonna istruttore**: ogni blocco dell'agenda
+  (guide, esami, gruppi, blocchi istruttore, annullate) porta la classe
+  `.agenda-card` (`assets/styles/globals.css`): solco bianco esterno 2px +
+  alone scuro morbido + ombra in tinta (`--agenda-card-shadow`, inline per le
+  guide via `agendaBlockStyle`, classe arbitraria per esami/gruppi/`blockTint`).
+  **Nessun bordo disegnato**: la separazione è solo di profondità — un bordo in
+  tinta era stato provato e scartato (feedback di Tiziano). Prima i pastelli dei
+  blocchi si fondevano con la banda della colonna (stessa famiglia di colore) e
+  con gli override, che erano **translucidi** (rgba 0.20): ora la tinta override
+  è appiattita su bianco, quindi opaca.
 - **Eccezioni pre-costruite** (`AGENDA_COLOR_EXCEPTIONS`, registry nel modulo
   condiviso): regole toggleabili che VINCONO sul criterio (prima che matcha
   vince, in ordine di registry), ognuna con colore personalizzabile

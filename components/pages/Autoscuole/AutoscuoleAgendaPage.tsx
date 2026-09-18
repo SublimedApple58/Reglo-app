@@ -166,8 +166,8 @@ const groupLessonTint = (item: { groupLessonKind?: string | null }) => {
   const moto = item.groupLessonKind === "moto";
   return {
     card: moto
-      ? "bg-[#FFEDD5] shadow-[0_5px_14px_rgba(249,115,22,0.22)]"
-      : "bg-[#ECFDF5] shadow-[0_5px_14px_rgba(16,185,129,0.22)]",
+      ? "bg-[#FFEDD5] [--agenda-card-shadow:rgba(249,115,22,0.22)]"
+      : "bg-[#ECFDF5] [--agenda-card-shadow:rgba(16,185,129,0.22)]",
     badge: moto
       ? "border-orange-200 bg-orange-200/60 text-orange-700"
       : "border-teal-200 bg-teal-200/60 text-teal-700",
@@ -461,15 +461,16 @@ const LEGACY_INSTRUCTOR_HEX = [
 
 // Palette posizionale di fallback (istruttori senza colore scelto). Redesign
 // 2026-07: il primo slot è neutro slate — niente più rosa di default.
+// REG-468: bande al 45% (erano al 60%) — stessa logica dei colori custom.
 const INSTRUCTOR_COLORS = [
-  { bg: "bg-slate-100/60", border: "border-slate-200/40", text: "text-slate-700", avatar: "bg-slate-200 text-slate-700" },
-  { bg: "bg-sky-50/60", border: "border-sky-200/40", text: "text-sky-700", avatar: "bg-sky-100 text-sky-700" },
-  { bg: "bg-emerald-50/60", border: "border-emerald-200/40", text: "text-emerald-700", avatar: "bg-emerald-100 text-emerald-700" },
-  { bg: "bg-amber-50/60", border: "border-amber-200/40", text: "text-amber-700", avatar: "bg-amber-100 text-amber-700" },
-  { bg: "bg-violet-50/60", border: "border-violet-200/40", text: "text-violet-700", avatar: "bg-violet-100 text-violet-700" },
-  { bg: "bg-teal-50/60", border: "border-teal-200/40", text: "text-teal-700", avatar: "bg-teal-100 text-teal-700" },
-  { bg: "bg-orange-50/60", border: "border-orange-200/40", text: "text-orange-700", avatar: "bg-orange-100 text-orange-700" },
-  { bg: "bg-rose-50/60", border: "border-rose-200/40", text: "text-rose-700", avatar: "bg-rose-100 text-rose-700" },
+  { bg: "bg-slate-100/45", border: "border-slate-200/40", text: "text-slate-700", avatar: "bg-slate-200 text-slate-700" },
+  { bg: "bg-sky-50/45", border: "border-sky-200/40", text: "text-sky-700", avatar: "bg-sky-100 text-sky-700" },
+  { bg: "bg-emerald-50/45", border: "border-emerald-200/40", text: "text-emerald-700", avatar: "bg-emerald-100 text-emerald-700" },
+  { bg: "bg-amber-50/45", border: "border-amber-200/40", text: "text-amber-700", avatar: "bg-amber-100 text-amber-700" },
+  { bg: "bg-violet-50/45", border: "border-violet-200/40", text: "text-violet-700", avatar: "bg-violet-100 text-violet-700" },
+  { bg: "bg-teal-50/45", border: "border-teal-200/40", text: "text-teal-700", avatar: "bg-teal-100 text-teal-700" },
+  { bg: "bg-orange-50/45", border: "border-orange-200/40", text: "text-orange-700", avatar: "bg-orange-100 text-orange-700" },
+  { bg: "bg-rose-50/45", border: "border-rose-200/40", text: "text-rose-700", avatar: "bg-rose-100 text-rose-700" },
 ];
 
 type FilterKind = "instructor" | "vehicle" | "type" | "status";
@@ -3677,7 +3678,7 @@ export function AutoscuoleAgendaPage({
                               ? guideBlockColorStyle(item, licenseTag)
                               : null;
                           const instrCardClass = isExamInstr
-                            ? "bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)]"
+                            ? "bg-[#F5F0FF] [--agenda-card-shadow:rgba(139,92,246,0.22)]"
                             : isGroupLessonInstr
                               ? glTintInstr.card
                               : instrColorStyle
@@ -3691,7 +3692,7 @@ export function AutoscuoleAgendaPage({
                                 <PopoverPrimitive.Anchor asChild>
                                 <button
                                   type="button"
-                                  className={cn("group absolute left-0.5 right-0.5 z-10 flex flex-col justify-start rounded-[8px] text-[9px] leading-tight text-left hover:z-30", isPendingAction ? "pointer-events-none opacity-75" : "", instrCardClass)}
+                                  className={cn("agenda-card group absolute left-0.5 right-0.5 z-10 flex flex-col justify-start rounded-[8px] text-[9px] leading-tight text-left hover:z-30", isPendingAction ? "pointer-events-none opacity-75" : "", instrCardClass)}
                                   style={{ top, height, ...(instrColorStyle ?? {}) }}
                                   title={`${isExamInstr ? "🎓 ESAME · " : ""}${item.student.firstName} ${item.student.lastName} · ${formatEventType(item.type)} · ${formatTimeRange(start, end)}`}
                                   onClick={(e) => e.stopPropagation()}
@@ -3795,7 +3796,7 @@ export function AutoscuoleAgendaPage({
                                 <button
                                   key={`exam-instr-${eg.key}`}
                                   type="button"
-                                  className="absolute left-0.5 right-0.5 z-20 flex flex-col justify-start overflow-hidden rounded-[8px] bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)] text-[9px] leading-tight text-left cursor-pointer hover:bg-[#EDE4FF] transition-colors"
+                                  className="agenda-card absolute left-0.5 right-0.5 z-20 flex flex-col justify-start overflow-hidden rounded-[8px] bg-[#F5F0FF] [--agenda-card-shadow:rgba(139,92,246,0.22)] text-[9px] leading-tight text-left cursor-pointer hover:bg-[#EDE4FF] transition-colors"
                                   style={{ top: 0 }}
                                   onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
                                 >
@@ -3817,7 +3818,7 @@ export function AutoscuoleAgendaPage({
                               <button
                                 key={`exam-instr-${eg.key}`}
                                 type="button"
-                                className="absolute left-0.5 right-0.5 z-10 flex flex-col justify-start overflow-hidden rounded-[8px] bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)] text-[9px] leading-tight text-left cursor-pointer hover:bg-[#EDE4FF] transition-colors"
+                                className="agenda-card absolute left-0.5 right-0.5 z-10 flex flex-col justify-start overflow-hidden rounded-[8px] bg-[#F5F0FF] [--agenda-card-shadow:rgba(139,92,246,0.22)] text-[9px] leading-tight text-left cursor-pointer hover:bg-[#EDE4FF] transition-colors"
                                 style={{ top, height }}
                                 onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
                               >
@@ -3873,7 +3874,7 @@ export function AutoscuoleAgendaPage({
                                 <DropdownMenuTrigger asChild>
                                   <button
                                     type="button"
-                                    className={cn("absolute left-0.5 right-0.5 z-[8] flex flex-col justify-start overflow-hidden rounded-[8px] text-[9px] leading-tight text-left transition-colors", blockStyle.card)}
+                                    className={cn("agenda-card absolute left-0.5 right-0.5 z-[8] flex flex-col justify-start overflow-hidden rounded-[8px] text-[9px] leading-tight text-left transition-colors", blockStyle.card)}
                                     style={{ top, height }}
                                     onClick={(e) => e.stopPropagation()}
                                   >
@@ -4196,7 +4197,7 @@ export function AutoscuoleAgendaPage({
                           ? guideBlockColorStyle(item, licenseTag)
                           : null;
                       const dayCardClass = isExamDay
-                        ? "bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)]"
+                        ? "bg-[#F5F0FF] [--agenda-card-shadow:rgba(139,92,246,0.22)]"
                         : isGroupLessonDay
                           ? glTintDay.card
                           : dayColorStyle
@@ -4212,7 +4213,7 @@ export function AutoscuoleAgendaPage({
                             <button
                               type="button"
                               className={cn(
-                                "group absolute left-1 right-1 z-10 box-border flex flex-col rounded-[10px] text-left text-[11px] transition-[box-shadow,transform] duration-200 ease-out motion-safe:hover:-translate-y-0.5 hover:z-30",
+                                "agenda-card group absolute left-1 right-1 z-10 box-border flex flex-col rounded-[10px] text-left text-[11px] transition-[box-shadow,transform] duration-200 ease-out motion-safe:hover:-translate-y-0.5 hover:z-30",
                                 isCompact ? "p-1.5" : "p-2",
                                 isPendingAction ? "pointer-events-none opacity-75" : "",
                                 dayCardClass,
@@ -4364,7 +4365,7 @@ export function AutoscuoleAgendaPage({
                           <button
                             key={`exam-day-grid-${eg.key}`}
                             type="button"
-                            className="absolute left-1 right-1 z-10 flex flex-col justify-start overflow-hidden rounded-[10px] bg-[#F5F0FF] text-left text-[11px] leading-tight shadow-[0_5px_14px_rgba(139,92,246,0.22)] transition-colors hover:bg-[#EDE4FF] cursor-pointer"
+                            className="agenda-card absolute left-1 right-1 z-10 flex flex-col justify-start overflow-hidden rounded-[10px] bg-[#F5F0FF] text-left text-[11px] leading-tight [--agenda-card-shadow:rgba(139,92,246,0.22)] transition-colors hover:bg-[#EDE4FF] cursor-pointer"
                             style={{ top, height }}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -4434,7 +4435,7 @@ export function AutoscuoleAgendaPage({
                             <DropdownMenuTrigger asChild>
                               <button
                                 type="button"
-                                className="absolute left-1 right-1 z-[8] flex flex-col justify-start overflow-hidden rounded-[10px] bg-[#F3F4F8] p-2 text-left text-[11px] transition hover:bg-[#E7E9F1]"
+                                className="agenda-card absolute left-1 right-1 z-[8] flex flex-col justify-start overflow-hidden rounded-[10px] bg-[#F3F4F8] p-2 text-left text-[11px] transition hover:bg-[#E7E9F1]"
                                 style={{ top, height }}
                                 onClick={(e) => e.stopPropagation()}
                               >
@@ -5042,7 +5043,7 @@ export function AutoscuoleAgendaPage({
                 ).map(({ entry, label, overrideHex }) => (
                   <div key={entry.key} className="flex items-center gap-3">
                     <div
-                      className="h-5 w-8 rounded-md"
+                      className="agenda-card h-5 w-8 rounded-md"
                       style={agendaBlockStyle(entry, overrideHex)}
                     />
                     <span className="text-xs text-foreground">{label}</span>
@@ -5065,7 +5066,7 @@ export function AutoscuoleAgendaPage({
                   ).map((exc) => (
                     <div key={exc.key} className="flex items-center gap-3">
                       <div
-                        className="h-5 w-8 rounded-md"
+                        className="agenda-card h-5 w-8 rounded-md"
                         style={agendaBlockStyle(exc.entry, agendaColorOverrides.eccezioni?.[exc.key])}
                       />
                       <span className="text-xs text-foreground">{exc.entry.label}</span>
@@ -6209,21 +6210,22 @@ function formatBlockReason(reason: string | null | undefined) {
 function blockTint(reason: string | null | undefined): { card: string; text: string } {
   switch ((reason ?? "").trim()) {
     case "sick_leave":
-      return { card: "bg-[#FFF1E9] hover:bg-[#FFE3D3]", text: "text-[#C2410C]" };
+      return { card: "bg-[#FFF1E9] [--agenda-card-shadow:rgba(194,65,12,0.18)] hover:bg-[#FFE3D3]", text: "text-[#C2410C]" };
     case "ferie":
-      return { card: "bg-[#DDF3F0] hover:bg-[#C9ECE7]", text: "text-[#0F766E]" };
+      return { card: "bg-[#DDF3F0] [--agenda-card-shadow:rgba(15,118,110,0.18)] hover:bg-[#C9ECE7]", text: "text-[#0F766E]" };
     case "lesson_buffer":
       // Pausa fra due guide (REG-484): grigio tenue a righine — c'è, occupa,
-      // ma non deve gridare come una malattia o una lezione teorica.
+      // ma non deve gridare come una malattia o una lezione teorica: ombra
+      // (REG-468) più tenue delle altre tinte, stessa famiglia grigia.
       return {
-        card: "bg-[#F5F5F7] bg-[image:repeating-linear-gradient(135deg,rgba(110,117,150,0.10)_0,rgba(110,117,150,0.10)_2px,transparent_2px,transparent_9px)] hover:bg-[#ECEEF3]",
+        card: "bg-[#F5F5F7] bg-[image:repeating-linear-gradient(135deg,rgba(110,117,150,0.10)_0,rgba(110,117,150,0.10)_2px,transparent_2px,transparent_9px)] [--agenda-card-shadow:rgba(110,117,150,0.14)] hover:bg-[#ECEEF3]",
         text: "text-[#6E7596]",
       };
     case "theory_lesson":
       // Indaco + righe diagonali = "occupato / non prenotabile" a colpo d'occhio.
       // Colore (background-color) + hatch (background-image) impilati in un'unica classe.
       return {
-        card: "bg-[#E6E9FF] bg-[image:repeating-linear-gradient(135deg,rgba(79,70,229,0.13)_0,rgba(79,70,229,0.13)_2px,transparent_2px,transparent_9px)] hover:bg-[#DCE0FF]",
+        card: "bg-[#E6E9FF] bg-[image:repeating-linear-gradient(135deg,rgba(79,70,229,0.13)_0,rgba(79,70,229,0.13)_2px,transparent_2px,transparent_9px)] [--agenda-card-shadow:rgba(79,70,229,0.18)] hover:bg-[#DCE0FF]",
         text: "text-[#3730a3]",
       };
     default:
@@ -6248,7 +6250,7 @@ function buildLocalDateTime(day: string, time: string) {
 // Guide a CAMBIO AUTOMATICO: colore dedicato (ciano) che SOSTITUISCE quello di
 // durata, così si distinguono a colpo d'occhio. Automatica se il veicolo usato è
 // automatico o, in mancanza, se l'allievo segue il percorso automatico.
-const AUTOMATIC_CLASS = "bg-[#CFFAFE] shadow-[0_5px_14px_rgba(6,182,212,0.22)]";
+const AUTOMATIC_CLASS = "bg-[#CFFAFE] [--agenda-card-shadow:rgba(6,182,212,0.22)]";
 
 function isAutomaticLesson(appointment: AppointmentRow): boolean {
   return (
@@ -6262,11 +6264,11 @@ function getScheduledDurationClass(appointment: AppointmentRow): string {
   const start = toDate(appointment.startsAt);
   const end = getAppointmentEnd(appointment);
   const dur = Math.round(diffMinutes(end, start));
-  if (dur <= 30) return "bg-[#E3EEFF] shadow-[0_5px_14px_rgba(59,130,246,0.22)]";
-  if (dur <= 45) return "bg-[#EAF7CE] shadow-[0_5px_14px_rgba(132,204,22,0.22)]";
-  if (dur <= 60) return "bg-[#FCEFC7] shadow-[0_5px_14px_rgba(245,158,11,0.22)]";
-  if (dur <= 90) return "bg-[#F9DDF3] shadow-[0_5px_14px_rgba(217,70,239,0.22)]";
-  return "bg-[#FBD9DD] shadow-[0_5px_14px_rgba(244,63,94,0.22)]";
+  if (dur <= 30) return "bg-[#E3EEFF] [--agenda-card-shadow:rgba(59,130,246,0.22)]";
+  if (dur <= 45) return "bg-[#EAF7CE] [--agenda-card-shadow:rgba(132,204,22,0.22)]";
+  if (dur <= 60) return "bg-[#FCEFC7] [--agenda-card-shadow:rgba(245,158,11,0.22)]";
+  if (dur <= 90) return "bg-[#F9DDF3] [--agenda-card-shadow:rgba(217,70,239,0.22)]";
+  return "bg-[#FBD9DD] [--agenda-card-shadow:rgba(244,63,94,0.22)]";
 }
 
 function getStatusMeta(
