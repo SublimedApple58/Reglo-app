@@ -44,6 +44,7 @@ import {
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
 import { isInstructor, isOwner, isStudent } from "@/lib/autoscuole/roles";
+import { canManageLessonPayments } from "@/lib/autoscuole/lesson-payments";
 import { LICENSE_CATEGORIES, TRANSMISSIONS, isMotoLicenseCategory, vehicleServesLicense } from "@/lib/autoscuole/license";
 import { FOLLOW_CAR_CATEGORY, parseFollowCarRulesFromLimits, type FollowCarRules } from "@/lib/autoscuole/follow-car";
 import { MOTO_LESSON_TYPES } from "@/lib/autoscuole/moto-lesson-type";
@@ -404,22 +405,6 @@ const canManageStudentCredits = (membership: {
 }) =>
   membership.role === "admin" ||
   isOwner(membership.autoscuolaRole);
-
-/**
- * Permesso SCOPED per il solo tracciamento pagamento manuale (REG-450): segnare
- * una guida pagata / da pagare. Più largo di `canManageStudentCredits` perché
- * l'app mobile lo mette in mano anche agli istruttori, che incassano in auto —
- * ma resta separato apposta: i CREDITI (grant/revoke, "copri con credito")
- * restano owner/admin, qui si tocca solo `manualPaymentStatus`.
- * L'istruttore è comunque ristretto alle proprie guide dal chiamante.
- */
-const canManageLessonPayments = (membership: {
-  role: string;
-  autoscuolaRole: string | null;
-}) =>
-  membership.role === "admin" ||
-  isOwner(membership.autoscuolaRole) ||
-  isInstructor(membership.autoscuolaRole);
 
 const getOwnInstructorProfile = async (companyId: string, userId: string) =>
   prisma.autoscuolaInstructor.findFirst({
@@ -10543,8 +10528,9 @@ export async function setManualPaymentStatus(
 ) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    // REG-450: permesso scoped — anche gli istruttori segnano pagata dall'app
-    // mobile. I crediti restano owner/admin (`canManageStudentCredits`).
+    // REG-450: permesso scoped — anche gli istruttori segnano pagata, su
+    // QUALSIASI guida dell'allievo (l'incasso è un fatto amministrativo, non
+    // didattico). I crediti restano owner/admin (`canManageStudentCredits`).
     if (!canManageLessonPayments(membership)) {
       return { success: false, message: "Operazione non consentita." };
     }
@@ -10556,34 +10542,10 @@ export async function setManualPaymentStatus(
         id: true,
         paymentRequired: true,
         manualPaymentStatus: true,
-        instructorId: true,
       },
     });
     if (!appointment) {
       return { success: false, message: "Appuntamento non trovato." };
-    }
-
-    // L'istruttore incassa le proprie guide, non quelle dei colleghi: stessa
-    // guardia di `updateAutoscuolaAppointmentDetails`. L'owner non è ristretto.
-    // NB: a differenza dei dettagli guida, qui una guida `cancelled` resta
-    // segnabile — è il caso della penale tardiva "da pagare".
-    if (isInstructor(membership.autoscuolaRole) && membership.role !== "admin") {
-      const ownInstructor = await getOwnInstructorProfile(
-        membership.companyId,
-        membership.userId,
-      );
-      if (!ownInstructor) {
-        return {
-          success: false,
-          message: "Profilo istruttore non trovato per questo account.",
-        };
-      }
-      if (appointment.instructorId !== ownInstructor.id) {
-        return {
-          success: false,
-          message: "Puoi segnare il pagamento solo delle tue guide.",
-        };
-      }
     }
 
     // Block manual marking ONLY for true automatic (Stripe) payments — those have
