@@ -42,6 +42,28 @@ Ogni push su `staging` fa partire anche la CI **Staging Smoke** (`.github/workfl
 QA manuale su `staging.reglo.it` (vedi account di test in [STAGING.md](../STAGING.md)). Mobile contro staging: `npm run ios:staging` / `android:staging` in `reglo-mobile/`.
 
 ### 4. Rilascio in produzione (con OK esplicito dell'utente)
+
+**Prima di promuovere, guarda cosa c'è davvero in `staging`:**
+
+```bash
+git fetch origin
+git log --oneline origin/main..origin/staging     # tutto quello che staging ha in piu' di prod
+```
+
+`staging` è condiviso: quando arrivi al rilascio ci può essere finito il lavoro di altri,
+in QA o proprio non ancora guardato da nessuno. In prod va **solo la feature approvata**,
+quindi si promuove il **feature branch**, non `staging`:
+
+```bash
+git merge-base --is-ancestor origin/main HEAD && git push origin HEAD:main   # fast-forward pulito
+git diff --stat origin/main..HEAD                                           # controlla cosa stai rilasciando
+git diff --name-only origin/main..HEAD -- prisma/                            # vuoto = nessuna migrazione
+```
+
+Se il feature branch non è fast-forward da `main`, mergia prima `origin/main` nel branch.
+Un merge `staging` → `main` va bene solo quando quel `git log` mostra esclusivamente i tuoi
+commit (caso raro: verificalo, non darlo per scontato).
+
 - **Web + backend** (`reglo`): merge `feature` → `main` → push → Vercel auto-deploya.
 - **DB**: `pnpm migrate:prod` se ci sono migrazioni.
 - **Background jobs**: `pnpm trigger:deploy:prod` se sono cambiati i job Trigger.dev.
@@ -58,4 +80,5 @@ QA manuale su `staging.reglo.it` (vedi account di test in [STAGING.md](../STAGIN
 1. **`staging` è condiviso** → allinealo nel tuo branch PRIMA di shippare (passo 1).
 2. **Niente lavoro diretto su `main`/`master`** per task grossi → feature branch su entrambi i repo.
 3. **Niente deploy/OTA in prod senza OK esplicito** dell'utente.
-4. Stub di un modello Prisma aggiunto a mano per far girare `migrate dev`? **Rimuovilo** quando arriva il branch reale che lo possiede (altrimenti al merge → modello duplicato → build rotta).
+4. **In prod si promuove il feature branch, non `staging`** → `git log origin/main..origin/staging` prima, per non portare in produzione il lavoro non approvato di altri (passo 4).
+5. Stub di un modello Prisma aggiunto a mano per far girare `migrate dev`? **Rimuovilo** quando arriva il branch reale che lo possiede (altrimenti al merge → modello duplicato → build rotta).
