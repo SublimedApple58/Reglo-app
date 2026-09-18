@@ -2114,7 +2114,7 @@ export function AutoscuoleAgendaPage({
     }
     setCreating(true);
     const endsAt = new Date(startDate.getTime() + Number(form.duration) * 60 * 1000);
-    const makePayload = (skip?: boolean) => ({
+    const makePayload = (skip?: boolean, confirmNoBuffer?: boolean) => ({
       studentId: form.studentId,
       type: form.types[0] || form.type,
       types: form.types,
@@ -2132,6 +2132,7 @@ export function AutoscuoleAgendaPage({
       locationId: form.locationId || null,
       notes: form.notes.trim() || undefined,
       ...(skip ? { skipWeeklyLimitCheck: true } : {}),
+      ...(confirmNoBuffer ? { confirmNoBuffer: true } : {}),
       ...(opts?.allowPast ? { allowPast: true } : {}),
     });
     const res = await createAutoscuolaAppointment(makePayload());
@@ -2143,6 +2144,21 @@ export function AutoscuoleAgendaPage({
         if (!confirmed) return;
         setCreating(true);
         const retryRes = await createAutoscuolaAppointment(makePayload(true));
+        if (!retryRes.success) {
+          setCreating(false);
+          toast.error({ description: retryRes.message ?? "Impossibile creare l'appuntamento." });
+          return;
+        }
+      } else if (code === "LESSON_BUFFER_CONFIRM") {
+        // REG-484: la guida riempie esattamente il buco, dopo non resta il
+        // tempo della pausa. Domanda secca; se conferma, si procede senza.
+        setCreating(false);
+        const confirmed = window.confirm(
+          res.message ?? "Non avrai tempo per una pausa. Vuoi procedere comunque?",
+        );
+        if (!confirmed) return;
+        setCreating(true);
+        const retryRes = await createAutoscuolaAppointment(makePayload(false, true));
         if (!retryRes.success) {
           setCreating(false);
           toast.error({ description: retryRes.message ?? "Impossibile creare l'appuntamento." });
@@ -6178,6 +6194,8 @@ function formatBlockReason(reason: string | null | undefined) {
       return "Ferie";
     case "theory_lesson":
       return "Lezione teorica";
+    case "lesson_buffer":
+      return "Pausa";
     case "":
       return "Blocco";
     default:
@@ -6194,6 +6212,13 @@ function blockTint(reason: string | null | undefined): { card: string; text: str
       return { card: "bg-[#FFF1E9] hover:bg-[#FFE3D3]", text: "text-[#C2410C]" };
     case "ferie":
       return { card: "bg-[#DDF3F0] hover:bg-[#C9ECE7]", text: "text-[#0F766E]" };
+    case "lesson_buffer":
+      // Pausa fra due guide (REG-484): grigio tenue a righine — c'è, occupa,
+      // ma non deve gridare come una malattia o una lezione teorica.
+      return {
+        card: "bg-[#F5F5F7] bg-[image:repeating-linear-gradient(135deg,rgba(110,117,150,0.10)_0,rgba(110,117,150,0.10)_2px,transparent_2px,transparent_9px)] hover:bg-[#ECEEF3]",
+        text: "text-[#6E7596]",
+      };
     case "theory_lesson":
       // Indaco + righe diagonali = "occupato / non prenotabile" a colpo d'occhio.
       // Colore (background-color) + hatch (background-image) impilati in un'unica classe.

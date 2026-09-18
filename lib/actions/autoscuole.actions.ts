@@ -62,6 +62,11 @@ import {
   resolveVehicleOwnerOnUpdate,
 } from "@/lib/autoscuole/appointment-vehicles";
 import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
+import {
+  createLessonBufferBlock,
+  lacksRoomForLessonBuffer,
+  resolveLessonBufferMinutes,
+} from "@/lib/autoscuole/lesson-buffer";
 import { parseInstructorSettings } from "@/lib/autoscuole/instructor-clusters";
 import { generateInviteCode } from "@/lib/company/invite-code";
 import { notifyStudentPhaseChange } from "@/lib/autoscuole/student-phase-notifications";
@@ -149,6 +154,9 @@ const createAppointmentSchema = z.object({
   // Owner/instructor may knowingly log a lesson in the past (dopo conferma
   // esplicita lato client). Senza il flag il blocco resta attivo.
   allowPast: z.boolean().optional(),
+  // REG-484: lo staff ha confermato "Non avrai tempo per una pausa" e vuole
+  // procedere lo stesso. Senza il flag l'azione si ferma e chiede conferma.
+  confirmNoBuffer: z.boolean().optional(),
 });
 
 const updateCaseStatusSchema = z.object({
@@ -3310,6 +3318,30 @@ export async function createAutoscuolaAppointment(
       resolvedLocationId = defaultLoc?.id ?? null;
     }
 
+    // ── Pausa fra le guide (REG-484) ─────────────────────────────────────
+    // Dopo la guida nasce un blocco-slot sull'istruttore, lungo quanto il
+    // buffer dell'autoscuola. Se quella guida riempie esattamente il buco fra
+    // due impegni, la pausa non ci sta: allo staff lo diciamo e chiediamo
+    // conferma (all'allievo no — non decide lui l'agenda dell'istruttore).
+    const lessonBufferMinutes = resolveLessonBufferMinutes(
+      await getCachedCompanyServiceLimits(companyId),
+    );
+    if (lessonBufferMinutes > 0 && !isStudentActor && !payload.confirmNoBuffer) {
+      const noRoom = await lacksRoomForLessonBuffer({
+        companyId,
+        instructorId: resolvedInstructorId,
+        lessonEndsAt: slotEnd,
+        bufferMinutes: lessonBufferMinutes,
+      });
+      if (noRoom) {
+        return {
+          success: false,
+          message: "Non avrai tempo per una pausa. Vuoi procedere comunque?",
+          code: "LESSON_BUFFER_CONFIRM" as const,
+        };
+      }
+    }
+
     const appointmentId = randomUUID();
     const appointment = await prisma.$transaction(async (tx) => {
       const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
@@ -3363,6 +3395,17 @@ export async function createAutoscuolaAppointment(
             : {}),
         },
       });
+    });
+
+    // ── Pausa fra le guide (REG-484) ─────────────────────────────────────
+    // Il blocco nasce subito dopo la guida, sull'istruttore. Se lo spazio non
+    // c'è (guida che riempie esattamente il buco fra due impegni) il blocco
+    // viene saltato: allo staff l'abbiamo già chiesto qui sopra.
+    await createLessonBufferBlock({
+      companyId,
+      instructorId: resolvedInstructorId,
+      endsAt: slotEnd,
+      bufferMinutes: lessonBufferMinutes,
     });
 
     await invalidateAgendaAndPaymentsCache(companyId);
@@ -3831,6 +3874,21 @@ export async function createAutoscuolaAppointmentBatch(
       }
       return results;
     });
+
+    // Pausa fra le guide (REG-484): una per ogni guida del batch. Le guide
+    // consecutive dello stesso batch si auto-troncano — la pausa si ferma
+    // sulla guida successiva, quindi non nasce se non c'è spazio.
+    const batchLessonBufferMinutes = resolveLessonBufferMinutes(
+      await getCachedCompanyServiceLimits(companyId),
+    );
+    for (const appt of appointments) {
+      await createLessonBufferBlock({
+        companyId,
+        instructorId: resolvedInstructorId,
+        endsAt: appt.endsAt,
+        bufferMinutes: batchLessonBufferMinutes,
+      });
+    }
 
     await invalidateAgendaAndPaymentsCache(companyId);
 

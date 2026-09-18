@@ -57,6 +57,10 @@ export type BookingsTabProps = {
   setBookingCutoffEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   bookingCutoffTime: string;
   setBookingCutoffTime: (v: string) => void;
+  lessonBufferEnabled: boolean;
+  setLessonBufferEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  lessonBufferMinutes: number;
+  setLessonBufferMinutes: (v: number) => void;
   weeklyBookingLimitEnabled: boolean;
   setWeeklyBookingLimitEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   weeklyBookingLimit: number;
@@ -194,17 +198,22 @@ function NumberField({
   value,
   min,
   max,
+  step,
   onCommit,
 }: {
   value: number;
   min: number;
   max: number;
+  /** Quando c'è, il valore digitato viene arrotondato al multiplo più vicino. */
+  step?: number;
   onCommit: (v: number) => void;
 }) {
   const [draft, setDraft] = React.useState(String(value));
   React.useEffect(() => setDraft(String(value)), [value]);
   const commit = () => {
-    const parsed = Math.max(min, Math.min(max, Number(draft) || min));
+    const raw = Number(draft) || min;
+    const stepped = step && step > 0 ? Math.round(raw / step) * step : raw;
+    const parsed = Math.max(min, Math.min(max, stepped));
     setDraft(String(parsed));
     onCommit(parsed);
   };
@@ -213,6 +222,7 @@ function NumberField({
       type="number"
       min={min}
       max={max}
+      step={step}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
@@ -460,6 +470,10 @@ export default function BookingsTab({
   setBookingCutoffEnabled,
   bookingCutoffTime,
   setBookingCutoffTime,
+  lessonBufferEnabled,
+  setLessonBufferEnabled,
+  lessonBufferMinutes,
+  setLessonBufferMinutes,
   weeklyBookingLimitEnabled,
   setWeeklyBookingLimitEnabled,
   weeklyBookingLimit,
@@ -764,6 +778,26 @@ export default function BookingsTab({
                 minuteStep={30}
                 placeholder="Orario"
                 className="w-[200px] justify-between py-[11px]"
+              />
+            </FieldBlock>
+          )}
+        </div>
+
+        <div className="py-6">
+          <SettingRow
+            title="Pausa tra una guida e l'altra"
+            description="Dopo ogni guida l'agenda dell'istruttore resta bloccata per il tempo che scegli: cambio allievo, rientro, due minuti di fiato. La guida dopo si può prendere solo passata la pausa."
+            checked={lessonBufferEnabled}
+            onToggle={() => setLessonBufferEnabled((prev) => !prev)}
+          />
+          {lessonBufferEnabled && (
+            <FieldBlock label="Minuti di pausa">
+              <NumberField
+                value={lessonBufferMinutes}
+                min={5}
+                max={60}
+                step={5}
+                onCommit={setLessonBufferMinutes}
               />
             </FieldBlock>
           )}

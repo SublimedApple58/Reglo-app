@@ -36,6 +36,14 @@ import {
 } from "@/lib/autoscuole/agenda-color-criterion";
 import { asAgendaInstructorOrder } from "@/lib/autoscuole/agenda-instructor-order";
 import {
+  DEFAULT_LESSON_BUFFER_ENABLED,
+  DEFAULT_LESSON_BUFFER_MINUTES,
+  LESSON_BUFFER_MAX_MINUTES,
+  LESSON_BUFFER_MIN_MINUTES,
+  isLessonBufferEnabled,
+  normalizeLessonBufferMinutes,
+} from "@/lib/autoscuole/lesson-buffer";
+import {
   BOOKING_SLOT_DURATION_OPTIONS,
   LESSON_POLICY_TYPES,
   LessonPolicyType,
@@ -335,6 +343,13 @@ const autoscuolaSettingsPatchSchema = z
     swapNotifyMode: z.enum(["all", "available_only"]).optional(),
     bookingCutoffEnabled: z.boolean().optional(),
     bookingCutoffTime: z.enum(BOOKING_CUTOFF_TIMES).optional(),
+    lessonBufferEnabled: z.boolean().optional(),
+    lessonBufferMinutes: z
+      .number()
+      .int()
+      .min(LESSON_BUFFER_MIN_MINUTES)
+      .max(LESSON_BUFFER_MAX_MINUTES)
+      .optional(),
     emptySlotNotificationEnabled: z.boolean().optional(),
     emptySlotNotificationTarget: z
       .enum(["all", "availability_matching"])
@@ -581,6 +596,9 @@ export type AutoscuolaSettingsData = {
   swapNotifyMode: (typeof SWAP_NOTIFY_MODES)[number];
   bookingCutoffEnabled: boolean;
   bookingCutoffTime: (typeof BOOKING_CUTOFF_TIMES)[number];
+  /** Pausa creata sull'istruttore dopo ogni guida prenotata (REG-484). */
+  lessonBufferEnabled: boolean;
+  lessonBufferMinutes: number;
   emptySlotNotificationEnabled: boolean;
   emptySlotNotificationTarget: (typeof EMPTY_SLOT_NOTIFICATION_TARGETS)[number];
   emptySlotNotificationTimes: string[];
@@ -760,6 +778,8 @@ const resolveAutoscuolaSettingsData = async (
   )
     ? (limits.bookingCutoffTime as (typeof BOOKING_CUTOFF_TIMES)[number])
     : DEFAULT_BOOKING_CUTOFF_TIME;
+  const lessonBufferEnabled = isLessonBufferEnabled(limits);
+  const lessonBufferMinutes = normalizeLessonBufferMinutes(limits.lessonBufferMinutes);
   const emptySlotNotificationEnabled =
     typeof limits.emptySlotNotificationEnabled === "boolean"
       ? limits.emptySlotNotificationEnabled
@@ -948,6 +968,8 @@ const resolveAutoscuolaSettingsData = async (
     swapNotifyMode,
     bookingCutoffEnabled,
     bookingCutoffTime,
+    lessonBufferEnabled,
+    lessonBufferMinutes,
     emptySlotNotificationEnabled,
     emptySlotNotificationTarget,
     emptySlotNotificationTimes,
@@ -1138,6 +1160,14 @@ export async function updateAutoscuolaSettings(
     )
       ? (limits.bookingCutoffTime as (typeof BOOKING_CUTOFF_TIMES)[number])
       : DEFAULT_BOOKING_CUTOFF_TIME;
+    const previousLessonBufferEnabled =
+      typeof limits.lessonBufferEnabled === "boolean"
+        ? limits.lessonBufferEnabled
+        : DEFAULT_LESSON_BUFFER_ENABLED;
+    const previousLessonBufferMinutes =
+      typeof limits.lessonBufferMinutes === "number"
+        ? normalizeLessonBufferMinutes(limits.lessonBufferMinutes)
+        : DEFAULT_LESSON_BUFFER_MINUTES;
     const previousEmptySlotNotificationEnabled =
       typeof limits.emptySlotNotificationEnabled === "boolean"
         ? limits.emptySlotNotificationEnabled
@@ -1321,6 +1351,11 @@ export async function updateAutoscuolaSettings(
     const nextSwapNotifyMode = payload.swapNotifyMode ?? previousSwapNotifyMode;
     const nextBookingCutoffEnabled = payload.bookingCutoffEnabled ?? previousBookingCutoffEnabled;
     const nextBookingCutoffTime = payload.bookingCutoffTime ?? previousBookingCutoffTime;
+    const nextLessonBufferEnabled = payload.lessonBufferEnabled ?? previousLessonBufferEnabled;
+    const nextLessonBufferMinutes =
+      payload.lessonBufferMinutes !== undefined
+        ? normalizeLessonBufferMinutes(payload.lessonBufferMinutes)
+        : previousLessonBufferMinutes;
     const nextEmptySlotNotificationEnabled =
       payload.emptySlotNotificationEnabled ?? previousEmptySlotNotificationEnabled;
     const nextEmptySlotNotificationTarget =
@@ -1528,6 +1563,8 @@ export async function updateAutoscuolaSettings(
       swapNotifyMode: nextSwapNotifyMode,
       bookingCutoffEnabled: nextBookingCutoffEnabled,
       bookingCutoffTime: nextBookingCutoffTime,
+      lessonBufferEnabled: nextLessonBufferEnabled,
+      lessonBufferMinutes: nextLessonBufferMinutes,
       emptySlotNotificationEnabled: nextEmptySlotNotificationEnabled,
       emptySlotNotificationTarget: nextEmptySlotNotificationTarget,
       emptySlotNotificationTimes: nextEmptySlotNotificationTimes,
@@ -1697,6 +1734,8 @@ export async function updateAutoscuolaSettings(
         swapNotifyMode: nextLimits.swapNotifyMode,
         bookingCutoffEnabled: nextLimits.bookingCutoffEnabled,
         bookingCutoffTime: nextLimits.bookingCutoffTime,
+        lessonBufferEnabled: nextLimits.lessonBufferEnabled,
+        lessonBufferMinutes: nextLimits.lessonBufferMinutes,
         emptySlotNotificationEnabled: nextLimits.emptySlotNotificationEnabled,
         emptySlotNotificationTarget: nextLimits.emptySlotNotificationTarget,
         emptySlotNotificationTimes: nextLimits.emptySlotNotificationTimes,
