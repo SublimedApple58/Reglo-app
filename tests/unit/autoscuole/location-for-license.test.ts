@@ -1,6 +1,7 @@
 import {
   lessonLicenseCategory,
   locationIdForLicenseCategory,
+  resolveGroupPrefilledLocationId,
   resolvePrefilledLocationId,
   type LicenseAwareLocation,
 } from "@/lib/autoscuole/location-for-license";
@@ -121,6 +122,82 @@ describe("resolvePrefilledLocationId", () => {
         locations: [{ id: "x", isDefault: false, licenseCategories: [] }],
         student: { licenseCategory: "B" },
       }),
+    ).toBeNull();
+  });
+});
+
+describe("resolveGroupPrefilledLocationId (guide di gruppo)", () => {
+  it("usa il default degli allievi quando sono tutti d'accordo", () => {
+    expect(
+      resolveGroupPrefilledLocationId({
+        locations: LOCATIONS,
+        studentDefaultLocationIds: ["parcheggio", "parcheggio"],
+        licenseCategories: ["B"],
+      }),
+    ).toBe("parcheggio");
+  });
+
+  it("chi non ha un default non blocca gli altri", () => {
+    expect(
+      resolveGroupPrefilledLocationId({
+        locations: LOCATIONS,
+        studentDefaultLocationIds: ["parcheggio", null, undefined],
+        licenseCategories: ["B"],
+      }),
+    ).toBe("parcheggio");
+  });
+
+  it("default in conflitto → si scende alla patente, non si sceglie a caso", () => {
+    expect(
+      resolveGroupPrefilledLocationId({
+        locations: LOCATIONS,
+        studentDefaultLocationIds: ["parcheggio", "camion"],
+        licenseCategories: ["A2"],
+      }),
+    ).toBe("moto");
+  });
+
+  it("ignora un default che punta a un luogo archiviato", () => {
+    expect(
+      resolveGroupPrefilledLocationId({
+        locations: LOCATIONS,
+        studentDefaultLocationIds: ["sparito", "sparito"],
+        licenseCategories: ["A1"],
+      }),
+    ).toBe("moto");
+  });
+
+  it("flotta moto concorde → luogo delle moto", () => {
+    expect(
+      resolveGroupPrefilledLocationId({
+        locations: LOCATIONS,
+        licenseCategories: ["A1", "A2", "A"],
+      }),
+    ).toBe("moto");
+  });
+
+  it("veicoli che puntano a luoghi diversi → sede", () => {
+    expect(
+      resolveGroupPrefilledLocationId({
+        locations: LOCATIONS,
+        licenseCategories: ["A1", "C"],
+      }),
+    ).toBe("sede");
+  });
+
+  it("nessun allievo e nessun veicolo → sede", () => {
+    expect(resolveGroupPrefilledLocationId({ locations: LOCATIONS })).toBe("sede");
+  });
+
+  it("categoria non assegnata a nessun luogo → sede", () => {
+    expect(
+      resolveGroupPrefilledLocationId({ locations: LOCATIONS, licenseCategories: ["D"] }),
+    ).toBe("sede");
+  });
+
+  it("company senza nemmeno la sede → null", () => {
+    expect(
+      resolveGroupPrefilledLocationId({ locations: [], licenseCategories: ["B"] }),
     ).toBeNull();
   });
 });

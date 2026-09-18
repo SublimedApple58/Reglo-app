@@ -3,7 +3,10 @@ import type { AutoscuolaLocation, Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
 
 import { isOwner } from "./roles";
-import { resolvePrefilledLocationId } from "./location-for-license";
+import {
+  resolveGroupPrefilledLocationId,
+  resolvePrefilledLocationId,
+} from "./location-for-license";
 
 export const DEFAULT_LOCATION_LABEL = "Sede dell'autoscuola";
 
@@ -141,6 +144,48 @@ export async function resolveStudentBookingLocationId(
     studentDefaultLocationId: member?.defaultLocationId ?? null,
     student: { licenseCategory: member?.licenseCategory ?? null },
     vehicle: { licenseCategory: params.vehicleLicenseCategory ?? null },
+  });
+}
+
+/**
+ * Luogo di ritrovo di una guida di GRUPPO (REG-409 follow-up).
+ *
+ * Stessa precedenza della guida singola, letta al plurale
+ * (`resolveGroupPrefilledLocationId`): default degli allievi pre-inseriti se
+ * concordi → luogo della patente se i veicoli concordano → sede. Serve al
+ * backend perché il luogo sia giusto anche quando il client non lo manda
+ * (creazione da mobile, o da un client vecchio): senza questo la guida
+ * finirebbe comunque in sede, che è il bug che REG-409 sta chiudendo.
+ *
+ * `licenseCategories` sono le categorie dei veicoli della guida — il veicolo
+ * condiviso o la flotta di moto, MAI l'auto al seguito (categoria B).
+ */
+export async function resolveGroupLessonLocationId(
+  tx: Prisma.TransactionClient,
+  params: {
+    companyId: string;
+    studentIds: readonly string[];
+    licenseCategories: readonly (string | null | undefined)[];
+  },
+): Promise<string | null> {
+  const [locations, members] = await Promise.all([
+    tx.autoscuolaLocation.findMany({
+      where: { companyId: params.companyId, archivedAt: null },
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+      select: { id: true, isDefault: true, licenseCategories: true },
+    }),
+    params.studentIds.length
+      ? tx.companyMember.findMany({
+          where: { companyId: params.companyId, userId: { in: [...params.studentIds] } },
+          select: { defaultLocationId: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  return resolveGroupPrefilledLocationId({
+    locations,
+    studentDefaultLocationIds: members.map((m) => m.defaultLocationId),
+    licenseCategories: params.licenseCategories,
   });
 }
 

@@ -31,6 +31,16 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Appointments**: guide e prenotazioni selezionano un luogo (default = sede `isDefault`); mostrato agli allievi nel dettaglio guida
 - → **Mobile**: dettaglio guida apre Google Maps quando `isPrecise` (address+coords da Google Places)
 - → **Appointments / Vehicles / License (luogo per tipo di patente, REG-409)**: `AutoscuolaLocation.licenseCategories` assegna a ogni luogo uno o più tipi di patente; in creazione guida il campo "Luogo" si precompila con **precedenza default allievo (REG-392) → luogo della patente → sede** (`lib/autoscuole/location-for-license.ts`, puro e testato). La patente della guida è quella del **veicolo** se selezionato, altrimenti il percorso dell'allievo → **chi tocca `licenseCategory` su veicoli o allievi cambia anche il luogo precompilato**. Una categoria appartiene a un solo luogo per company: l'esclusività è applicata in transazione da `setLocationLicenseCategories`, quindi **ogni nuovo path che scrive un luogo deve passare da lì**, mai da un `update` diretto su `licenseCategories`. Archiviare un luogo libera le sue categorie.
+- → **Guide di gruppo (follow-up 2026-09-19)**: il container ha ora il suo luogo
+  (`AutoscuolaGroupLesson.locationId`, migrazione additiva) e lo **copia su ogni
+  seat** nei 3 punti che creano un posto (`createGroupLesson`,
+  `addGroupLessonParticipant`, `respondGroupLessonInvite`) → **chi aggiunge un
+  quarto punto di creazione seat deve propagarlo**, altrimenti quell'allievo non
+  vede nessun luogo. La precedenza è quella della guida singola letta al plurale
+  (`resolveGroupPrefilledLocationId`): default degli allievi se concordi → luogo
+  della patente se i veicoli concordano → sede; in moto la patente viene dalla
+  **flotta**, mai dall'auto al seguito. `updateGroupLesson` NON tocca il luogo.
+  See `features/group-lessons.md`.
 - → **Prenotazione allievo da app + mobile (follow-up 2026-09-19)**: entrambi allineati alla stessa precedenza. L'auto-prenotazione (`createBookingRequest`, `respondWaitlistOffer`) non scrive più la sede hardcoded ma passa da `resolveStudentBookingLocationId` (`lib/autoscuole/locations.ts`) → **chi cambia la precedenza cambia anche il luogo delle guide prenotate dagli allievi**. Il `BookingForm` del **mobile** consuma `licenseCategories` tramite `reglo-mobile/src/utils/locationForLicense.ts`, **gemello** di `lib/autoscuole/location-for-license.ts`: le due copie vanno cambiate insieme (come `mandatory-lessons.ts` e `agenda-color-criterion.ts`).
 
 ### Availability

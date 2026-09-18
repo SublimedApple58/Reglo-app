@@ -5010,6 +5010,7 @@ export async function respondGroupLessonInvite(
             kind: true,
             instructorId: true,
             followVehicleId: true,
+            locationId: true,
             priceAmount: true,
             notes: true,
             vehicle: { select: { id: true, licenseCategory: true, transmission: true } },
@@ -5209,6 +5210,9 @@ export async function respondGroupLessonInvite(
           status: "scheduled",
           instructorId: gl.instructorId,
           vehicleId: assignedVehicleId,
+          // Chi accetta l'invito va dove va il gruppo: il posto eredita il
+          // luogo del container (REG-409).
+          locationId: gl.locationId,
           // Moto group participants carry their assigned moto as primary; the
           // shared follow car is reserved on the group container only.
           notes: gl.notes,

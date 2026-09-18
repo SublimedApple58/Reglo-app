@@ -110,6 +110,10 @@ Docs: `features/locations.md`, `INDEX.md`, `impact-map.md`.
   Entrambi i follow-up sono sul branch `tizianodifelice1/reg-409-luogo-prenotazione-allievo`
   (presente su **entrambi** i repo) — piano:
   `reglo-mobile/plans/mobile/reg-409-luogo-per-tipo-patente-mobile.md`.
+- ~~**Guide di gruppo**~~ ✅ **fatto 2026-09-19**: non avevano proprio il campo
+  Luogo (gap trovato da Tiziano). Container + copia sui posti + select nel
+  dialog di creazione — piano:
+  `plans/autoscuole/reg-409-luogo-guide-di-gruppo.md`.
 - **Cambio automatico**: "B" copre manuale e automatica. Se servisse
   distinguerle (come fa la palette colori agenda con la voce `autom`) va
   aggiunta una seconda dimensione.
