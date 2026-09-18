@@ -76,6 +76,10 @@ import {
   fetchGroupLessonBusyRows,
 } from "@/lib/autoscuole/group-lesson-busy";
 import {
+  createLessonBufferBlock,
+  resolveLessonBufferMinutes,
+} from "@/lib/autoscuole/lesson-buffer";
+import {
   buildSlotAssignmentContext,
   resolveSlotAssignmentForStudent,
 } from "@/lib/autoscuole/slot-assignment";
@@ -2581,6 +2585,14 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         });
       });
 
+      // Pausa fra le guide (REG-484): blocco sull'istruttore subito dopo.
+      await createLessonBufferBlock({
+        companyId: membership.companyId,
+        instructorId: candidate.instructorId,
+        endsAt: candidate.end,
+        bufferMinutes: resolveLessonBufferMinutes(serviceLimits),
+      });
+
       const request = await upsertBookingRequest("matched");
       await invalidateAgendaAndPaymentsCache(membership.companyId);
 
@@ -4303,6 +4315,17 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
       });
 
       return { appointment, response };
+    });
+
+    // Pausa fra le guide (REG-484): anche lo slot liberato è una guida
+    // prenotata, quindi lascia la sua pausa sull'istruttore.
+    await createLessonBufferBlock({
+      companyId: membership.companyId,
+      instructorId: assignment.instructorId,
+      endsAt: offer.slot.endsAt,
+      bufferMinutes: resolveLessonBufferMinutes(
+        await getCachedCompanyServiceLimits(membership.companyId),
+      ),
     });
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);

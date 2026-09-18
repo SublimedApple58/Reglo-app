@@ -477,6 +477,8 @@ export function AutoscuoleResourcesPage({
   const [studentCancellationEnabled, setStudentCancellationEnabled] = React.useState(true);
   const [bookingCutoffEnabled, setBookingCutoffEnabled] = React.useState(false);
   const [bookingCutoffTime, setBookingCutoffTime] = React.useState<string>("18:00");
+  const [lessonBufferEnabled, setLessonBufferEnabled] = React.useState(false);
+  const [lessonBufferMinutes, setLessonBufferMinutes] = React.useState(15);
   const [weeklyBookingLimitEnabled, setWeeklyBookingLimitEnabled] = React.useState(false);
   const [weeklyBookingLimit, setWeeklyBookingLimit] = React.useState(3);
   const [autoBookingBlockEnabled, setAutoBookingBlockEnabled] = React.useState(false);
@@ -723,6 +725,8 @@ export function AutoscuoleResourcesPage({
     setStudentCancellationEnabled(res.data.studentCancellationEnabled !== false);
     setBookingCutoffEnabled(res.data.bookingCutoffEnabled ?? false);
     setBookingCutoffTime(res.data.bookingCutoffTime ?? "18:00");
+    setLessonBufferEnabled(res.data.lessonBufferEnabled ?? false);
+    setLessonBufferMinutes(res.data.lessonBufferMinutes ?? 15);
     setWeeklyBookingLimitEnabled(res.data.weeklyBookingLimitEnabled ?? false);
     setWeeklyBookingLimit(res.data.weeklyBookingLimit ?? 3);
     setAutoBookingBlockEnabled(res.data.autoBookingBlockEnabled ?? false);
@@ -886,6 +890,12 @@ export function AutoscuoleResourcesPage({
   }));
   const saveBookingCutoffTime = persistField(bookingCutoffTime, setBookingCutoffTime, (v) => ({
     bookingCutoffTime: v as SettingsPatch["bookingCutoffTime"],
+  }));
+  const saveLessonBufferEnabled = persistField(lessonBufferEnabled, setLessonBufferEnabled, (v) => ({
+    lessonBufferEnabled: v,
+  }));
+  const saveLessonBufferMinutes = persistField(lessonBufferMinutes, setLessonBufferMinutes, (v) => ({
+    lessonBufferMinutes: v,
   }));
   const saveWeeklyBookingLimitEnabled = persistField(
     weeklyBookingLimitEnabled,
@@ -2286,6 +2296,10 @@ export function AutoscuoleResourcesPage({
             setBookingCutoffEnabled={saveBookingCutoffEnabled}
             bookingCutoffTime={bookingCutoffTime}
             setBookingCutoffTime={saveBookingCutoffTime}
+            lessonBufferEnabled={lessonBufferEnabled}
+            setLessonBufferEnabled={saveLessonBufferEnabled}
+            lessonBufferMinutes={lessonBufferMinutes}
+            setLessonBufferMinutes={saveLessonBufferMinutes}
             weeklyBookingLimitEnabled={weeklyBookingLimitEnabled}
             setWeeklyBookingLimitEnabled={saveWeeklyBookingLimitEnabled}
             weeklyBookingLimit={weeklyBookingLimit}
