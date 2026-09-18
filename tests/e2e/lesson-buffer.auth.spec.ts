@@ -121,12 +121,18 @@ test.describe("Pausa tra le guide (REG-484)", () => {
         };
       }).data;
 
-      const instructor = bootstrap.instructors.find((i) => i.name === "Istruttore E2E");
+      // Dev e staging hanno seed diversi (dev: "Istruttore E2E"; staging:
+      // "Chiara Marino"), quindi: nome da env, poi il nome del seed dev, poi
+      // il primo istruttore disponibile.
+      const instructorName = process.env.E2E_INSTRUCTOR_NAME || "Istruttore E2E";
+      const instructor =
+        bootstrap.instructors.find((i) => i.name === instructorName) ??
+        bootstrap.instructors[0];
       // La directory allievi espone firstName/lastName, non `name`: l'email del
       // seed è l'identificativo stabile.
       const student = bootstrap.students.find((s) => s.email === "allievo@reglo.it");
-      expect(instructor, "istruttore del seed (pnpm seed:e2e:dev)").toBeTruthy();
-      expect(student, "allievo del seed (pnpm seed:e2e:dev)").toBeTruthy();
+      expect(instructor, "almeno un istruttore in autoscuola").toBeTruthy();
+      expect(student, "allievo del seed (allievo@reglo.it)").toBeTruthy();
 
       // Residui di run precedenti nella stessa finestra.
       for (const appt of bootstrap.appointments) {
