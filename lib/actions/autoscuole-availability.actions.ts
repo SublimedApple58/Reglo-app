@@ -55,6 +55,11 @@ import {
   getStudentUnpaidLessonCount,
 } from "@/lib/autoscuole/unpaid-auto-block";
 import {
+  isBookingBlockActive,
+  isBookingBlockExpired,
+} from "@/lib/autoscuole/booking-block";
+import { releaseExpiredManualBlocks } from "@/lib/autoscuole/booking-block-expiry";
+import {
   resolveEffectiveBookingSettings,
   buildCompanyBookingDefaults,
 } from "@/lib/autoscuole/instructor-clusters";
@@ -666,6 +671,7 @@ const ensureStudentCanBookFromApp = async ({
       select: {
         bookingBlocked: true,
         bookingBlockReason: true,
+        bookingBlockUntil: true,
         unpaidBlockClearedAtCount: true,
         studentPhase: true,
         selfRegistered: true,
@@ -679,7 +685,18 @@ const ensureStudentCanBookFromApp = async ({
   // il suo debito corrente PRIMA di controllare il blocco, così l'enforcement
   // scatta esattamente al momento della prenotazione (non solo quando il titolare
   // apre la lista allievi). Query extra solo quando la feature è accesa.
-  let bookingBlocked = studentMembership?.bookingBlocked ?? false;
+  // Blocco manuale a tempo (REG-442): se la scadenza è passata il blocco non
+  // vale più — rilascialo qui, così l'automatismo per debito (sotto) torna
+  // padrone della riga invece di vedere un blocco "manual" intoccabile.
+  const blockExpired = studentMembership
+    ? isBookingBlockExpired(studentMembership)
+    : false;
+  if (blockExpired) {
+    await releaseExpiredManualBlocks({ companyId, userId: studentId });
+  }
+  let bookingBlocked = studentMembership
+    ? isBookingBlockActive(studentMembership)
+    : false;
   if (studentMembership) {
     const autoBlockSettings = readAutoBlockSettings(limits);
     if (autoBlockSettings.enabled) {
@@ -688,12 +705,13 @@ const ensureStudentCanBookFromApp = async ({
         companyId,
         userId: studentId,
         state: {
-          bookingBlocked: studentMembership.bookingBlocked,
-          bookingBlockReason:
-            (studentMembership.bookingBlockReason as
-              | "manual"
-              | "unpaid_threshold"
-              | null) ?? null,
+          bookingBlocked: blockExpired ? false : studentMembership.bookingBlocked,
+          bookingBlockReason: blockExpired
+            ? null
+            : (studentMembership.bookingBlockReason as
+                | "manual"
+                | "unpaid_threshold"
+                | null) ?? null,
           unpaidBlockClearedAtCount: studentMembership.unpaidBlockClearedAtCount ?? null,
         },
         unpaidCount,
@@ -2687,6 +2705,7 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
         select: {
           bookingBlocked: true,
           bookingBlockReason: true,
+          bookingBlockUntil: true,
           unpaidBlockClearedAtCount: true,
         },
       }),
@@ -2700,7 +2719,16 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
     // con la stessa macchina a stati usata al momento della ricerca, così la
     // home mobile conosce subito lo stato reale (e uno sblocco per debito
     // rientrato si riflette senza dover tentare una ricerca destinata al 400).
-    let bookingBlocked = blockState?.bookingBlocked ?? false;
+    // Blocco manuale a tempo scaduto (REG-442) → rilascialo e trattalo come non
+    // bloccato, esattamente come fa il guard della prenotazione.
+    const blockExpired = blockState ? isBookingBlockExpired(blockState) : false;
+    if (blockExpired) {
+      await releaseExpiredManualBlocks({
+        companyId: membership.companyId,
+        userId: payload.studentId,
+      });
+    }
+    let bookingBlocked = blockState ? isBookingBlockActive(blockState) : false;
     if (blockState) {
       const autoBlockSettings = readAutoBlockSettings(limits);
       if (autoBlockSettings.enabled) {
@@ -2712,12 +2740,13 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
           companyId: membership.companyId,
           userId: payload.studentId,
           state: {
-            bookingBlocked: blockState.bookingBlocked,
-            bookingBlockReason:
-              (blockState.bookingBlockReason as
-                | "manual"
-                | "unpaid_threshold"
-                | null) ?? null,
+            bookingBlocked: blockExpired ? false : blockState.bookingBlocked,
+            bookingBlockReason: blockExpired
+              ? null
+              : (blockState.bookingBlockReason as
+                  | "manual"
+                  | "unpaid_threshold"
+                  | null) ?? null,
             unpaidBlockClearedAtCount:
               blockState.unpaidBlockClearedAtCount ?? null,
           },
@@ -4858,7 +4887,7 @@ export async function broadcastGroupLessonInvite({
     if (enrolled.has(id)) return false;
     // REG-420 — never nudge a student whose bookings are blocked (they can't
     // self-enrol anyway; the accept path and the in-app list both reject them).
-    if (student.bookingBlocked) return false;
+    if (isBookingBlockActive(student)) return false;
     if (gl.kind === "moto") {
       // Moto group: any fleet moto must serve the license (hierarchy-only).
       // Before 2026-07-06 moto groups had NO license filter here (container
@@ -5038,6 +5067,7 @@ export async function respondGroupLessonInvite(
         licenseCategory: true,
         transmission: true,
         bookingBlocked: true,
+        bookingBlockUntil: true,
       },
     });
     if (!member) return { success: false as const, message: "Allievo non valido." };
@@ -5070,7 +5100,7 @@ export async function respondGroupLessonInvite(
     // self-enrolment (this path bypassed it, unlike single lessons). Staff add
     // students via createGroupLesson/addGroupLessonParticipant, which are
     // unaffected — this only guards the student's own accept.
-    if (member.bookingBlocked) {
+    if (isBookingBlockActive(member)) {
       return {
         success: false as const,
         message: "Le tue prenotazioni sono temporaneamente sospese. Contatta la segreteria.",
@@ -5496,6 +5526,7 @@ export async function getGroupLessonInvites(
         licenseCategory: true,
         transmission: true,
         bookingBlocked: true,
+        bookingBlockUntil: true,
       },
     });
     if (!member || !member.groupLessonsOptIn) return { success: true as const, data: [] };
@@ -5504,7 +5535,7 @@ export async function getGroupLessonInvites(
     // not a generic tap error). We just don't NUDGE them: the home badge
     // (countOnly) stays empty. The accept path (respondGroupLessonInvite) and the
     // push broadcast still reject/skip a blocked student — REG-420 unchanged.
-    const bookingBlocked = member.bookingBlocked;
+    const bookingBlocked = isBookingBlockActive(member);
     if (bookingBlocked && payload.countOnly) return { success: true as const, data: [] };
 
     // Lesson-first discovery: surface EVERY scheduled, future, non-full group
@@ -5806,9 +5837,9 @@ export async function getStudentBookingBlockStatus(
 ): Promise<boolean> {
   const member = await prisma.companyMember.findFirst({
     where: { companyId, userId: studentId, autoscuolaRole: "STUDENT" },
-    select: { bookingBlocked: true },
+    select: { bookingBlocked: true, bookingBlockUntil: true },
   });
-  return member?.bookingBlocked ?? false;
+  return member ? isBookingBlockActive(member) : false;
 }
 
 // ── Publication Mode ──────────────────────────────────────────────────────────

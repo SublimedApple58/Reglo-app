@@ -18,6 +18,7 @@ import {
   appointmentSwapBlockReason,
   SWAP_BLOCK_MESSAGES,
 } from "@/lib/autoscuole/swap-rules";
+import { isBookingBlockActive } from "@/lib/autoscuole/booking-block";
 import {
   isStudentInManualFullCluster,
   resolveEffectiveBookingSettings,
@@ -475,12 +476,14 @@ export async function getSwapOffers(
         licenseCategory: true,
         transmission: true,
         bookingBlocked: true,
+        bookingBlockUntil: true,
       },
     });
 
     // Allievo con prenotazioni bloccate dal titolare: non può accettare scambi
-    // (vedi respondSwapOffer), quindi non gli mostriamo alcuna offerta.
-    if (viewerMember?.bookingBlocked === true) {
+    // (vedi respondSwapOffer), quindi non gli mostriamo alcuna offerta. Un blocco
+    // a tempo scaduto (REG-442) non conta più: lo dice `isBookingBlockActive`.
+    if (viewerMember && isBookingBlockActive(viewerMember)) {
       return { success: true, data: [] };
     }
 
@@ -660,13 +663,14 @@ export async function respondSwapOffer(
           transmission: true,
           weeklyBookingLimitExempt: true,
           bookingBlocked: true,
+          bookingBlockUntil: true,
         },
       });
 
       // Blocco prenotazioni (toggle titolare dal dettaglio allievo): accettare uno
       // scambio riassegna la guida a questo allievo — è a tutti gli effetti una
       // prenotazione, quindi va rifiutata come nel flusso di booking normale.
-      if (acceptingMember?.bookingBlocked === true) {
+      if (acceptingMember && isBookingBlockActive(acceptingMember)) {
         return {
           success: false,
           message: "Le tue prenotazioni sono state bloccate: non puoi accettare scambi. Contatta la tua autoscuola.",

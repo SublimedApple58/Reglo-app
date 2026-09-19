@@ -326,6 +326,12 @@ model CompanyMember {
   /// re-blocks only if the debt later rises ABOVE this level, or drops below the
   /// threshold and climbs back up. Null = no active dismissal.
   unpaidBlockClearedAtCount Int?
+  /// Scadenza di un blocco prenotazioni MANUALE a tempo (REG-442): istante di
+  /// fine della giornata scelta (Europe/Rome) oltre il quale il blocco decade da
+  /// solo. Null = blocco indefinito (comportamento storico) oppure nessun blocco.
+  /// Significativo solo con bookingBlockReason="manual": l'auto-block per debito
+  /// non usa scadenze. Vedi lib/autoscuole/booking-block-expiry.ts.
+  bookingBlockUntil         DateTime?
   weeklyBookingLimitExempt  Boolean                @default(false)
   examPriorityOverride      Boolean?
   assignedInstructorId      String?                @db.Uuid

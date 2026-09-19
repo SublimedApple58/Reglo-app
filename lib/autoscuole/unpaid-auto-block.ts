@@ -239,3 +239,38 @@ export async function reconcileUnpaidAutoBlock(params: {
   });
   return next;
 }
+
+/**
+ * Versione batch di `getStudentUnpaidLessonCount`: una sola lettura per N
+ * allievi. Serve allo sblocco in bulk (REG-442), che deve scrivere il watermark
+ * di ogni allievo senza sparare 2 query a testa.
+ */
+export async function getStudentsUnpaidLessonCounts(
+  companyId: string,
+  studentIds: string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>(studentIds.map((id) => [id, 0]));
+  if (!studentIds.length) return counts;
+  const [config, lessons] = await Promise.all([
+    getAutoscuolaPaymentConfig({ companyId }),
+    prisma.autoscuolaAppointment.findMany({
+      where: { companyId, studentId: { in: studentIds } },
+      select: {
+        studentId: true,
+        status: true,
+        manualPaymentStatus: true,
+        creditApplied: true,
+        lateCancellationAction: true,
+      },
+      take: 20000,
+    }),
+  ]);
+  const manualMode = isCompanyManualMode(config);
+  for (const lesson of lessons) {
+    if (!lesson.studentId) continue;
+    if (!counts.has(lesson.studentId)) continue;
+    if (!isLessonUnpaid(lesson, manualMode)) continue;
+    counts.set(lesson.studentId, (counts.get(lesson.studentId) ?? 0) + 1);
+  }
+  return counts;
+}

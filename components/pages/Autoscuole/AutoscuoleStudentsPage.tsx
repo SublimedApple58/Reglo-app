@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ArrowDownAZ, Camera, ChevronDown, ChevronLeft, ChevronRight, Download, KeyRound, MapPin, Ticket, UserPlus, UserRoundPlus, Users } from "lucide-react";
+import { ArrowDownAZ, Ban, Camera, ChevronDown, ChevronLeft, ChevronRight, Download, KeyRound, LockOpen, MapPin, Ticket, UserPlus, UserRoundPlus, Users, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -42,6 +42,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DatePickerInput } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { Label } from "@/components/ui/label";
@@ -63,6 +65,7 @@ import {
   getCompanyInviteCode,
   getPaymentMode,
   toggleStudentBookingBlock,
+  setStudentsBookingBlock,
   toggleWeeklyBookingLimitExempt,
   setExamPriorityOverride,
   setStudentExamReady,
@@ -104,6 +107,10 @@ import { LoadingDots } from "@/components/ui/loading-dots";
 import { AutoscuoleLateCancellationsPanel } from "./AutoscuoleLateCancellationsPanel";
 import { NeverAccessedListMark } from "./NeverAccessedNudge";
 import {
+  blockUntilDateToInstant,
+  blockUntilInstantToDateLabel,
+} from "@/lib/autoscuole/booking-block";
+import {
   Pill,
   StudentAvatar,
   avatarColor,
@@ -126,6 +133,8 @@ type StudentProfile = {
 type Student = StudentProfile & {
   bookingBlocked?: boolean;
   bookingBlockReason?: "manual" | "unpaid_threshold" | null;
+  /** Scadenza del blocco manuale (REG-442). Null = blocco indefinito. */
+  bookingBlockUntil?: string | null;
   // Account creato dal titolare ma mai usato (nessun accesso in app) → non
   // riceve promemoria. Guida l'indicatore "cellulare-divieto" nella lista.
   neverAccessed?: boolean;
@@ -362,6 +371,7 @@ type StudentRegister = {
   student: StudentProfile;
   bookingBlocked?: boolean;
   bookingBlockReason?: "manual" | "unpaid_threshold" | null;
+  bookingBlockUntil?: string | null;
   weeklyBookingLimitExempt?: boolean;
   examPriorityOverride?: boolean | null;
   examPriorityActive?: boolean;
@@ -774,6 +784,18 @@ export function AutoscuoleStudentsPage({
     patentati: 1,
   });
 
+  // ── Selezione multipla + blocco prenotazioni in bulk (REG-442) ──────────
+  // La selezione vive sul tab corrente: cambiare tab o ricerca la azzera, così
+  // non si agisce mai su allievi che non si stanno guardando.
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+  const [bulkDialogOpen, setBulkDialogOpen] = React.useState(false);
+  const [bulkAction, setBulkAction] = React.useState<"block" | "unblock">("block");
+  const [bulkUntilMode, setBulkUntilMode] = React.useState<"indefinite" | "date">(
+    "indefinite",
+  );
+  const [bulkUntil, setBulkUntil] = React.useState("");
+  const [bulkSaving, setBulkSaving] = React.useState(false);
+
   // Panel tabs
   const [drawerTab, setDrawerTab] = React.useState<DrawerTab>("summary");
   // Situazione quiz (REG-445): caricata pigramente all'apertura del tab "Quiz",
@@ -894,6 +916,94 @@ export function AutoscuoleStudentsPage({
     return groups;
   }, [students, sortMode]);
 
+  /**
+   * Lista su cui agisce la selezione multipla: quella effettivamente a schermo,
+   * filtri inclusi. Il tab "In attesa" resta fuori — un allievo non ancora
+   * attivato non può prenotare, bloccarlo non vuol dire niente.
+   */
+  const selectableList = React.useMemo<Student[]>(() => {
+    if (phaseTab === "teoria") return studentsByPhase.teoria;
+    if (phaseTab === "patentati") return studentsByPhase.patentato;
+    if (phaseTab === "pratica" && praticaSubTab === "lista") {
+      return praticaOnlyReady
+        ? studentsByPhase.pratica.filter((student) => student.examReady)
+        : studentsByPhase.pratica;
+    }
+    return [];
+  }, [phaseTab, praticaSubTab, praticaOnlyReady, studentsByPhase]);
+
+  const selectionEnabled = selectableList.length > 0;
+  const selectedStudents = React.useMemo(
+    () => selectableList.filter((student) => selectedIds.has(student.id)),
+    [selectableList, selectedIds],
+  );
+  const selectedBlockedCount = selectedStudents.filter((s) => s.bookingBlocked).length;
+
+  const toggleRowSelection = React.useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = React.useCallback(() => {
+    setSelectedIds((prev) =>
+      prev.size === selectableList.length
+        ? new Set()
+        : new Set(selectableList.map((student) => student.id)),
+    );
+  }, [selectableList]);
+
+  const openBulkDialog = React.useCallback((action: "block" | "unblock") => {
+    setBulkAction(action);
+    setBulkUntilMode("indefinite");
+    setBulkUntil("");
+    setBulkDialogOpen(true);
+  }, []);
+
+  /** Applica blocco/sblocco a tutti i selezionati in una sola chiamata. */
+  const submitBulkBlock = React.useCallback(async () => {
+    const ids = selectedStudents.map((student) => student.id);
+    if (!ids.length || bulkSaving) return;
+    const blocked = bulkAction === "block";
+    const useDate = blocked && bulkUntilMode === "date";
+    if (useDate && !bulkUntil) {
+      toast.error({ description: "Scegli la data di fine blocco." });
+      return;
+    }
+    setBulkSaving(true);
+    const res = await setStudentsBookingBlock({
+      studentIds: ids,
+      blocked,
+      until: useDate ? bulkUntil : null,
+    });
+    setBulkSaving(false);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Errore aggiornamento blocco." });
+      return;
+    }
+    toast.success({ description: res.message ?? "Stato aggiornato." });
+    // Stessa conversione del server (helper puro condiviso): la lista mostra
+    // subito "fino al …" senza aspettare un refetch.
+    const untilIso =
+      useDate && bulkUntil ? blockUntilDateToInstant(bulkUntil)?.toISOString() ?? null : null;
+    const idSet = new Set(ids);
+    const patch = {
+      bookingBlocked: blocked,
+      bookingBlockReason: blocked ? ("manual" as const) : null,
+      bookingBlockUntil: blocked ? untilIso : null,
+    };
+    setStudents((prev) =>
+      prev.map((student) => (idSet.has(student.id) ? { ...student, ...patch } : student)),
+    );
+    // Se il drawer è aperto su uno dei selezionati, allinea anche quello.
+    setRegister((prev) => (prev && idSet.has(prev.student.id) ? { ...prev, ...patch } : prev));
+    setSelectedIds(new Set());
+    setBulkDialogOpen(false);
+  }, [bulkAction, bulkSaving, bulkUntil, bulkUntilMode, selectedStudents, toast]);
+
   // Manual payment toggle
   const [paymentSaving, setPaymentSaving] = React.useState<string | null>(null);
   // Dialogo annulla (future) / rimuovi (passate) dal dettaglio allievo.
@@ -908,6 +1018,11 @@ export function AutoscuoleStudentsPage({
   React.useEffect(() => {
     setPages({ attesa: 1, teoria: 1, pratica: 1, patentati: 1 });
   }, [debouncedSearch]);
+
+  // Cambio tab / ricerca / sotto-tab → via la selezione (vedi sopra).
+  React.useEffect(() => {
+    setSelectedIds(new Set());
+  }, [debouncedSearch, phaseTab, praticaSubTab, praticaOnlyReady]);
 
   const load = React.useCallback(async (isSearch = false) => {
     if (isSearch) setSearching(true); else setLoading(true);
@@ -1289,15 +1404,29 @@ export function AutoscuoleStudentsPage({
       toast.success({ description: res.message ?? "Stato aggiornato." });
       // Update local register — un blocco manuale ha reason "manual", uno sblocco
       // manuale azzera la reason (torna gestibile dall'automatismo).
+      // Il toggle singolo non chiede una data → blocco indefinito (la scadenza
+      // eventualmente impostata in bulk va via).
       const nextReason = blocked ? "manual" : null;
       setRegister((prev) =>
-        prev ? { ...prev, bookingBlocked: blocked, bookingBlockReason: nextReason } : prev,
+        prev
+          ? {
+              ...prev,
+              bookingBlocked: blocked,
+              bookingBlockReason: nextReason,
+              bookingBlockUntil: null,
+            }
+          : prev,
       );
       // Update student in table list
       setStudents((prev) =>
         prev.map((s) =>
           s.id === selectedStudentId
-            ? { ...s, bookingBlocked: blocked, bookingBlockReason: nextReason }
+            ? {
+                ...s,
+                bookingBlocked: blocked,
+                bookingBlockReason: nextReason,
+                bookingBlockUntil: null,
+              }
             : s,
         ),
       );
@@ -1589,7 +1718,63 @@ export function AutoscuoleStudentsPage({
 
   /* ── Rows ────────────────────────────────────────────────────────── */
 
-  const renderNameCell = (student: Student, options?: { secondLine?: string | null; showDot?: boolean }) => (
+  /** Checkbox di riga della selezione multipla (REG-442). */
+  const renderSelectCell = (student: Student) => (
+    <div className="flex items-center justify-center">
+      <Checkbox
+        checked={selectedIds.has(student.id)}
+        onCheckedChange={() => toggleRowSelection(student.id)}
+        aria-label={`Seleziona ${student.firstName} ${student.lastName}`}
+        className="size-[18px] rounded-[5px] border-[#cfcfcf] data-[state=checked]:border-[#111111] data-[state=checked]:bg-[#111111]"
+      />
+    </div>
+  );
+
+  /**
+   * Testata della selezione: "seleziona tutti" sull'intera lista filtrata del
+   * tab (anche le pagine non visibili — il contatore nella barra in basso dice
+   * sempre su quanti allievi si sta per agire).
+   */
+  const renderSelectionHeader = () => {
+    const total = selectableList.length;
+    const selected = selectedStudents.length;
+    const allSelected = selected > 0 && selected === total;
+    return (
+      <div className="flex items-center gap-3 border-t border-[#ebebeb] bg-[#fafafa] px-6 py-2.5">
+        <Checkbox
+          checked={allSelected ? true : selected > 0 ? "indeterminate" : false}
+          onCheckedChange={toggleSelectAll}
+          aria-label="Seleziona tutti gli allievi"
+          className="size-[18px] rounded-[5px] border-[#cfcfcf] data-[state=checked]:border-[#111111] data-[state=checked]:bg-[#111111] data-[state=indeterminate]:border-[#111111] data-[state=indeterminate]:bg-[#111111] data-[state=indeterminate]:text-white"
+        />
+        <button
+          type="button"
+          onClick={toggleSelectAll}
+          className="cursor-pointer text-[12px] font-medium text-[#6a6a6a] transition-colors hover:text-foreground"
+        >
+          {selected > 0
+            ? `${selected} ${selected === 1 ? "selezionato" : "selezionati"} su ${total}`
+            : `Seleziona tutti (${total})`}
+        </button>
+      </div>
+    );
+  };
+
+  const renderNameCell = (
+    student: Student,
+    options?: { secondLine?: string | null; showDot?: boolean },
+  ) => {
+    // La scadenza del blocco (REG-442) va sulla riga secondaria, non nella pill:
+    // una pill "Bloccato fino al 22 set" mangia il nome dell'allievo.
+    const blockUntilLabel =
+      student.bookingBlocked && student.bookingBlockUntil
+        ? blockUntilInstantToDateLabel(student.bookingBlockUntil, { short: true })
+        : null;
+    const secondLine =
+      [options?.secondLine, blockUntilLabel ? `fino al ${blockUntilLabel}` : null]
+        .filter(Boolean)
+        .join(" · ") || null;
+    return (
     <div className="flex min-w-0 items-center gap-3">
       <div className="relative shrink-0">
         <StudentAvatar student={student} />
@@ -1609,15 +1794,18 @@ export function AutoscuoleStudentsPage({
           {student.neverAccessed ? (
             <NeverAccessedListMark hasPhone={Boolean(student.phone)} />
           ) : null}
-          {student.bookingBlocked && <Pill tone="red">Bloccato</Pill>}
+          {student.bookingBlocked && (
+            <Pill tone="red">Bloccato</Pill>
+          )}
           {student.examReady && <Pill tone="green">Pronto</Pill>}
         </div>
-        {options?.secondLine ? (
-          <p className="mt-0.5 truncate text-[12px] font-medium text-[#929292]">{options.secondLine}</p>
+        {secondLine ? (
+          <p className="mt-0.5 truncate text-[12px] font-medium text-[#929292]">{secondLine}</p>
         ) : null}
       </div>
     </div>
-  );
+    );
+  };
 
   const renderAttesaRows = () => {
     const list = studentsByPhase.awaiting;
@@ -1660,7 +1848,7 @@ export function AutoscuoleStudentsPage({
   };
 
   const renderTeoriaRows = () => {
-    const list = studentsByPhase.teoria;
+    const list = selectableList;
     if (list.length === 0) {
       return <EmptyList subtitle={debouncedSearch ? "Nessun allievo trovato" : "Nessun allievo in fase teoria"} />;
     }
@@ -1672,8 +1860,9 @@ export function AutoscuoleStudentsPage({
           return (
             <div
               key={student.id}
-              className="grid grid-cols-[2fr_1.5fr_1fr_1fr_110px] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
+              className="grid grid-cols-[22px_2fr_1.5fr_1fr_1fr_110px] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
             >
+              {renderSelectCell(student)}
               {renderNameCell(student, { showDot: true })}
               <div className="truncate pr-3 text-[13px] font-medium text-[#6a6a6a]">{student.email || "—"}</div>
               <div className="text-[13px] font-medium text-foreground">{student.phone || "—"}</div>
@@ -1715,7 +1904,7 @@ export function AutoscuoleStudentsPage({
       return <EmptyList subtitle={debouncedSearch ? "Nessun allievo trovato" : "Nessun allievo in fase pratica"} />;
     }
     const readyCount = allPratica.filter((s) => s.examReady).length;
-    const list = praticaOnlyReady ? allPratica.filter((s) => s.examReady) : allPratica;
+    const list = selectableList;
     const visible = pageSlice(list, pages.pratica);
     return (
       <div>
@@ -1752,8 +1941,9 @@ export function AutoscuoleStudentsPage({
           return (
             <div
               key={student.id}
-              className="grid grid-cols-[2fr_1.5fr_1fr_1.1fr_1fr_110px] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
+              className="grid grid-cols-[22px_2fr_1.5fr_1fr_1.1fr_1fr_110px] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
             >
+              {renderSelectCell(student)}
               {renderNameCell(student, { showDot: true, secondLine })}
               <div className="truncate pr-3 text-[13px] font-medium text-[#6a6a6a]">{student.email || "—"}</div>
               <div className="text-[13px] font-medium text-foreground">{student.phone || "—"}</div>
@@ -1790,7 +1980,7 @@ export function AutoscuoleStudentsPage({
   };
 
   const renderPatentatiRows = () => {
-    const list = studentsByPhase.patentato;
+    const list = selectableList;
     if (list.length === 0) {
       return <EmptyList subtitle="Nessun allievo patentato" />;
     }
@@ -1800,8 +1990,9 @@ export function AutoscuoleStudentsPage({
         {visible.map((student) => (
           <div
             key={student.id}
-            className="grid grid-cols-[2fr_1.5fr_1fr_1fr_110px] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
+            className="grid grid-cols-[22px_2fr_1.5fr_1fr_1fr_110px] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
           >
+            {renderSelectCell(student)}
             {renderNameCell(student)}
             <div className="truncate pr-3 text-[13px] font-medium text-[#6a6a6a]">{student.email || "—"}</div>
             <div className="text-[13px] font-medium text-foreground">{student.phone || "—"}</div>
@@ -1991,6 +2182,12 @@ export function AutoscuoleStudentsPage({
                 {register.bookingBlocked && register.bookingBlockReason === "unpaid_threshold" && (
                   <p className="mt-1 text-[11px] font-medium text-[#929292]">
                     Blocco automatico per guide da pagare
+                  </p>
+                )}
+                {register.bookingBlocked && register.bookingBlockUntil && (
+                  <p className="mt-1 text-[11px] font-medium text-[#929292]">
+                    Fino al {blockUntilInstantToDateLabel(register.bookingBlockUntil)} · poi si
+                    riattiva da solo
                   </p>
                 )}
               </div>
@@ -3105,6 +3302,7 @@ export function AutoscuoleStudentsPage({
               {/* ── Content ── */}
               <div className="relative">
                 <div className={cn("transition-opacity", searching && "pointer-events-none opacity-60")}>
+                  {selectionEnabled && renderSelectionHeader()}
                   {phaseTab === "attesa" && renderAttesaRows()}
                   {phaseTab === "teoria" && renderTeoriaRows()}
                   {phaseTab === "pratica" && praticaSubTab === "lista" && renderPraticaRows()}
@@ -3118,6 +3316,160 @@ export function AutoscuoleStudentsPage({
           )}
         </div>
       </div>
+
+      {/* ── Barra azione flottante: selezione multipla (REG-442) ── */}
+      {selectedStudents.length > 0 && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-7 z-50 flex justify-center px-6">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-pill bg-[#111111] py-2 pl-5 pr-2 shadow-accent">
+            <span className="mr-1 text-[13px] font-semibold text-white">
+              {selectedStudents.length}{" "}
+              {selectedStudents.length === 1 ? "allievo selezionato" : "allievi selezionati"}
+            </span>
+            {selectedBlockedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => openBulkDialog("unblock")}
+                className="flex cursor-pointer items-center gap-1.5 rounded-pill px-3.5 py-2 text-[13px] font-medium text-white/85 transition-colors hover:bg-white/10 hover:text-white"
+              >
+                <LockOpen className="size-4" strokeWidth={1.9} />
+                Sblocca
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => openBulkDialog("block")}
+              className="flex cursor-pointer items-center gap-1.5 rounded-pill bg-white px-3.5 py-2 text-[13px] font-semibold text-[#111111] transition-colors hover:bg-[#ececec]"
+            >
+              <Ban className="size-4" strokeWidth={1.9} />
+              Blocca prenotazioni
+            </button>
+            <button
+              type="button"
+              aria-label="Annulla selezione"
+              onClick={() => setSelectedIds(new Set())}
+              className="flex size-8 cursor-pointer items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <X className="size-4" strokeWidth={2} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Dialog: conferma blocco/sblocco in bulk ── */}
+      <Dialog open={bulkDialogOpen} onOpenChange={(open) => !bulkSaving && setBulkDialogOpen(open)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {bulkAction === "block" ? "Blocca prenotazioni" : "Riattiva prenotazioni"}
+            </DialogTitle>
+            <DialogDescription>
+              {bulkAction === "block"
+                ? `${selectedStudents.length === 1 ? "L'allievo selezionato non potrà" : `I ${selectedStudents.length} allievi selezionati non potranno`} più prenotare guide dall'app.`
+                : `${selectedStudents.length === 1 ? "L'allievo selezionato potrà" : `I ${selectedStudents.length} allievi selezionati potranno`} di nuovo prenotare guide dall'app.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Chi è coinvolto: nomi in chiaro, non solo un numero. */}
+          <div className="rounded-[14px] bg-[#f7f7f7] px-4 py-3 text-[13px] font-medium leading-relaxed text-[#4a4a4a]">
+            {selectedStudents
+              .slice(0, 6)
+              .map((student) => `${student.firstName} ${student.lastName}`)
+              .join(", ")}
+            {selectedStudents.length > 6 && (
+              <span className="text-[#929292]">
+                {" "}
+                e altri {selectedStudents.length - 6}
+              </span>
+            )}
+          </div>
+
+          {bulkAction === "block" && (
+            <div className="space-y-2">
+              <p className={sectionLabelClass}>Durata del blocco</p>
+              {([
+                {
+                  key: "indefinite" as const,
+                  title: "A tempo indeterminato",
+                  hint: "Resta attivo finché non lo togli a mano.",
+                },
+                {
+                  key: "date" as const,
+                  title: "Fino a una data",
+                  hint: "Si riattiva da solo il giorno dopo.",
+                },
+              ]).map((option) => {
+                const active = bulkUntilMode === option.key;
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => setBulkUntilMode(option.key)}
+                    className={cn(
+                      "flex w-full cursor-pointer items-start gap-3 rounded-[14px] border px-4 py-3 text-left transition-colors",
+                      active
+                        ? "border-[#111111] bg-[#fafafa]"
+                        : "border-[#e4e4e4] hover:bg-[#fafafa]",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full border transition-colors",
+                        active ? "border-[#111111]" : "border-[#cfcfcf]",
+                      )}
+                    >
+                      {active && <span className="size-2.5 rounded-full bg-[#111111]" />}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-foreground">
+                        {option.title}
+                      </span>
+                      <span className="mt-0.5 block text-[12px] font-medium text-[#929292]">
+                        {option.hint}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+              {bulkUntilMode === "date" && (
+                <div className="pt-1">
+                  <Label className="mb-1.5 block text-[12px] font-medium text-[#929292]">
+                    Ultimo giorno di blocco
+                  </Label>
+                  <DatePickerInput
+                    value={bulkUntil}
+                    onChange={setBulkUntil}
+                    placeholder="Scegli la data"
+                    // Un blocco "fino a ieri" non esiste: il server lo rifiuta,
+                    // il calendario nemmeno lo propone.
+                    minDate={new Date()}
+                  />
+                  <p className="mt-1.5 text-[12px] font-medium text-[#929292]">
+                    Il giorno scelto è ancora bloccato: le prenotazioni si riaprono la
+                    mattina dopo.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={bulkSaving}
+              onClick={() => setBulkDialogOpen(false)}
+            >
+              Annulla
+            </Button>
+            <Button disabled={bulkSaving} onClick={() => void submitBulkBlock()}>
+              {bulkSaving
+                ? "Applico…"
+                : bulkAction === "block"
+                  ? `Blocca ${selectedStudents.length} ${selectedStudents.length === 1 ? "allievo" : "allievi"}`
+                  : `Riattiva ${selectedStudents.length} ${selectedStudents.length === 1 ? "allievo" : "allievi"}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Dialog: crea account allievo ── */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

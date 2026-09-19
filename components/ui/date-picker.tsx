@@ -24,11 +24,14 @@ function CalendarGrid({
   setMonth,
   selectedDate,
   onSelect,
+  minDate,
 }: {
   month: Date;
   setMonth: React.Dispatch<React.SetStateAction<Date>>;
   selectedDate: Date | null;
   onSelect: (date: Date) => void;
+  /** Primo giorno selezionabile (incluso). Omesso = nessun limite. */
+  minDate?: Date;
 }) {
   const year = month.getFullYear();
   const monthIndex = month.getMonth();
@@ -38,6 +41,7 @@ function CalendarGrid({
   const totalDays = lastDay.getDate();
   const today = new Date();
   const todayStr = today.toDateString();
+  const minTime = minDate ? new Date(minDate).setHours(0, 0, 0, 0) : null;
   const cells: Array<Date | null> = [];
   for (let i = 0; i < startOffset; i++) cells.push(null);
   for (let day = 1; day <= totalDays; day++) cells.push(new Date(year, monthIndex, day));
@@ -77,17 +81,19 @@ function CalendarGrid({
         {cells.map((day, index) => {
           const isSelected = day && selectedDate && day.toDateString() === selectedDate.toDateString();
           const isToday = day && day.toDateString() === todayStr;
+          const isBeforeMin = Boolean(day && minTime != null && day.getTime() < minTime);
           return (
             <button
               key={`${day?.toISOString() ?? "empty"}-${index}`}
               type="button"
-              disabled={!day}
-              onClick={() => day && onSelect(day)}
+              disabled={!day || isBeforeMin}
+              onClick={() => day && !isBeforeMin && onSelect(day)}
               className={cn(
                 "h-8 w-8 mx-auto rounded-full text-xs font-medium transition-colors cursor-pointer",
                 !day && "opacity-0 pointer-events-none",
-                day && !isSelected && !isToday && "text-foreground hover:bg-gray-100",
-                isToday && !isSelected && "border border-[#dddddd] bg-white text-foreground",
+                isBeforeMin && "cursor-not-allowed text-[#c4c4c4]",
+                day && !isBeforeMin && !isSelected && !isToday && "text-foreground hover:bg-gray-100",
+                isToday && !isSelected && !isBeforeMin && "border border-[#dddddd] bg-white text-foreground",
                 isSelected && "bg-[#222222] text-white",
               )}
             >
@@ -147,11 +153,14 @@ export function DatePickerInput({
   onChange,
   placeholder = "Seleziona data",
   className,
+  minDate,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  /** Primo giorno selezionabile (incluso). Omesso = nessun limite. */
+  minDate?: Date;
 }) {
   const [open, setOpen] = React.useState(false);
   const [month, setMonth] = React.useState<Date>(() => (value ? new Date(value) : new Date()));
@@ -198,6 +207,7 @@ export function DatePickerInput({
             month={month}
             setMonth={setMonth}
             selectedDate={selectedDate}
+            minDate={minDate}
             onSelect={(day) => {
               onChange(formatDateLocal(day));
               setOpen(false);
