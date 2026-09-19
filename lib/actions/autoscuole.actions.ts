@@ -44,6 +44,7 @@ import {
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
 import { isInstructor, isOwner, isStudent } from "@/lib/autoscuole/roles";
+import { canManageLessonPayments } from "@/lib/autoscuole/lesson-payments";
 import { LICENSE_CATEGORIES, TRANSMISSIONS, isMotoLicenseCategory, vehicleServesLicense } from "@/lib/autoscuole/license";
 import { FOLLOW_CAR_CATEGORY, parseFollowCarRulesFromLimits, type FollowCarRules } from "@/lib/autoscuole/follow-car";
 import { MOTO_LESSON_TYPES } from "@/lib/autoscuole/moto-lesson-type";
@@ -10527,18 +10528,26 @@ export async function setManualPaymentStatus(
 ) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    if (!canManageStudentCredits(membership)) {
+    // REG-450: permesso scoped — anche gli istruttori segnano pagata, su
+    // QUALSIASI guida dell'allievo (l'incasso è un fatto amministrativo, non
+    // didattico). I crediti restano owner/admin (`canManageStudentCredits`).
+    if (!canManageLessonPayments(membership)) {
       return { success: false, message: "Operazione non consentita." };
     }
     const payload = setManualPaymentStatusSchema.parse(input);
 
     const appointment = await prisma.autoscuolaAppointment.findFirst({
       where: { id: payload.appointmentId, companyId: membership.companyId },
-      select: { id: true, paymentRequired: true, manualPaymentStatus: true },
+      select: {
+        id: true,
+        paymentRequired: true,
+        manualPaymentStatus: true,
+      },
     });
     if (!appointment) {
       return { success: false, message: "Appuntamento non trovato." };
     }
+
     // Block manual marking ONLY for true automatic (Stripe) payments — those have
     // paymentRequired=true AND no manual status, and are settled in the Pagamenti
     // section. Group lessons are "da pagare" manually (paymentRequired=true but
