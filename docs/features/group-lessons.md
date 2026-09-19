@@ -9,7 +9,7 @@ Optional module letting a school run **group driving lessons**: 1 instructor + 1
 - **License-aware**: when the Vehicles module is on, only students whose pursued license matches the lesson vehicle (category + transmission) can be pre-added/invited/accept (`vehicleServesLicense`).
 
 ## Data model (`prisma/schema.prisma`)
-- **`AutoscuolaGroupLesson`** (container): `id, companyId, instructorId?, vehicleId?, startsAt, endsAt?, capacity (default 3), status("scheduled"|"cancelled"), priceAmount, notes, createdByUserId`. **Capacity is user-configurable (3 or 4) since 2026-06-12**: selectable at creation (web dialog + mobile sheet) and editable later (web manage dialog + mobile manage sheet, `updateGroupLesson({capacity})` — refused below the current enrolled count). The agenda bootstrap annotates every group-lesson row (incl. `gl-empty:` synthetic rows) with `groupLessonCapacity` so mobile seat dots show the real capacity.
+- **`AutoscuolaGroupLesson`** (container): `id, companyId, instructorId?, vehicleId?, locationId?, startsAt, endsAt?, capacity (default 3), status("scheduled"|"cancelled"), priceAmount, notes, createdByUserId`. **Capacity is user-configurable (3 or 4) since 2026-06-12**: selectable at creation (web dialog + mobile sheet) and editable later (web manage dialog + mobile manage sheet, `updateGroupLesson({capacity})` — refused below the current enrolled count). The agenda bootstrap annotates every group-lesson row (incl. `gl-empty:` synthetic rows) with `groupLessonCapacity` so mobile seat dots show the real capacity.
 - **`AutoscuolaGroupLessonInvite`** + **`AutoscuolaGroupLessonInviteResponse`** — mirror `AutoscuolaWaitlistOffer`/`...Response`. Status: invite `broadcasted`→`filled`/`cancelled`; response `accepted`/`declined`. `@@unique([inviteId, studentId])` blocks double-accept.
 - **`AutoscuolaAppointment.groupLessonId`** (nullable FK, `onDelete: Cascade`): participants are real appointment rows with `type="group_lesson"` → they reuse agenda/overlap/payments/history for free.
 - **`CompanyMember.groupLessonsOptIn Boolean @default(false)`**.
@@ -19,7 +19,7 @@ Optional module letting a school run **group driving lessons**: 1 instructor + 1
 Participant appointments are written **directly** (NOT via `prepareAppointmentPaymentSnapshot`, which would consume a credit): `creditApplied=false, paymentRequired=true, paymentStatus="pending", manualPaymentStatus="unpaid", priceAmount=getGroupLessonPrice()`. `paymentStatus="pending"` is **inert to Stripe** (the auto-charge job only touches `pending_penalty`/`partial_paid`); the charge surfaces in the payments list (`paymentRequired=true`) and as a manual "da pagare" item. `getGroupLessonPrice` is in `lib/autoscuole/payments.ts`.
 
 ## Server actions (`lib/actions/autoscuole.actions.ts`)
-- `createGroupLesson({startsAt, endsAt, vehicleId?, instructorId?, capacity?, studentIds?, notes?})` — OWNER+INSTRUCTOR (instructor auto-assigns self). Gated on `groupLessonsEnabled`. Validates instructor/vehicle, students (opted-in + license), overlap; transaction creates the container + one participant appointment per pre-added student.
+- `createGroupLesson({startsAt, endsAt, vehicleId?, instructorId?, locationId?, capacity?, studentIds?, notes?})` — OWNER+INSTRUCTOR (instructor auto-assigns self). Gated on `groupLessonsEnabled`. Validates instructor/vehicle, students (opted-in + license), overlap; transaction creates the container + one participant appointment per pre-added student.
 - `addGroupLessonParticipant` / `removeGroupLessonParticipant` (cancels the seat + drops its pending charge).
 - `cancelGroupLesson` — cancels the container, all participant appointments, and open invites.
 - `getGroupLessonsForAgenda({from?, to?})` — returns lessons with `filledSeats`/`openSeats`/`participants`, incl. **empty** lessons (used by `GET /api/autoscuole/group-lessons` list). Empty-lesson agenda cards now come from the bootstrap `gl-empty:` synthesis, not this action.
@@ -31,6 +31,27 @@ Participant appointments are written **directly** (NOT via `prepareAppointmentPa
 - `getAutoscuolaAgendaBootstrapAction` now also returns `groupLessonsEnabled` (next to `vehiclesEnabled`, from `CompanyService.limits`) so the web agenda knows whether to show the "Nuovo → Guida di gruppo" item.
 - Helpers: `validateGroupLessonStudents`, `findGroupLessonOverlap`, `GROUP_LESSON_ACTIVE_STATUSES`, `GROUP_LESSON_ENROLLED_STATUSES`.
 - **Creazione nel passato** (2026-07-15): `createGroupLesson` non ha mai avuto un blocco `startsAt < now` → già consentita. Dal 2026-07-15 il web `GroupLessonCreateDialog` chiede conferma con un `AlertDialog` (icona ambra, "Crea comunque"/"Annulla") quando lo start è passato; è **solo client**, nessun flag BE. Vedi `appointments.md` → "Prenotazione nel passato" per il flusso gemello delle guide autonome (che invece usa il flag BE `allowPast`).
+
+## Luogo di ritrovo (REG-409, 2026-09-19)
+Fino a questa modifica una guida di gruppo non aveva il campo Luogo — né a
+schema né nel dialog — quindi si ritrovava sempre in sede, anche in
+un'autoscuola con più luoghi guida. Ora il luogo vive sul **container**
+(`AutoscuolaGroupLesson.locationId`, migrazione additiva
+`20260919090000_group_lesson_location`) e viene **copiato su ogni seat**: è da
+`AutoscuolaAppointment.location` che l'allievo lo vede, quindi tutti e 3 i punti
+che creano un posto lo propagano — `createGroupLesson`,
+`addGroupLessonParticipant`, `respondGroupLessonInvite` (chi arriva dopo va dove
+va il gruppo).
+
+`locationId` è **opzionale** in input: se il client non lo manda, lo risolve il
+backend con `resolveGroupLessonLocationId` (default degli allievi pre-inseriti
+se concordi → luogo della patente se i veicoli concordano → sede; in moto la
+patente viene dalla flotta, mai dall'auto al seguito). Dettaglio della
+precedenza e casi limite: `features/locations.md`.
+
+Le guide di gruppo **vuote** espongono il luogo anche nella riga sintetica
+`gl-empty:` del bootstrap agenda. **Non modificabile dopo la creazione**:
+`updateGroupLesson` non tocca `locationId`.
 
 ## Per-student notes (2026-06-16)
 The instructor takes a **separate note for each participant** (no more single container note). Each participant is an `AutoscuolaAppointment`, so the note simply lives on the **seat's own `notes` field** — no new model, no migration.

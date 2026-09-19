@@ -98,3 +98,74 @@ export function resolvePrefilledLocationId({
   // 3. Sede.
   return locations.find((l) => l.isDefault)?.id ?? null;
 }
+
+// ─── Guide di GRUPPO (REG-409, follow-up) ────────────────────────────────────
+// Una guida di gruppo è UN evento in UN luogo, ma ha più allievi e (in moto)
+// più veicoli: la precedenza della guida singola va letta al plurale.
+
+export type ResolveGroupLocationInput = {
+  /** Luoghi attivi della company (ordine: `isDefault desc, name asc`). */
+  locations: readonly LicenseAwareLocation[];
+  /**
+   * `CompanyMember.defaultLocationId` degli allievi pre-inseriti (REG-392).
+   * Chi non ne ha uno non esprime preferenza: non blocca gli altri.
+   */
+  studentDefaultLocationIds?: readonly (string | null | undefined)[];
+  /**
+   * Categorie patente dei veicoli della guida: il veicolo condiviso
+   * (kind="standard") o la flotta di moto (kind="moto"). **Non** l'auto al
+   * seguito: è un accessorio di categoria B e manderebbe ogni gruppo moto al
+   * luogo della B.
+   */
+  licenseCategories?: readonly (string | null | undefined)[];
+};
+
+/**
+ * L'unico valore su cui la lista è concorde, ignorando i vuoti. `null` se non
+ * c'è nessun valore o se ce ne sono due diversi: con due preferenze in
+ * conflitto nessuna delle due può vincere senza essere arbitraria.
+ */
+function unanimous(values: readonly (string | null | undefined)[]): string | null {
+  let found: string | null = null;
+  for (const value of values) {
+    if (!value) continue;
+    if (found === null) found = value;
+    else if (found !== value) return null;
+  }
+  return found;
+}
+
+/**
+ * Luogo da precompilare creando una guida di GRUPPO. Stessa precedenza della
+ * guida singola (`resolvePrefilledLocationId`), letta al plurale:
+ *
+ *   1. default degli ALLIEVI pre-inseriti — solo se sono tutti d'accordo
+ *      (chi non ha un default non conta) e il luogo esiste ancora;
+ *   2. luogo della PATENTE della guida — solo se i veicoli portano tutti allo
+ *      stesso luogo (flotta moto mista → categorie che puntano altrove);
+ *   3. SEDE.
+ *
+ * Il criterio dell'unanimità vale per entrambi i passi: a preferenze in
+ * conflitto si scende al gradino dopo invece di scegliere a caso. Il luogo
+ * resta sempre modificabile a mano.
+ */
+export function resolveGroupPrefilledLocationId({
+  locations,
+  studentDefaultLocationIds = [],
+  licenseCategories = [],
+}: ResolveGroupLocationInput): string | null {
+  // 1. Default degli allievi.
+  const sharedDefault = unanimous(studentDefaultLocationIds);
+  if (sharedDefault && locations.some((l) => l.id === sharedDefault)) {
+    return sharedDefault;
+  }
+
+  // 2. Luogo della patente, se i veicoli concordano.
+  const byLicense = unanimous(
+    licenseCategories.map((c) => locationIdForLicenseCategory(locations, c)),
+  );
+  if (byLicense) return byLicense;
+
+  // 3. Sede.
+  return locations.find((l) => l.isDefault)?.id ?? null;
+}

@@ -576,6 +576,7 @@ model AutoscuolaLocation {
   company           Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
   createdByUser     User?                   @relation("AutoscuolaLocationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   appointments      AutoscuolaAppointment[]
+  groupLessons      AutoscuolaGroupLesson[]
   defaultForMembers CompanyMember[]         @relation("MemberDefaultLocation")
 
   @@index([companyId])
@@ -1041,6 +1042,11 @@ model AutoscuolaGroupLesson {
   /// group rides the same type. Mirrors AutoscuolaAppointment.motoLessonType
   /// (REG-399). See lib/autoscuole/moto-lesson-type.ts.
   motoLessonType  String?
+  /// Luogo di ritrovo della guida di gruppo (REG-409). Vive sul CONTAINER —
+  /// un gruppo è un evento solo, in un posto solo — e viene copiato su ogni
+  /// posto (`AutoscuolaAppointment.locationId`) così l'allievo lo vede dai
+  /// percorsi già esistenti. Null = sede dell'autoscuola.
+  locationId      String?   @db.Uuid
   startsAt        DateTime  @db.Timestamp(6)
   endsAt          DateTime? @db.Timestamp(6)
   capacity        Int       @default(3)
@@ -1052,6 +1058,7 @@ model AutoscuolaGroupLesson {
   updatedAt       DateTime  @updatedAt
 
   company       Company                        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  location      AutoscuolaLocation?            @relation(fields: [locationId], references: [id], onDelete: SetNull)
   instructor    AutoscuolaInstructor?          @relation(fields: [instructorId], references: [id], onDelete: SetNull)
   vehicle       AutoscuolaVehicle?             @relation("GroupLessonVehicle", fields: [vehicleId], references: [id], onDelete: SetNull)
   followVehicle AutoscuolaVehicle?             @relation("GroupLessonFollowVehicle", fields: [followVehicleId], references: [id], onDelete: SetNull)
@@ -1065,6 +1072,7 @@ model AutoscuolaGroupLesson {
   @@index([instructorId])
   @@index([vehicleId])
   @@index([followVehicleId])
+  @@index([locationId])
 }
 
 /// The motorcycle "fleet" of a kind="moto" group lesson: the explicit set of

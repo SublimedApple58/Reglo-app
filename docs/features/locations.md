@@ -30,6 +30,39 @@ creando una guida il campo "Luogo" si precompila di conseguenza.
   - Doppia assegnazione (possibile solo per scrittura concorrente): vince il
     primo della lista, che arriva ordinata `isDefault desc, name asc` → esito
     deterministico, mai casuale.
+- **Guide di GRUPPO** (follow-up 2026-09-19): fino a ieri non avevano proprio il
+  campo Luogo — né a schema né in UI — quindi finivano sempre in sede. Ora
+  `AutoscuolaGroupLesson.locationId` (migrazione
+  `20260919090000_group_lesson_location`, additiva e nullable) tiene il luogo a
+  livello di **container** — un gruppo è un evento solo, in un posto solo — e
+  il luogo viene **copiato su ogni posto** (`AutoscuolaAppointment.locationId`)
+  nei 3 punti che creano una seat (`createGroupLesson`,
+  `addGroupLessonParticipant`, `respondGroupLessonInvite`): è dalla seat che
+  l'allievo lo vede, perché app e dettaglio guida leggono
+  `AutoscuolaAppointment.location`.
+  - **Precedenza al plurale** (`resolveGroupPrefilledLocationId`, puro e
+    testato): un gruppo ha più allievi e, in moto, più veicoli, quindi la regola
+    della guida singola si legge così: **default degli allievi pre-inseriti se
+    sono concordi** (chi non ne ha uno non esprime preferenza e non blocca gli
+    altri) → **luogo della patente se i veicoli concordano** → **sede**. A
+    preferenze in conflitto si scende al gradino dopo invece di sceglierne una
+    a caso.
+  - **Quale patente in moto**: quella della **flotta**, mai l'auto al seguito —
+    è un accessorio di categoria B e manderebbe ogni gruppo moto al luogo della
+    B. Flotta mista che punta a luoghi diversi → sede.
+  - **Il backend risolve anche senza il campo**: `createGroupLesson` accetta
+    `locationId` opzionale e, se manca, applica la stessa precedenza via
+    `resolveGroupLessonLocationId` (`lib/autoscuole/locations.ts`). Così un
+    client che non lo manda (mobile, dove il campo non c'è ancora) non ricade
+    automaticamente in sede.
+  - **UI**: select "Luogo" nel `GroupLessonCreateDialog`, sotto i veicoli. Si
+    ricalcola al cambio di veicolo/flotta/allievi finché non lo si tocca a mano
+    (`locationTouchedRef`), stesso patto dell'agenda. Le guide di gruppo
+    **vuote** portano il loro luogo anche nella riga sintetica `gl-empty:`
+    dell'agenda, che prima aveva `location: null` per definizione.
+  - **Non ancora modificabile dopo la creazione**: `updateGroupLesson` non tocca
+    il luogo (e il dialog di gestione non lo mostra). Per cambiarlo si passa
+    dalla singola seat.
 - **Granularità**: solo la categoria patente, nessuna distinzione manuale/
   automatico ("B" copre entrambi). Diverso dalla palette colori agenda, dove
   "B autom." è una voce a sé.
@@ -37,13 +70,21 @@ creando una guida il campo "Luogo" si precompila di conseguenza.
   (sempre, azzerando il flag) e al cambio **veicolo** (solo se il titolare non
   ha scelto il Luogo a mano — `createLocationTouchedRef`). Toccare il select
   alza il flag; cambiare allievo lo azzera (cambio di contesto completo).
-- **Fuori scope**: l'auto-prenotazione dell'allievo da app (`createBookingRequest`,
-  `respondWaitlistOffer`) continua ad assegnare **sempre la sede** — non ha un
-  campo Luogo da precompilare e già oggi ignora anche il default REG-392.
-- **Mobile**: `GET /api/autoscuole/locations` espone già `licenseCategories`, ma
-  il `BookingForm` dell'agenda istruttore **non lo consuma ancora** (scelta
-  esplicita: REG-409 è stato chiuso web-only). Lì il precompile resta
-  default allievo → sede.
+- **Prenotazione dell'allievo da app** (follow-up 2026-09-19): non ha un campo
+  Luogo, ma non finisce più sempre in sede — `createBookingRequest` e
+  `respondWaitlistOffer` applicano la **stessa precedenza** via
+  `resolveStudentBookingLocationId` (`lib/autoscuole/locations.ts`), che carica
+  luoghi + `CompanyMember.defaultLocationId`/`licenseCategory` e delega al
+  resolver puro. La patente della guida viene dal **veicolo assegnato dal
+  matcher**; senza veicolo (o col modulo Veicoli spento) si ricade sul percorso
+  dell'allievo.
+- **Mobile** (follow-up 2026-09-19): il `BookingForm` dell'agenda
+  istruttore/titolare consuma `licenseCategories` e applica la stessa
+  precedenza, con lo stesso comportamento del web sul ricalcolo (cambio allievo
+  azzera, cambio veicolo rispetta la scelta manuale). La logica è duplicata in
+  `reglo-mobile/src/utils/locationForLicense.ts`, **gemello** di
+  `lib/autoscuole/location-for-license.ts`: le due copie vanno cambiate insieme.
+  Vedi `reglo-mobile/docs/features/locations.md`.
 
 ## Backend — API routes
 
@@ -99,4 +140,4 @@ Create/update/default accettano `licenseCategories?: LicenseCategory[]`
 
 - **Appointments/booking**: il luogo è selezionabile su guide e prenotazioni (default = sede).
 - **Vehicles / License**: la patente della guida (e quindi il luogo precompilato) dipende dal veicolo scelto — chi tocca `licenseCategory` sui veicoli tocca anche questo.
-- **Mobile**: il dettaglio guida mostra il luogo; con `isPrecise` apre Google Maps.
+- **Mobile**: il dettaglio guida mostra il luogo; con `isPrecise` apre Google Maps. Il `BookingForm` precompila il Luogo con la stessa precedenza (`src/utils/locationForLicense.ts`, gemello del modulo puro qui).

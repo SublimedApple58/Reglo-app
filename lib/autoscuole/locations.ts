@@ -3,6 +3,10 @@ import type { AutoscuolaLocation, Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
 
 import { isOwner } from "./roles";
+import {
+  resolveGroupPrefilledLocationId,
+  resolvePrefilledLocationId,
+} from "./location-for-license";
 
 export const DEFAULT_LOCATION_LABEL = "Sede dell'autoscuola";
 
@@ -101,6 +105,88 @@ export async function getDefaultLocationId(companyId: string): Promise<string | 
     select: { id: true },
   });
   return loc?.id ?? null;
+}
+
+/**
+ * Luogo di una prenotazione fatta DALL'ALLIEVO dall'app (REG-409 follow-up).
+ *
+ * Applica la stessa precedenza del campo "Luogo" in creazione guida dal web
+ * (`resolvePrefilledLocationId`): default dell'allievo → luogo della patente
+ * della guida → sede. Prima di questo helper le prenotazioni self-service
+ * finivano SEMPRE in sede, ignorando sia REG-392 sia REG-409.
+ *
+ * `vehicleLicenseCategory` è la categoria del veicolo assegnato dal matcher
+ * (è il veicolo a definire che guida è); `null` quando la guida non ha veicolo
+ * o il modulo Veicoli è spento → si ricade sul percorso dell'allievo.
+ */
+export async function resolveStudentBookingLocationId(
+  tx: Prisma.TransactionClient,
+  params: {
+    companyId: string;
+    studentId: string;
+    vehicleLicenseCategory?: string | null;
+  },
+): Promise<string | null> {
+  const [locations, member] = await Promise.all([
+    tx.autoscuolaLocation.findMany({
+      where: { companyId: params.companyId, archivedAt: null },
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+      select: { id: true, isDefault: true, licenseCategories: true },
+    }),
+    tx.companyMember.findFirst({
+      where: { companyId: params.companyId, userId: params.studentId },
+      select: { defaultLocationId: true, licenseCategory: true },
+    }),
+  ]);
+
+  return resolvePrefilledLocationId({
+    locations,
+    studentDefaultLocationId: member?.defaultLocationId ?? null,
+    student: { licenseCategory: member?.licenseCategory ?? null },
+    vehicle: { licenseCategory: params.vehicleLicenseCategory ?? null },
+  });
+}
+
+/**
+ * Luogo di ritrovo di una guida di GRUPPO (REG-409 follow-up).
+ *
+ * Stessa precedenza della guida singola, letta al plurale
+ * (`resolveGroupPrefilledLocationId`): default degli allievi pre-inseriti se
+ * concordi → luogo della patente se i veicoli concordano → sede. Serve al
+ * backend perché il luogo sia giusto anche quando il client non lo manda
+ * (creazione da mobile, o da un client vecchio): senza questo la guida
+ * finirebbe comunque in sede, che è il bug che REG-409 sta chiudendo.
+ *
+ * `licenseCategories` sono le categorie dei veicoli della guida — il veicolo
+ * condiviso o la flotta di moto, MAI l'auto al seguito (categoria B).
+ */
+export async function resolveGroupLessonLocationId(
+  tx: Prisma.TransactionClient,
+  params: {
+    companyId: string;
+    studentIds: readonly string[];
+    licenseCategories: readonly (string | null | undefined)[];
+  },
+): Promise<string | null> {
+  const [locations, members] = await Promise.all([
+    tx.autoscuolaLocation.findMany({
+      where: { companyId: params.companyId, archivedAt: null },
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+      select: { id: true, isDefault: true, licenseCategories: true },
+    }),
+    params.studentIds.length
+      ? tx.companyMember.findMany({
+          where: { companyId: params.companyId, userId: { in: [...params.studentIds] } },
+          select: { defaultLocationId: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  return resolveGroupPrefilledLocationId({
+    locations,
+    studentDefaultLocationIds: members.map((m) => m.defaultLocationId),
+    licenseCategories: params.licenseCategories,
+  });
 }
 
 export type CreateLocationInput = {

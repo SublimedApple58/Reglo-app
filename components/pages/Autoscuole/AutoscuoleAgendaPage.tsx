@@ -3265,6 +3265,7 @@ export function AutoscuoleAgendaPage({
           instructors={instructors.map((i) => ({ id: i.id, name: i.name }))}
           vehiclesEnabled={vehiclesEnabled}
           followCarRules={followCarRules}
+          locations={agendaLocations}
           defaultDate={groupLessonPrefill?.date ?? normalizeDay(dayFocus).toISOString().slice(0, 10)}
           defaultTime={groupLessonPrefill?.time ?? null}
           defaultInstructorId={groupLessonPrefill?.instructorId ?? null}

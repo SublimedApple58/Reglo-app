@@ -15,6 +15,7 @@ import { BOOKING_SOURCE, staffBookingSource } from "@/lib/autoscuole/booking-sou
 import { broadcastWaitlistOffer, buildAvailabilityResolver, getStudentBookingBlockStatus, cancelGroupLessonParticipantAppointment } from "@/lib/actions/autoscuole-availability.actions";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import { fetchGroupLessonBusyRows } from "@/lib/autoscuole/group-lesson-busy";
+import { resolveGroupLessonLocationId } from "@/lib/autoscuole/locations";
 import {
   EMPTY_OCCUPANCY,
   buildDeclaredIntervals,
@@ -1321,8 +1322,22 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           motoLessonType: true,
           instructorId: true,
           vehicleId: true,
+          locationId: true,
           instructor: { select: { id: true, name: true } },
           vehicle: { select: { id: true, name: true, transmission: true } },
+          location: {
+            select: {
+              id: true,
+              companyId: true,
+              name: true,
+              address: true,
+              latitude: true,
+              longitude: true,
+              placeId: true,
+              isDefault: true,
+              isPrecise: true,
+            },
+          },
         },
         orderBy: { startsAt: "asc" },
       });
@@ -1343,7 +1358,9 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           endsAt: gl.endsAt,
           instructorId: gl.instructorId,
           vehicleId: gl.vehicleId,
-          locationId: null,
+          // Il luogo del container: senza posti occupati non c'è nessuna riga
+          // vera da cui leggerlo, ma la guida un luogo ce l'ha (REG-409).
+          locationId: gl.locationId,
           groupLessonId: gl.id,
           motoLessonType: null,
           cancellationKind: null,
@@ -1357,7 +1374,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           vehicle: gl.vehicle,
           followVehicle: null,
           extraMotoVehicles: [],
-          location: null,
+          location: gl.location,
           groupLessonCapacity: gl.capacity,
           groupLessonKind: gl.kind,
           groupLessonMotoType: gl.motoLessonType,
@@ -9044,6 +9061,12 @@ const createGroupLessonSchema = z.object({
   /** Moto lesson type (kind="moto" only): "birilli" | "strada" | null. */
   motoLessonType: z.enum(MOTO_LESSON_TYPES).nullable().optional(),
   instructorId: z.string().uuid().optional().nullable(),
+  /**
+   * Luogo di ritrovo (REG-409). Omesso → lo risolve il backend con la stessa
+   * precedenza del campo "Luogo" della guida singola, così anche un client che
+   * non lo manda (mobile) non finisce automaticamente in sede.
+   */
+  locationId: z.string().uuid().optional().nullable(),
   // Free choice by owner/instructor (12 = sanity ceiling). For moto groups the
   // participants may outnumber the fleet (they ride in turns).
   capacity: z.number().int().min(1).max(12).optional(),
@@ -9102,6 +9125,34 @@ export async function createGroupLesson(
     if (!instructorId) {
       return { success: false as const, message: "Seleziona l'istruttore della guida di gruppo." };
     }
+
+    // Luogo di ritrovo (REG-409): quello scelto a mano se valido, altrimenti
+    // risolto dalla patente della guida e dai default degli allievi. Le
+    // categorie arrivano dal ramo (veicolo condiviso o flotta moto): l'auto al
+    // seguito non entra mai nel calcolo, manderebbe ogni gruppo moto al luogo
+    // della B.
+    const resolveLessonLocation = async (
+      licenseCategories: Array<string | null | undefined>,
+    ): Promise<{ ok: true; locationId: string | null } | { ok: false; message: string }> => {
+      if (payload.locationId) {
+        const loc = await prisma.autoscuolaLocation.findFirst({
+          where: { id: payload.locationId, companyId, archivedAt: null },
+          select: { id: true },
+        });
+        if (!loc) {
+          return { ok: false, message: "Luogo non valido per questa autoscuola." };
+        }
+        return { ok: true, locationId: loc.id };
+      }
+      return {
+        ok: true,
+        locationId: await resolveGroupLessonLocationId(prisma, {
+          companyId,
+          studentIds,
+          licenseCategories,
+        }),
+      };
+    };
 
     const price = await getGroupLessonPrice({ companyId });
     const priceDecimal = new Prisma.Decimal(price.toFixed(2));
@@ -9196,6 +9247,13 @@ export async function createGroupLesson(
       });
       if (overlapErr) return { success: false as const, message: overlapErr };
 
+      // La patente della guida viene dalla FLOTTA, non dall'auto al seguito.
+      const motoLocation = await resolveLessonLocation(
+        setup.fleet.map((v) => v.licenseCategory),
+      );
+      if (!motoLocation.ok) return { success: false as const, message: motoLocation.message };
+      const locationId = motoLocation.locationId;
+
       const groupLesson = await prisma.$transaction(async (tx) => {
         await lockAndRecheckGroupLessonOverlap(tx, {
           companyId,
@@ -9212,6 +9270,7 @@ export async function createGroupLesson(
             instructorId,
             vehicleId: null,
             followVehicleId: motoFollowVehicleId,
+            locationId,
             motoLessonType: payload.motoLessonType ?? null,
             startsAt,
             endsAt,
@@ -9235,6 +9294,10 @@ export async function createGroupLesson(
               status: "scheduled",
               instructorId,
               vehicleId: a.vehicleId,
+              // Il luogo del container si copia su ogni posto: è da lì che
+              // l'allievo lo vede (app e dettaglio guida leggono
+              // AutoscuolaAppointment.location).
+              locationId,
               notes: null,
               groupLessonId: gl.id,
               paymentRequired: true,
@@ -9302,6 +9365,12 @@ export async function createGroupLesson(
     });
     if (overlapErr) return { success: false as const, message: overlapErr };
 
+    const standardLocation = await resolveLessonLocation([vehicle?.licenseCategory ?? null]);
+    if (!standardLocation.ok) {
+      return { success: false as const, message: standardLocation.message };
+    }
+    const locationId = standardLocation.locationId;
+
     const groupLesson = await prisma.$transaction(async (tx) => {
       await lockAndRecheckGroupLessonOverlap(tx, {
         companyId,
@@ -9316,6 +9385,7 @@ export async function createGroupLesson(
           companyId,
           instructorId,
           vehicleId,
+          locationId,
           startsAt,
           endsAt,
           capacity,
@@ -9337,6 +9407,10 @@ export async function createGroupLesson(
             status: "scheduled",
             instructorId,
             vehicleId,
+            // Il luogo del container si copia su ogni posto: è da lì che
+            // l'allievo lo vede (app e dettaglio guida leggono
+            // AutoscuolaAppointment.location).
+            locationId,
             // Per-student note: starts empty. The instructor writes an
             // individual note per participant (typically after the lesson) via
             // updateAutoscuolaAppointmentDetails — NOT copied from the container.
@@ -9393,6 +9467,7 @@ export async function addGroupLessonParticipant(
       select: {
         id: true, startsAt: true, endsAt: true, capacity: true, instructorId: true,
         kind: true, priceAmount: true, notes: true, followVehicleId: true,
+        locationId: true,
         vehicle: { select: { id: true, licenseCategory: true, transmission: true } },
         fleetVehicles: {
           select: { vehicle: { select: { id: true, licenseCategory: true, transmission: true } } },
@@ -9511,6 +9586,9 @@ export async function addGroupLessonParticipant(
             status: "scheduled",
             instructorId: gl.instructorId,
             vehicleId: assignedVehicleId,
+            // Il posto eredita il luogo del container: chi si aggiunge dopo va
+            // nello stesso posto degli altri (REG-409).
+            locationId: gl.locationId,
             // Per-student note starts empty (see createGroupLesson) — the instructor
             // adds an individual note per participant, not the container note.
             notes: null,
@@ -10302,6 +10380,8 @@ export async function listOptedInGroupLessonStudents() {
         userId: true,
         licenseCategory: true,
         transmission: true,
+        // Serve al dialog per precompilare il Luogo (REG-392 + REG-409).
+        defaultLocationId: true,
         user: { select: { name: true } },
       },
       take: 1000,
@@ -10312,6 +10392,7 @@ export async function listOptedInGroupLessonStudents() {
       name: m.user?.name ?? null,
       licenseCategory: m.licenseCategory ?? null,
       transmission: m.transmission ?? null,
+      defaultLocationId: m.defaultLocationId ?? null,
     }));
 
     return { success: true as const, data };

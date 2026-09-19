@@ -39,6 +39,7 @@ import {
 } from "@/lib/actions/autoscuole.actions";
 import { inviteToGroupLesson } from "@/lib/actions/autoscuole-availability.actions";
 import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
+import { resolveGroupPrefilledLocationId } from "@/lib/autoscuole/location-for-license";
 import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
 import { vehicleServesLicense, MOTO_LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
 
@@ -58,6 +59,18 @@ type OptedInStudent = {
   name: string | null;
   licenseCategory: string | null;
   transmission: string | null;
+  /** Luogo di default dell'allievo (REG-392), per precompilare il Luogo. */
+  defaultLocationId?: string | null;
+};
+
+/** Luogo guida selezionabile (stessa shape del select dell'agenda). */
+type LocationOption = {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  isPrecise?: boolean;
+  /** Tipi di patente serviti dal luogo (REG-409). */
+  licenseCategories?: string[] | null;
 };
 
 type Props = {
@@ -67,6 +80,8 @@ type Props = {
   vehiclesEnabled: boolean;
   /** Per-moto-category follow-car rules (to require an auto al seguito). */
   followCarRules?: Record<string, { enabled: boolean }>;
+  /** Luoghi guida attivi (ordine: sede prima, poi nome A→Z). */
+  locations?: LocationOption[];
   /** Optional ISO date (YYYY-MM-DD) of the agenda's focused day to pre-fill. */
   defaultDate?: string | null;
   /** Optional HH:mm to pre-fill (agenda slot click). */
@@ -116,6 +131,7 @@ export function GroupLessonCreateDialog({
   instructors,
   vehiclesEnabled,
   followCarRules,
+  locations = [],
   defaultDate,
   defaultTime,
   defaultInstructorId,
@@ -144,6 +160,11 @@ export function GroupLessonCreateDialog({
   // Moto lesson type (birilli/strada), shared by the whole group — optional.
   const [motoLessonType, setMotoLessonType] = React.useState<MotoLessonType | null>(null);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
+  // Luogo di ritrovo (REG-409). Si precompila da solo finché non lo si tocca a
+  // mano: da quel momento la scelta dell'utente vince su ogni ricalcolo, come
+  // nel form della guida singola.
+  const [locationId, setLocationId] = React.useState<string>("");
+  const locationTouchedRef = React.useRef(false);
   const [openInvites, setOpenInvites] = React.useState(true);
   const [studentQuery, setStudentQuery] = React.useState("");
   const [browseOpen, setBrowseOpen] = React.useState(false);
@@ -207,6 +228,8 @@ export function GroupLessonCreateDialog({
     setFollowVehicleId("");
     setMotoLessonType(null);
     setSelectedIds([]);
+    setLocationId("");
+    locationTouchedRef.current = false;
     setOpenInvites(true);
     setStudentQuery("");
     setSaving(false);
@@ -301,6 +324,33 @@ export function GroupLessonCreateDialog({
     );
   }, [eligibleStudents]);
 
+  // Luogo precompilato (REG-409), stessa precedenza della guida singola letta
+  // al plurale: default degli allievi se concordi → luogo della patente se i
+  // veicoli concordano → sede. Le categorie vengono dal veicolo condiviso o
+  // dalla flotta di moto; l'auto al seguito resta fuori (è di categoria B e
+  // manderebbe ogni gruppo moto al luogo della B).
+  const prefilledLocationId = React.useMemo(() => {
+    if (!locations.length) return "";
+    return (
+      resolveGroupPrefilledLocationId({
+        locations,
+        studentDefaultLocationIds: selectedIds.map(
+          (id) => students.find((st) => st.id === id)?.defaultLocationId ?? null,
+        ),
+        licenseCategories: isMoto
+          ? fleet.map((v) => v.licenseCategory)
+          : [selectedVehicle?.licenseCategory ?? null],
+      }) ?? ""
+    );
+  }, [locations, selectedIds, students, isMoto, fleet, selectedVehicle]);
+
+  // Il ricalcolo segue allievi e veicoli finché il Luogo non è stato scelto a
+  // mano.
+  React.useEffect(() => {
+    if (!open || locationTouchedRef.current) return;
+    setLocationId(prefilledLocationId);
+  }, [open, prefilledLocationId]);
+
   // Changing the instructor can make a chosen vehicle / fleet / follow car no
   // longer accessible — drop selections that fell out of the accessible set.
   React.useEffect(() => {
@@ -393,6 +443,7 @@ export function GroupLessonCreateDialog({
               capacity: CAPACITY,
             }),
         studentIds: selectedIds,
+        ...(locationId ? { locationId } : {}),
       });
       if (!res.success || !res.data) {
         toast.error({ description: res.message ?? "Creazione non riuscita." });
@@ -741,6 +792,32 @@ export function GroupLessonCreateDialog({
                     })}
                   </div>
                 </div>
+              </div>
+            ) : null}
+
+            {/* Luogo di ritrovo (REG-409): precompilato, sempre modificabile. */}
+            {locations.length > 0 ? (
+              <div className="space-y-1">
+                <Label className="text-[11px] text-muted-foreground">Luogo</Label>
+                <Select
+                  value={locationId}
+                  onValueChange={(value) => {
+                    locationTouchedRef.current = true;
+                    setLocationId(value);
+                  }}
+                >
+                  <SelectTrigger className="cursor-pointer">
+                    <SelectValue placeholder="Sede dell'autoscuola" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {locations.map((loc) => (
+                      <SelectItem key={loc.id} value={loc.id} className="cursor-pointer">
+                        {loc.name}
+                        {loc.isDefault ? " · Sede" : loc.isPrecise ? " · Preciso" : " · Generico"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             ) : null}
 
