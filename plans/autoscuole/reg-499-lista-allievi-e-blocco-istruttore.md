@@ -83,7 +83,21 @@ fix non resta niente da controllare — rimosso, query in meno.
 
 - 424 test unitari + `tsc --noEmit` verdi sui due repo (il mobile ha un errore
   preesistente in `TabNavigator.tsx`, non toccato).
-- Staging: istruttore che prenota per un allievo bloccato → passa; allievo che
-  prova da sé → fermato.
-- Mobile: nessuno staging (regola nota) → verifica sul bootstrap reale che le fasi
-  arrivino e che il filtro selezioni gli allievi giusti, poi OTA in produzione.
+- **Staging, end-to-end.** La stessa identica chiamata dell'istruttore, con
+  l'allievo bloccato e poi sbloccato: `200` tutte e due le volte, sia sul percorso
+  singolo sia sul batch. L'allievo, con lo stesso blocco attivo, continua a
+  prendersi `400 "Le tue prenotazioni sono temporaneamente sospese."`. Dati di
+  prova ripuliti (appuntamenti + i blocchi `lesson_buffer` che si portano dietro),
+  stato del blocco ripristinato.
+- **Picker, sui dati veri di staging.** Con due allievi demo messi a TEORIA e
+  PATENTATO: da 29 a 26 nel picker, esclusi esattamente i tre non-PRATICA. Fasi
+  ripristinate.
+
+## Rilascio (19/09/2026)
+
+- Web/backend: `main 09ac6ae`, nessuna migrazione, nessun job Trigger. Il build
+  di produzione è andato in `out_of_memory` al primo tentativo (l'ennesima volta),
+  passato al redeploy.
+- Mobile: `master cdc9bcc` → OTA produzione iOS + Android, runtime 2.3.0.
+- In produzione, al momento del rilascio, **94 allievi risultavano bloccati**: fino
+  a oggi nessuno di loro era prenotabile nemmeno dal proprio istruttore.
