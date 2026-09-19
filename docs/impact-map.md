@@ -109,6 +109,16 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Repositioning**: respects cluster constraints
 - → **Mobile**: `SettingsScreen`, `ClusterSettingsScreen`, `InstructorAvailabilityScreen`, `PublicationModeEditor` (9 screens total)
 
+### Blocco prenotazioni in bulk + scadenza (REG-442)
+- **Stesso campo, stessa semantica** del toggle singolo: `CompanyMember.bookingBlocked` + `bookingBlockReason="manual"`, applicato a N allievi. Il toggle singolo e il bulk passano ora dallo **stesso cuore** (`applyStudentsBookingBlock` in `autoscuole.actions.ts`) → cambiarne uno li cambia entrambi.
+- **Nuovo campo** `CompanyMember.bookingBlockUntil` (migrazione additiva): scadenza del blocco manuale, null = indefinito. Vale SOLO sui blocchi `manual`; l'auto-block per debito non usa date.
+- → **Ogni enforcement del blocco**: nessuno legge più `bookingBlocked` grezzo, tutti passano dal predicato puro `isBookingBlockActive` (`lib/autoscuole/booking-block.ts`), che spegne da solo un blocco scaduto. Toccati: guard prenotazione da app + `getBookingOptions` + inviti/self-enrol gruppi + `getStudentBookingBlockStatus` (`autoscuole-availability.actions.ts`), offerte e accettazione swap (`autoscuole-swap.actions.ts`). **Chi aggiunge un nuovo punto che guarda il blocco deve selezionare anche `bookingBlockUntil` e usare quel predicato**, altrimenti blocca gente già libera.
+- → **Auto-block per debito**: una scadenza che decade rilascia la riga (`reason` torna null) **prima** del reconcile per debito, così l'automatismo torna padrone di quell'allievo. La scadenza NON scrive il watermark `unpaidBlockClearedAtCount` (differenza voluta rispetto allo sblocco manuale). Vedi `features/auto-booking-block-debt.md`.
+- → **Trigger.dev**: nuovo cron notturno `autoscuole-booking-block-expiry` che ripulisce le righe scadute (igiene del DB: l'enforcement non dipende da lui). Rilasciarlo richiede `pnpm trigger:deploy:*`.
+- → **Students directory**: `getAutoscuolaStudentsWithProgress` e `getAutoscuolaStudentDrivingRegister` espongono `bookingBlockUntil` e fanno il sweep delle scadenze on-read.
+- → **Componenti condivisi**: `components/ui/checkbox.tsx` ora rende lo stato `indeterminate` con un trattino, `components/ui/date-picker.tsx` accetta `minDate` — entrambi retro-compatibili (opzionali), ma sono componenti usati ovunque.
+- **Volutamente NON connesso a Mobile**: nessun tipo/endpoint nuovo, il mobile subisce solo l'effetto del blocco esistente (che già conosce via `getBookingOptions.bookingBlocked`).
+
 ### Auto-block prenotazioni per debito allievo (web-only)
 - **Scrive sullo STESSO campo** `CompanyMember.bookingBlocked` del blocco manuale (unificazione). Distinzione origine via `bookingBlockReason` ("manual" | "unpaid_threshold" | null) + watermark `unpaidBlockClearedAtCount` per l'anti-conflitto sullo sblocco manuale. State machine pura in `lib/autoscuole/unpaid-auto-block.ts`.
 - → **Payments**: il conteggio "guide da pagare" (`isLessonUnpaid`, = `manualUnpaid`) dipende da `manualMode` (`getAutoscuolaPaymentConfig`) e dallo stato pagamento delle guide. `isLessonUnpaid` ora è **definizione unica** nell'helper, importata da `autoscuole.actions.ts`.

@@ -93,9 +93,14 @@ import {
   isLessonUnpaid,
   readAutoBlockSettings,
   reconcileUnpaidAutoBlock,
-  getStudentUnpaidLessonCount,
+  getStudentsUnpaidLessonCounts,
   type MemberBlockState,
 } from "@/lib/autoscuole/unpaid-auto-block";
+import {
+  blockUntilDateToInstant,
+  isBookingBlockExpired,
+} from "@/lib/autoscuole/booking-block";
+import { releaseExpiredManualBlocks } from "@/lib/autoscuole/booking-block-expiry";
 import {
   LESSON_ALL_ALLOWED_TYPES,
   getCompatibleLessonTypesForInterval,
@@ -1788,14 +1793,27 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
     }));
     if (!students.length) return { success: true, data: [] };
 
+    // Blocchi a tempo scaduti (REG-442): ripuliscili DAVVERO prima di tutto il
+    // resto, così l'automatismo per debito torna padrone di quelle righe e la
+    // pill "Bloccato" sparisce dalla lista. Una sola updateMany, quasi sempre a
+    // vuoto; lo stato in memoria viene allineato subito sotto.
+    const blockExpiryNow = new Date();
+    if (members.some((m) => isBookingBlockExpired(m, blockExpiryNow))) {
+      await releaseExpiredManualBlocks({ companyId, now: blockExpiryNow });
+    }
+
     const memberBlockStateMap = new Map<string, MemberBlockState>();
+    const blockUntilMap = new Map<string, Date | null>();
     for (const m of members) {
+      const expired = isBookingBlockExpired(m, blockExpiryNow);
       memberBlockStateMap.set(m.userId, {
-        bookingBlocked: m.bookingBlocked,
-        bookingBlockReason:
-          (m.bookingBlockReason as MemberBlockState["bookingBlockReason"]) ?? null,
+        bookingBlocked: expired ? false : m.bookingBlocked,
+        bookingBlockReason: expired
+          ? null
+          : (m.bookingBlockReason as MemberBlockState["bookingBlockReason"]) ?? null,
         unpaidBlockClearedAtCount: m.unpaidBlockClearedAtCount ?? null,
       });
+      blockUntilMap.set(m.userId, expired ? null : m.bookingBlockUntil ?? null);
     }
     const autoBlockSettings = readAutoBlockSettings(
       await getCachedCompanyServiceLimits(companyId),
@@ -1895,6 +1913,11 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
           ...student,
           bookingBlocked: nextBlock.bookingBlocked,
           bookingBlockReason: nextBlock.bookingBlockReason,
+          // La scadenza vale solo finché il blocco manuale resta in piedi.
+          bookingBlockUntil:
+            nextBlock.bookingBlocked && nextBlock.bookingBlockReason === "manual"
+              ? blockUntilMap.get(student.id)?.toISOString() ?? null
+              : null,
           activeCase: register.activeCase,
           summary: register.summary,
           manualUnpaid,
@@ -2102,15 +2125,24 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
     );
     const manualUnpaid = lessons.filter((l) => isLessonUnpaid(l, manualMode)).length;
 
+    // Blocco manuale a tempo scaduto (REG-442) → rilascialo prima di passare la
+    // parola all'automatismo per debito, che altrimenti vedrebbe ancora un
+    // blocco "manual" e non toccherebbe la riga.
+    const blockExpired = isBookingBlockExpired(studentMembership, now);
+    if (blockExpired) {
+      await releaseExpiredManualBlocks({ companyId, userId: studentId, now });
+    }
+
     // Riconcilia il blocco automatico per debito con il conteggio appena calcolato.
     const autoBlock = await reconcileUnpaidAutoBlock({
       companyId,
       userId: studentId,
       state: {
-        bookingBlocked: studentMembership.bookingBlocked,
-        bookingBlockReason:
-          (studentMembership.bookingBlockReason as MemberBlockState["bookingBlockReason"]) ??
-          null,
+        bookingBlocked: blockExpired ? false : studentMembership.bookingBlocked,
+        bookingBlockReason: blockExpired
+          ? null
+          : (studentMembership.bookingBlockReason as MemberBlockState["bookingBlockReason"]) ??
+            null,
         unpaidBlockClearedAtCount: studentMembership.unpaidBlockClearedAtCount ?? null,
       },
       unpaidCount: manualUnpaid,
@@ -2127,6 +2159,13 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
         student,
         bookingBlocked: autoBlock.bookingBlocked,
         bookingBlockReason: autoBlock.bookingBlockReason,
+        bookingBlockUntil:
+          !blockExpired &&
+          autoBlock.bookingBlocked &&
+          autoBlock.bookingBlockReason === "manual" &&
+          studentMembership.bookingBlockUntil
+            ? studentMembership.bookingBlockUntil.toISOString()
+            : null,
         weeklyBookingLimitExempt: studentMembership.weeklyBookingLimitExempt,
         examPriorityOverride: studentMembership.examPriorityOverride,
         examPriorityActive: examPriorityInfo.active,
@@ -7897,6 +7936,25 @@ export async function deleteInstructorBlockRecurrence(recurrenceGroupId: string)
 const toggleStudentBookingBlockSchema = z.object({
   studentId: z.string().uuid(),
   blocked: z.boolean(),
+  /**
+   * Ultimo giorno di blocco incluso (YYYY-MM-DD, REG-442). Null/omesso =
+   * blocco indefinito, il comportamento storico. Ignorato su `blocked:false`.
+   */
+  until: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data non valida.")
+    .nullable()
+    .optional(),
+});
+
+const setStudentsBookingBlockSchema = z.object({
+  studentIds: z.array(z.string().uuid()).min(1).max(500),
+  blocked: z.boolean(),
+  until: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data non valida.")
+    .nullable()
+    .optional(),
 });
 
 const updateStudentPhaseSchema = z.object({
@@ -7923,6 +7981,91 @@ const updateStudentPhoneSchema = z.object({
   phone: z.string().max(30),
 });
 
+/**
+ * Cuore del blocco/sblocco manuale delle prenotazioni, per uno o N allievi.
+ *
+ * Il blocco/sblocco manuale del titolare convive con l'automatismo per debito
+ * (stesso campo `bookingBlocked`). Marca l'origine per non entrare in conflitto:
+ *  - BLOCCA a mano → reason="manual": l'automatismo non toccherà mai il record.
+ *  - SBLOCCA a mano → reason=null + watermark = guide non pagate correnti, così
+ *    l'automatismo non riblocca per lo stesso debito residuo (ribloccherà solo
+ *    su un nuovo superamento della soglia).
+ *
+ * REG-442: il blocco può avere una scadenza (`until`, ultimo giorno incluso).
+ * Null = indefinito. Lo sblocco azzera sempre la scadenza.
+ */
+async function applyStudentsBookingBlock(params: {
+  companyId: string;
+  studentIds: string[];
+  blocked: boolean;
+  until?: string | null;
+}): Promise<
+  | { ok: true; affected: number; blockUntil: Date | null }
+  | { ok: false; message: string }
+> {
+  const { companyId, blocked } = params;
+
+  // Solo allievi davvero di questa company: mai fidarsi degli id in input.
+  const members = await prisma.companyMember.findMany({
+    where: {
+      companyId,
+      userId: { in: params.studentIds },
+      autoscuolaRole: "STUDENT",
+    },
+    select: { userId: true },
+  });
+  const studentIds = members.map((m) => m.userId);
+  if (!studentIds.length) {
+    return { ok: false, message: "Nessun allievo valido per questa autoscuola." };
+  }
+
+  if (blocked) {
+    let blockUntil: Date | null = null;
+    if (params.until) {
+      blockUntil = blockUntilDateToInstant(params.until);
+      if (!blockUntil) return { ok: false, message: "Data di fine blocco non valida." };
+      if (blockUntil.getTime() <= Date.now()) {
+        return { ok: false, message: "La data di fine blocco è già passata." };
+      }
+    }
+    await prisma.companyMember.updateMany({
+      where: { companyId, userId: { in: studentIds }, autoscuolaRole: "STUDENT" },
+      data: {
+        bookingBlocked: true,
+        bookingBlockReason: "manual",
+        bookingBlockUntil: blockUntil,
+        unpaidBlockClearedAtCount: null,
+      },
+    });
+    return { ok: true, affected: studentIds.length, blockUntil };
+  }
+
+  // Sblocco: il watermark è per-allievo → conteggio batch (una sola lettura) e
+  // una updateMany per ogni valore distinto, invece di N update separate.
+  const counts = await getStudentsUnpaidLessonCounts(companyId, studentIds);
+  const byCount = new Map<number, string[]>();
+  for (const id of studentIds) {
+    const count = counts.get(id) ?? 0;
+    const bucket = byCount.get(count) ?? [];
+    bucket.push(id);
+    byCount.set(count, bucket);
+  }
+  await prisma.$transaction(
+    [...byCount.entries()].map(([count, ids]) =>
+      prisma.companyMember.updateMany({
+        where: { companyId, userId: { in: ids }, autoscuolaRole: "STUDENT" },
+        data: {
+          bookingBlocked: false,
+          bookingBlockReason: null,
+          bookingBlockUntil: null,
+          unpaidBlockClearedAtCount: count,
+        },
+      }),
+    ),
+  );
+  return { ok: true, affected: studentIds.length, blockUntil: null };
+}
+
 export async function toggleStudentBookingBlock(
   input: z.infer<typeof toggleStudentBookingBlockSchema>,
 ) {
@@ -7933,35 +8076,62 @@ export async function toggleStudentBookingBlock(
     }
     const payload = toggleStudentBookingBlockSchema.parse(input);
 
-    // Il blocco/sblocco manuale del titolare convive con l'automatismo per debito
-    // (stesso campo `bookingBlocked`). Marca l'origine per non entrare in conflitto:
-    //  - BLOCCA a mano → reason="manual": l'automatismo non toccherà mai il record.
-    //  - SBLOCCA a mano → reason=null + watermark = guide non pagate correnti, così
-    //    l'automatismo non riblocca per lo stesso debito residuo (ribloccherà solo
-    //    su un nuovo superamento della soglia).
-    const clearedAtCount = payload.blocked
-      ? null
-      : await getStudentUnpaidLessonCount(membership.companyId, payload.studentId);
-
-    await prisma.companyMember.updateMany({
-      where: {
-        companyId: membership.companyId,
-        userId: payload.studentId,
-        autoscuolaRole: "STUDENT",
-      },
-      data: {
-        bookingBlocked: payload.blocked,
-        bookingBlockReason: payload.blocked ? "manual" : null,
-        unpaidBlockClearedAtCount: clearedAtCount,
-      },
+    const result = await applyStudentsBookingBlock({
+      companyId: membership.companyId,
+      studentIds: [payload.studentId],
+      blocked: payload.blocked,
+      until: payload.until ?? null,
     });
+    if (!result.ok) return { success: false, message: result.message };
 
     return {
       success: true,
-      data: { bookingBlocked: payload.blocked },
+      data: {
+        bookingBlocked: payload.blocked,
+        bookingBlockUntil: result.blockUntil ? result.blockUntil.toISOString() : null,
+      },
       message: payload.blocked
         ? "Prenotazioni bloccate per l'allievo."
         : "Prenotazioni riattivate per l'allievo.",
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+/**
+ * Blocco/sblocco prenotazioni in BULK dalla sezione Allievi (REG-442): stessa
+ * semantica dell'azione singola, applicata a tutti gli allievi selezionati.
+ */
+export async function setStudentsBookingBlock(
+  input: z.infer<typeof setStudentsBookingBlockSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (!canManageStudentCredits(membership)) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+    const payload = setStudentsBookingBlockSchema.parse(input);
+
+    const result = await applyStudentsBookingBlock({
+      companyId: membership.companyId,
+      studentIds: payload.studentIds,
+      blocked: payload.blocked,
+      until: payload.until ?? null,
+    });
+    if (!result.ok) return { success: false, message: result.message };
+
+    const noun = result.affected === 1 ? "allievo" : "allievi";
+    return {
+      success: true,
+      data: {
+        updated: result.affected,
+        bookingBlocked: payload.blocked,
+        bookingBlockUntil: result.blockUntil ? result.blockUntil.toISOString() : null,
+      },
+      message: payload.blocked
+        ? `Prenotazioni bloccate per ${result.affected} ${noun}.`
+        : `Prenotazioni riattivate per ${result.affected} ${noun}.`,
     };
   } catch (error) {
     return { success: false, message: formatError(error) };

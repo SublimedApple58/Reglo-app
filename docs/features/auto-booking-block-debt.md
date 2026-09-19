@@ -21,6 +21,12 @@ entrare in conflitto con l'azione del titolare, ogni blocco porta un'**origine**
 | `"unpaid_threshold"` | Bloccato dall'automatismo per soglia | Sì: lo sblocca quando l'allievo scende sotto soglia |
 | `null`               | Non bloccato — oppure blocco **legacy** (bloccato senza reason): trattato come manuale per sicurezza | No (se `bookingBlocked=true`) |
 
+Dal 2026-09-19 (REG-442) un blocco `manual` può avere una **scadenza**
+(`bookingBlockUntil`): quando scade la riga viene rilasciata (`reason` → null)
+**prima** del reconcile per debito, quindi l'automatismo torna padrone di
+quell'allievo. La scadenza non scrive il watermark. Vedi
+[bulk-booking-block.md](bulk-booking-block.md).
+
 ### Anti-conflitto (watermark)
 
 Se il titolare **sblocca a mano** un allievo bloccato dall'automatismo, non
@@ -41,7 +47,7 @@ La logica è una macchina a stati **pura** e testata: `resolveUnpaidAutoBlock`.
 | `lib/autoscuole/unpaid-auto-block.ts` | **Cuore**: state machine pura `resolveUnpaidAutoBlock`, `reconcileUnpaidAutoBlock` (scrive), `getStudentUnpaidLessonCount`, `isLessonUnpaid` (definizione unica condivisa), `readAutoBlockSettings`, default |
 | `lib/services.ts` | `ServiceLimits.autoBookingBlockEnabled` / `autoBookingBlockThreshold` |
 | `lib/actions/autoscuole-settings.actions.ts` | Read/validate/save dei due setting nel JSON `limits` |
-| `lib/actions/autoscuole.actions.ts` | `getAutoscuolaStudentsWithProgress` + `getAutoscuolaStudentRegister` riconciliano on-read; `toggleStudentBookingBlock` marca `reason` + watermark; importa `isLessonUnpaid` dall'helper |
+| `lib/actions/autoscuole.actions.ts` | `getAutoscuolaStudentsWithProgress` + `getAutoscuolaStudentRegister` riconciliano on-read; `toggleStudentBookingBlock` marca `reason` + watermark (dal 2026-09-19 via `applyStudentsBookingBlock`, condiviso col bulk REG-442); importa `isLessonUnpaid` dall'helper |
 | `lib/actions/autoscuole-availability.actions.ts` | Guard prenotazione da app: riconcilia **prima** di controllare `bookingBlocked` (enforcement al momento della prenotazione) |
 | `components/pages/Autoscuole/tabs/BookingsTab.tsx` | UI switch + soglia nel tab Limiti |
 | `components/pages/Autoscuole/AutoscuoleResourcesPage.tsx` | State + load + auto-save (`persistField`) + wiring props |
