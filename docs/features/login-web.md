@@ -1,9 +1,14 @@
-# Login web (`/[locale]/sign-in`)
+# Pagine di accesso web (`sign-in`, `sign-up`, `reset-password`)
 
-Pagina di accesso della web app, ridisegnata il **2026-09-17** per essere
-visivamente identica alla vista Login del **sito marketing** (`reglo-landing`):
-il bottone "Accedi" del sito pubblico punta direttamente qui, quindi le due
-pagine devono sembrare la stessa pagina.
+Le tre pagine pubbliche della web app. Il **login** è stato ridisegnato il
+**2026-09-17** per essere visivamente identico alla vista Login del **sito
+marketing** (`reglo-landing`): il bottone "Accedi" del sito pubblico punta
+direttamente qui, quindi le due pagine devono sembrare la stessa pagina.
+
+Dal **2026-09-19** lo stesso trattamento vale per **registrazione** (REG-487) e
+**recupero password** (REG-485): stesso guscio, stessa foto, stessi campi. Chi
+arriva dal sito non deve accorgersi di cambiare schermata passando da una
+all'altra.
 
 Il redesign tocca **solo la presentazione**. Autenticazione, redirect
 post-login e selezione azienda sono rimasti invariati.
@@ -14,26 +19,31 @@ post-login e selezione azienda sono rimasti invariati.
 |------|------|
 | `app/[locale]/(signin)/sign-in/page.tsx` | Server component: sessione, redirect, stato "nessuna membership". |
 | `app/[locale]/(signin)/sign-in/credentials-signin-form.tsx` | Client: form credenziali, link recupero e registrazione. |
-| `app/[locale]/(signin)/auth-shell.tsx` | Guscio a due colonne, **condiviso** con `/reset-password`. |
-| `app/[locale]/(signin)/auth-form-ui.tsx` | Client: classi del design marketing + `PasswordField`, `SubmitButton`, `FormError`, `FormNotice`, **condivisi** con `/reset-password`. |
+| `app/[locale]/(signin)/sign-up/page.tsx` | Server component: redirect se già loggato, poi lo stesso guscio. |
+| `app/[locale]/(signin)/sign-up/sign-up-form.tsx` | Client: form di registrazione (`signUpUser`), stessi mattoni del login. |
+| `app/[locale]/(signin)/auth-shell.tsx` | Guscio a due colonne (logo + contenuto a sinistra, foto + recensioni a destra), **condiviso dalle tre pagine**. |
+| `app/[locale]/(signin)/auth-form-ui.tsx` | Client: classi del design marketing + `PasswordField`, `SubmitButton`, `FormError`, `FormNotice`, **condivisi dalle tre pagine**. |
 | `app/[locale]/(signin)/review-panel.tsx` | Client: pannello destro — foto + carosello recensioni (rotazione 6s, pausa hover, dots). |
 | `app/[locale]/(signin)/marketing-links.ts` | URL di ritorno al sito marketing (`NEXT_PUBLIC_MARKETING_URL`, default `https://reglo.it`). |
+| `app/[locale]/(signin)/reset-password/*` | Recupero password — vedi [password-reset.md](password-reset.md). |
 | `public/images/auth/login-hero.jpg` | Foto del team, presa da `reglo-landing/public/uploads/` e ricompressa (2,3 MB → 361 KB). |
 | `public/images/auth/review-{paolo,francesca,martina}.png` | Avatar delle 3 recensioni. |
 
-## Perché il route group `(signin)` e non `(auth)`
+## Un solo route group: `(signin)`
 
 Il design ha un layout **a tutta pagina** (logo dentro la colonna sinistra,
-pannello immagine a destra), incompatibile con `app/[locale]/(auth)/layout.tsx`
-— che impagina logo + contenuto centrato a 400px ed è **condiviso con
-`/sign-up`**.
+pannello immagine a destra), incompatibile con il vecchio
+`app/[locale]/(auth)/layout.tsx` — che impaginava logo + contenuto centrato a
+400px. Il login è quindi nato in un route group suo.
 
-La pagina è quindi stata spostata in un route group suo. I route group non
-compaiono nell'URL: **`/it/sign-in` non è cambiato**. `/sign-up` continua a
-usare `(auth)/layout.tsx` con `BrandCarousel`, invariato.
+Con **REG-487** (2026-09-19) ci sono entrate anche `/sign-up` e
+`/reset-password`: il gruppo `(auth)`, il suo layout e il `BrandCarousel` sono
+stati **cancellati**. I route group non compaiono nell'URL: nessuno dei tre
+indirizzi è cambiato.
 
-> Se un domani anche `/sign-up` va allineato al marketing, il posto giusto è
-> spostarlo in `(signin)` e cancellare `(auth)`, non duplicare il layout.
+Oggi le tre pagine pubbliche di accesso condividono `auth-shell.tsx` e
+`auth-form-ui.tsx`: chi ne tocca uno le cambia tutte e tre. È voluto — devono
+sembrare la stessa pagina, perché per chi arriva dal sito marketing lo sono.
 
 ## Vincolo non ovvio: aria-label dell'occhio password
 

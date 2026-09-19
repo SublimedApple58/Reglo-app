@@ -17,8 +17,8 @@ export const metadata: Metadata = {
  * form, colonna destra con la foto del team e il carosello recensioni.
  *
  * Il guscio a due colonne sta in `../auth-shell`, condiviso con il recupero
- * password. La pagina vive fuori dal gruppo (auth) perché quel layout — logo
- * in cima, contenuto centrato a 400px — è quello di /sign-up.
+ * password e con la registrazione: le tre pagine pubbliche di accesso sono
+ * una pagina sola con dentro form diversi.
  */
 
 const SignInPage = async (props: {

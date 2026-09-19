@@ -310,7 +310,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 
 ### Login web (`/[locale]/sign-in`)
 - → **Auth & RBAC**: `signInWithCredentials` + `auth()`; il redesign 2026-09-17 ha cambiato SOLO la presentazione — sessione, `activeCompanyId` e redirect a `/select-company` invariati.
-- → **Sign-up**: la pagina è uscita da `(auth)` ed è in `(signin)` (URL invariato), così `/sign-up` tiene il suo `(auth)/layout.tsx` + `BrandCarousel`. Chi modifica `(auth)/layout.tsx` NON tocca più il login.
+- → **Sign-up** (REG-487, 2026-09-19): `/sign-up` è entrata in `(signin)` e usa lo stesso `auth-shell.tsx` + `auth-form-ui.tsx` del login. Il route group `(auth)`, il suo layout e `BrandCarousel` (più i keyframes `brand-ring-spin` in `globals.css`) sono stati CANCELLATI. URL invariati. Chi tocca il guscio o i pezzi di form cambia login, sign-up e reset-password insieme.
 - → **Middleware**: `/reset-password` è in `publicRoutes` (`lib/constants/index.ts`). Senza quella riga la pagina rimanda al login, cioè esattamente a chi non riesce a entrare.
 - → **E2E (`tests/e2e/login-stato-client.spec.ts`)**: il test guida questo form. L'aria-label dell'occhio password non deve contenere "password", altrimenti `getByLabel("Password")` matcha 2 elementi (strict mode violation).
 - → **Sito marketing (`reglo-landing`)**: dipendenza bidirezionale. Il sito punta a `https://app.reglo.it/sign-in` (`src/site/routes.ts`, `/accedi` redirige); la pagina rimanda a `reglo.it` e `reglo.it/assistenza` via `marketing-links.ts` (`NEXT_PUBLIC_MARKETING_URL`). Testi recensioni e foto sono DUPLICATI dal sito, non importati: vanno riallineati a mano.
