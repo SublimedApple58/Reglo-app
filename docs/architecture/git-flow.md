@@ -65,7 +65,9 @@ Un merge `staging` → `main` va bene solo quando quel `git log` mostra esclusiv
 commit (caso raro: verificalo, non darlo per scontato).
 
 - **Web + backend** (`reglo`): merge `feature` → `main` → push → Vercel auto-deploya.
-- **DB**: `pnpm migrate:prod` se ci sono migrazioni.
+- **DB**: `pnpm migrate:prod` se ci sono migrazioni. Se si pianta con **P1002**
+  c'è un advisory lock orfano lasciato da una migrazione precedente: causa e
+  bonifica in [environments.md](environments.md) → "`DATABASE_URL` vs `DIRECT_URL`".
 - **Background jobs**: `pnpm trigger:deploy:prod` se sono cambiati i job Trigger.dev.
 - **Mobile** (`reglo-mobile`): merge `feature` → `master`, poi OTA: `eas update --platform ios --branch production` **poi** `--platform android` (MAI `--auto`, MAI `--platform all`). Native build solo se sono cambiati moduli nativi.
 

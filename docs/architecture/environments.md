@@ -33,6 +33,49 @@ integration is a **no-op**, so QA on a copied DB never reaches real users:
 merge into **`main`** (prod). DB migrations: `pnpm migrate:staging` before/at the
 staging deploy; `pnpm migrate:prod` at the prod release.
 
+## `DATABASE_URL` vs `DIRECT_URL` — il pooler non tocca le migrazioni
+
+Regola, in ogni ambiente: **`DATABASE_URL` = endpoint POOLED** (`ep-xxx-pooler.…`,
+l'app apre tante connessioni corte), **`DIRECT_URL` = endpoint DIRETTO**
+(`ep-xxx.…`, senza `-pooler`). È il motivo per cui il datasource Prisma ha
+`directUrl` accanto a `url`.
+
+**Cosa succede se `DIRECT_URL` passa dal pooler** (capitato su `.env.prod`, il
+19/09/2026): `prisma migrate` prende un **advisory lock di sessione**
+(`pg_advisory_lock(72707369)`) per impedire due migrazioni insieme. Il pooler
+Neon è pgbouncer in *transaction pooling*, dove lo stato di sessione appartiene
+alla connessione **server**, non al client: finita la transazione quella
+connessione torna nel pool **col lock ancora in mano**, e l'`unlock` di Prisma
+finisce su un'altra connessione senza liberare niente. Il lock resta appeso a un
+backend che intanto serve traffico dell'app, e la migrazione successiva — di
+chiunque, anche da un altro branch o da un altro dev — si pianta con **P1002**.
+
+Sintomo da cercare quando una migrazione non parte:
+
+```bash
+pnpm db:prod:query "SELECT l.pid, l.objid, a.state, a.application_name
+  FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid
+  WHERE l.locktype = 'advisory'"
+```
+
+Una riga con `objid = 72707369` e `application_name = pgbouncer` è il lock
+orfano. **Non terminare il backend alla cieca**: è una connessione viva del
+pool, spesso a metà del lavoro. Termina solo quella che tiene il lock **ed è
+`idle`**, così nessun client la sta usando in quel momento:
+
+```bash
+pnpm db:prod:query "SELECT a.pid, pg_terminate_backend(a.pid)
+  FROM pg_stat_activity a
+  JOIN pg_locks l ON l.pid = a.pid AND l.locktype='advisory' AND l.objid=72707369
+  WHERE a.state = 'idle' AND a.application_name = 'pgbouncer'"
+```
+
+**Prevenzione**: `scripts/check-direct-url.mjs` gira davanti a ogni
+`pnpm migrate:dev|staging|prod` e blocca la migrazione se `DIRECT_URL` manca,
+contiene `-pooler` o è identica a `DATABASE_URL`. Serve perché la dashboard Neon
+propone l'URL **pooled** come connection string di default: chi rigenera le
+credenziali se lo ritrova in entrambe le variabili senza accorgersene.
+
 ## `.env.staging` — required keys (local file, never committed; `.env*` is gitignored)
 
 Mirror `.env.prod`, then OVERRIDE these for isolation/safety:
