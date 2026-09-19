@@ -53,6 +53,33 @@ export function isBookingBlockActive(
   return until.getTime() > now.getTime();
 }
 
+/**
+ * Chi ha fatto partire la prenotazione.
+ *  - `student`    → l'allievo si prenota da solo dall'app (self-service)
+ *  - `instructor` → l'istruttore prenota PER l'allievo (app istruttore o agenda web)
+ *  - `staff`      → titolare / admin dal gestionale
+ */
+export type BookingInitiator = "student" | "instructor" | "staff";
+
+/**
+ * Il blocco prenotazioni ferma **solo** l'auto-prenotazione dell'allievo
+ * (REG-499).
+ *
+ * "Blocca prenotazioni" è una leva che il titolare usa VERSO l'allievo (rate
+ * non pagate, sospensione): gli toglie il self-service, non toglie
+ * all'autoscuola la possibilità di metterlo in agenda. Anzi, il caso normale è
+ * esattamente quello — l'allievo bloccato telefona e la segreteria o
+ * l'istruttore gli fissano la guida a mano.
+ *
+ * Fino al 19/09/2026 l'istruttore veniva fermato come l'allievo, e con lo stesso
+ * messaggio ("le TUE prenotazioni sono sospese") scritto per l'allievo. Il
+ * titolare invece non è mai stato bloccato: questa funzione allinea l'istruttore
+ * al titolare.
+ */
+export function bookingBlockStops(initiator: BookingInitiator): boolean {
+  return initiator === "student";
+}
+
 /** True quando la riga porta un blocco a tempo ormai scaduto (da ripulire). */
 export function isBookingBlockExpired(
   state: BookingBlockState,

@@ -1,6 +1,10 @@
+import fs from "fs";
+import path from "path";
+
 import {
   blockUntilDateToInstant,
   blockUntilInstantToDateLabel,
+  bookingBlockStops,
   isBookingBlockActive,
   isBookingBlockExpired,
 } from "@/lib/autoscuole/booking-block";
@@ -121,5 +125,58 @@ describe("isBookingBlockActive / isBookingBlockExpired", () => {
     const state = { bookingBlocked: true, bookingBlockUntil: "non-una-data" };
     expect(isBookingBlockActive(state, now)).toBe(true);
     expect(isBookingBlockExpired(state, now)).toBe(false);
+  });
+});
+
+/**
+ * Chi ferma il blocco (REG-499). È una regola di prodotto, non tecnica: il
+ * titolare blocca l'allievo per togliergli il self-service, non per impedire
+ * all'autoscuola di metterlo in agenda. Fino al 19/09/2026 l'istruttore veniva
+ * fermato come l'allievo.
+ */
+describe("bookingBlockStops", () => {
+  it("ferma l'allievo che si prenota da solo", () => {
+    expect(bookingBlockStops("student")).toBe(true);
+  });
+
+  it("NON ferma l'istruttore che prenota per l'allievo", () => {
+    expect(bookingBlockStops("instructor")).toBe(false);
+  });
+
+  it("NON ferma titolare/segreteria", () => {
+    expect(bookingBlockStops("staff")).toBe(false);
+  });
+});
+
+/**
+ * Guardia sulle due porte d'ingresso staff della prenotazione: una svista qui
+ * rimette l'istruttore dentro il blocco senza che nessun test puro se ne accorga
+ * (la regola è giusta, è il punto di enforcement che sbaglia a usarla).
+ */
+describe("enforcement del blocco nelle action di prenotazione", () => {
+  const source = fs.readFileSync(
+    path.join(process.cwd(), "lib/actions/autoscuole.actions.ts"),
+    "utf8",
+  );
+
+  /** Corpo di una `export async function` fino alla export successiva. */
+  const bodyOf = (name: string): string => {
+    const start = source.indexOf(`export async function ${name}(`);
+    expect(start).toBeGreaterThan(-1);
+    const next = source.indexOf("\nexport ", start + 1);
+    return source.slice(start, next === -1 ? source.length : next);
+  };
+
+  it("createAutoscuolaAppointment rifiuta solo passando da bookingBlockStops", () => {
+    const body = bodyOf("createAutoscuolaAppointment");
+    expect(body).toContain("getStudentBookingBlockStatus(");
+    expect(body).toContain("bookingBlockStops(bookingInitiator)");
+    // Il rifiuto non deve più dipendere dal ruolo letto a mano.
+    expect(body).not.toMatch(/studentBlocked[\s\S]{0,80}isInstructorActor/);
+  });
+
+  it("createAutoscuolaAppointmentBatch (solo staff) non guarda affatto il blocco", () => {
+    const body = bodyOf("createAutoscuolaAppointmentBatch");
+    expect(body).not.toContain("getStudentBookingBlockStatus(");
   });
 });

@@ -118,6 +118,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Students directory**: `getAutoscuolaStudentsWithProgress` e `getAutoscuolaStudentDrivingRegister` espongono `bookingBlockUntil` e fanno il sweep delle scadenze on-read.
 - → **Componenti condivisi**: `components/ui/checkbox.tsx` ora rende lo stato `indeterminate` con un trattino, `components/ui/date-picker.tsx` accetta `minDate` — entrambi retro-compatibili (opzionali), ma sono componenti usati ovunque.
 - **Volutamente NON connesso a Mobile**: nessun tipo/endpoint nuovo, il mobile subisce solo l'effetto del blocco esistente (che già conosce via `getBookingOptions.bookingBlocked`).
+- → **Chi ferma il blocco (REG-499, 19/09/2026)**: solo l'allievo che si prenota **da sé**. `createAutoscuolaAppointment` e `createAutoscuolaAppointmentBatch` fermavano anche l'**istruttore** che prenota PER l'allievo (rispettivamente da aprile e giugno 2026 — non colpa di REG-442, che ha solo reso il blocco facile da incontrare); ora l'istruttore è trattato come il titolare: prenota, e riceve il warning "l'allievo ha le prenotazioni bloccate". Predicato unico `bookingBlockStops(initiator)` in `lib/autoscuole/booking-block.ts` + guardia sulle due action in `tests/unit/autoscuole/booking-block.test.ts`. Restano fermi (correttamente) i path self-service: swap accept/offer, self-enrol gruppi, ricerca disponibilità da app.
 
 ### Auto-block prenotazioni per debito allievo (web-only)
 - **Scrive sullo STESSO campo** `CompanyMember.bookingBlocked` del blocco manuale (unificazione). Distinzione origine via `bookingBlockReason` ("manual" | "unpaid_threshold" | null) + watermark `unpaidBlockClearedAtCount` per l'anti-conflitto sullo sblocco manuale. State machine pura in `lib/autoscuole/unpaid-auto-block.ts`.
@@ -269,6 +270,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 
 ### Student Phase + Quiz Seats
 - → **Booking Engine**: `ensureStudentCanBookFromApp` rifiuta se phase = AWAITING o TEORIA (messaggi distinti). Anche `getAllAvailableSlots` e `getDateAvailabilityMap` ereditano il blocco.
+- → **Picker allievo dell'istruttore (mobile, REG-499)**: il selettore "Seleziona allievo" della prenotazione istruttore mostra solo la fase **PRATICA** (prima: tutti, patentati e teoria compresi). Il filtro è lato app (`IstruttoreHomeScreen.bookingStudentOptions`), perché la fase arriva già nel bootstrap agenda; `studentPhase` assente ⇒ trattato come PRATICA (default dello schema), così le autoscuole che le fasi non le usano non si ritrovano la lista vuota. Il backend **non** impone la fase allo staff: dall'agenda web il titolare può ancora prenotare per chiunque.
 - → **Quiz Teoria**: la fase TEORIA + `hasQuizAccess` controllano visibilità tab mobile. Seat = licenza nominale a vita (`CompanyMember.quizSeatGrantedAt`).
 - → **Cases & Deadlines**: riusa `AutoscuolaCase.theoryExamAt` per countdown (no duplicazione campi).
 - → **Communications / Background Jobs**: `processAutoscuolaTheoryReminders` esegue countdown T-7/T-3/T-1 e nudge inattività 5gg per TEORIA.

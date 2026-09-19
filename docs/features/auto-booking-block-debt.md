@@ -78,6 +78,9 @@ Scritture rare: `reconcileUnpaidAutoBlock` persiste solo quando lo stato cambia.
   i blocchi manuali restano.
 - Lo stesso campo `bookingBlocked` è già letto dagli altri enforcement (swap
   accept/offer, availability) → il blocco automatico li rispetta senza codice extra.
+- Vale anche qui la regola su **chi** viene fermato: solo l'allievo che si
+  prenota da sé. Istruttore e segreteria prenotano lo stesso (con warning) —
+  vedi `bulk-booking-block.md`, sezione "A chi si applica il blocco".
 
 ## Migration
 

@@ -37,6 +37,29 @@ a mano è una decisione sul singolo allievo ("per me può prenotare"), una scade
 no. Finito il blocco a tempo, l'automatismo per debito torna ad avere l'ultima
 parola.
 
+## A chi si applica il blocco (REG-499)
+
+Il blocco toglie all'allievo **l'auto-prenotazione da app**. Non toglie
+all'autoscuola la possibilità di mettere quell'allievo in agenda:
+
+| Chi prenota | Blocco attivo |
+|---|---|
+| Allievo, da app (self-service) | **fermato** — "Le tue prenotazioni sono temporaneamente sospese." |
+| Istruttore, per l'allievo (app istruttore o agenda web) | passa, con warning "l'allievo ha le prenotazioni bloccate" |
+| Titolare / segreteria / admin | passa, stesso warning |
+
+È il caso normale: bloccato l'allievo, è proprio la segreteria (o l'istruttore)
+che gli fissa la guida a mano quando telefona. Fino al **19/09/2026**
+l'istruttore veniva fermato come l'allievo, e con lo stesso messaggio scritto per
+l'allievo ("le **tue** prenotazioni") — un bug vecchio (aprile 2026, prenotazione
+singola; giugno 2026, batch), non introdotto da REG-442: il blocco in bulk lo ha
+solo reso facile da incontrare.
+
+La regola vive in `bookingBlockStops(initiator)` (`lib/autoscuole/booking-block.ts`).
+Chi aggiunge un punto di enforcement passa da lì e non rilegge il ruolo a mano.
+Restano giustamente fermi, perché sono self-service dell'allievo: accettare uno
+scambio, iscriversi a una guida di gruppo, e la ricerca disponibilità da app.
+
 ### Come si spegne un blocco scaduto
 
 Due meccanismi, volutamente ridondanti:
@@ -66,7 +89,7 @@ Due meccanismi, volutamente ridondanti:
 | `components/pages/Autoscuole/AutoscuoleStudentsPage.tsx` | Checkbox di riga, testata "seleziona tutti", barra azione flottante, dialog di conferma |
 | `components/ui/checkbox.tsx` | Stato `indeterminate` → trattino invece della spunta |
 | `components/ui/date-picker.tsx` | `minDate` opzionale su `DatePickerInput`/`CalendarGrid` |
-| `tests/unit/autoscuole/booking-block.test.ts` | 14 test sui predicati puri + conversione data↔istante (ora legale e solare) |
+| `tests/unit/autoscuole/booking-block.test.ts` | 19 test: predicati puri, conversione data↔istante (ora legale e solare), `bookingBlockStops` + guardia sulle due action di prenotazione staff |
 | `tests/e2e/bulk-booking-block.auth.spec.ts` | e2e titolare: selezione → blocco con data → pill → sblocco |
 
 ## UI
@@ -102,5 +125,5 @@ Schema modificato → `pnpm migrate:dev` (dev, già applicata), `pnpm
 migrate:staging`, `pnpm migrate:prod` (solo con OK esplicito). Colonna nullable,
 retro-compatibile, nessun backfill: i blocchi esistenti restano indefiniti.
 
-Nuovo job Trigger.dev → serve `pnpm trigger:deploy:*` sull'ambiente in cui si
-rilascia.
+Nuovo job Trigger.dev → `pnpm trigger:deploy:prod`, che è l'unico script (i job
+non hanno staging) e va lanciato **dopo** `migrate:prod` — vedi REG-498.

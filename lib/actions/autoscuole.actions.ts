@@ -98,7 +98,9 @@ import {
 } from "@/lib/autoscuole/unpaid-auto-block";
 import {
   blockUntilDateToInstant,
+  bookingBlockStops,
   isBookingBlockExpired,
+  type BookingInitiator,
 } from "@/lib/autoscuole/booking-block";
 import { releaseExpiredManualBlocks } from "@/lib/autoscuole/booking-block-expiry";
 import {
@@ -2999,17 +3001,22 @@ export async function createAutoscuolaAppointment(
       }
     }
 
-    // Booking block enforcement
+    // Blocco prenotazioni: ferma solo l'auto-prenotazione dell'allievo — la
+    // regola sta in `bookingBlockStops` (REG-499), che spiega anche perché
+    // l'istruttore non va fermato. Lo stato serve comunque a tutti: per chi non
+    // viene fermato diventa il warning qui sotto.
+    const bookingInitiator: BookingInitiator = isStudentActor
+      ? "student"
+      : isInstructorActor
+        ? "instructor"
+        : "staff";
     const studentBlocked = await getStudentBookingBlockStatus(companyId, payload.studentId);
-    if (studentBlocked) {
-      if (isStudentActor || isInstructorActor) {
-        return {
-          success: false,
-          message:
-            "Le tue prenotazioni sono temporaneamente sospese. Contatta la segreteria.",
-        };
-      }
-      // Owner/Admin: soft warning — don't block, just flag
+    if (studentBlocked && bookingBlockStops(bookingInitiator)) {
+      return {
+        success: false,
+        message:
+          "Le tue prenotazioni sono temporaneamente sospese. Contatta la segreteria.",
+      };
     }
 
     // Weekly booking limit enforcement — cluster settings override company defaults
@@ -3219,7 +3226,10 @@ export async function createAutoscuolaAppointment(
       };
     }
     const warnings: string[] = [];
-    if (studentBlocked && isOwnerOrAdminActor) {
+    // Qui ci arriva solo chi il blocco non ferma (l'allievo bloccato è già
+    // tornato indietro sopra): istruttore compreso, dal REG-499 — prenota, ma
+    // che almeno sappia che quell'allievo è bloccato.
+    if (studentBlocked) {
       warnings.push("Attenzione: l'allievo ha le prenotazioni bloccate.");
     }
     if (
@@ -3615,14 +3625,9 @@ export async function createAutoscuolaAppointmentBatch(
       }
     }
 
-    // Booking block enforcement
-    const studentBlocked = await getStudentBookingBlockStatus(companyId, payload.studentId);
-    if (studentBlocked && isInstructorActor) {
-      return {
-        success: false,
-        message: "Le tue prenotazioni sono temporaneamente sospese. Contatta la segreteria.",
-      };
-    }
+    // Nessun controllo sul blocco prenotazioni: qui ci arrivano solo istruttore
+    // e titolare/admin (guard sopra), e `bookingBlockStops` ferma solo
+    // l'allievo che si prenota da sé (REG-499).
 
     // Lesson type validation
     if (lessonPolicy.lessonPolicyEnabled && !requestedType && !requestedTypes.length) {
