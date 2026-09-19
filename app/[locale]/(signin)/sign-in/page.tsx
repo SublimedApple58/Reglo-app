@@ -1,11 +1,10 @@
 import { auth } from '@/auth';
 import { Metadata } from 'next';
-import Image from 'next/image';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import CredentialsSignInForm from './credentials-signin-form';
-import ReviewPanel from './review-panel';
-import { MARKETING_HOME_URL } from './marketing-links';
+import Shell from '../auth-shell';
+import { MARKETING_HOME_URL } from '../marketing-links';
 import { prisma } from '@/db/prisma';
 import { signOutUser } from '@/lib/actions/user.actions';
 
@@ -17,50 +16,10 @@ export const metadata: Metadata = {
  * Login (redesign allineato al sito marketing): colonna sinistra con logo e
  * form, colonna destra con la foto del team e il carosello recensioni.
  *
- * La pagina vive fuori dal gruppo (auth) perché ha un layout suo, a tutta
- * pagina: il layout condiviso di (auth) resta quello di /sign-up.
+ * Il guscio a due colonne sta in `../auth-shell`, condiviso con il recupero
+ * password. La pagina vive fuori dal gruppo (auth) perché quel layout — logo
+ * in cima, contenuto centrato a 400px — è quello di /sign-up.
  */
-
-const SHELL_CLASS = 'flex min-h-svh w-full bg-white';
-const LEFT_COLUMN_CLASS =
-  'flex min-w-0 flex-1 flex-col bg-white px-6 py-7 sm:px-10 lg:px-10';
-
-const Shell = ({
-  locale,
-  children,
-  withPanel = true,
-}: {
-  locale: string;
-  children: React.ReactNode;
-  withPanel?: boolean;
-}) => (
-  <div className={SHELL_CLASS}>
-    <div className={LEFT_COLUMN_CLASS}>
-      <Link href={`/${locale}`} className="inline-flex self-start">
-        <Image
-          src="/images/nav/logo-reglo-tight.png"
-          alt="Reglo"
-          width={28}
-          height={28}
-          className="h-7 w-auto select-none object-contain"
-          priority
-        />
-      </Link>
-
-      <div className="flex flex-1 items-center justify-center">
-        <div className="flex w-full max-w-[460px] flex-col items-start text-left">
-          {children}
-        </div>
-      </div>
-    </div>
-
-    {withPanel && (
-      <div className="hidden min-w-0 flex-[1.05] bg-white p-[14px] pl-0 lg:flex">
-        <ReviewPanel />
-      </div>
-    )}
-  </div>
-);
 
 const SignInPage = async (props: {
   searchParams: Promise<{

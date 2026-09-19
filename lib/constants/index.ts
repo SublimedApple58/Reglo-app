@@ -57,6 +57,8 @@ export const EMAIL_PROFILE_PICTURE = process.env.EMAIL_PROFILE_PICTURE;
 export const publicRoutes = [
   '/sign-in',
   '/sign-up',
+  // Recupero password (REG-485): per definizione ci arriva chi NON è loggato.
+  '/reset-password',
   '/unauthorized',
   '/not-found',
   // Reglo Aula: pagina pubblica del quiz live (join studente da QR, no auth).
