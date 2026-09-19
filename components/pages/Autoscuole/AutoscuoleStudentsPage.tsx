@@ -90,6 +90,7 @@ import { useUserPhotoUrl, invalidateUserPhoto } from "@/components/ui/user-photo
 import { ChangeStudentPhaseDialog } from "@/components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog";
 import { EditStudentLicenseDialog } from "@/components/pages/Autoscuole/dialogs/EditStudentLicenseDialog";
 import { InviteCodeDialog } from "@/components/pages/Autoscuole/dialogs/InviteCodeDialog";
+import { ToolbarFilters } from "@/components/pages/Autoscuole/filters/ToolbarFilters";
 import {
   LICENSE_CATEGORIES,
   LICENSE_CATEGORY_LABELS,
@@ -129,6 +130,43 @@ type StudentProfile = {
   status: string;
   createdAt: string | Date;
 };
+
+/** Filtri della lista allievi (REG-469), ricordati come quelli dell'agenda. */
+const STUDENT_FILTERS_KEY = "reglo-students-filters";
+
+const NO_VALUE = "__none__";
+
+type PersistedStudentFilters = {
+  license: string[];
+  transmission: string[];
+  location: string[];
+  instructor: string[];
+};
+
+const EMPTY_STUDENT_FILTERS: PersistedStudentFilters = {
+  license: [],
+  transmission: [],
+  location: [],
+  instructor: [],
+};
+
+function readStudentFilters(): PersistedStudentFilters {
+  if (typeof window === "undefined") return EMPTY_STUDENT_FILTERS;
+  try {
+    const raw = window.localStorage.getItem(STUDENT_FILTERS_KEY);
+    if (!raw) return EMPTY_STUDENT_FILTERS;
+    const parsed = JSON.parse(raw) as Partial<PersistedStudentFilters>;
+    const list = (v: unknown) => (Array.isArray(v) ? (v as string[]) : []);
+    return {
+      license: list(parsed.license),
+      transmission: list(parsed.transmission),
+      location: list(parsed.location),
+      instructor: list(parsed.instructor),
+    };
+  } catch {
+    return EMPTY_STUDENT_FILTERS;
+  }
+}
 
 type Student = StudentProfile & {
   bookingBlocked?: boolean;
@@ -696,6 +734,39 @@ export function AutoscuoleStudentsPage({
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [searchOpen, setSearchOpen] = React.useState(false);
+
+  // Filtri multi-selezione (REG-469): array vuoto = filtro spento. Stesso
+  // controllo dell'agenda (`ToolbarFilters`), stessa persistenza.
+  const [licenseFilter, setLicenseFilter] = React.useState<string[]>([]);
+  const [transmissionFilter, setTransmissionFilter] = React.useState<string[]>([]);
+  const [locationFilter, setLocationFilter] = React.useState<string[]>([]);
+  const [studentInstructorFilter, setStudentInstructorFilter] = React.useState<string[]>([]);
+
+  // I filtri salvati si leggono dopo il mount: sul server localStorage non
+  // esiste, e leggerlo nello stato iniziale farebbe divergere l'HTML.
+  React.useEffect(() => {
+    const saved = readStudentFilters();
+    setLicenseFilter(saved.license);
+    setTransmissionFilter(saved.transmission);
+    setLocationFilter(saved.location);
+    setStudentInstructorFilter(saved.instructor);
+  }, []);
+
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        STUDENT_FILTERS_KEY,
+        JSON.stringify({
+          license: licenseFilter,
+          transmission: transmissionFilter,
+          location: locationFilter,
+          instructor: studentInstructorFilter,
+        }),
+      );
+    } catch {
+      /* localStorage non disponibile: ignora */
+    }
+  }, [licenseFilter, transmissionFilter, locationFilter, studentInstructorFilter]);
   // Ordinamento lista allievi: "recent" (ordine server, default) o "name" (A-Z
   // dentro ogni fase). Client-side: la lista è già tutta in memoria.
   const [sortMode, setSortMode] = React.useState<"recent" | "name">("recent");
@@ -889,6 +960,177 @@ export function AutoscuoleStudentsPage({
     }
   };
 
+  /**
+   * Opzioni dei filtri (REG-469).
+   *
+   * Patente e cambio si ricavano dagli allievi **non filtrati**: mostrano solo
+   * quello che l'autoscuola ha davvero, e non si svuotano man mano che si
+   * filtra. Luogo e istruttore vengono dalle rispettive anagrafiche, più la
+   * voce "senza", che è una domanda che il titolare fa spesso ("chi non ha
+   * ancora un istruttore?").
+   */
+  const filterGroups = React.useMemo(() => {
+    const licenses = Array.from(
+      new Set(students.map((s) => s.licenseCategory).filter(Boolean) as string[]),
+    ).sort((a, b) => a.localeCompare(b, "it"));
+
+    const transmissions = TRANSMISSIONS.filter((t) =>
+      students.some((s) => s.transmission === t),
+    );
+
+    const instructorEntries = Array.from(instructorMap.entries()).sort((a, b) =>
+      a[1].localeCompare(b[1], "it", { sensitivity: "base" }),
+    );
+
+    return [
+      {
+        kind: "license",
+        label: "Patente",
+        title: "Filtra per patente",
+        options: licenses.map((value) => ({
+          value,
+          label: LICENSE_CATEGORY_LABELS[value as (typeof LICENSE_CATEGORIES)[number]] ?? value,
+        })),
+        value: licenseFilter,
+      },
+      {
+        kind: "transmission",
+        label: "Cambio",
+        title: "Filtra per tipo di cambio",
+        options: transmissions.map((value) => ({
+          value,
+          label: TRANSMISSION_LABELS[value],
+        })),
+        value: transmissionFilter,
+      },
+      ...(locations.length > 0
+        ? [
+            {
+              kind: "location",
+              label: "Luogo",
+              title: "Filtra per luogo",
+              options: [
+                ...locations.map((l) => ({ value: l.id, label: l.name })),
+                { value: NO_VALUE, label: "Senza luogo" },
+              ],
+              value: locationFilter,
+            },
+          ]
+        : []),
+      ...(instructorEntries.length > 0
+        ? [
+            {
+              kind: "instructor",
+              label: "Istruttore",
+              title: "Filtra per istruttore",
+              options: [
+                ...instructorEntries.map(([id, name]) => ({ value: id, label: name })),
+                { value: NO_VALUE, label: "Senza istruttore" },
+              ],
+              value: studentInstructorFilter,
+            },
+          ]
+        : []),
+    ];
+  }, [
+    students,
+    instructorMap,
+    locations,
+    licenseFilter,
+    transmissionFilter,
+    locationFilter,
+    studentInstructorFilter,
+  ]);
+
+  // Toglie dai filtri salvati gli id che non esistono più (luogo archiviato,
+  // istruttore rimosso, cambio autoscuola): un filtro fantasma svuoterebbe la
+  // lista senza che si capisca perché.
+  React.useEffect(() => {
+    if (locations.length > 0) {
+      setLocationFilter((prev) => {
+        const valid = prev.filter(
+          (id) => id === NO_VALUE || locations.some((l) => l.id === id),
+        );
+        return valid.length === prev.length ? prev : valid;
+      });
+    }
+    if (instructorMap.size > 0) {
+      setStudentInstructorFilter((prev) => {
+        const valid = prev.filter((id) => id === NO_VALUE || instructorMap.has(id));
+        return valid.length === prev.length ? prev : valid;
+      });
+    }
+  }, [locations, instructorMap]);
+
+  const applyStudentFilter = React.useCallback((kind: string, value: string[]) => {
+    if (kind === "license") setLicenseFilter(value);
+    else if (kind === "transmission") setTransmissionFilter(value);
+    else if (kind === "location") setLocationFilter(value);
+    else if (kind === "instructor") setStudentInstructorFilter(value);
+  }, []);
+
+  const filtersActive =
+    licenseFilter.length > 0 ||
+    transmissionFilter.length > 0 ||
+    locationFilter.length > 0 ||
+    studentInstructorFilter.length > 0;
+
+  /** "Non c'è nessuno" vs "l'hai nascosto tu": sono due cose diverse. */
+  const emptyListSubtitle = React.useCallback(
+    (whenEmpty: string) => {
+      if (debouncedSearch) return "Nessun allievo trovato";
+      if (filtersActive) return "Nessun allievo con questi filtri";
+      return whenEmpty;
+    },
+    [debouncedSearch, filtersActive],
+  );
+
+  const clearStudentFilters = React.useCallback(() => {
+    setLicenseFilter([]);
+    setTransmissionFilter([]);
+    setLocationFilter([]);
+    setStudentInstructorFilter([]);
+  }, []);
+
+  /**
+   * Allievi che passano i filtri. Sta **prima** del raggruppamento per fase,
+   * così contatori dei tab, paginazione e selezione multipla vedono tutti la
+   * stessa lista senza doverlo sapere.
+   */
+  const filteredStudents = React.useMemo(() => {
+    const hasFilters =
+      licenseFilter.length > 0 ||
+      transmissionFilter.length > 0 ||
+      locationFilter.length > 0 ||
+      studentInstructorFilter.length > 0;
+    if (!hasFilters) return students;
+
+    return students.filter((student) => {
+      if (licenseFilter.length > 0 && !licenseFilter.includes(student.licenseCategory ?? "")) {
+        return false;
+      }
+      if (
+        transmissionFilter.length > 0 &&
+        !transmissionFilter.includes(student.transmission ?? "")
+      ) {
+        return false;
+      }
+      if (
+        locationFilter.length > 0 &&
+        !locationFilter.includes(student.defaultLocationId ?? NO_VALUE)
+      ) {
+        return false;
+      }
+      if (
+        studentInstructorFilter.length > 0 &&
+        !studentInstructorFilter.includes(student.assignedInstructorId ?? NO_VALUE)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [students, licenseFilter, transmissionFilter, locationFilter, studentInstructorFilter]);
+
   // Group students by phase
   const studentsByPhase = React.useMemo(() => {
     const groups = {
@@ -897,7 +1139,7 @@ export function AutoscuoleStudentsPage({
       pratica: [] as Student[],
       patentato: [] as Student[],
     };
-    for (const s of students) {
+    for (const s of filteredStudents) {
       const phase = s.studentPhase ?? "PRATICA";
       if (phase === "AWAITING") groups.awaiting.push(s);
       else if (phase === "TEORIA") groups.teoria.push(s);
@@ -914,7 +1156,7 @@ export function AutoscuoleStudentsPage({
       groups.patentato.sort(byName);
     }
     return groups;
-  }, [students, sortMode]);
+  }, [filteredStudents, sortMode]);
 
   /**
    * Lista su cui agisce la selezione multipla: quella effettivamente a schermo,
@@ -1810,7 +2052,7 @@ export function AutoscuoleStudentsPage({
   const renderAttesaRows = () => {
     const list = studentsByPhase.awaiting;
     if (list.length === 0) {
-      return <EmptyList subtitle={debouncedSearch ? "Nessun allievo trovato" : "Nessun allievo in attesa di attivazione"} />;
+      return <EmptyList subtitle={emptyListSubtitle("Nessun allievo in attesa di attivazione")} />;
     }
     const visible = pageSlice(list, pages.attesa);
     const noSeatsLeft = quizCtx !== null && quizCtx.available <= 0;
@@ -1850,7 +2092,7 @@ export function AutoscuoleStudentsPage({
   const renderTeoriaRows = () => {
     const list = selectableList;
     if (list.length === 0) {
-      return <EmptyList subtitle={debouncedSearch ? "Nessun allievo trovato" : "Nessun allievo in fase teoria"} />;
+      return <EmptyList subtitle={emptyListSubtitle("Nessun allievo in fase teoria")} />;
     }
     const visible = pageSlice(list, pages.teoria);
     return (
@@ -1901,7 +2143,7 @@ export function AutoscuoleStudentsPage({
   const renderPraticaRows = () => {
     const allPratica = studentsByPhase.pratica;
     if (allPratica.length === 0) {
-      return <EmptyList subtitle={debouncedSearch ? "Nessun allievo trovato" : "Nessun allievo in fase pratica"} />;
+      return <EmptyList subtitle={emptyListSubtitle("Nessun allievo in fase pratica")} />;
     }
     const readyCount = allPratica.filter((s) => s.examReady).length;
     const list = selectableList;
@@ -3131,7 +3373,11 @@ export function AutoscuoleStudentsPage({
           <PageHeader
             title="Allievi"
             subtitle={[
-              `${students.length} allievi`,
+              // Con i filtri attivi il totale da solo mentirebbe: la lista ne
+              // mostra meno e il numero in testata direbbe un'altra cosa.
+              filtersActive
+                ? `${filteredStudents.length} di ${students.length} allievi`
+                : `${students.length} allievi`,
               phaseTab === "pratica" && praticaSubTab === "cancellazioni"
                 ? "Cancellazioni tardive da gestire"
                 : PHASE_SUBTITLES[phaseTab],
@@ -3257,6 +3503,11 @@ export function AutoscuoleStudentsPage({
                 >
                   <UserRoundPlus className="size-[21px]" strokeWidth={1.8} />
                 </button>
+                <ToolbarFilters
+                  groups={filterGroups}
+                  onApply={applyStudentFilter}
+                  onClearAll={clearStudentFilters}
+                />
                 <ExpandingSearch
                   open={searchOpen}
                   onOpenChange={setSearchOpen}

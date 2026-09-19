@@ -318,6 +318,13 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Communications**: invia il codice OTP via `sendDynamicEmail` (Resend) dentro `after()`.
 - → **Mobile**: `PasswordResetScreen` consuma le 3 route; auto-login via `SessionContext.applyAuthPayload`.
 
+### Filtri lista Allievi (REG-469)
+
+- → **Agenda**: il controllo "Filtri" è lo STESSO componente (`components/pages/Autoscuole/filters/ToolbarFilters.tsx`), estratto dall'agenda quando è servito anche in Allievi. Chi lo modifica cambia entrambe le pagine: è voluto, il ticket chiedeva lo stesso identico design.
+- → **Blocco prenotazioni in bulk (REG-442)**: la selezione multipla parte da `selectableList`, che discende da `studentsByPhase` → `filteredStudents`. Con un filtro attivo "Seleziona tutti" seleziona i filtrati, non tutti gli allievi.
+- → **Locations / REG-392**: il filtro Luogo legge `CompanyMember.defaultLocationId`; un luogo archiviato viene tolto dai filtri salvati al mount.
+- → **Student phase**: filtri e tab di fase si sommano, non si escludono.
+
 ### Login web (`/[locale]/sign-in`)
 - → **Auth & RBAC**: `signInWithCredentials` + `auth()`; il redesign 2026-09-17 ha cambiato SOLO la presentazione — sessione, `activeCompanyId` e redirect a `/select-company` invariati.
 - → **Sign-up** (REG-487, 2026-09-19): `/sign-up` è entrata in `(signin)` e usa lo stesso `auth-shell.tsx` + `auth-form-ui.tsx` del login. Il route group `(auth)`, il suo layout e `BrandCarousel` (più i keyframes `brand-ring-spin` in `globals.css`) sono stati CANCELLATI. URL invariati. Chi tocca il guscio o i pezzi di form cambia login, sign-up e reset-password insieme.

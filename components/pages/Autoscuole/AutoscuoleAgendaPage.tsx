@@ -97,6 +97,7 @@ import {
 } from "@/lib/autoscuole/agenda-color-criterion";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { ExpandingSearch } from "@/components/ui/expanding-search";
+import { ToolbarFilters } from "./filters/ToolbarFilters";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import {
   OutOfAvailabilitySheet,
@@ -476,14 +477,13 @@ const INSTRUCTOR_COLORS = [
 
 type FilterKind = "instructor" | "vehicle" | "type" | "status";
 
-type FilterEditorState = {
-  kind: FilterKind;
-  value: string[];
-};
-type FilterOption = {
-  value: string;
-  label: string;
-};
+const AGENDA_STATUS_OPTIONS = [
+  { value: "scheduled", label: "In programma" },
+  { value: "checked_in", label: "Presente" },
+  { value: "completed", label: "Completata" },
+  { value: "no_show", label: "Assente" },
+];
+
 
 /**
  * Filtro "Autoscuola" (solo modalità consorzio) da mettere SOPRA ogni picker
@@ -757,7 +757,6 @@ export function AutoscuoleAgendaPage({
   const [refreshing, setRefreshing] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [searchOpen, setSearchOpen] = React.useState(false);
-  const [filtersMenuOpen, setFiltersMenuOpen] = React.useState(false);
   const [plusMenuOpen, setPlusMenuOpen] = React.useState(false);
   // Filtri multi-selezione (redesign 2026-07): array vuoto = nessun filtro.
   // Applicati client-side sul bootstrap già caricato — cambiare filtro non
@@ -795,7 +794,6 @@ export function AutoscuoleAgendaPage({
       });
     }
   }, [loading, instructors, vehicles]);
-  const [filterEditor, setFilterEditor] = React.useState<FilterEditorState | null>(null);
   const [viewMode, setViewMode] = React.useState<"week" | "day">("week");
   // Anteprima di stampa dell'agenda (foglio PDF della vista corrente).
   const [printOpen, setPrintOpen] = React.useState(false);
@@ -2728,8 +2726,15 @@ export function AutoscuoleAgendaPage({
 
     const totalCount = columns.reduce((sum, c) => sum + c.blocks.length, 0);
 
+    // Etichette leggibili per il riepilogo filtri della stampa.
+    const labelLookup: Record<FilterKind, Map<string, string>> = {
+      instructor: new Map(instructors.map((i) => [i.id, i.name])),
+      vehicle: new Map(vehicles.map((v) => [v.id, v.name])),
+      type: new Map(LESSON_TYPE_OPTIONS.map((o) => [o.value, o.label])),
+      status: new Map(AGENDA_STATUS_OPTIONS.map((o) => [o.value, o.label])),
+    };
     const optionLabels = (kind: FilterKind, ids: string[]) =>
-      ids.map((id) => getFilterOptions(kind, instructors, vehicles).find((o) => o.value === id)?.label ?? id);
+      ids.map((id) => labelLookup[kind].get(id) ?? id);
     const filtersSummary: string[] = [];
     if (instructorFilter.length > 0) filtersSummary.push(`Istruttore: ${optionLabels("instructor", instructorFilter).join(", ")}`);
     if (vehiclesEnabled && vehicleFilter.length > 0) filtersSummary.push(`Veicolo: ${optionLabels("vehicle", vehicleFilter).join(", ")}`);
@@ -3037,59 +3042,52 @@ export function AutoscuoleAgendaPage({
           </button>
 
           {/* Filtri (menu unico, proto) */}
-          {(() => {
-            const hasActiveFilters =
-              instructorFilter.length > 0 || vehicleFilter.length > 0 || typeFilter.length > 0 || statusFilter.length > 0;
-            const menuEntries: Array<{ kind: FilterKind; label: string; active: boolean; value: string[] }> = [
-              { kind: "instructor", label: "Istruttore", active: instructorFilter.length > 0, value: instructorFilter },
+          <ToolbarFilters
+            groups={[
+              {
+                kind: "instructor",
+                label: "Istruttore",
+                title: "Filtra per istruttore",
+                options: instructors.map((item) => ({ value: item.id, label: item.name })),
+                value: instructorFilter,
+              },
               ...(vehiclesEnabled
-                ? [{ kind: "vehicle" as FilterKind, label: "Veicolo", active: vehicleFilter.length > 0, value: vehicleFilter }]
+                ? [
+                    {
+                      kind: "vehicle",
+                      label: "Veicolo",
+                      title: "Filtra per veicolo",
+                      options: vehicles.map((item) => ({ value: item.id, label: item.name })),
+                      value: vehicleFilter,
+                    },
+                  ]
                 : []),
-              { kind: "type", label: "Tipo", active: typeFilter.length > 0, value: typeFilter },
-              { kind: "status", label: "Stato", active: statusFilter.length > 0, value: statusFilter },
-            ];
-            return (
-              <DropdownMenu open={filtersMenuOpen} onOpenChange={setFiltersMenuOpen}>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className="relative flex h-[34px] shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 transition-colors hover:bg-[#f0f0f0]"
-                  >
-                    <SlidersHorizontal className="size-4 text-[#888888]" strokeWidth={1.6} />
-                    <span className="text-[13px] font-medium text-[#555555]">Filtri</span>
-                    {hasActiveFilters && (
-                      <span className="absolute right-1 top-1 size-[7px] rounded-full bg-[#111111]" />
-                    )}
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[190px] rounded-xl p-1.5 shadow-dropdown">
-                  {menuEntries.map((entry) => (
-                    <button
-                      key={entry.kind}
-                      type="button"
-                      className="flex w-full cursor-pointer items-center rounded-lg px-3 py-[9px] text-[13px] font-medium text-foreground transition-colors hover:bg-[#f7f7f7]"
-                      onClick={() => { setFiltersMenuOpen(false); setFilterEditor({ kind: entry.kind, value: entry.value }); }}
-                    >
-                      {entry.label}
-                      {entry.active && <span className="ml-auto size-[7px] rounded-full bg-[#111111]" />}
-                    </button>
-                  ))}
-                  {hasActiveFilters && (
-                    <>
-                      <div className="my-1 border-t border-[#f0f0f0]" />
-                      <button
-                        type="button"
-                        className="flex w-full cursor-pointer items-center rounded-lg px-3 py-[9px] text-[13px] font-medium text-[#111111] transition-colors hover:bg-[#f0f0f0]"
-                        onClick={() => { setFiltersMenuOpen(false); setInstructorFilter([]); setVehicleFilter([]); setTypeFilter([]); setStatusFilter([]); }}
-                      >
-                        Rimuovi filtri
-                      </button>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            );
-          })()}
+              {
+                kind: "type",
+                label: "Tipo",
+                title: "Filtra per tipo",
+                options: LESSON_TYPE_OPTIONS.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                })),
+                value: typeFilter,
+              },
+              {
+                kind: "status",
+                label: "Stato",
+                title: "Filtra per stato",
+                options: AGENDA_STATUS_OPTIONS,
+                value: statusFilter,
+              },
+            ]}
+            onApply={(kind, value) => applyFilter(kind as FilterKind, value)}
+            onClearAll={() => {
+              setInstructorFilter([]);
+              setVehicleFilter([]);
+              setTypeFilter([]);
+              setStatusFilter([]);
+            }}
+          />
 
           {/* Cerca (espandibile, proto) */}
           <ExpandingSearch
@@ -4517,87 +4515,6 @@ export function AutoscuoleAgendaPage({
         )}
         </FadeIn>)}
       </div>
-
-      <Dialog
-        open={Boolean(filterEditor)}
-        onOpenChange={(open) => {
-          if (!open) setFilterEditor(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-xs">
-          <DialogHeader>
-            <DialogTitle>
-              {getFilterTitle(filterEditor?.kind ?? "status")}
-            </DialogTitle>
-          </DialogHeader>
-          {filterEditor ? (
-            <div className="space-y-4">
-              <div className="-mx-1 max-h-72 space-y-0.5 overflow-y-auto px-1">
-                {getFilterOptions(filterEditor.kind, instructors, vehicles).map((item) => {
-                  const checked = filterEditor.value.includes(item.value);
-                  return (
-                    <button
-                      key={item.value}
-                      type="button"
-                      onClick={() =>
-                        setFilterEditor((current) =>
-                          current
-                            ? {
-                                ...current,
-                                value: checked
-                                  ? current.value.filter((v) => v !== item.value)
-                                  : [...current.value, item.value],
-                              }
-                            : current,
-                        )
-                      }
-                      className="flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-foreground transition-colors hover:bg-[#f7f7f7]"
-                    >
-                      <span
-                        className={cn(
-                          "flex size-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-colors",
-                          checked ? "border-navy-900 bg-navy-900" : "border-[#c1c1c1] bg-white",
-                        )}
-                      >
-                        {checked ? (
-                          <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
-                            <path d="M3 7.4l2.6 2.6L11 4.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        ) : null}
-                      </span>
-                      <span className="truncate">{item.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <DialogFooter className="items-center gap-2">
-                <button
-                  type="button"
-                  className="mr-auto cursor-pointer text-sm font-semibold text-foreground underline underline-offset-2 hover:opacity-70"
-                  onClick={() =>
-                    setFilterEditor((current) => (current ? { ...current, value: [] } : current))
-                  }
-                >
-                  Azzera
-                </button>
-                <Button type="button" variant="outline" onClick={() => setFilterEditor(null)}>
-                  Chiudi
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    applyFilter(filterEditor.kind, filterEditor.value);
-                    setFilterEditor(null);
-                  }}
-                >
-                  Applica
-                </Button>
-              </DialogFooter>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
-
 
       <CreateEventPopover
         open={createOpen}
@@ -6358,38 +6275,6 @@ function getStatusMeta(
     return { label: "Annullata", shortLabel: "Annullata", className: "bg-[#F3F4F8] text-[#8A90A6] opacity-70 line-through" };
   }
   return { label: "Programmata", shortLabel: "Programmata", className: durationClass };
-}
-
-function getFilterTitle(kind: FilterKind) {
-  if (kind === "instructor") return "Filtra per istruttore";
-  if (kind === "vehicle") return "Filtra per veicolo";
-  if (kind === "type") return "Filtra per tipo";
-  return "Filtra per stato";
-}
-
-function getFilterOptions(
-  kind: FilterKind,
-  instructors: ResourceOption[],
-  vehicles: ResourceOption[],
-): FilterOption[] {
-  if (kind === "instructor") {
-    return instructors.map((item) => ({ value: item.id, label: item.name }));
-  }
-  if (kind === "vehicle") {
-    return vehicles.map((item) => ({ value: item.id, label: item.name }));
-  }
-  if (kind === "type") {
-    return LESSON_TYPE_OPTIONS.map((option) => ({
-      value: option.value,
-      label: option.label,
-    }));
-  }
-  return [
-    { value: "scheduled", label: "In programma" },
-    { value: "checked_in", label: "Presente" },
-    { value: "completed", label: "Completata" },
-    { value: "no_show", label: "Assente" },
-  ];
 }
 
 /** Rende trascinabile il pannello dettaglio EVENTO dentro i menu Radix. */
