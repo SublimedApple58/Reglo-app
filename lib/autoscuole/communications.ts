@@ -190,9 +190,15 @@ const resolveRecipients = async ({
 
   if (channel !== "email") return [];
 
+  // `select`, non `include`: con `include` Prisma chiede TUTTE le colonne
+  // scalari di CompanyMember, quindi questa query muore con 42703 ogni volta
+  // che lo schema ha una colonna che il DB di quell'ambiente non ha ancora —
+  // cioè nella finestra fra un deploy e la sua migrazione. Gira dal cron dei
+  // promemoria, ogni minuto: qui un errore non lo vede nessuno finché non
+  // saltano i messaggi. Qui serve solo l'email. (REG-498)
   const admins = await prisma.companyMember.findMany({
     where: { companyId, role: "admin" },
-    include: { user: { select: { email: true } } },
+    select: { user: { select: { email: true } } },
   });
   return admins.map((entry) => entry.user.email).filter(Boolean);
 };

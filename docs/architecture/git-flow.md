@@ -69,6 +69,11 @@ commit (caso raro: verificalo, non darlo per scontato).
   c'è un advisory lock orfano lasciato da una migrazione precedente: causa e
   bonifica in [environments.md](environments.md) → "`DATABASE_URL` vs `DIRECT_URL`".
 - **Background jobs**: `pnpm trigger:deploy:prod` se sono cambiati i job Trigger.dev.
+  È l'**unico** script di deploy e va **sempre in produzione**: il progetto
+  Trigger.dev è uno solo, quindi i job non hanno uno staging. `trigger:deploy:dev`
+  e `trigger:deploy:staging` sono stati rimossi perché deployavano nello stesso
+  posto mentendo sul nome (REG-498). Falla **dopo** `migrate:prod`, non prima:
+  un job che cerca una colonna non ancora migrata si pianta a ogni giro.
 - **Mobile** (`reglo-mobile`): merge `feature` → `master`, poi OTA: `eas update --platform ios --branch production` **poi** `--platform android` (MAI `--auto`, MAI `--platform all`). Native build solo se sono cambiati moduli nativi.
 
 ## Ambiente staging in breve

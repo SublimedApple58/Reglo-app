@@ -18,8 +18,8 @@
 | `pnpm studio:prod` | Prisma Studio (prod DB — read with care) |
 | `pnpm db:dev:query "<SQL>"` | Read-only SQL query against dev DB |
 | `pnpm db:prod:query "<SQL>"` | Read-only SQL query against prod DB |
-| `pnpm trigger:deploy:dev` | Deploy Trigger.dev workflows (dev) |
-| `pnpm trigger:deploy:prod` | Deploy Trigger.dev workflows (prod) |
+| `pnpm trigger:dev` | Trigger.dev worker locale (ambiente `dev`, non deploya niente) |
+| `pnpm trigger:deploy:prod` | Deploy dei job Trigger.dev — **va sempre in PRODUZIONE**, non esiste un equivalente staging (vedi sotto) |
 
 After schema changes: `npx prisma generate`
 
@@ -32,6 +32,15 @@ Flusso pre-rilascio (regola d'oro: `staging` è condiviso → **non shippare a f
 2. `pnpm ship:staging` (merge feature→staging + push, Vercel rideploya) → `pnpm migrate:staging` se ci sono migrazioni nuove.
 3. QA su `staging.reglo.it`.
 4. Rilascio prod (solo con OK utente): merge → `main`, `pnpm migrate:prod`, `pnpm trigger:deploy:prod` se cambiano i job; mobile via OTA.
+
+> ⚠️ **I job Trigger.dev non hanno uno staging.** Il progetto Trigger.dev è uno
+> solo e `trigger:deploy:prod` è l'unico script rimasto: `trigger:deploy:dev` e
+> `trigger:deploy:staging` esistevano ma deployavano nello stesso posto — cioè
+> in produzione — e il 19/09/2026 hanno mandato in prod dei job che si
+> aspettavano una colonna presente solo su dev e staging (REG-498). Sono stati
+> rimossi. Quindi: **il passo 2 non deploya nessun job**, e i job nuovi o
+> modificati arrivano in produzione solo al passo 4, insieme alla migrazione che
+> gli serve.
 
 Dettagli: [docs/architecture/git-flow.md](docs/architecture/git-flow.md) · staging operativo (account test, comandi, accesso): [docs/STAGING.md](docs/STAGING.md). Nuova integrazione "che invia" → guardala con `externalSendsDisabled()`.
 
