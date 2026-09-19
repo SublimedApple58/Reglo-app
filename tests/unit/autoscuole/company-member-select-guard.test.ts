@@ -14,21 +14,48 @@ import path from "path";
  * messaggi smettono di partire e nessuno se ne accorge. È successo il
  * 19/09/2026 con `resolveRecipients` in `communications.ts`.
  *
- * Il test guarda i moduli raggiungibili dai task in `trigger/`. **Se ne aggiungi
- * uno che legge CompanyMember, mettilo in questa lista.**
+ * La lista dei file non si scrive a mano: si ricava dagli import dei task in
+ * `trigger/`. Una lista manuale invecchia in silenzio — è successo entro l'ora,
+ * con il job nuovo di REG-442.
  */
 
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 
-const JOB_REACHABLE = [
-  "trigger/autoscuole-reminders.ts",
-  "trigger/autoscuole-empty-slot-notifications.ts",
-  "trigger/autoscuole-national-holidays.ts",
-  "lib/autoscuole/communications.ts",
-  "lib/autoscuole/theory-reminders.ts",
-  "lib/autoscuole/exam-ready-nudge.ts",
-  "lib/autoscuole/national-holidays-sync.ts",
-];
+const TRIGGER_DIR = path.join(REPO_ROOT, "trigger");
+
+/** I task Trigger.dev, cioè i punti d'ingresso dei cron. */
+const triggerFiles = fs
+  .readdirSync(TRIGGER_DIR)
+  .filter((f) => f.endsWith(".ts"))
+  .map((f) => path.join("trigger", f));
+
+/**
+ * I moduli `@/...` importati dai task, risolti a file reali. Un livello solo:
+ * basta a coprire dove vivono davvero le query dei job, e non trascina mezza
+ * codebase dentro il test.
+ */
+const importedByJobs = (): string[] => {
+  const found = new Set<string>();
+
+  for (const rel of triggerFiles) {
+    const source = fs.readFileSync(path.join(REPO_ROOT, rel), "utf8");
+    const imports = /from\s+"@\/([^"]+)"/g;
+
+    for (let m = imports.exec(source); m; m = imports.exec(source)) {
+      for (const candidate of [`${m[1]}.ts`, path.join(m[1], "index.ts")]) {
+        if (fs.existsSync(path.join(REPO_ROOT, candidate))) {
+          found.add(candidate);
+          break;
+        }
+      }
+    }
+  }
+
+  return [...found].sort();
+};
+
+// `trigger/prisma.ts` è sia un file di trigger/ sia un import: dedupe.
+const JOB_REACHABLE = [...new Set([...triggerFiles, ...importedByJobs()])];
 
 /** Estrae il corpo `{...}` che segue una posizione, bilanciando le graffe. */
 const objectArgAt = (source: string, openBraceIndex: number): string => {
@@ -46,11 +73,7 @@ const objectArgAt = (source: string, openBraceIndex: number): string => {
 type Finding = { file: string; line: number; snippet: string };
 
 const readsWithoutSelect = (relPath: string): Finding[] => {
-  const full = path.join(REPO_ROOT, relPath);
-  if (!fs.existsSync(full)) {
-    throw new Error(`${relPath} non esiste più: aggiorna JOB_REACHABLE.`);
-  }
-  const source = fs.readFileSync(full, "utf8");
+  const source = fs.readFileSync(path.join(REPO_ROOT, relPath), "utf8");
   const findings: Finding[] = [];
 
   // `prisma.companyMember.findMany({`, `.findFirst({`, `.findUnique({`,
@@ -87,6 +110,19 @@ const readsWithoutSelect = (relPath: string): Finding[] => {
 };
 
 describe("letture di CompanyMember dai job (REG-498)", () => {
+  it("copre i moduli dove i job leggono davvero CompanyMember", () => {
+    // Se un refactor sposta le query altrove e la derivazione dagli import
+    // smette di trovarle, questo si accorge del buco.
+    expect(JOB_REACHABLE).toEqual(
+      expect.arrayContaining([
+        "lib/autoscuole/communications.ts",
+        "lib/autoscuole/theory-reminders.ts",
+        "lib/autoscuole/exam-ready-nudge.ts",
+      ]),
+    );
+    expect(JOB_REACHABLE.length).toBeGreaterThanOrEqual(6);
+  });
+
   it("il guard riconosce una lettura senza select", () => {
     // Sanità del test stesso: senza questo, un regex rotto lo farebbe passare
     // sempre e la guardia non guarderebbe niente.

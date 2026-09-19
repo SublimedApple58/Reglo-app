@@ -54,6 +54,12 @@ raggiungibili dai task in `trigger/` e fallisce su ogni
 `companyMember.findMany/findFirst/findUnique` senza `select` al primo livello,
 riportando `file:riga`.
 
+**La lista dei file si ricava dagli import di `trigger/`, non si scrive a mano.**
+La prima versione aveva una lista fissa con un commento "se aggiungi un job,
+mettilo qui": è invecchiata entro l'ora, perché nel frattempo REG-442 è entrato
+in `main` con un job nuovo (`autoscuole-booking-block-expiry.ts`) che la lista
+non conteneva. Una guardia che va ricordata non è una guardia.
+
 Il test verifica **anche sé stesso**: scrive una fixture con una lettura
 sbagliata e pretende di trovarla, così un regex rotto non lo fa passare a vuoto.
 Provato rimettendo l'`include` vero in `communications.ts` → fallisce indicando
@@ -65,6 +71,7 @@ costa 0,1s e dice esattamente dove guardare.
 
 ## Test
 
-- Suite unitaria: **400 verdi** (29 suite), 8 nuovi.
-- `tsc --noEmit` e lint puliti.
+- Suite unitaria: **419 verdi** (30 suite), di cui 13 di questa guardia.
+- `tsc --noEmit` e lint puliti (dopo `npx prisma generate`: il merge di REG-442
+  ha aggiunto `CompanyMember.bookingBlockUntil` e il client locale era vecchio).
 - `package.json` riletto come JSON dopo la modifica.
