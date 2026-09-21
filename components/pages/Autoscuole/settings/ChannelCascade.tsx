@@ -162,12 +162,21 @@ export function ChannelCascade({
                 </div>
               </div>
 
-              <InlineToggle
-                checked={on}
-                size="lg"
-                disabled={disabled || row.locked || !available}
-                onChange={() => toggle(row.key)}
-              />
+              {row.locked ? (
+                // Acceso e non modificabile. NON si passa `disabled`: quello
+                // sbiadisce al 40% e si rilegge come spento, che è l'opposto.
+                // Si toglie solo l'interazione.
+                <span className="pointer-events-none" aria-disabled>
+                  <InlineToggle checked size="lg" />
+                </span>
+              ) : (
+                <InlineToggle
+                  checked={on}
+                  size="lg"
+                  disabled={disabled || !available}
+                  onChange={() => toggle(row.key)}
+                />
+              )}
             </div>
           </div>
         );
