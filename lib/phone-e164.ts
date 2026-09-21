@@ -80,3 +80,23 @@ export function isWhatsAppCapable(e164: string): boolean {
   if (e164.startsWith("+390")) return false;
   return true;
 }
+
+/**
+ * Forma in cui salvare un numero in anagrafica.
+ *
+ * Converte in E.164 quando è possibile; quando il numero è ambiguo **restituisce
+ * quello che l'utente ha scritto**, ripulito degli spazi, invece di rifiutarlo o
+ * di inventare un prefisso. Due ragioni: non si perde un dato che la segreteria
+ * ha inserito apposta, e non si blocca l'inserimento di un numero estero o
+ * strano che magari è giusto.
+ *
+ * L'effetto è progressivo: da qui in avanti i numeri nuovi nascono già in E.164,
+ * e il backfill si occupa di quelli vecchi.
+ */
+export function toStoredPhone(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const normalized = normalizeToE164(trimmed);
+  return normalized.ok ? normalized.e164 : trimmed;
+}

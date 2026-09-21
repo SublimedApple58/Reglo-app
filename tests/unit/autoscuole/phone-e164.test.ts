@@ -1,4 +1,4 @@
-import { isWhatsAppCapable, normalizeToE164 } from "@/lib/phone-e164";
+import { isWhatsAppCapable, normalizeToE164, toStoredPhone } from "@/lib/phone-e164";
 
 /**
  * La regola che conta è la prudenza: davanti a un numero ambiguo si rinuncia.
@@ -103,5 +103,24 @@ describe("isWhatsAppCapable", () => {
   it("scarta quello che non è E.164", () => {
     expect(isWhatsAppCapable("3331234567")).toBe(false);
     expect(isWhatsAppCapable("+39")).toBe(false);
+  });
+});
+
+describe("toStoredPhone", () => {
+  it("salva in E.164 quello che sa convertire", () => {
+    expect(toStoredPhone("333 1234567")).toBe("+393331234567");
+    expect(toStoredPhone("+39 333 1234567")).toBe("+393331234567");
+  });
+
+  it("tiene quello che l'utente ha scritto quando è ambiguo, invece di buttarlo", () => {
+    expect(toStoredPhone("chiedere in segreteria")).toBe("chiedere in segreteria");
+    expect(toStoredPhone("333/1234567 o 3387654321")).toBe("333/1234567 o 3387654321");
+  });
+
+  it("il vuoto diventa null, non stringa vuota", () => {
+    expect(toStoredPhone("")).toBeNull();
+    expect(toStoredPhone("   ")).toBeNull();
+    expect(toStoredPhone(null)).toBeNull();
+    expect(toStoredPhone(undefined)).toBeNull();
   });
 });
