@@ -736,15 +736,16 @@ function SettingsTab({
               />
             </div>
 
-            <details className="group mt-3 rounded-[12px] border border-[#e8e8e8] bg-white">
-              <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-[13px] font-semibold text-[#555555] transition-colors duration-200 hover:text-[#222222]">
+            <details className="group border-b border-[#ebebeb]">
+              <summary className="flex cursor-pointer list-none items-center justify-between py-[18px] text-[15px] font-semibold text-[#222222]">
                 Personalizza per tipo di messaggio
                 <ChevronDown
-                  className="size-[16px] text-[#b4b4b4] transition-transform duration-200 group-open:rotate-180"
+                  className="size-[17px] text-[#b4b4b4] transition-transform duration-200 group-open:rotate-180"
+                  strokeWidth={2}
                   aria-hidden
                 />
               </summary>
-              <div className="grid gap-3 border-t border-[#f0f0f0] p-4 sm:grid-cols-2">
+              <div className="grid gap-3 pb-[18px] sm:grid-cols-2">
                 <ChannelCard
                   title="Promemoria istruttore"
                   value={instructorReminderChannels}
