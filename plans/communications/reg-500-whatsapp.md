@@ -323,15 +323,39 @@ decide iterando anteprime), non in questo documento.
   parsing di stati e messaggi in arrivo, riconoscimento della revoca in italiano.
   19 test.
 
+Fatto in questa fase (staging, commit `f774313`):
+- **Ogni** tentativo di invio scrive su `AutoscuolaMessageLog`, anche i promemoria
+  (prima lo faceva solo il percorso a regole) → i fallimenti smettono di essere
+  invisibili. `lib/autoscuole/delivery-log.ts` + i 12 blocchi muti di
+  `lib/autoscuole/communications.ts` convertiti.
+- Normalizzazione in **E.164 alla scrittura** (`toStoredPhone`) sui 4 punti reali di
+  scrittura: web (`user.actions.ts` ×2), registrazione allievo mobile, profilo mobile.
+  L'import CSV è disattivato, quindi non serve toccarlo ora.
+  *Serve comunque, per qualunque provider, e serve anche alla voce.*
+
+Dry-run del backfill sui numeri di produzione (sola lettura, 2026-09-21):
+
+| | |
+|---|---|
+| Numeri in anagrafica | 1052 |
+| Già in E.164, non si toccano | 68 |
+| Verrebbero convertiti | 981 |
+| Resterebbero come sono (ambigui) | 3 |
+
 Resta da fare in questa fase:
 - WhatsApp selezionabile **solo** se configurato e sano; stato visibile in UI.
-- **Ogni** tentativo di invio scrive su `AutoscuolaMessageLog`, anche i promemoria
-  (oggi lo fa solo il percorso a regole) → i fallimenti smettono di essere invisibili.
-- Normalizzazione dei numeri in **E.164** alla scrittura (web + mobile + import) e
-  **backfill** dei 795 numeri senza prefisso, con report dei casi ambigui.
-  *Serve comunque, per qualunque provider, e serve anche alla voce.*
-- **Blocco/domanda aperta:** il backfill scrive su dati di produzione. Va fatto con
-  una dry-run da rivedere prima di applicare.
+- **Domanda aperta:** applicare il backfill ai 981 convertibili — è una scrittura su
+  dati di produzione, in attesa dell'ok esplicito di Tiziano.
+
+**Decisioni prese (Tiziano, 2026-09-21):**
+- I **3 numeri ambigui** (cifre sbagliate in anagrafica: 2 di Autoscuola Robatto,
+  1 di Autoscuola Montreal) → **si lasciano come sono**, non si contattano le
+  autoscuole. Il normalizzatore li lascia intatti apposta, quindi non fanno danno:
+  semplicemente quegli allievi non saranno raggiungibili su WhatsApp.
+- I **7 duplicati di anagrafica** (stesso numero su due utenti diversi, scoperti
+  durante il dry-run) → **nessuna azione**. Nessun impatto sull'invio: il messaggio
+  parte comunque, arriva due volte allo stesso telefono nei rari casi in cui
+  entrambe le anagrafiche siano attive.
 
 ### Fase 1 — Mittente vero (bloccata sulle decisioni di Tiziano)
 - Scelta provider (raccomandato: **Meta Cloud API diretta**; 360dialog se si vuole
