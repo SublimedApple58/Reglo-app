@@ -89,12 +89,6 @@ export function ChannelCascade({
   const isAvailable = (key: CascadeChannel) =>
     key !== "whatsapp" || whatsapp.state === "ready";
 
-  // I numeri contano i tentativi VERI, non le righe: un canale spento o non
-  // ancora disponibile non occupa un posto.
-  const activeOrder = ROWS.map((row) => row.key).filter(
-    (key) => value.includes(key) && isAvailable(key),
-  );
-
   const toggle = (key: CascadeChannel) => {
     const next = value.includes(key)
       ? value.filter((item) => item !== key)
@@ -118,7 +112,6 @@ export function ChannelCascade({
         const Icon = row.icon;
         const available = isAvailable(row.key);
         const on = value.includes(row.key) && available;
-        const position = on ? activeOrder.indexOf(row.key) + 1 : null;
         const counts = reach?.[row.key];
 
         return (
@@ -132,17 +125,6 @@ export function ChannelCascade({
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-[15px] font-semibold text-[#222222]">
-                  {/* Larghezza fissa: accendere o spegnere una riga non deve
-                      far saltare l'allineamento di quelle sotto. */}
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "w-[14px] shrink-0 text-right text-[13px] font-semibold tabular-nums",
-                      position ? "text-[#222222]" : "text-[#d4d4d4]",
-                    )}
-                  >
-                    {position ?? "–"}
-                  </span>
                   <Icon
                     className={cn("size-[17px] shrink-0", !on && "text-[#b4b4b4]")}
                     strokeWidth={2}
@@ -155,7 +137,7 @@ export function ChannelCascade({
                     </Chip>
                   )}
                 </div>
-                <div className="mt-0.5 pl-[22px] text-sm font-medium text-[#929292]">
+                <div className="mt-0.5 text-sm font-medium text-[#929292]">
                   {counts
                     ? `Arriva a ${counts.reachable.toLocaleString("it-IT")} dei tuoi ${counts.total.toLocaleString("it-IT")} allievi`
                     : row.fallbackHint}
