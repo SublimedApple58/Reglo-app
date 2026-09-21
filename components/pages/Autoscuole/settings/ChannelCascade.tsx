@@ -103,10 +103,20 @@ export function ChannelCascade({
     onChange(ROWS.map((row) => row.key).filter((key) => next.includes(key)));
   };
 
-  // Si numerano solo i canali accesi, così il numero dice davvero "sei il
-  // secondo tentativo", non "sei la seconda riga".
-  const rank = (key: CascadeChannel) =>
-    value.indexOf(key) >= 0 ? value.indexOf(key) + 1 : null;
+  const isAvailable = (key: CascadeChannel) =>
+    key !== "whatsapp" || whatsapp.state === "ready";
+
+  // I numeri contano i tentativi VERI, non le righe: un canale spento o non
+  // collegato non occupa un posto. Con WhatsApp non attivo, l'email è il
+  // secondo tentativo — numerarla "3" farebbe credere che ce ne sia uno in
+  // mezzo che non c'è.
+  const activeOrder = ROWS.map((row) => row.key).filter(
+    (key) => value.includes(key) && isAvailable(key),
+  );
+  const rank = (key: CascadeChannel) => {
+    const index = activeOrder.indexOf(key);
+    return index >= 0 ? index + 1 : null;
+  };
 
   return (
     <div>
@@ -124,7 +134,7 @@ export function ChannelCascade({
       <ol className="overflow-hidden rounded-[12px] border border-[#e8e8e8] bg-white">
         {ROWS.map((row, index) => {
           const Icon = row.icon;
-          const available = row.key !== "whatsapp" || whatsapp.state === "ready";
+          const available = isAvailable(row.key);
           const on = isOn(row.key) && available;
           const position = on ? rank(row.key) : null;
           const counts = reach?.[row.key];
@@ -201,7 +211,10 @@ export function ChannelCascade({
                   className={cn(
                     "relative h-[26px] w-[44px] shrink-0 rounded-full transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#111111]",
                     on ? "bg-[#111111]" : "bg-[#e2e2e2]",
-                    interactive ? "cursor-pointer" : "cursor-default opacity-55",
+                    interactive && "cursor-pointer",
+                    // Bloccato = acceso e non modificabile: resta pieno.
+                    // Sbiadito solo quello che è davvero indisponibile.
+                    !interactive && (row.locked ? "cursor-default" : "cursor-default opacity-55"),
                   )}
                 >
                   <span
