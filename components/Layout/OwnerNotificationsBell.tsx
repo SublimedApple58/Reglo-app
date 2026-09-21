@@ -308,6 +308,32 @@ export function OwnerNotificationsBell() {
                     </div>
                   );
                 }
+                // Risposta su WhatsApp (REG-500). Ramo esplicito: senza, il
+                // fallback qui sotto la mostrerebbe come "ha annullato una guida".
+                if (n.kind === "whatsapp_reply") {
+                  const text = typeof n.meta?.text === "string" ? n.meta.text : "";
+                  return (
+                    <div key={n.id} className="relative flex items-center gap-3.5 px-5 py-3">
+                      <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-[#f0f0f0] text-[13px] font-semibold text-[#484848]">
+                        {initialsOf(n.studentName)}
+                      </span>
+                      <div className="min-w-0 flex-1 pr-4">
+                        <p className="text-[14.5px] leading-[1.4] text-foreground">
+                          <span className="font-semibold">
+                            {n.studentName ?? "Un allievo"}
+                          </span>{" "}
+                          ha risposto su WhatsApp
+                        </p>
+                        <p className="mt-0.5 truncate text-[13px] font-medium text-[#717171]">
+                          {text ? `“${text}”` : relativeTime(n.createdAt)}
+                        </p>
+                      </div>
+                      {!n.read && (
+                        <span className="h-[9px] w-[9px] shrink-0 rounded-full bg-[#c13515]" />
+                      )}
+                    </div>
+                  );
+                }
                 return (
                   <div key={n.id} className="relative flex items-center gap-3.5 px-5 py-3">
                     <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-[#f0f0f0] text-[13px] font-semibold text-[#484848]">

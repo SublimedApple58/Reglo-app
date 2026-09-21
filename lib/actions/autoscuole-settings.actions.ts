@@ -6,6 +6,7 @@ import { prisma } from "@/db/prisma";
 import { notifyStudentPhaseChange } from "@/lib/autoscuole/student-phase-notifications";
 import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
 import { formatError } from "@/lib/utils";
+import { getChannelReach } from "@/lib/autoscuole/channel-reach";
 import { requireServiceAccess } from "@/lib/service-access";
 import { isAutoscuolaStripeConnectReady } from "@/lib/autoscuole/stripe-connect";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
@@ -1058,6 +1059,31 @@ export async function getAutoscuolaSettings() {
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
+  }
+}
+
+/**
+ * Raggiungibilità per canale + se WhatsApp è collegato davvero (REG-500).
+ *
+ * Azione **separata** da `getAutoscuolaSettings` di proposito: quella gira su
+ * quasi ogni schermata ed è in cache Redis, questa scorre gli allievi della
+ * company. Ficcarla lì dentro avrebbe messo una scansione sul percorso caldo
+ * per un dato che serve a una riga di un pannello. Si chiama solo quando il
+ * pannello dei promemoria è aperto.
+ */
+export async function getChannelReachAction() {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const [reach, { isWhatsAppChannelAvailable }] = await Promise.all([
+      getChannelReach(membership.companyId),
+      import("@/lib/autoscuole/whatsapp-sender"),
+    ]);
+    return {
+      success: true as const,
+      data: { reach, whatsappAvailable: isWhatsAppChannelAvailable() },
+    };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
   }
 }
 

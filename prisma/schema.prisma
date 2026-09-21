@@ -60,6 +60,11 @@ model User {
   address                              Json?                                  @db.Json
   paymentMethod                        String?
   phone                                String?
+  /// Quando l'utente ha chiesto di non ricevere più messaggi su WhatsApp
+  /// (ha risposto STOP, o equivalente in italiano, al numero di Reglo).
+  /// Null = può riceverli. Onorarla non e' cortesia: ignorare una revoca fa
+  /// scendere la quality rating di Meta e alla lunga fa bloccare il mittente.
+  whatsappOptOutAt                     DateTime?                              @db.Timestamp(6)
   createdAt                            DateTime                               @default(now()) @db.Timestamp(6)
   updatedAt                            DateTime                               @updatedAt
   account                              Account[]

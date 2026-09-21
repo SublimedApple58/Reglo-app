@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 
+import { prisma } from "@/db/prisma";
+import {
+  findUserByPhone,
+  recordWhatsAppOptOut,
+} from "@/lib/autoscuole/whatsapp-consent";
+import { createWhatsAppReplyNotification } from "@/lib/autoscuole/notifications";
 import {
   parseMetaWebhook,
   parseTwilioWebhook,
@@ -17,11 +23,14 @@ import {
  * ritentano e, dopo troppi errori, disattivano la sottoscrizione. Quindi qui non
  * si fa lavoro lungo: si valida la firma, si interpreta, si registra.
  *
- * Quello che ancora NON fa, di proposito: non salva la revoca del consenso e non
- * consegna le risposte alla segreteria. Servono entrambe una colonna nuova
- * (consenso/opt-out) e una decisione di prodotto su dove vanno a finire le
- * risposte — vedi `plans/communications/reg-500-whatsapp.md`, fase 3. Fino ad
- * allora gli eventi vengono riconosciuti e messi a log, non persi.
+ * Cosa fa con quello che riceve:
+ *  - **revoca** ("STOP", "cancellami", …) → la scrive su `User.whatsappOptOutAt`,
+ *    e da lì in poi `sendWhatsAppToPhone` non scrive più a quella persona;
+ *  - **risposta** → diventa una notifica in campanella per l'autoscuola, così
+ *    qualcuno la legge davvero;
+ *  - **stato di consegna** → per ora a log. Aggiornare la riga di
+ *    `AutoscuolaMessageLog` richiede una colonna per l'id del fornitore, che
+ *    arriverà quando gli invii passeranno dai template.
  */
 
 /** Meta verifica la sottoscrizione con una GET e si aspetta indietro la challenge. */
@@ -63,7 +72,7 @@ export async function POST(request: Request) {
         );
         if (!valid) return new NextResponse("bad signature", { status: 403 });
       }
-      handleEvents(parseTwilioWebhook(params));
+      await handleEvents(parseTwilioWebhook(params));
       // Twilio si aspetta TwiML (o un 200 vuoto): niente risposta automatica.
       return new NextResponse("", { status: 200 });
     }
@@ -84,7 +93,7 @@ export async function POST(request: Request) {
       return new NextResponse("not configured", { status: 500 });
     }
 
-    handleEvents(parseMetaWebhook(JSON.parse(raw)));
+    await handleEvents(parseMetaWebhook(JSON.parse(raw)));
     return NextResponse.json({ received: true });
   } catch (error) {
     // Anche in errore si risponde 200: un 500 ripetuto fa disattivare la
@@ -94,30 +103,70 @@ export async function POST(request: Request) {
   }
 }
 
-function handleEvents(events: ReturnType<typeof parseMetaWebhook>) {
+async function handleEvents(events: ReturnType<typeof parseMetaWebhook>) {
   for (const event of events) {
-    if (event.type === "status") {
-      // TODO(REG-500 fase 3): aggiornare la riga di AutoscuolaMessageLog
-      // corrispondente a `providerMessageId`. Richiede la colonna per l'id del
-      // fornitore, che oggi non c'è.
-      console.info("[whatsapp-webhook] stato", {
-        id: event.providerMessageId,
-        status: event.status,
-        ...(event.error ? { error: event.error } : {}),
-      });
-      continue;
+    try {
+      if (event.type === "status") {
+        console.info("[whatsapp-webhook] stato", {
+          id: event.providerMessageId,
+          status: event.status,
+          ...(event.error ? { error: event.error } : {}),
+        });
+        continue;
+      }
+
+      if (event.isOptOut) {
+        const found = await recordWhatsAppOptOut(event.from);
+        console.warn("[whatsapp-webhook] revoca consenso", {
+          from: event.from,
+          utenteTrovato: found,
+        });
+        continue;
+      }
+
+      await deliverReply(event.from, event.text);
+    } catch (error) {
+      // Un evento che esplode non deve portarsi dietro gli altri dello stesso
+      // payload: Meta ne impacchetta più d'uno per richiesta.
+      console.error("[whatsapp-webhook] evento non gestito", error);
     }
-    if (event.isOptOut) {
-      // TODO(REG-500 fase 3): persistere la revoca. Obbligatoria per policy Meta:
-      // continuare a scrivere a chi ha detto STOP fa scendere la quality rating
-      // e alla lunga fa bloccare il numero.
-      console.warn("[whatsapp-webhook] REVOCA CONSENSO da", event.from);
-      continue;
-    }
-    // TODO(REG-500 fase 3): consegnare la risposta alla segreteria.
-    console.info("[whatsapp-webhook] risposta in arrivo", {
-      from: event.from,
-      text: event.text.slice(0, 120),
+  }
+}
+
+/**
+ * Porta la risposta a chi la deve leggere: la campanella dell'autoscuola.
+ *
+ * Se il numero non è di nessuno in anagrafica la risposta non si butta — si
+ * lascia a log, perché è comunque qualcuno che ha scritto a Reglo. Senza una
+ * company a cui appenderla, però, non c'è campanella dove metterla.
+ */
+async function deliverReply(from: string, text: string) {
+  const user = await findUserByPhone(from);
+  if (!user) {
+    console.warn("[whatsapp-webhook] risposta da un numero sconosciuto", {
+      from,
+      text: text.slice(0, 120),
+    });
+    return;
+  }
+  const memberships = await prisma.companyMember.findMany({
+    where: { userId: user.id, autoscuolaRole: "STUDENT" },
+    select: { companyId: true },
+  });
+  if (!memberships.length) {
+    console.warn("[whatsapp-webhook] risposta da un utente senza autoscuola", { from });
+    return;
+  }
+  // Un allievo sta in una sola autoscuola nella pratica, ma il modello ne
+  // ammette più d'una: la risposta va a tutte, perché non sappiamo a quale
+  // delle due stesse rispondendo.
+  for (const membership of memberships) {
+    await createWhatsAppReplyNotification({
+      companyId: membership.companyId,
+      studentId: user.id,
+      studentName: user.name ?? null,
+      text,
+      phone: from,
     });
   }
 }

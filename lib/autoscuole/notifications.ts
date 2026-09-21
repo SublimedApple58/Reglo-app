@@ -84,6 +84,39 @@ export async function createConsortiumGuideRequestNotification(input: {
 }
 
 /**
+ * Risposta di un allievo su WhatsApp (REG-500) → campanella del titolare.
+ *
+ * Perché qui e non in una schermata nuova: la campanella è già il posto dove
+ * l'autoscuola guarda quando "è successo qualcosa con un allievo" (ci arrivano
+ * già le cancellazioni e le richieste del consorzio). Una inbox separata
+ * sarebbe un secondo posto da ricordarsi di aprire — e quello che non si apre
+ * non si legge, che è esattamente il problema da cui partiamo.
+ *
+ * Il testo sta in `meta.text`: `studentName` resta il nome per l'avatar.
+ */
+export async function createWhatsAppReplyNotification(input: {
+  companyId: string;
+  studentId: string | null;
+  studentName: string | null;
+  text: string;
+  phone: string;
+}): Promise<void> {
+  await prisma.autoscuolaNotification.create({
+    data: {
+      companyId: input.companyId,
+      kind: "whatsapp_reply",
+      studentId: input.studentId,
+      studentName: input.studentName,
+      meta: {
+        // Tagliato: la campanella mostra un estratto, non un thread.
+        text: input.text.slice(0, 500),
+        phone: input.phone,
+      },
+    },
+  });
+}
+
+/**
  * Aggiorna la notifica "Richiesta guida" quando il consorzio accetta/rifiuta:
  * la riga in campanella cambia stato in "Guida accettata"/"Guida rifiutata"
  * (icona verde/rossa nel prototipo) invece di restare una richiesta pendente.
