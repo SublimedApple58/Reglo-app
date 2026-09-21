@@ -93,19 +93,96 @@ template approvati. Cambia solo chi fa da tramite.
 | Integrazione | webhook + Graph API da zero | **il codice c'è già** (`whatsapp.ts` parla Twilio) | API propria, da scrivere | da scrivere |
 | Stesso fornitore della voce Reglo | no | **sì** (i numeri voce +39 0445 0600xx sono Twilio) | no | no |
 | Tempi | più lunghi (gestisci tu WABA, sender, template) | brevi | medi | lunghi |
+| Costo del solo provider a 30.000 msg/mese | **€0** | €138/mese | €49/mese | variabile |
 
-**Raccomandazione: Twilio**, e rivedere la scelta sopra i ~10.000 messaggi al mese.
+**Raccomandazione (rivista il 21/09 sul volume reale): Meta Cloud API diretta**,
+con **360dialog** come alternativa se si vuole un BSP che dia assistenza.
+**Twilio no**, a questi volumi.
 
-Il conto è semplice: il ricarico Twilio pareggia i €49/mese di 360dialog a circa
-**10.600 messaggi al mese**. Il volume realistico di Reglo è un ordine di grandezza
-sotto (vedi §3): il ricarico vale 5-15 $ al mese, mentre 360dialog ne costerebbe 53.
-In più il codice Twilio esiste già, l'account esiste già, la fattura è una sola e
-il numero di telefono lo si compra dalla stessa console dove stanno i numeri della
-voce.
+### Il volume vero, misurato (non stimato)
 
-**Con una precauzione nel codice**: l'invio va dietro un'interfaccia `WhatsAppSender`
-con un adapter Twilio. Se un domani il volume giustifica Cloud API diretta o
-360dialog, si cambia un file, non venti.
+Ultimi 30 giorni in produzione: **1.895 guide** non annullate, **1.218 allievi
+attivi**, **457 broadcast di inviti a guide di gruppo**, 40 offerte di scambio.
+Promemoria attivi: mattutino in 7 autoscuole su 19, giorno-prima in 6,
+istruttore in 4, slot vuoti in 8.
+
+Tetto dei soli promemoria, se tutti i tipi fossero accesi ovunque:
+1.895 × 3 (allievo) + 1.895 (istruttore) = **~7.600 messaggi al mese, ~250 al
+giorno**. È esattamente l'ordine di grandezza che dice Tiziano.
+
+E i **broadcast** stanno sopra: 457 inviti a guide di gruppo in 30 giorni, con
+un pubblico che da Robatto arriva a **183 allievi iscritti ai gruppi**. Se quelli
+passassero da WhatsApp sarebbero **10-20.000 messaggi al mese da soli** — più di
+tutti i promemoria messi insieme.
+
+### I conti, per scenario
+
+Tariffa Meta *utility* per l'Italia: forchetta **€0,020-0,050** a messaggio
+(UK $0,022 / Germania $0,055 dai listini di terze parti; l'Italia sta lì in
+mezzo). **Non è un preventivo**: il listino vero si scarica solo da dentro un
+account Meta Business.
+
+| Scenario | msg/mese | Tariffe Meta (uguali per tutti) | + Twilio | + 360dialog | + Meta diretta |
+|---|---|---|---|---|---|
+| ~100/giorno | 3.000 | €60-150 | €14 | €49 | **€0** |
+| ~250/giorno (tetto promemoria) | 7.600 | €152-379 | €35 | €49 | **€0** |
+| ~500/giorno | 15.000 | €300-750 | €69 | €49 | **€0** |
+| ~1.000/giorno (WhatsApp primario) | 30.000 | €600-1.500 | €138 | €49 | **€0** |
+
+Solo il sovrapprezzo del provider, su base annua:
+
+| msg/mese | Twilio | 360dialog | Meta diretta |
+|---|---|---|---|
+| 3.000 | €166 | €588 | €0 |
+| 7.600 | €418 | €588 | €0 |
+| 15.000 | **€828** | €588 | €0 |
+| 30.000 | **€1.656** | €588 | €0 |
+
+**Pareggio Twilio / 360dialog: 10.652 messaggi al mese.** Sopra, 360dialog costa
+meno. **Twilio contro Meta diretta non pareggia mai**: Meta diretta costa meno dal
+primo messaggio, perché non ha né fisso né margine.
+
+### Perché cambio raccomandazione
+
+Il timore di Tiziano è **strutturalmente giusto**: Twilio è l'unica delle tre
+opzioni il cui costo cresce linearmente con l'uso *sopra* a quello di Meta, senza
+tetto e senza dare niente in cambio che le altre non diano. A 900-1.700 messaggi
+al mese erano 5-8 euro e non valeva la pena di discuterne; a 15-30.000 sono
+800-1.650 euro l'anno di puro sovrapprezzo.
+
+E il lavoro che Twilio sembrava risparmiare **va fatto comunque**: i template sono
+un concetto di Meta, non di Twilio, e il webhook serve con qualunque provider.
+Quello che Twilio toglie davvero è la registrazione del mittente e una console più
+comoda — settimana di lavoro, non mesi.
+
+- **Meta Cloud API diretta** — la scelta di default. Nessun fisso, nessun margine,
+  il costo è solo quello di Meta. In cambio Reglo fa da BSP a se stessa: se il
+  numero viene segnalato o la *quality rating* scende, non c'è un'assistenza a cui
+  scrivere.
+- **360dialog** — la via di mezzo, e risponde alla lettera al "non voglio che
+  esploda": **€49 al mese fissi, che non crescono mai con l'uso**, più assistenza
+  da BSP ufficiale. A 30.000 messaggi costa un terzo di Twilio.
+- **Twilio** — solo come ripiego se la verifica Meta si impantana e serve mandare
+  qualcosa subito, sapendo che è la più cara a regime.
+
+### Ma il provider è il termine piccolo
+
+A 15.000 messaggi al mese: Meta chiede €300-750, il margine Twilio è €69. Cioè
+**la scelta del provider vale meno del 10% della bolletta**. Quello che la decide
+davvero è *quanti messaggi si mandano*, e lì i moltiplicatori sono tre:
+
+1. **La cascata** (un messaggio, un canale) invece di tre spunte che mandano tre
+   messaggi allo stesso allievo: **-66%**.
+2. **La push assorbe il 71%** degli allievi (863 su 1.216 hanno l'app): WhatsApp
+   come ripiego e non come doppione taglia un altro **-71%** del resto.
+3. **I broadcast restano su push.** Inviti ai gruppi, slot liberi, offerte di
+   scambio sono *inviti*, non impegni presi: se finiscono su WhatsApp da soli
+   valgono più di tutti i promemoria insieme.
+
+Con questo disegno il volume WhatsApp reale è **~2.200 messaggi al mese**
+(i promemoria dei soli allievi senza app) → **€44-110 al mese di tariffe Meta**,
+più €0 di provider con Meta diretta. Senza questo disegno si arriva a
+€600-1.500 al mese. **La progettazione vale dieci volte la scelta del fornitore.**
 
 ### Cosa serve comunque, con qualunque provider
 
@@ -215,7 +292,8 @@ Si può fare subito, indipendentemente dal provider scelto.
   una dry-run da rivedere prima di applicare.
 
 ### Fase 1 — Mittente vero (bloccata sulle decisioni di Tiziano)
-- Scelta provider (raccomandato: Twilio).
+- Scelta provider (raccomandato: **Meta Cloud API diretta**; 360dialog se si vuole
+  assistenza a costo fisso; Twilio solo come ripiego d'emergenza).
 - Meta Business verificato + WABA + numero dedicato + registrazione sender.
 - Rotazione `TWILIO_AUTH_TOKEN` e aggiornamento su Vercel (e ovunque lo usi il
   voice-runtime).
@@ -223,7 +301,8 @@ Si può fare subito, indipendentemente dal provider scelto.
   È il vero collo di bottiglia del "più velocemente possibile".
 
 ### Fase 2 — Template invece di testo libero
-- `WhatsAppSender` come interfaccia + adapter Twilio (porta d'uscita verso Cloud API).
+- `WhatsAppSender` come interfaccia + adapter **Cloud API** (e un adapter Twilio
+  tenuto come ripiego: l'interfaccia serve proprio a non restare incastrati).
 - Registro dei template in codice: `kind → nome template + variabili`, per
   promemoria guida (3 varianti), esame, slot libero, scadenze foglio rosa/certificato
   medico, comunicato.
@@ -261,5 +340,11 @@ Si può fare subito, indipendentemente dal provider scelto.
    canale va acceso di default o venduto come opzione.
 3. **WhatsApp anche per i comunicati promozionali?** Sarebbero categoria *marketing*:
    più cari e con obbligo di opt-in esplicito. I promemoria no, sono *utility*.
+5. **I broadcast (inviti ai gruppi, slot liberi, scambi) restano su push?**
+   È la singola decisione che pesa di più sulla bolletta: da sola vale più di tutti
+   i promemoria messi insieme. *Raccomandazione: sì, restano su push.*
+6. **Assistenza o costo zero?** Meta diretta non costa niente ma lascia Reglo senza
+   un interlocutore se il numero viene segnalato; 360dialog costa €49/mese fissi e
+   te lo dà. È una scelta di rischio, non di prezzo.
 4. **Quale numero di telefono** dedicare al mittente (non deve essere già su
    WhatsApp).
