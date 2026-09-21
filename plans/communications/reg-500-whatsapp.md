@@ -95,9 +95,37 @@ template approvati. Cambia solo chi fa da tramite.
 | Tempi | più lunghi (gestisci tu WABA, sender, template) | brevi | medi | lunghi |
 | Costo del solo provider a 30.000 msg/mese | **€0** | €138/mese | €49/mese | variabile |
 
-**Raccomandazione (rivista il 21/09 sul volume reale): Meta Cloud API diretta**,
-con **360dialog** come alternativa se si vuole un BSP che dia assistenza.
-**Twilio no**, a questi volumi.
+**Decisione (21/09, priorità alla velocità): non si sceglie adesso.** Il codice
+parla con tutti e tre attraverso un'interfaccia, e il fornitore si collega a
+onboarding finito. Se bisogna partire oggi: **Twilio**, perché le credenziali
+sono già in mano e l'Embedded Signup è guidato — €10/mese a 2.200 messaggi non è
+un argomento. **Innesco scritto: sopra i ~10.000 messaggi/mese si passa a
+`cloud` (€0) o 360dialog (€49 fissi)**, che con l'astrazione è un cambio di
+variabile d'ambiente.
+
+### La verifica Meta NON è sul percorso critico (e vale per tutti e tre)
+
+Un numero su un business non ancora verificato può mandare **250 messaggi
+business-initiated ogni 24 ore** (Meta, *Messaging Limits*; e la doc Twilio dice
+lo stesso per i suoi sender). Il fabbisogno di Reglo col disegno a cascata è
+**~73 al giorno**: ci sta dentro con tre volte di margine. Si va in produzione
+**prima** che la verifica finisca; la verifica serve dopo, per alzare il tetto
+(250 → 2.000 → 10.000 → illimitato) — e al secondo scaglione si arriva anche
+senza, consegnando 2.000 messaggi in 30 giorni con template di qualità alta.
+
+Da sfatare: **la verifica Twilio (quella dei numeri voce) non conta nulla per
+Meta.** Sono due aziende diverse. La doc Twilio è esplicita: il cliente crea una
+WABA sua e la verifica la completa lui. Nessun BSP può saltarla o riciclarla.
+
+| | Meta diretta | Twilio | 360dialog |
+|---|---|---|---|
+| Registrazione sender | ~1 ora, manuale (App + System User token) | ~1 ora, Embedded Signup | ~1 ora, Embedded Signup |
+| Si manda subito a utenti veri? | sì, 250/giorno | sì, 250/giorno | sì, 250/giorno |
+| Verifica Meta | 1-3 settimane | **identica** | **identica** |
+| Costo a 2.200 msg/mese | €0 | **~€10/mese** | €49/mese |
+
+Quello che ci separa davvero dalla produzione non è il fornitore: sono template,
+webhook, numeri e UI — settimane di lavoro, identiche nei tre casi.
 
 ### Il volume vero, misurato (non stimato)
 
@@ -281,7 +309,21 @@ decide iterando anteprime), non in questo documento.
 ## 5. Piano a fasi
 
 ### Fase 0 — Smettere di mentire (nessuna decisione richiesta, nessun costo)
-Si può fare subito, indipendentemente dal provider scelto.
+**In corso dal 21/09.** Già fatto:
+- `lib/phone-e164.ts` — normalizzazione E.164, prudente per costruzione (davanti
+  a un numero ambiguo rinuncia invece di indovinare). 17 test.
+- `lib/autoscuole/whatsapp-templates.ts` — registro dei template: nome su Meta,
+  categoria, variabili ordinate, testo da sottomettere. Include l'elenco dei
+  `kind` che **non** passano da WhatsApp (i broadcast).
+- `lib/autoscuole/whatsapp-sender.ts` — interfaccia `WhatsAppSender` + adapter
+  Cloud API (che serve anche 360dialog) + adapter Twilio, e
+  `isWhatsAppChannelAvailable()` per la UI. 17 test.
+- `lib/autoscuole/whatsapp-webhook.ts` + `app/api/webhooks/whatsapp/route.ts` —
+  firma (HMAC-SHA256 Meta / HMAC-SHA1 Twilio), challenge di sottoscrizione,
+  parsing di stati e messaggi in arrivo, riconoscimento della revoca in italiano.
+  19 test.
+
+Resta da fare in questa fase:
 - WhatsApp selezionabile **solo** se configurato e sano; stato visibile in UI.
 - **Ogni** tentativo di invio scrive su `AutoscuolaMessageLog`, anche i promemoria
   (oggi lo fa solo il percorso a regole) → i fallimenti smettono di essere invisibili.
