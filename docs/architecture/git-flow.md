@@ -76,6 +76,31 @@ commit (caso raro: verificalo, non darlo per scontato).
   un job che cerca una colonna non ancora migrata si pianta a ogni giro.
 - **Mobile** (`reglo-mobile`): merge `feature` → `master`, poi OTA: `eas update --platform ios --branch production` **poi** `--platform android` (MAI `--auto`, MAI `--platform all`). Native build solo se sono cambiati moduli nativi.
 
+## Memoria dei build Vercel
+
+I build Next andavano in `out_of_memory` di continuo (il 19 e il 21/09/2026, in
+un caso 5 volte su 8 di fila su staging, e due volte su main): il worker di
+`next build` esauriva l'heap V8 e usciva con `SIGABRT`. Si risolveva ritentando,
+ma a caso.
+
+Il tetto è alzato a **6 GB** dentro gli script `build*` di `package.json`:
+
+```
+NODE_OPTIONS='--require=dotenv/config --max-old-space-size=6144' next build
+```
+
+**Trappola da conoscere:** l'istinto è mettere `NODE_OPTIONS` fra le variabili
+d'ambiente del progetto su Vercel. **Non funziona**, e in silenzio: gli script di
+build assegnano già `NODE_OPTIONS` inline, e un'assegnazione inline *sostituisce*
+la variabile ereditata. La variabile su Vercel verrebbe ignorata e resteremmo
+convinti di aver applicato il fix.
+
+Secondo motivo per tenerla nello script: una `NODE_OPTIONS` globale su Vercel
+finisce anche nel **runtime** delle funzioni serverless, che hanno molta meno
+memoria della macchina di build. Node crederebbe di avere 6 GB, non farebbe GC
+in tempo, e il container lo ucciderebbe. Nello script il flag vale solo per il
+build.
+
 ## Ambiente staging in breve
 - **Vercel custom environment** nello stesso progetto `reglo` (non un progetto separato), agganciato al branch git `staging`, dominio `staging.reglo.it`.
 - **DB Neon dedicato** (Francoforte), isolato da prod: una scrittura su staging non tocca prod.
