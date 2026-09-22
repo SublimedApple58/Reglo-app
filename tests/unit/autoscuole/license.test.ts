@@ -105,6 +105,24 @@ describe("licenseCategoryEligible (moto hierarchy AM < A1 < A2 < A)", () => {
     expect(licenseCategoryEligible("C1E", "C1")).toBe(false);
   });
 
+  // REG-507: CQC e ADR sono abilitazioni, non classi di veicolo. Si fanno su un
+  // camion — pretendere un mezzo omonimo lasciava 18 allievi senza veicolo.
+  it("a qualification runs on the truck it is taught on", () => {
+    expect(licenseCategoryEligible("C", "CQC")).toBe(true);
+    expect(licenseCategoryEligible("C", "ADR")).toBe(true);
+    // E un mezzo già marcato con la qualifica continua a servire.
+    expect(licenseCategoryEligible("CQC", "CQC")).toBe(true);
+    expect(licenseCategoryEligible("ADR", "ADR")).toBe(true);
+  });
+
+  it("a qualification does not unlock buses, nor the other way round", () => {
+    expect(licenseCategoryEligible("D", "CQC")).toBe(false);
+    expect(licenseCategoryEligible("D", "ADR")).toBe(false);
+    // Senso unico come le altre catene: un allievo C non guida col CQC altrui.
+    expect(licenseCategoryEligible("CQC", "C")).toBe(false);
+    expect(licenseCategoryEligible("ADR", "C")).toBe(false);
+  });
+
   it("does not open the door to unrelated categories", () => {
     // The tolerance is the motrice, not "anything big".
     expect(licenseCategoryEligible("D", "CE")).toBe(false);

@@ -73,7 +73,7 @@ Vehicle queries use `status: "active"` → **maintenance** vehicles are excluded
 - No `trigger:deploy` is required by this feature.
 
 ## License categories (B / BE / C / CE / D / DE / AM / A1 / A2 / A + transmission)
-Second brick of the Vehicles module. Each vehicle serves **one** license category + one transmission; each PRATICA student pursues one license path. Eligibility uses the **moto hierarchy AM < A1 < A2 < A** (since 2026-06-30): a moto student may train on any moto of category **≤** their own (an A2 student → A2/A1/AM, **not** A); and the **trailer hierarchy B < BE · C1 < C1E · C < CE · D1 < D1E · D < DE** (since 2026-09-22, REG-507): a trailer course runs on its **motrice** (a CE student → a C truck) or on a vehicle already marked with the trailer category. Both hierarchies are **one-way**: a C student may NOT use a CE-marked vehicle, because driving a combination requires the CE licence. The remaining non-moto categories only match themselves; cross-class never mixes; transmission must still match exactly. This lives in `licenseCategoryEligible` / `vehicleServesLicense` (`lib/autoscuole/license.ts`) — the single chokepoint used by the matcher, availability, swaps, group-moto AND the booking pickers, so all surfaces agree.
+Second brick of the Vehicles module. Each vehicle serves **one** license category + one transmission; each PRATICA student pursues one license path. Eligibility uses the **moto hierarchy AM < A1 < A2 < A** (since 2026-06-30): a moto student may train on any moto of category **≤** their own (an A2 student → A2/A1/AM, **not** A); and the **trailer hierarchy B < BE · C1 < C1E · C < CE · D1 < D1E · D < DE** plus the **qualifications CQC/ADR → C** (since 2026-09-22, REG-507): a trailer course runs on its **motrice** (a CE student → a C truck) or on a vehicle already marked with the trailer category. Both hierarchies are **one-way**: a C student may NOT use a CE-marked vehicle, because driving a combination requires the CE licence. A CQC/ADR course runs on the truck it is actually taught on. The remaining non-moto categories only match themselves; cross-class never mixes; transmission must still match exactly. This lives in `licenseCategoryEligible` / `vehicleServesLicense` (`lib/autoscuole/license.ts`) — the single chokepoint used by the matcher, availability, swaps, group-moto AND the booking pickers, so all surfaces agree.
 
 **Booking eligibility (instructor/owner) (2026-06-30):** the student picker now shows a license badge (sourced from `listDirectoryStudents`, which exposes `licenseCategory`/`transmission` on the agenda bootstrap). Web create dialog: the student list is filtered by the Auto/Moto mode and the vehicle list by the chosen student (only eligible vehicles); submit is blocked on a mismatch. Mobile `BookingForm`: the vehicle picker only offers vehicles eligible for the chosen student, a now-incompatible vehicle is cleared when the student changes, and confirm is blocked on a mismatch.
 
@@ -89,6 +89,13 @@ Second brick of the Vehicles module. Each vehicle serves **one** license categor
 > veicoli usabili, mentre un'altra autoscuola aveva dovuto marcare il proprio camion
 > come "CE" per aggirare il problema. Quella flotta continua a funzionare: stessa
 > categoria combacia sempre.
+>
+> **Stessa famiglia di errore, stessa correzione: CQC e ADR.** Non sono classi di
+> veicolo ma abilitazioni che si aggiungono a una patente — un corso CQC si fa su
+> un camion. Il registro dei colori lo diceva già (la CQC ha `parent` C). Su
+> staging questo lasciava 18 allievi senza un solo veicolo prenotabile. Nota: la
+> CQC esiste anche nella variante *persone*, che si farebbe su un autobus; oggi
+> vale la scelta del consorzio (camion).
 
 - **Taxonomy**: `lib/autoscuole/license.ts` — `LICENSE_CATEGORIES = ['B','BE','C','CE','D','DE','AM','A1','A2','A']`, `TRANSMISSIONS = ['manual','automatic']`, IT labels (BE "auto + rimorchio", C "camion", CE "camion + rimorchio", D "autobus", DE "autobus + rimorchio"), and `vehicleServesLicense(vehicle, student)` (moto hierarchy + trailer hierarchy; null on either side is permissive). Zod enums + all web/mobile pickers derive from this list. New non-moto categories fall in the "Auto" bucket of every Auto/Moto mode split (`isMotoLicenseCategory` is an explicit A-family list).
 - **Data model**:
