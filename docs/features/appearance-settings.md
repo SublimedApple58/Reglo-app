@@ -1,11 +1,34 @@
 # Aspetto (Impostazioni account)
 
 Pannello "Aspetto" (icona tavolozza) nell'overlay Impostazioni dell'account:
-personalizzazione visiva dell'agenda. Due sezioni: criterio colore dei blocchi
-guida (durata | tipo patente) e "Istruttori in agenda" — una sola lista dove si
+personalizzazione visiva dell'agenda. Tre sezioni: criterio colore dei blocchi
+guida (durata | tipo patente), "Nome degli allievi" (REG-507) e "Istruttori in
+agenda" — una sola lista dove si
 trascina per l'**ordine delle colonne** (REG-449, 2026-09-13) e si tocca il
 pallino per il **colore** (spostato qui da Gestisci istruttore, 2026-08-10). Il
 colore istruttore tinge avatar/bande/stampa, NON i blocchi.
+
+## Nome degli allievi (REG-507)
+
+Terza sezione del pannello: **Nome e cognome** / **Cognome e nome**, setting per
+autoscuola (`studentNameOrder` nel JSON `limits`, default `nome_cognome` — le
+altre autoscuole non cambiano). Decide **sia** come si scrive il nome **sia**
+l'ordine delle liste: chi legge "Rossi Mario" lo cerca alla R.
+
+Fonte unica in `lib/autoscuole/student-name-order.ts` (client-safe):
+`formatStudentName`, `formatStudentNameShort` (per il blocco agenda stretto,
+abbrevia la parte *omessa*), `studentNameComparator`/`sortStudentsByName`
+(`Intl.Collator` italiano, `sensitivity: "base"`: in produzione convivono
+"VERONICA BILIOTTI" e "Luca rubino") e `asStudentNameOrder`.
+
+> ⚠️ **Debito noto.** `User.name` è **un unico campo di testo**: nome e cognome
+> non esistono separati e si ricavano spezzando sul primo spazio. Sui nomi
+> composti l'euristica sbaglia ("Maria Grazia Rossi" → nome *Maria*, cognome
+> *Grazia Rossi*), e invertirli dà "Grazia Rossi Maria". In produzione sono
+> **180 allievi su 1.288 (14%)** ad avere un nome di 3+ parole. Il modulo non
+> risolve il problema: lo tiene in un posto solo. La correzione vera sono due
+> colonne `firstName`/`lastName` con migrazione e backfill — vedi
+> `plans/consorzio/002-richieste-federica.md`.
 
 ## Data model
 
@@ -20,6 +43,9 @@ colore istruttore tinge avatar/bande/stampa, NON i blocchi.
 - Ordine colonne: `agendaInstructorOrder` (array di id istruttore) nello stesso
   JSON `limits`, normalizzato da `asAgendaInstructorOrder`. Elenco anche
   **parziale**; array vuoto = ordine alfabetico (il comportamento storico).
+- Ordine del nome allievo: `studentNameOrder` (`"nome_cognome"` default |
+  `"cognome_nome"`) nello stesso JSON `limits`, normalizzato da
+  `asStudentNameOrder`. Nessuna migrazione.
 
 ## Files
 
@@ -27,6 +53,7 @@ colore istruttore tinge avatar/bande/stampa, NON i blocchi.
 |------|------|
 | `lib/autoscuole/agenda-color-criterion.ts` | Costante `AGENDA_COLOR_CRITERIA`, tipo, default, normalizzatori + palette (`DURATION_COLOR_ENTRIES`, `LICENSE_COLOR_ENTRIES`, `durationColorEntry`, `licenseColorEntryForTag`) + `agendaBlockStyle(entry, overrideHex?)` (override → tinta alpha 0.20 **appiattita su bianco**, opaca, + custom property `--agenda-card-shadow` letta da `.agenda-card`, REG-468) — modulo client-safe, condiviso action↔UI |
 | `lib/actions/autoscuole-settings.actions.ts` | `agendaColorCriterion` in patch schema, `AutoscuolaSettingsData`, `resolveAutoscuolaSettingsData`, `nextLimits` e risposta di `updateAutoscuolaSettings` |
+| `lib/autoscuole/student-name-order.ts` | `STUDENT_NAME_ORDERS`, default, etichette, `asStudentNameOrder`, `formatStudentName`, `formatStudentNameShort`, `studentNameComparator`/`sortStudentsByName` — modulo client-safe condiviso action↔agenda↔liste↔pane (REG-507) |
 | `lib/autoscuole/agenda-instructor-order.ts` | `asAgendaInstructorOrder` (normalizzatore), `agendaInstructorComparator` (ordinati per posizione, gli altri alfabetici in coda) e `sortInstructorsForAgenda` — modulo client-safe condiviso action↔agenda↔pane |
 | `components/pages/Autoscuole/AspettoSettingsPane.tsx` | Il pannello: card radio criterio (anteprima chip override-aware) + link "Personalizza i colori" che apre on-demand la chip strip (una chip pillola per voce del criterio attivo, tap → `ColorSwatchPicker` via `renderTrigger`, reset "Colore standard") + lista "Istruttori in agenda": `Reorder`/`useDragControls` di `motion/react` (drag dalla sola maniglia, ↑/↓ da tastiera), auto-save al rilascio con rollback, link "Ripristina l'ordine alfabetico" + `ColorSwatchPicker` per riga (`taken`) |
 | `components/pages/Autoscuole/AutoscuoleResourcesPage.tsx` | Wiring: `ConfigPane` union, `CONFIG_PANE_GROUPS` (gruppo Istruttori/Veicoli), `CONFIG_PANE_TITLES`, `PANES_NEEDING_RESOURCES`, `KeepAlivePane`; passa `instructors` + `changeInstructorColor` |

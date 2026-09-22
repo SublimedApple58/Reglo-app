@@ -665,6 +665,38 @@ function StudentSearchSelect({
   );
 }
 
+// Recapiti dell'allievo nel dettaglio della guida (REG-507). Chiesto dal
+// Consorzio: la segreteria deve poter chiamare senza aprire la scheda allievo,
+// e con due autoscuole "Pontedera" nel consorzio il nome da solo non basta a
+// capire di chi è l'allievo.
+//
+// L'autoscuola compare solo in modalità consorzio e solo se ce n'è più d'una:
+// stessa regola del filtro "Autoscuola" sopra i picker: dove non distingue
+// niente, non si mostra.
+function StudentContactLines({
+  phone,
+  schoolName,
+}: {
+  phone?: string | null;
+  schoolName?: string | null;
+}) {
+  if (!phone && !schoolName) return null;
+  return (
+    <>
+      {phone ? (
+        <div>
+          Telefono: <span className="font-medium text-foreground/85">{phone}</span>
+        </div>
+      ) : null}
+      {schoolName ? (
+        <div>
+          Autoscuola: <span className="font-medium text-foreground/85">{schoolName}</span>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 // Vehicle lines in the agenda detail. A moto guide with companions (follow car
 // and/or extra motos) is grouped into "Moto" (primary marked) + "Auto al seguito"
 // instead of one cramped line; a single-vehicle guide keeps the "Veicolo" line.
@@ -2519,6 +2551,14 @@ export function AutoscuoleAgendaPage({
     for (const s of students) if (s.phone) map.set(s.id, s.phone);
     return map;
   }, [students]);
+  const schoolNameById = React.useMemo(() => {
+    const map = new Map<string, string>();
+    if (!consortium) return map;
+    for (const s of students) {
+      if (s.consorzioSchoolName) map.set(s.id, s.consorzioSchoolName);
+    }
+    return map;
+  }, [consortium, students]);
   // Il badge va solo sulle guide individuali (le guide di gruppo hanno più
   // allievi → niente singolo destinatario da avvisare).
   const neverAccessedFor = React.useCallback(
@@ -3759,6 +3799,10 @@ export function AutoscuoleAgendaPage({
                                     <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
                                     <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                                       <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
+                                      <StudentContactLines
+                                        phone={phoneById.get(item.student.id)}
+                                        schoolName={showSchoolFilter ? schoolNameById.get(item.student.id) : null}
+                                      />
                                       <VehicleDetailLines item={item} vehiclesEnabled={vehiclesEnabled} />
                                       <div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>
                                       {motoTypeLabelInstr ? <div>Guida moto: <span className="font-medium text-foreground/85">{motoTypeLabelInstr}</span></div> : null}
@@ -4317,6 +4361,10 @@ export function AutoscuoleAgendaPage({
                                 <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
                                 <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                                   <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
+                                  <StudentContactLines
+                                    phone={phoneById.get(item.student.id)}
+                                    schoolName={showSchoolFilter ? schoolNameById.get(item.student.id) : null}
+                                  />
                                   <VehicleDetailLines item={item} vehiclesEnabled={vehiclesEnabled} />
                                   <div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>
                                   {motoTypeLabelDay ? <div>Guida moto: <span className="font-medium text-foreground/85">{motoTypeLabelDay}</span></div> : null}

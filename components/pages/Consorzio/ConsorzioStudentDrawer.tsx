@@ -411,6 +411,14 @@ export function ConsorzioStudentDrawer({
                     Esame
                   </span>
                 )}
+                {row.kind === "guide" && row.absence && (
+                  <span
+                    className="inline-flex rounded-[6px] px-[7px] py-[3px] text-[11px] font-bold"
+                    style={{ background: "#FDECEC", color: "#B3494F" }}
+                  >
+                    Assenza
+                  </span>
+                )}
                 <p className="text-sm font-semibold text-foreground">
                   {formatLessonWhen(row.startsAt)}
                 </p>
@@ -421,7 +429,11 @@ export function ConsorzioStudentDrawer({
             </div>
             <div className="flex shrink-0 items-center gap-3">
               <span className="text-[13px] font-semibold tabular-nums text-foreground">
-                {row.kind === "exam" ? formatMoney(row.price) : formatHours(row.durationMinutes)}
+                {row.kind === "exam"
+                  ? formatMoney(row.price)
+                  : row.absence
+                    ? "—"
+                    : formatHours(row.durationMinutes)}
               </span>
               {row.kind === "exam" ? (
                 <Pill tone={row.settled ? "green" : "amber"}>
@@ -473,6 +485,18 @@ export function ConsorzioStudentDrawer({
             value: formatMoney(data.costs.exams.amount),
             muted: false,
           },
+          // Solo se ce n'è almeno una: una riga "0 assenze" è rumore (REG-507).
+          ...(data.costs.absences.count
+            ? [
+                {
+                  key: "absences",
+                  label: "Assenze",
+                  sub: plural(data.costs.absences.count, "guida non svolta", "guide non svolte"),
+                  value: formatMoney(data.costs.absences.amount),
+                  muted: false,
+                },
+              ]
+            : []),
         ].map((row) => (
           <div
             key={row.key}

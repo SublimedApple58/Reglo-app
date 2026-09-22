@@ -54,6 +54,41 @@ Il prezzo è **calcolato live in Fatturazione** finché la guida non viene certi
 
 "Ore certificate / da certificare" nel dettaglio scuola = minuti delle guide passate con/senza `settledAt`.
 
+## Costo dell'assenza (REG-507)
+
+Quanto costa all'autoscuola consorziata una guida che l'allievo **non ha fatto**.
+Si configura in Impostazioni → Prenotazioni e allievi → **Prezzi**, sezione
+"Cancellazioni tardive": un segmented **Percentuale / Importo fisso** (stessa
+forma del criterio "A ore / Percorso") e, in modalità fissa, l'importo in €.
+Entrambe le cifre restano salvate: cambiare criterio non perde l'altra.
+
+- `lateCancellationMode` (`percent` default | `fixed`) e
+  `lateCancellationFixedAmount` (default 20) in `limits.consorzioPricing`,
+  normalizzati da `parseConsorzioPricing`.
+- Calcolo in `absencePrice()` (`lib/consorzio/pricing.ts`, puro e testato).
+  In modalità **fissa** l'importo vale anche per le patenti **a percorso** (la
+  guida vale 0 perché è inclusa nel prezzo unico, ma il posto sprecato è un
+  costo reale); in modalità **percentuale** una patente a percorso produce 0, che
+  è la conseguenza onesta di quel criterio.
+- Quali guide contano: `isBillableAbsence()` — **no-show sempre**, e
+  `manual_cancel` **oltre il cutoff**. Restano fuori di proposito
+  `operational_cancel`/`operational_reposition` (li decide la scuola: istruttore
+  malato, mezzo fermo), `record_cleanup` (pulizia storico) e `permanent_cancel`.
+  Cutoff a 0 = regola spenta.
+
+> ⚠️ **Cosa faceva prima.** `lateCancellationCutoffHours` e
+> `lateCancellationPenaltyPct` erano salvate e modificabili nel pane Prezzi ma
+> **non le leggeva nessun calcolo**. La Fatturazione filtrava
+> `status: { not: "cancelled" }`, quindi: un **no-show finiva in fattura a
+> prezzo pieno** (una CE a 110 €/h) perché `no_show` non è `cancelled`, e un
+> **annullamento tardivo non costava niente** perché spariva dal conto. Da qui
+> la richiesta del consorzio: «20 € a prescindere dalla categoria».
+
+La voce compare in Fatturazione come riga **"Assenza"** (tag ambra, "guida non
+svolta") e nel drawer allievo come bucket **Assenze** nel Riepilogo costi, più
+un badge sulla riga della guida. Le due schermate usano la stessa regola, così
+non possono dire cifre diverse sullo stesso allievo.
+
 ## Categorie patente superiori (C1, C1E, D1, D1E, CQC, ADR)
 
 Aggiunte alla lista canonica `LICENSE_CATEGORIES` (`lib/autoscuole/license.ts`), bucket `pro`, match veicolo **stretto** (self-match, nessuna gerarchia — mappa eligibilità CQC/ADR da confermare col consorzio). CQC/ADR sono qualificazioni modellate come pseudo-categorie (evita una seconda dimensione su member/veicoli/tariffe).

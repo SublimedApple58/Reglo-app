@@ -11,11 +11,14 @@ import { CONSORTIUM_LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
 import { guideRequestLeadTimeError } from "@/lib/consorzio/guide-request-lead";
 import {
   CONSORZIO_BILLING_MODES,
+  LATE_CANCELLATION_MODES,
+  absencePrice,
   billingModeFor,
   billingMonthOf,
   coursePrice,
   examPrice,
   guidePrice,
+  isBillableAbsence,
   parseConsorzioPricing,
   roundMoney,
   type ConsorzioBillingMode,
@@ -815,6 +818,8 @@ export type ConsorzioStudentDetail = {
     vehicleName: string | null;
     instructorName: string | null;
     certified: boolean;
+    /** Guida non svolta e addebitata come assenza (REG-507). */
+    absence: boolean;
   }>;
   /** Esami non annullati dell'allievo, voce distinta dalle guide (REG-459). */
   exams: Array<{
@@ -830,6 +835,8 @@ export type ConsorzioStudentDetail = {
     guides: { count: number; amount: number; includedInCourse: boolean };
     course: { category: string; amount: number; settled: boolean } | null;
     exams: { count: number; amount: number };
+    /** Guide non svolte, addebitate al costo assenza (REG-507). */
+    absences: { count: number; amount: number };
     total: number;
   };
 };
@@ -862,12 +869,16 @@ export async function getConsorzioStudentDetail(userId: string) {
         where: {
           companyId,
           studentId: userId,
-          status: { not: "cancelled" },
+          // Le annullate entrano per poter riconoscere le assenze addebitabili;
+          // quelle che non lo sono vengono scartate subito sotto (REG-507).
           type: { not: "group_lesson" },
         },
         select: {
           id: true,
           type: true,
+          status: true,
+          cancellationKind: true,
+          cancelledAt: true,
           startsAt: true,
           endsAt: true,
           instructor: { select: { name: true } },
@@ -887,18 +898,36 @@ export async function getConsorzioStudentDetail(userId: string) {
       }),
     ]);
 
-    const guideAppointments = appointments.filter((appt) => appt.type !== "esame");
-    const examAppointments = appointments.filter((appt) => appt.type === "esame");
+    // Stessa regola della Fatturazione: un'annullata conta solo se è
+    // un'assenza addebitabile, altrimenti sparisce come è sempre stato.
+    const billable = appointments.filter(
+      (appt) =>
+        appt.status !== "cancelled" ||
+        isBillableAbsence(appt, pricing.lateCancellationCutoffHours),
+    );
+    const guideAppointments = billable.filter((appt) => appt.type !== "esame");
+    const examAppointments = billable.filter((appt) => appt.type === "esame");
 
     let certifiedMinutes = 0;
     let guidesAmount = 0;
+    let absencesAmount = 0;
+    let absencesCount = 0;
     const allLessons = guideAppointments.map((appt) => {
       const durationMinutes = lessonMinutes(appt.startsAt, appt.endsAt);
       const certified = Boolean(appt.consorzioBilling?.settledAt);
       if (certified) certifiedMinutes += durationMinutes;
-      guidesAmount += appt.consorzioBilling
+      const absence = isBillableAbsence(appt, pricing.lateCancellationCutoffHours);
+      const amount = appt.consorzioBilling
         ? decimalToNumber(appt.consorzioBilling.priceAmount)
-        : guidePrice(pricing, member.licenseCategory, durationMinutes);
+        : absence
+          ? absencePrice(pricing, member.licenseCategory, durationMinutes)
+          : guidePrice(pricing, member.licenseCategory, durationMinutes);
+      if (absence) {
+        absencesCount += 1;
+        absencesAmount += amount;
+      } else {
+        guidesAmount += amount;
+      }
       return {
         appointmentId: appt.id,
         startsAt: appt.startsAt.toISOString(),
@@ -906,6 +935,7 @@ export async function getConsorzioStudentDetail(userId: string) {
         vehicleName: appt.vehicle?.name ?? null,
         instructorName: appt.instructor?.name ?? null,
         certified,
+        absence,
       };
     });
 
@@ -943,7 +973,7 @@ export async function getConsorzioStudentDetail(userId: string) {
       schoolCity: member.consorzioSchool?.city ?? null,
       licenseCategory: member.licenseCategory,
       transmission: member.transmission,
-      lessonsCount: guideAppointments.length,
+      lessonsCount: guideAppointments.length - absencesCount,
       certifiedMinutes,
       codes: member.consorzioAccountingCodes.map((link) => link.code),
       allCodes,
@@ -951,13 +981,16 @@ export async function getConsorzioStudentDetail(userId: string) {
       exams,
       costs: {
         guides: {
-          count: guideAppointments.length,
+          count: guideAppointments.length - absencesCount,
           amount: roundMoney(guidesAmount),
           includedInCourse: billingModeFor(pricing, member.licenseCategory) === "course",
         },
         course,
         exams: { count: exams.length, amount: roundMoney(examsAmount) },
-        total: roundMoney(guidesAmount + examsAmount + (course?.amount ?? 0)),
+        absences: { count: absencesCount, amount: roundMoney(absencesAmount) },
+        total: roundMoney(
+          guidesAmount + absencesAmount + examsAmount + (course?.amount ?? 0),
+        ),
       },
     };
     return { success: true as const, data: detail };
@@ -983,6 +1016,8 @@ const pricingSchema = z.object({
   examFee: z.number().min(0).max(1_000_000).nullable(),
   lateCancellationCutoffHours: z.number().int().min(0).max(336),
   lateCancellationPenaltyPct: z.number().int().min(0).max(100),
+  lateCancellationMode: z.enum(LATE_CANCELLATION_MODES),
+  lateCancellationFixedAmount: z.number().min(0).max(10000),
   guideRequestMinLeadHours: z.number().int().min(0).max(336),
 });
 
@@ -1050,6 +1085,8 @@ export async function updateConsorzioPricing(input: z.infer<typeof pricingSchema
             examFee: payload.examFee,
             lateCancellationCutoffHours: payload.lateCancellationCutoffHours,
             lateCancellationPenaltyPct: payload.lateCancellationPenaltyPct,
+            lateCancellationMode: payload.lateCancellationMode,
+            lateCancellationFixedAmount: payload.lateCancellationFixedAmount,
             guideRequestMinLeadHours: payload.guideRequestMinLeadHours,
           },
         } as object,
@@ -1100,7 +1137,7 @@ const setAppointmentCodesSchema = z.object({
  * - "exam": esame prenotato all'allievo, a tariffa esame (REG-459);
  * - "course": prezzo unico del percorso completo di un allievo (REG-462).
  */
-export type ConsorzioBillingLineKind = "guide" | "exam" | "course";
+export type ConsorzioBillingLineKind = "guide" | "exam" | "course" | "absence";
 
 export type ConsorzioBillingLesson = {
   /** Chiave stabile della riga (appuntamento o percorso allievo+patente). */
@@ -1188,12 +1225,17 @@ export async function getConsorzioBilling(input: z.infer<typeof billingMonthSche
             companyId,
             studentId: { in: members.map((m) => m.userId) },
             startsAt: { gte: monthStart, lt: monthEnd },
-            status: { not: "cancelled" },
+            // Le annullate NON sono più escluse a priori: quelle tardive
+            // diventano una voce "Assenza" (REG-507). Prima uscivano dal conto
+            // in silenzio e il costo dell'assenza non esisteva.
             type: { not: "group_lesson" },
           },
           select: {
             id: true,
             type: true,
+            status: true,
+            cancellationKind: true,
+            cancelledAt: true,
             studentId: true,
             startsAt: true,
             endsAt: true,
@@ -1227,9 +1269,14 @@ export async function getConsorzioBilling(input: z.infer<typeof billingMonthSche
       const member = appt.studentId ? memberByUserId.get(appt.studentId) : undefined;
       if (!member?.consorzioSchoolId) continue;
       const durationMinutes = lessonMinutes(appt.startsAt, appt.endsAt);
+      const isAbsence = isBillableAbsence(appt, pricing.lateCancellationCutoffHours);
+      // Un'annullata che non è un'assenza addebitabile non si fattura affatto:
+      // è il comportamento di sempre per gli annullamenti operativi e le
+      // pulizie di storico.
+      if (appt.status === "cancelled" && !isAbsence) continue;
       const isExam = appt.type === "esame";
       const includedInCourse =
-        !isExam && billingModeFor(pricing, member.licenseCategory) === "course";
+        !isExam && !isAbsence && billingModeFor(pricing, member.licenseCategory) === "course";
       const billing = appt.consorzioBilling;
       // Codici della guida: espliciti se presenti, altrimenti i default allievo.
       const codes = appt.consorzioAccountingCodes.length
@@ -1238,7 +1285,7 @@ export async function getConsorzioBilling(input: z.infer<typeof billingMonthSche
 
       pushLine(member.consorzioSchoolId, {
         lineId: `appt:${appt.id}`,
-        kind: isExam ? "exam" : "guide",
+        kind: isAbsence ? "absence" : isExam ? "exam" : "guide",
         appointmentId: appt.id,
         studentUserId: member.userId,
         startsAt: appt.startsAt.toISOString(),
@@ -1250,9 +1297,11 @@ export async function getConsorzioBilling(input: z.infer<typeof billingMonthSche
         codes,
         price: billing
           ? decimalToNumber(billing.priceAmount)
-          : isExam
-            ? examPrice(pricing)
-            : guidePrice(pricing, member.licenseCategory, durationMinutes),
+          : isAbsence
+            ? absencePrice(pricing, member.licenseCategory, durationMinutes)
+            : isExam
+              ? examPrice(pricing)
+              : guidePrice(pricing, member.licenseCategory, durationMinutes),
         includedInCourse,
         settled: Boolean(billing?.settledAt),
         invoiceSent: Boolean(billing?.invoiceSentAt),
