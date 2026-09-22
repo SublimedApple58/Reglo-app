@@ -36,6 +36,8 @@ import { SectionCard } from "@/components/ui/section-card";
 import { StatMetric } from "@/components/ui/stat-metric";
 import { FieldGroup } from "@/components/ui/field-group";
 import { InlineToggle } from "@/components/ui/inline-toggle";
+import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
+import { formatStoredName } from "@/lib/autoscuole/student-name-order";
 
 type PaymentOverview = {
   totalRequired: number;
@@ -178,6 +180,7 @@ export function AutoscuolePaymentsPage({
 }: {
   tabs?: React.ReactNode;
 } = {}) {
+  const nameOrder = useStudentNameOrder();
   const toast = useFeedbackToast();
   const searchParams = useSearchParams();
   const hasHandledStripeReturn = React.useRef(false);
@@ -1189,7 +1192,7 @@ export function AutoscuolePaymentsPage({
                   <SelectContent>
                     {testStudents.map((s) => (
                       <SelectItem key={s.id} value={s.id}>
-                        <span className="font-medium">{s.name}</span>
+                        <span className="font-medium">{formatStoredName(s.name, nameOrder)}</span>
                         {s.email ? <span className="ml-1 text-muted-foreground">{s.email}</span> : null}
                       </SelectItem>
                     ))}

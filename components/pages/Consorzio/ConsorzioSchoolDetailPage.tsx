@@ -40,6 +40,8 @@ import {
   updateConsorzioSchool,
   type ConsorzioSchoolStudent,
 } from "@/lib/actions/consorzio.actions";
+import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
+import { formatStoredName, storedNameInitials } from "@/lib/autoscuole/student-name-order";
 
 /**
  * Dettaglio autoscuola consorziata — riproduzione 1:1 del prototipo
@@ -171,6 +173,7 @@ function SchoolDetailSkeleton() {
 }
 
 export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
+  const nameOrder = useStudentNameOrder();
   const router = useRouter();
   const locale = useLocale();
   const toast = useFeedbackToast();
@@ -447,10 +450,10 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#111111] text-[11px] font-bold text-white">
-                    {initialsOf(student.name)}
+                    {storedNameInitials(student.name, nameOrder)}
                   </div>
                   <span className="truncate text-[14px] font-semibold text-[#222222]">
-                    {student.name}
+                    {formatStoredName(student.name, nameOrder)}
                   </span>
                 </div>
                 <div>

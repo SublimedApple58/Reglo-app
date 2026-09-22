@@ -25,6 +25,8 @@ import { Badge } from "@/components/ui/badge";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { cn } from "@/lib/utils";
 import { DashboardSkeleton } from "@/components/ui/page-skeleton";
+import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
+import { formatStoredName } from "@/lib/autoscuole/student-name-order";
 
 type Overview = {
   studentsCount: number;
@@ -49,6 +51,7 @@ export function AutoscuoleDashboardPage({
 }: {
   tabs?: React.ReactNode;
 } = {}) {
+  const nameOrder = useStudentNameOrder();
   const locale = useLocale();
   const toast = useFeedbackToast();
   const [overview, setOverview] = React.useState<Overview | null>(null);
@@ -199,13 +202,13 @@ export function AutoscuoleDashboardPage({
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
                           {inst.liveStatus === "busy" && inst.currentLesson
-                            ? `In guida con ${inst.currentLesson.studentName ?? "allievo"} — fino alle ${formatTime(inst.currentLesson.endsAt)}`
+                            ? `In guida con ${inst.currentLesson.studentName ? formatStoredName(inst.currentLesson.studentName, nameOrder) : "allievo"} — fino alle ${formatTime(inst.currentLesson.endsAt)}`
                             : inst.liveStatus === "blocked"
                               ? inst.blockReason ?? "Blocco attivo"
                               : inst.liveStatus === "inactive"
                                 ? "Inattivo"
                                 : inst.nextLesson
-                                  ? `Prossima guida: ${formatTime(inst.nextLesson.startsAt)} con ${inst.nextLesson.studentName ?? "allievo"}`
+                                  ? `Prossima guida: ${formatTime(inst.nextLesson.startsAt)} con ${inst.nextLesson.studentName ? formatStoredName(inst.nextLesson.studentName, nameOrder) : "allievo"}`
                                   : "Nessuna guida oggi"}
                         </p>
                       </div>

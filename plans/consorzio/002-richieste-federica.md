@@ -59,6 +59,16 @@ Conseguenza: "Maria Grazia Rossi" viene letto come nome *Maria* e cognome
 
 - **(a) Fatto ora:** inversione di etichetta e ordinamento sulla separazione
   esistente. Corretta sui nomi semplici.
+
+  > **Correzione del 23/09.** Il primo giro aveva applicato (a) solo alle
+  > superfici con `firstName`/`lastName` separati, chiamandole "a dati puliti".
+  > Era sbagliato: quei campi li produce `parseNameParts` spezzando `User.name`
+  > sul primo spazio — **la stessa euristica**, solo eseguita prima lato server.
+  > Non c'erano due famiglie di affidabilità diversa, e il QA l'ha dimostrato
+  > subito trovando la tabella allievi del dettaglio autoscuola ancora in "Nome
+  > Cognome". Ora l'ordine vale in **tutta la web app**, con un provider unico
+  > (`StudentNameOrderProvider`) e un solo punto che indovina
+  > (`splitStoredName`). Il debito (b) resta invariato: è lui la correzione vera.
 - **(b) Debito tecnico, NON fatto:** campi `firstName`/`lastName` veri, con
   migrazione e backfill di ~1.200 utenti (stessi casi ambigui del backfill
   telefoni di REG-500) e modifica dei form di creazione. È la correzione vera.

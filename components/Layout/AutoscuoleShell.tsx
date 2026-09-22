@@ -44,6 +44,7 @@ import { OwnerNotificationsBell } from "@/components/Layout/OwnerNotificationsBe
 import { FeedbackDialog } from "@/components/Layout/FeedbackDialog";
 import { isSecretaryOnly, isServiceActive } from "@/lib/services";
 import { cn } from "@/lib/utils";
+import { StudentNameOrderProvider } from "@/components/pages/Autoscuole/student-name-order-context";
 
 // Sezione "Novità" del menu utente (riattivata 2026-07-21).
 const SHOW_NOVITA = true;
@@ -422,7 +423,7 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <main className={`mx-auto flex w-full flex-1 flex-col gap-6 px-4 pt-6 pb-10 lg:gap-8 lg:px-10 lg:pt-8 lg:pb-12 ${isWideLayout ? "max-w-[1920px]" : "max-w-[1440px]"}`}>
-        {children}
+        <StudentNameOrderProvider>{children}</StudentNameOrderProvider>
       </main>
 
       {/* Dialog dal menu hamburger */}

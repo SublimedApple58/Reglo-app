@@ -11,6 +11,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
+import { formatStoredName } from "@/lib/autoscuole/student-name-order";
 
 export type OutOfAvailabilityAppointment = {
   id: string;
@@ -37,6 +39,7 @@ export function OutOfAvailabilitySheet({
   appointments,
   onActionComplete,
 }: Props) {
+  const nameOrder = useStudentNameOrder();
   const toast = useFeedbackToast();
   const [loadingId, setLoadingId] = React.useState<string | null>(null);
 
@@ -121,7 +124,7 @@ export function OutOfAvailabilitySheet({
               >
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <span className="text-sm font-semibold text-foreground">
-                    {apt.studentName}
+                    {formatStoredName(apt.studentName, nameOrder)}
                   </span>
                   <div className="flex flex-wrap gap-1">
                     {reasons.includes("instructor") && reasons.includes("vehicle") ? (

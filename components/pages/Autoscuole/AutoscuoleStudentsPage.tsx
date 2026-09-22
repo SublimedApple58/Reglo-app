@@ -92,11 +92,11 @@ import { EditStudentLicenseDialog } from "@/components/pages/Autoscuole/dialogs/
 import { InviteCodeDialog } from "@/components/pages/Autoscuole/dialogs/InviteCodeDialog";
 import { ToolbarFilters } from "@/components/pages/Autoscuole/filters/ToolbarFilters";
 import {
-  DEFAULT_STUDENT_NAME_ORDER,
   formatStudentName,
   studentNameComparator,
   type StudentNameOrder,
 } from "@/lib/autoscuole/student-name-order";
+import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
 import {
   LICENSE_CATEGORIES,
   LICENSE_CATEGORY_LABELS,
@@ -736,6 +736,7 @@ export function AutoscuoleStudentsPage({
 }: {
   tabs?: React.ReactNode;
 } = {}) {
+  const studentNameOrder = useStudentNameOrder();
   const toast = useFeedbackToast();
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
@@ -791,8 +792,6 @@ export function AutoscuoleStudentsPage({
   >([]);
   const [registerLoading, setRegisterLoading] = React.useState(false);
   const [weeklyLimitActive, setWeeklyLimitActive] = React.useState(false);
-  const [studentNameOrder, setStudentNameOrder] =
-    React.useState<StudentNameOrder>(DEFAULT_STUDENT_NAME_ORDER);
   const [groupLessonsEnabledGlobal, setGroupLessonsEnabledGlobal] = React.useState(false);
   const [groupOptInSaving, setGroupOptInSaving] = React.useState(false);
   const [examPriorityEnabledGlobal, setExamPriorityEnabledGlobal] = React.useState(false);
@@ -1903,7 +1902,6 @@ export function AutoscuoleStudentsPage({
     getAutoscuolaSettings().then((res) => {
       if (res.success && res.data) {
         setWeeklyLimitActive(res.data.weeklyBookingLimitEnabled ?? false);
-        setStudentNameOrder(res.data.studentNameOrder);
         setExamPriorityEnabledGlobal(res.data.examPriorityEnabled ?? false);
         setGroupLessonsEnabledGlobal(res.data.groupLessonsEnabled === true);
         setLicenseDefaults({

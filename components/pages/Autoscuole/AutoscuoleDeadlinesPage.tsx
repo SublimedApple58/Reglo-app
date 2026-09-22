@@ -8,6 +8,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { getAutoscuolaDeadlines } from "@/lib/actions/autoscuole.actions";
+import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
+import { formatStoredName } from "@/lib/autoscuole/student-name-order";
 
 type DeadlineItem = {
   id: string;
@@ -37,6 +39,7 @@ export function AutoscuoleDeadlinesPage({
 }: {
   tabs?: React.ReactNode;
 } = {}) {
+  const nameOrder = useStudentNameOrder();
   const toast = useFeedbackToast();
   const [loading, setLoading] = React.useState(true);
   const [items, setItems] = React.useState<DeadlineItem[]>([]);
@@ -106,7 +109,7 @@ export function AutoscuoleDeadlinesPage({
                     const badge = statusBadge(item.status);
                     return (
                       <TableRow key={item.id}>
-                        <TableCell className="font-medium">{item.studentName}</TableCell>
+                        <TableCell className="font-medium">{formatStoredName(item.studentName, nameOrder)}</TableCell>
                         <TableCell>{deadlineLabel(item.deadlineType)}</TableCell>
                         <TableCell>
                           {new Date(item.deadlineDate).toLocaleDateString("it-IT")}

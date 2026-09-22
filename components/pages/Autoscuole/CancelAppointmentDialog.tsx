@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { cn } from "@/lib/utils";
+import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
+import { formatStoredName } from "@/lib/autoscuole/student-name-order";
 
 /**
  * Dialogo unico "Annulla / Rimuovi guida", context-aware.
@@ -117,6 +119,7 @@ export function CancelAppointmentDialog({
   onAnnul: (lateOutcome?: LateOutcome) => void;
   onRemove: (opts: { keepInHours: boolean; refundCredit: boolean }) => void;
 }) {
+  const nameOrder = useStudentNameOrder();
   const [lateOutcome, setLateOutcome] = React.useState<LateOutcome>("penalize");
   const [keepInHours, setKeepInHours] = React.useState(false);
   const [refundCredit, setRefundCredit] = React.useState(false);
@@ -144,11 +147,11 @@ export function CancelAppointmentDialog({
           Math.round((target.startsAt.getTime() - target.penaltyCutoffAt.getTime()) / 3600000),
         )
       : null;
-  const student = target.studentName ?? "l'allievo";
+  const student = target.studentName ? formatStoredName(target.studentName, nameOrder) : "l'allievo";
 
   const lessonLine = (
     <div className="mt-3 flex items-center gap-2 rounded-[12px] bg-[#f7f7f9] px-3 py-2.5 text-[13px] font-medium text-[#6a6a76]">
-      <span className="font-semibold text-foreground">{target.studentName ?? "Allievo"}</span>
+      <span className="font-semibold text-foreground">{target.studentName ? formatStoredName(target.studentName, nameOrder) : "Allievo"}</span>
       <span>·</span>
       <span>
         {dayLabel(target.startsAt)} · {timeLabel(target.startsAt)}
