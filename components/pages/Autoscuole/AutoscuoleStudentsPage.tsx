@@ -92,6 +92,12 @@ import { EditStudentLicenseDialog } from "@/components/pages/Autoscuole/dialogs/
 import { InviteCodeDialog } from "@/components/pages/Autoscuole/dialogs/InviteCodeDialog";
 import { ToolbarFilters } from "@/components/pages/Autoscuole/filters/ToolbarFilters";
 import {
+  DEFAULT_STUDENT_NAME_ORDER,
+  formatStudentName,
+  studentNameComparator,
+  type StudentNameOrder,
+} from "@/lib/autoscuole/student-name-order";
+import {
   LICENSE_CATEGORIES,
   LICENSE_CATEGORY_LABELS,
   TRANSMISSIONS,
@@ -785,6 +791,8 @@ export function AutoscuoleStudentsPage({
   >([]);
   const [registerLoading, setRegisterLoading] = React.useState(false);
   const [weeklyLimitActive, setWeeklyLimitActive] = React.useState(false);
+  const [studentNameOrder, setStudentNameOrder] =
+    React.useState<StudentNameOrder>(DEFAULT_STUDENT_NAME_ORDER);
   const [groupLessonsEnabledGlobal, setGroupLessonsEnabledGlobal] = React.useState(false);
   const [groupOptInSaving, setGroupOptInSaving] = React.useState(false);
   const [examPriorityEnabledGlobal, setExamPriorityEnabledGlobal] = React.useState(false);
@@ -1147,16 +1155,14 @@ export function AutoscuoleStudentsPage({
       else groups.pratica.push(s);
     }
     if (sortMode === "name") {
-      const fullName = (s: Student) => `${s.firstName} ${s.lastName}`.trim();
-      const byName = (a: Student, b: Student) =>
-        fullName(a).localeCompare(fullName(b), "it", { sensitivity: "base" });
+      const byName = studentNameComparator<Student>(studentNameOrder);
       groups.awaiting.sort(byName);
       groups.teoria.sort(byName);
       groups.pratica.sort(byName);
       groups.patentato.sort(byName);
     }
     return groups;
-  }, [filteredStudents, sortMode]);
+  }, [filteredStudents, sortMode, studentNameOrder]);
 
   /**
    * Lista su cui agisce la selezione multipla: quella effettivamente a schermo,
@@ -1858,14 +1864,14 @@ export function AutoscuoleStudentsPage({
       }
       toast.success({
         title: "Account creato",
-        description: `${firstName} ${lastName} può accedere all'app con la sua email.`,
+        description: `${formatStudentName({ firstName, lastName }, studentNameOrder)} può accedere all'app con la sua email.`,
       });
       setCreateOpen(false);
       setCreateForm(emptyCreateForm);
       void load(true);
       if (createForm.studentPhase === "TEORIA") void refreshQuizCtx();
     },
-    [company?.id, createForm, createSaving, emptyCreateForm, load, refreshQuizCtx, toast],
+    [company?.id, createForm, createSaving, emptyCreateForm, load, refreshQuizCtx, toast, studentNameOrder],
   );
 
   const initialRef = React.useRef(true);
@@ -1897,6 +1903,7 @@ export function AutoscuoleStudentsPage({
     getAutoscuolaSettings().then((res) => {
       if (res.success && res.data) {
         setWeeklyLimitActive(res.data.weeklyBookingLimitEnabled ?? false);
+        setStudentNameOrder(res.data.studentNameOrder);
         setExamPriorityEnabledGlobal(res.data.examPriorityEnabled ?? false);
         setGroupLessonsEnabledGlobal(res.data.groupLessonsEnabled === true);
         setLicenseDefaults({
@@ -1966,7 +1973,7 @@ export function AutoscuoleStudentsPage({
       <Checkbox
         checked={selectedIds.has(student.id)}
         onCheckedChange={() => toggleRowSelection(student.id)}
-        aria-label={`Seleziona ${student.firstName} ${student.lastName}`}
+        aria-label={`Seleziona ${formatStudentName(student, studentNameOrder)}`}
         className="size-[18px] rounded-[5px] border-[#cfcfcf] data-[state=checked]:border-[#111111] data-[state=checked]:bg-[#111111]"
       />
     </div>
@@ -2019,7 +2026,7 @@ export function AutoscuoleStudentsPage({
     return (
     <div className="flex min-w-0 items-center gap-3">
       <div className="relative shrink-0">
-        <StudentAvatar student={student} />
+        <StudentAvatar student={student} nameOrder={studentNameOrder} />
         {options?.showDot && (
           <span
             className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full ring-2 ring-white"
@@ -2031,7 +2038,7 @@ export function AutoscuoleStudentsPage({
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-semibold text-foreground">
-            {student.firstName} {student.lastName}
+            {formatStudentName(student, studentNameOrder)}
           </span>
           {student.neverAccessed ? (
             <NeverAccessedListMark hasPhone={Boolean(student.phone)} />
@@ -2268,7 +2275,7 @@ export function AutoscuoleStudentsPage({
             <div>
               <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Nome</p>
               <p className="text-sm font-medium text-foreground">
-                {register.student.firstName} {register.student.lastName}
+                {formatStudentName(register.student, studentNameOrder)}
               </p>
             </div>
             <div>
@@ -3624,7 +3631,7 @@ export function AutoscuoleStudentsPage({
           <div className="rounded-[14px] bg-[#f7f7f7] px-4 py-3 text-[13px] font-medium leading-relaxed text-[#4a4a4a]">
             {selectedStudents
               .slice(0, 6)
-              .map((student) => `${student.firstName} ${student.lastName}`)
+              .map((student) => formatStudentName(student, studentNameOrder))
               .join(", ")}
             {selectedStudents.length > 6 && (
               <span className="text-[#929292]">
@@ -3926,7 +3933,12 @@ export function AutoscuoleStudentsPage({
                   className="block cursor-pointer"
                   title="Modifica foto profilo"
                 >
-                  <StudentAvatar student={panelHeaderStudent} size={96} photoUrl={drawerPhotoUrl} />
+                  <StudentAvatar
+                    student={panelHeaderStudent}
+                    size={96}
+                    photoUrl={drawerPhotoUrl}
+                    nameOrder={studentNameOrder}
+                  />
                 </button>
                 {/* Pill "Modifica" (stile area personale) + download foto accanto */}
                 <div className="absolute -bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1.5">
@@ -3984,7 +3996,7 @@ export function AutoscuoleStudentsPage({
             <div className="mt-4">
               <p className="text-lg font-bold tracking-[-0.2px] text-foreground">
                 {panelHeaderStudent
-                  ? `${panelHeaderStudent.firstName} ${panelHeaderStudent.lastName}`
+                  ? formatStudentName(panelHeaderStudent, studentNameOrder)
                   : "Dettaglio allievo"}
               </p>
               <p className="mt-0.5 text-[13px] font-medium text-[#929292]">
@@ -4049,7 +4061,7 @@ export function AutoscuoleStudentsPage({
           open={phaseDialogOpen}
           onOpenChange={setPhaseDialogOpen}
           studentId={selectedStudentId}
-          studentName={`${register.student.firstName} ${register.student.lastName}`}
+          studentName={formatStudentName(register.student, studentNameOrder)}
           currentPhase={register.studentPhase ?? "PRATICA"}
           currentTheoryExamAt={register.theoryExamAt ?? null}
           phasesEnabled={quizCtx?.phasesEnabled}
@@ -4082,7 +4094,7 @@ export function AutoscuoleStudentsPage({
           open={licenseDialogOpen}
           onOpenChange={setLicenseDialogOpen}
           studentId={selectedStudentId}
-          studentName={`${register.student.firstName} ${register.student.lastName}`}
+          studentName={formatStudentName(register.student, studentNameOrder)}
           currentLicenseCategory={register.licenseCategory ?? null}
           currentTransmission={register.transmission ?? null}
           onSuccess={({ licenseCategory, transmission }) => {

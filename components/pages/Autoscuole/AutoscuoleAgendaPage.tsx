@@ -82,6 +82,15 @@ import {
   sortInstructorsForAgenda,
 } from "@/lib/autoscuole/agenda-instructor-order";
 import {
+  DEFAULT_STUDENT_NAME_ORDER,
+  formatStudentName,
+  formatStudentNameShort,
+  sortStudentsByName,
+  studentInitials,
+  studentMatchesQuery,
+  type StudentNameOrder,
+} from "@/lib/autoscuole/student-name-order";
+import {
   AGENDA_COLOR_EXCEPTIONS,
   DEFAULT_AGENDA_COLOR_CRITERION,
   DURATION_COLOR_ENTRIES,
@@ -535,12 +544,14 @@ function StudentSearchSelect({
   instructors,
   value,
   onChange,
+  nameOrder = DEFAULT_STUDENT_NAME_ORDER,
 }: {
   students: StudentOption[];
   /** Per mostrare in lista il nome dell'istruttore assegnato all'allievo. */
   instructors?: ResourceOption[];
   value: string;
   onChange: (id: string) => void;
+  nameOrder?: StudentNameOrder;
 }) {
   const [query, setQuery] = React.useState("");
   const [open, setOpen] = React.useState(false);
@@ -557,15 +568,14 @@ function StudentSearchSelect({
   const selected = students.find((s) => s.id === value);
 
   const filtered = React.useMemo(() => {
-    if (!query.trim()) return students;
-    const q = query.toLowerCase();
-    return students.filter(
-      (s) =>
-        s.firstName.toLowerCase().includes(q) ||
-        s.lastName.toLowerCase().includes(q) ||
-        (s.email && s.email.toLowerCase().includes(q)),
-    );
-  }, [students, query]);
+    const q = query.trim().toLowerCase();
+    const matching = q
+      ? students.filter(
+          (s) => studentMatchesQuery(s, q) || (s.email && s.email.toLowerCase().includes(q)),
+        )
+      : students;
+    return sortStudentsByName(matching, nameOrder);
+  }, [students, query, nameOrder]);
 
   const openPanel = React.useCallback(() => {
     const input = inputRef.current;
@@ -602,7 +612,7 @@ function StudentSearchSelect({
         ref={inputRef}
         className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none transition focus:border-primary"
         placeholder="Cerca allievo..."
-        value={open ? query : selected ? `${selected.firstName} ${selected.lastName}` : query}
+        value={open ? query : selected ? formatStudentName(selected, nameOrder) : query}
         onChange={(e) => {
           setQuery(e.target.value);
           if (!open) openPanel();
@@ -641,7 +651,7 @@ function StudentSearchSelect({
                     }}
                   >
                     <span className="flex min-w-0 flex-col">
-                      <span className="truncate font-medium">{s.firstName} {s.lastName}</span>
+                      <span className="truncate font-medium">{formatStudentName(s, nameOrder)}</span>
                       {s.email && <span className="truncate text-[11px] text-muted-foreground">{s.email}</span>}
                       {assignedInstructor && (
                         <span className="mt-px truncate text-[11px] font-medium text-[#555555]">
@@ -758,6 +768,8 @@ export function AutoscuoleAgendaPage({
   // Elenco di id anche parziale: chi non c'è resta in coda in ordine alfabetico.
   // Arriva coi settings (cache Redis) insieme al criterio colore, vedi sotto.
   const [agendaInstructorOrder, setAgendaInstructorOrder] = React.useState<string[]>([]);
+  const [studentNameOrder, setStudentNameOrder] =
+    React.useState<StudentNameOrder>(DEFAULT_STUDENT_NAME_ORDER);
   // Ordinata UNA volta qui: tutto ciò che discende da `instructors` (colonne
   // vista Giorno, filtro Istruttori, select dei dialoghi, stampa) eredita
   // l'ordine dell'autoscuola. La palette colori posizionale NO — resta
@@ -980,8 +992,7 @@ export function AutoscuoleAgendaPage({
   React.useEffect(() => {
     if (!examDialogOpen) { setExamBrowseOpen(false); setExamStudentSearch(""); }
   }, [examDialogOpen]);
-  const examStudentInitials = (first?: string | null, last?: string | null) =>
-    `${(first ?? "").trim()[0] ?? ""}${(last ?? "").trim()[0] ?? ""}`.toUpperCase() || "?";
+  const examStudentInitials = studentInitials;
   // Tooltip del badge "Pronto" nel picker esame: "Segnato pronto (da N giorni)".
   const examReadyTitle = (readyAt?: string | null) => {
     if (!readyAt) return "Segnato pronto per l'esame";
@@ -1022,13 +1033,14 @@ export function AutoscuoleAgendaPage({
   );
   const examBrowseList = React.useMemo(() => {
     const q = examStudentSearch.trim().toLowerCase();
-    return filterStudentsBySchool(students, examSchoolFilter)
+    const base = filterStudentsBySchool(students, examSchoolFilter)
       .filter((s) => !examForm.studentIds.includes(s.id))
-      .filter((s) => !q || `${s.firstName} ${s.lastName}`.toLowerCase().includes(q))
+      .filter((s) => !q || studentMatchesQuery(s, q));
+    return sortStudentsByName(base, studentNameOrder)
       // Chicca: gli allievi segnati "pronti" salgono in cima al picker esame
-      // (ordine stabile per il resto — filtriamo su una copia via sort).
+      // (sort stabile: fra i pari resta l'ordine alfabetico scelto sopra).
       .sort((a, b) => Number(Boolean(b.examReady)) - Number(Boolean(a.examReady)));
-  }, [students, examForm.studentIds, examStudentSearch, examSchoolFilter]);
+  }, [students, examForm.studentIds, examStudentSearch, examSchoolFilter, studentNameOrder]);
   const [examPanelGroup, setExamPanelGroup] = React.useState<ExamGroup | null>(null);
   const [examPanelStudentSearch, setExamPanelStudentSearch] = React.useState("");
   const [examPanelPending, setExamPanelPending] = React.useState(false);
@@ -1084,6 +1096,7 @@ export function AutoscuoleAgendaPage({
         setAgendaColorOverrides(res.data.agendaColorOverrides);
         setAgendaColorExceptions(res.data.agendaColorExceptions);
         setAgendaInstructorOrder(res.data.agendaInstructorOrder);
+        setStudentNameOrder(res.data.studentNameOrder);
       }
     });
     return () => {
@@ -1841,7 +1854,7 @@ export function AutoscuoleAgendaPage({
         durMin: dur,
         instructorId: form.instructorId || null,
         vehicleId: form.vehicleId || null,
-        title: student ? `${student.firstName} ${student.lastName}` : "Nuova guida",
+        title: student ? formatStudentName(student, studentNameOrder) : "Nuova guida",
         cardClass,
         dotClass,
       };
@@ -1908,7 +1921,7 @@ export function AutoscuoleAgendaPage({
       };
     }
     return null;
-  }, [createOpen, form.day, form.time, form.duration, form.studentId, form.instructorId, form.vehicleId, students, examDialogOpen, examForm, blockDialogOpen, blockForm, blockKind, createGroupLessonOpen, groupDraft, editAppointmentTarget, editDraft, DAY_START_HOUR]);
+  }, [createOpen, form.day, form.time, form.duration, form.studentId, form.instructorId, form.vehicleId, students, examDialogOpen, examForm, blockDialogOpen, blockForm, blockKind, createGroupLessonOpen, groupDraft, editAppointmentTarget, editDraft, DAY_START_HOUR, studentNameOrder]);
 
   // Annullamento pregresso dell'allievo su QUESTO orario. Se l'allievo aveva
   // annullato lui una guida che iniziava a questo istante, mostriamo un banner
@@ -2661,7 +2674,7 @@ export function AutoscuoleAgendaPage({
         : instructorHex(item.instructor?.id);
       const title = isGroup
         ? item.student.firstName
-        : `${item.student.firstName} ${item.student.lastName}`.trim();
+        : formatStudentName(item.student, studentNameOrder);
       const subtitle = isGroup
         ? item.groupLessonKind === "moto" ? "Gruppo moto" : "Gruppo"
         : [formatEventType(item.type), item.instructor?.name].filter(Boolean).join(" · ");
@@ -2805,7 +2818,7 @@ export function AutoscuoleAgendaPage({
       columns,
       totalCount,
     };
-  }, [printOpen, viewMode, viewPrefs.startHour, viewPrefs.endHour, viewPrefs.days, filtered, examGroups, instructors, vehicles, instructorFilter, vehicleFilter, typeFilter, statusFilter, search, dayFocus, weekStart, dayViewInstructors, rangeStart, rangeEnd, todayNormalized, vehiclesEnabled, nowTick]);
+  }, [printOpen, viewMode, viewPrefs.startHour, viewPrefs.endHour, viewPrefs.days, filtered, examGroups, instructors, vehicles, instructorFilter, vehicleFilter, typeFilter, statusFilter, search, dayFocus, weekStart, dayViewInstructors, rangeStart, rangeEnd, todayNormalized, vehiclesEnabled, nowTick, studentNameOrder]);
 
   return (
     <PageWrapper
@@ -3766,13 +3779,13 @@ export function AutoscuoleAgendaPage({
                                   type="button"
                                   className={cn("agenda-card group absolute left-0.5 right-0.5 z-10 flex flex-col justify-start rounded-[8px] text-[9px] leading-tight text-left hover:z-30", isPendingAction ? "pointer-events-none opacity-75" : "", instrCardClass)}
                                   style={{ top, height, ...(instrColorStyle ?? {}) }}
-                                  title={`${isExamInstr ? "🎓 ESAME · " : ""}${item.student.firstName} ${item.student.lastName} · ${formatEventType(item.type)} · ${formatTimeRange(start, end)}`}
+                                  title={`${isExamInstr ? "🎓 ESAME · " : ""}${formatStudentName(item.student, studentNameOrder)} · ${formatEventType(item.type)} · ${formatTimeRange(start, end)}`}
                                   onClick={(e) => e.stopPropagation()}
                                   onMouseEnter={hasNotesInstr ? () => setHoveredNoteId(item.id) : undefined}
                                   onMouseLeave={hasNotesInstr ? () => setHoveredNoteId((c) => (c === item.id ? null : c)) : undefined}
                                 >
                                   <div className={cn("flex h-full flex-col overflow-hidden rounded-[8px] p-1", isCompact ? "p-0.5" : "")}>
-                                    <div className={cn("font-bold truncate text-[10px]", isExamInstr ? "text-violet-800" : isGroupLessonInstr ? glTintInstr.name : "")}>{isExamInstr ? "🎓 " : ""}{item.student.firstName}{isGroupLessonInstr ? "" : ` ${item.student.lastName.charAt(0)}.`}</div>
+                                    <div className={cn("font-bold truncate text-[10px]", isExamInstr ? "text-violet-800" : isGroupLessonInstr ? glTintInstr.name : "")}>{isExamInstr ? "🎓 " : ""}{isGroupLessonInstr ? item.student.firstName : formatStudentNameShort(item.student, studentNameOrder)}</div>
                                     <div className={cn("text-[8px] truncate", isExamInstr ? "text-violet-600" : isGroupLessonInstr ? glTintInstr.time : "text-muted-foreground")}>{isExamInstr ? "Esame · " : isGroupLessonInstr ? `${glTintInstr.label} · ` : ""}{formatTimeRange(start, end)}{isCompact && licenseTag ? ` · ${licenseTag}` : ""}</div>
                                     {!isCompact && licenseTag ? (
                                       <div className={cn("text-[9px] font-semibold truncate", isExamInstr ? "text-violet-700" : "text-foreground/70")}>Patente {licenseTag}</div>
@@ -3794,7 +3807,7 @@ export function AutoscuoleAgendaPage({
                                 <div className="space-y-2">
                                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div>
                                   <div className="rounded-xl border border-border bg-white p-3">
-                                    <div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div>
+                                    <div className="text-sm font-semibold text-foreground">{formatStudentName(item.student, studentNameOrder)}</div>
                                     <div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div>
                                     <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
                                     <div className="mt-2 space-y-1 text-xs text-muted-foreground">
@@ -3913,7 +3926,7 @@ export function AutoscuoleAgendaPage({
                                         const lic = studentLicenseById.get(a.student.id);
                                         return (
                                           <div key={a.id} className="truncate text-[9px] font-semibold leading-tight text-violet-900/85">
-                                            {a.student.firstName} {a.student.lastName}
+                                            {formatStudentName(a.student, studentNameOrder)}
                                             {lic ? <span className="font-medium text-violet-500"> · {lic}</span> : null}
                                           </div>
                                         );
@@ -4312,7 +4325,7 @@ export function AutoscuoleAgendaPage({
                                 <>
                                   <div className="flex items-center justify-between gap-2">
                                     <div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight", isExamDay ? "text-violet-800" : isGroupLessonDay ? glTintDay.name : "text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>
-                                      {isExamDay && !isCompact ? "🎓 " : ""}{item.student.firstName} {item.student.lastName}
+                                      {isExamDay && !isCompact ? "🎓 " : ""}{formatStudentName(item.student, studentNameOrder)}
                                     </div>
                                     <Badge
                                       variant="secondary"
@@ -4356,7 +4369,7 @@ export function AutoscuoleAgendaPage({
                             <div className="space-y-2">
                               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div>
                               <div className="rounded-xl border border-border bg-white p-3">
-                                <div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div>
+                                <div className="text-sm font-semibold text-foreground">{formatStudentName(item.student, studentNameOrder)}</div>
                                 <div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div>
                                 <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
                                 <div className="mt-2 space-y-1 text-xs text-muted-foreground">
@@ -4479,7 +4492,7 @@ export function AutoscuoleAgendaPage({
                                         key={a.id}
                                         className="truncate text-[10px] font-semibold leading-tight text-violet-900/85"
                                       >
-                                        {a.student.firstName} {a.student.lastName}
+                                        {formatStudentName(a.student, studentNameOrder)}
                                         {lic ? (
                                           <span className="font-medium text-violet-500"> · {lic}</span>
                                         ) : null}
@@ -4706,6 +4719,7 @@ export function AutoscuoleAgendaPage({
           <div ref={createStudentRef}>
             <p className="mb-1.5 text-xs font-semibold text-[#555555]">Allievo</p>
             <StudentSearchSelect
+              nameOrder={studentNameOrder}
               students={filterStudentsBySchool(
                 vehiclesEnabled
                   ? students.filter((s) =>
@@ -5128,8 +5142,10 @@ export function AutoscuoleAgendaPage({
               (s) => !examDraftStudentIds.includes(s.id),
             );
             const examQuery = examPanelStudentSearch.trim().toLowerCase();
-            const examBrowse = examAddable
-              .filter((s) => !examQuery || `${s.firstName} ${s.lastName}`.toLowerCase().includes(examQuery))
+            const examBrowse = sortStudentsByName(
+              examAddable.filter((s) => !examQuery || studentMatchesQuery(s, examQuery)),
+              studentNameOrder,
+            )
               // Come nel picker di creazione: i "pronti" salgono in cima anche qui.
               .sort((a, b) => Number(Boolean(b.examReady)) - Number(Boolean(a.examReady)));
             // Diff draft vs salvato → abilita il bottone unico "Salva modifiche".
@@ -5299,12 +5315,12 @@ export function AutoscuoleAgendaPage({
                                   s.examReady && "ring-2 ring-[#1a7f50]",
                                 )}
                               >
-                                {examStudentInitials(s.firstName, s.lastName)}
+                                {examStudentInitials(s, studentNameOrder)}
                               </span>
                             </UserPhotoCircle>
                             <span className="flex min-w-0 flex-col">
                               <span className="flex min-w-0 items-center gap-1.5">
-                                <span className="truncate text-sm font-semibold text-foreground">{s.firstName} {s.lastName}</span>
+                                <span className="truncate text-sm font-semibold text-foreground">{formatStudentName(s, studentNameOrder)}</span>
                                 {s.examReady && (
                                   <span
                                     title={examReadyTitle(s.examReadyAt)}
@@ -5461,12 +5477,12 @@ export function AutoscuoleAgendaPage({
                                       s.examReady && "ring-2 ring-[#1a7f50]",
                                     )}
                                   >
-                                    {examStudentInitials(s.firstName, s.lastName)}
+                                    {examStudentInitials(s, studentNameOrder)}
                                   </span>
                                 </UserPhotoCircle>
                                 <span className="flex min-w-0 flex-col">
                                   <span className="flex min-w-0 items-center gap-1.5">
-                                    <span className="truncate text-sm font-medium text-foreground">{s.firstName} {s.lastName}</span>
+                                    <span className="truncate text-sm font-medium text-foreground">{formatStudentName(s, studentNameOrder)}</span>
                                     {s.examReady && (
                                       <span
                                         title={examReadyTitle(s.examReadyAt)}
@@ -5568,12 +5584,12 @@ export function AutoscuoleAgendaPage({
                               st.examReady && "ring-2 ring-[#1a7f50]",
                             )}
                           >
-                            {examStudentInitials(st.firstName, st.lastName)}
+                            {examStudentInitials(st, studentNameOrder)}
                           </span>
                         </UserPhotoCircle>
                         <span className="flex min-w-0 flex-1 flex-col">
                           <span className="flex min-w-0 items-center gap-1.5">
-                            <span className="truncate text-sm font-medium text-[#222222]">{st.firstName} {st.lastName}</span>
+                            <span className="truncate text-sm font-medium text-[#222222]">{formatStudentName(st, studentNameOrder)}</span>
                             {st.examReady && (
                               <span
                                 title={examReadyTitle(st.examReadyAt)}
@@ -5711,7 +5727,7 @@ export function AutoscuoleAgendaPage({
                       onClick={() => setExamForm((f) => ({ ...f, studentIds: f.studentIds.filter((x) => x !== id) }))}
                       className="flex cursor-pointer items-center gap-1.5 rounded-full border border-[#222222] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#222222] transition-colors hover:bg-[#f7f7f7]"
                     >
-                      {s.firstName} {s.lastName}
+                      {formatStudentName(s, studentNameOrder)}
                       {s.licenseCategory ? (
                         <span className="font-medium text-[#929292]">· {s.licenseCategory}{s.transmission === "automatic" ? " aut." : ""}</span>
                       ) : null}

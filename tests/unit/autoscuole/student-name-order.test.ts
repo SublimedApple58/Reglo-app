@@ -4,6 +4,8 @@ import {
   formatStudentName,
   formatStudentNameShort,
   sortStudentsByName,
+  studentInitials,
+  studentMatchesQuery,
 } from "@/lib/autoscuole/student-name-order";
 
 describe("asStudentNameOrder", () => {
@@ -109,5 +111,44 @@ describe("sortStudentsByName", () => {
     const originale = [...allievi];
     sortStudentsByName(allievi, "cognome_nome");
     expect(allievi).toEqual(originale);
+  });
+});
+
+describe("studentInitials", () => {
+  it("segue l'ordine con cui il nome è scritto accanto", () => {
+    const mario = { firstName: "Mario", lastName: "Rossi" };
+    expect(studentInitials(mario, "nome_cognome")).toBe("MR");
+    expect(studentInitials(mario, "cognome_nome")).toBe("RM");
+  });
+
+  it("non lascia mai un avatar vuoto", () => {
+    expect(studentInitials({ firstName: "", lastName: "" })).toBe("?");
+    expect(studentInitials({ firstName: "Gruppo", lastName: "" })).toBe("G");
+  });
+});
+
+describe("studentMatchesQuery", () => {
+  const mario = { firstName: "Mario", lastName: "Rossi" };
+
+  it("trova scrivendo in QUALUNQUE dei due ordini", () => {
+    // È il punto: il setting non deve spezzare le ricerche di chi è abituato
+    // all'ordine opposto.
+    expect(studentMatchesQuery(mario, "mario rossi")).toBe(true);
+    expect(studentMatchesQuery(mario, "rossi mario")).toBe(true);
+  });
+
+  it("trova anche per pezzi e senza badare alle maiuscole", () => {
+    expect(studentMatchesQuery(mario, "ROS")).toBe(true);
+    expect(studentMatchesQuery(mario, "mar")).toBe(true);
+    expect(studentMatchesQuery(mario, "  rossi  ")).toBe(true);
+  });
+
+  it("una ricerca vuota non filtra niente", () => {
+    expect(studentMatchesQuery(mario, "")).toBe(true);
+    expect(studentMatchesQuery(mario, "   ")).toBe(true);
+  });
+
+  it("non inventa corrispondenze", () => {
+    expect(studentMatchesQuery(mario, "bianchi")).toBe(false);
   });
 });

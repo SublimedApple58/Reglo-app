@@ -24,6 +24,11 @@ import {
 import { rescheduleAutoscuolaAppointment } from "@/lib/actions/autoscuole.actions";
 
 type StudentLite = { firstName: string; lastName: string };
+import {
+  DEFAULT_STUDENT_NAME_ORDER,
+  formatStudentName,
+  type StudentNameOrder,
+} from "@/lib/autoscuole/student-name-order";
 type ResourceLite = { name: string };
 
 export type RescheduleAppointmentDialogAppointment = {
@@ -82,11 +87,13 @@ export function RescheduleAppointmentDialog({
   onOpenChange,
   appointment,
   onSuccess,
+  nameOrder = DEFAULT_STUDENT_NAME_ORDER,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   appointment: RescheduleAppointmentDialogAppointment | null;
   onSuccess?: () => void;
+  nameOrder?: StudentNameOrder;
 }) {
   const toast = useFeedbackToast();
 
@@ -134,8 +141,7 @@ export function RescheduleAppointmentDialog({
 
   const isPast = newStart ? newStart.getTime() < Date.now() : false;
 
-  const studentLabel =
-    `${appointment.student.firstName} ${appointment.student.lastName}`.trim();
+  const studentLabel = formatStudentName(appointment.student, nameOrder);
   const subtitle = appointment.instructor?.name
     ? `${studentLabel} · ${appointment.instructor.name}`
     : studentLabel;
