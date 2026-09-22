@@ -23,6 +23,12 @@ import {
   type AgendaColorOverrides,
 } from "@/lib/autoscuole/agenda-color-criterion";
 import { sortInstructorsForAgenda } from "@/lib/autoscuole/agenda-instructor-order";
+import {
+  DEFAULT_STUDENT_NAME_ORDER,
+  STUDENT_NAME_ORDER_HINTS,
+  STUDENT_NAME_ORDER_LABELS,
+  type StudentNameOrder,
+} from "@/lib/autoscuole/student-name-order";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { INSTRUCTOR_COLOR_CHOICES } from "@/lib/autoscuole/instructor-colors";
 import { ColorSwatchPicker } from "@/components/ui/color-swatch-picker";
@@ -58,6 +64,23 @@ const CRITERION_OPTIONS: Array<{
     label: "Tipo patente",
     description:
       "Ogni blocco prende il colore della patente della guida (la B automatica è distinta dalla B).",
+  },
+];
+
+const NAME_ORDER_OPTIONS: Array<{
+  value: StudentNameOrder;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "nome_cognome",
+    label: STUDENT_NAME_ORDER_LABELS.nome_cognome,
+    description: `Gli allievi compaiono come "${STUDENT_NAME_ORDER_HINTS.nome_cognome}" e le liste sono in ordine di nome.`,
+  },
+  {
+    value: "cognome_nome",
+    label: STUDENT_NAME_ORDER_LABELS.cognome_nome,
+    description: `Gli allievi compaiono come "${STUDENT_NAME_ORDER_HINTS.cognome_nome}" e le liste sono in ordine di cognome.`,
   },
 ];
 
@@ -162,6 +185,10 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
     DEFAULT_AGENDA_COLOR_CRITERION,
   );
   const [savingCriterion, setSavingCriterion] = React.useState(false);
+  const [nameOrder, setNameOrder] = React.useState<StudentNameOrder>(
+    DEFAULT_STUDENT_NAME_ORDER,
+  );
+  const [savingNameOrder, setSavingNameOrder] = React.useState(false);
   const [overrides, setOverrides] = React.useState<AgendaColorOverrides>({});
   // Pannellini on-demand sotto i card (accordion: uno aperto alla volta).
   const [openPanel, setOpenPanel] = React.useState<"colors" | "exceptions" | null>(null);
@@ -184,6 +211,7 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
       if (!active) return;
       if (res.success && res.data) {
         setCriterion(res.data.agendaColorCriterion);
+        setNameOrder(res.data.studentNameOrder);
         setOverrides(res.data.agendaColorOverrides);
         setExceptions(res.data.agendaColorExceptions);
         setOrder(res.data.agendaInstructorOrder);
@@ -195,6 +223,21 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
       active = false;
     };
   }, []);
+
+  const saveNameOrder = async (value: StudentNameOrder) => {
+    if (value === nameOrder || savingNameOrder) return;
+    const previous = nameOrder;
+    setNameOrder(value);
+    setSavingNameOrder(true);
+    const res = await updateAutoscuolaSettings({ studentNameOrder: value });
+    setSavingNameOrder(false);
+    if (!res.success || !res.data) {
+      setNameOrder(previous);
+      toast.error({ description: res.message ?? "Impossibile salvare l'impostazione." });
+      return;
+    }
+    setNameOrder(res.data.studentNameOrder);
+  };
 
   const saveCriterion = async (value: AgendaColorCriterion) => {
     if (value === criterion || savingCriterion) return;
@@ -575,6 +618,53 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
           })}
         </div>
       )}
+
+      {/* ── Nome degli allievi (REG-507) ── */}
+      <section className="mt-10">
+        <div className="flex items-center gap-2.5">
+          <h3 className="text-base font-semibold text-[#222222]">Nome degli allievi</h3>
+          {savingNameOrder && <LoadingDots className="text-[#929292]" />}
+        </div>
+        <p className="mt-1 max-w-[560px] text-[13px] font-medium leading-normal text-[#929292]">
+          Come scrivere il nome degli allievi in tutta l&apos;app, e in che ordine elencarli.
+          Vale per l&apos;agenda, la lista Allievi e le schede.
+        </p>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {NAME_ORDER_OPTIONS.map((option) => {
+            const active = nameOrder === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => void saveNameOrder(option.value)}
+                disabled={savingNameOrder}
+                className={cn(
+                  "cursor-pointer rounded-2xl border-[1.5px] p-4 text-left transition-colors",
+                  active
+                    ? "border-[#222222] bg-[#fafafa]"
+                    : "border-[#dddddd] hover:border-[#b8b8b8]",
+                )}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-semibold text-[#222222]">{option.label}</div>
+                  <span
+                    className={cn(
+                      "flex size-[18px] shrink-0 items-center justify-center rounded-full border-[1.5px]",
+                      active ? "border-[#222222]" : "border-[#c9c9c9]",
+                    )}
+                  >
+                    {active && <span className="size-2.5 rounded-full bg-[#222222]" />}
+                  </span>
+                </div>
+                <div className="mt-1 text-[12.5px] font-medium leading-snug text-[#929292]">
+                  {option.description}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       {/* ── Istruttori in agenda: ordine delle colonne + colore ── */}
       <section className="mt-10">

@@ -772,7 +772,9 @@ model AutoscuolaVehicle {
   /// No longer unique: an instructor may own several exclusive vehicles.
   assignedInstructorId          String?  @db.Uuid
   followsInstructorAvailability Boolean  @default(true)
-  /// License category this vehicle serves: B | AM | A1 | A2 | A (see lib/autoscuole/license.ts).
+  /// License category this vehicle serves — the vehicle's OWN category, i.e. the
+  /// motrice, never the trailer (see LICENSE_CATEGORIES in lib/autoscuole/license.ts).
+  /// A CE course runs on a C truck: the hierarchy lives in licenseCategoryEligible.
   licenseCategory               String   @default("B")
   /// Transmission: manual | automatic.
   transmission                  String   @default("manual")
