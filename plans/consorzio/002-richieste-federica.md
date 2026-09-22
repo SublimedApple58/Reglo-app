@@ -125,6 +125,13 @@ catene del rimorchio:
 
 **B < BE · C1 < C1E · C < CE · D1 < D1E · D < DE**
 
+E, per la stessa ragione, le **qualificazioni sul mezzo su cui si svolgono**:
+**CQC → C · ADR → C**. CQC e ADR non sono classi di veicolo ma abilitazioni che
+si aggiungono a una patente: un corso CQC si fa su un camion. Il registro dei
+colori dell'agenda lo diceva già (la CQC ha C come categoria madre). Deciso da
+Tiziano il 22/09 dopo che il QA su staging ha mostrato 18 allievi CQC/ADR senza
+un solo veicolo prenotabile.
+
 Un allievo CE può usare un veicolo **C** (la motrice) o uno marcato **CE**. Senso
 unico: un allievo **C non** può usare un veicolo CE, perché guidare un complesso
 richiede la CE. Solo le motrici che hanno senso per quella categoria, mai "un

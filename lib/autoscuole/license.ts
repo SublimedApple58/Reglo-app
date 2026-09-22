@@ -279,16 +279,41 @@ const TRAILER_CATEGORY_MOTRICE: Record<string, string> = {
 };
 
 /**
+ * Veicolo su cui si svolge una **qualificazione** — REG-507.
+ *
+ * CQC e ADR non sono classi di veicolo: sono abilitazioni che si aggiungono a
+ * una patente. Un corso CQC si fa su un camion, non su un fantomatico "veicolo
+ * CQC". Sono modellate come pseudo-categorie per non introdurre una seconda
+ * dimensione su allievi, veicoli e tariffe, ma pretendere un mezzo omonimo è lo
+ * stesso errore del rimorchio: su staging lasciava 18 allievi senza un solo
+ * veicolo prenotabile.
+ *
+ * Il registro dei colori dell'agenda lo diceva già: la CQC ha **C** come
+ * categoria madre.
+ *
+ * Nota per chi ci tornerà: la CQC esiste anche nella variante *persone*, che si
+ * farebbe su un autobus (D). Qui vale la scelta del consorzio — camion — e se
+ * un giorno servisse distinguerle andranno separate le due pseudo-categorie,
+ * non allargata questa mappa a tutto.
+ */
+const QUALIFICATION_BASE_VEHICLE: Record<string, string> = {
+  CQC: "C",
+  ADR: "C",
+};
+
+/**
  * True when a vehicle of `vehicleCategory` is eligible for a student pursuing
  * `studentCategory`, applying two real-world hierarchies:
  *
  *   MOTO:    AM < A1 < A2 < A
  *   TRAILER: B < BE · C1 < C1E · C < CE · D1 < D1E · D < DE
+ *   QUALIF.: CQC e ADR si svolgono su un camion C
  *
  * A moto student may train on any moto of category ≤ their own (an A2 student →
  * A2, A1, AM — but NOT A). A trailer student may train on the corresponding
  * motrice (a CE student → a C truck) or on a vehicle already marked with the
- * trailer category.
+ * trailer category. A CQC/ADR student trains on the truck the qualification is
+ * actually taught on.
  *
  * Both hierarchies run **one way only**: a C student may NOT use a CE-marked
  * vehicle, because driving a combination requires the CE licence. Only the
@@ -311,14 +336,21 @@ export function licenseCategoryEligible(
   }
   // Trailer course on its motrice: CE → C, DE → D, BE → B, …
   if (TRAILER_CATEGORY_MOTRICE[studentCategory] === vehicleCategory) return true;
+  // Qualification on the vehicle it is actually taught on: CQC → C, ADR → C.
+  if (QUALIFICATION_BASE_VEHICLE[studentCategory] === vehicleCategory) return true;
   // Different classes (moto vs non-moto), or two unrelated non-moto categories
   // (e.g. B vs C, or a C student on a CE vehicle) — never eligible.
   return false;
 }
 
-/** The motrice category a trailer course can also run on, if any. */
+/**
+ * The vehicle category a course can ALSO run on, beyond its own: the motrice of
+ * a trailer category, or the vehicle a qualification is taught on.
+ */
 export function motriceCategoryFor(category: string): string | null {
-  return TRAILER_CATEGORY_MOTRICE[category] ?? null;
+  return (
+    TRAILER_CATEGORY_MOTRICE[category] ?? QUALIFICATION_BASE_VEHICLE[category] ?? null
+  );
 }
 
 /**
