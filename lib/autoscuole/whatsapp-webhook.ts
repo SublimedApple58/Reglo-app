@@ -131,23 +131,40 @@ export function verifyTelnyxSignature(
   if (skewSeconds > TELNYX_MAX_SKEW_SECONDS) return false;
 
   try {
-    const key = Buffer.from(publicKeyBase64, "base64");
-    if (key.length !== 32) return false;
     const sig = Buffer.from(signature, "base64");
     if (sig.length !== 64) return false;
+    const key = toEd25519PublicKey(publicKeyBase64);
+    if (!key) return false;
     return crypto.verify(
       null,
       Buffer.from(`${timestamp}|${rawBody}`, "utf8"),
-      crypto.createPublicKey({
-        // Ed25519 grezza a 32 byte → SPKI, che è quello che accetta crypto.verify.
-        key: Buffer.concat([TELNYX_ED25519_SPKI_PREFIX, key]),
-        format: "der",
-        type: "spki",
-      }),
+      key,
       sig,
     );
   } catch {
     return false;
+  }
+}
+
+/**
+ * Accetta la chiave in **entrambe** le forme in cui la si trova in giro: grezza a
+ * 32 byte (come la pubblica il portale Telnyx) o già impacchettata in SPKI DER.
+ *
+ * Non è indecisione: `lib/autoscuole/voice.ts` legge la stessa variabile
+ * `TELNYX_PUBLIC_KEY` assumendo SPKI, questo modulo nasceva assumendo la forma
+ * grezza, e indovinare male significa un webhook che rifiuta tutto il primo
+ * giorno senza che nessuno capisca perché. Reggere tutte e due costa otto righe.
+ */
+function toEd25519PublicKey(publicKeyBase64: string): crypto.KeyObject | null {
+  const raw = Buffer.from(publicKeyBase64, "base64");
+  const der =
+    raw.length === 32 ? Buffer.concat([TELNYX_ED25519_SPKI_PREFIX, raw]) : raw;
+  // Uno SPKI Ed25519 valido è sempre 44 byte: 12 di intestazione + 32 di chiave.
+  if (der.length !== TELNYX_ED25519_SPKI_PREFIX.length + 32) return null;
+  try {
+    return crypto.createPublicKey({ key: der, format: "der", type: "spki" });
+  } catch {
+    return null;
   }
 }
 

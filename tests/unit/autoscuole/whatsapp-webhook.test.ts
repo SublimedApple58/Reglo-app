@@ -285,6 +285,20 @@ describe("verifyTelnyxSignature", () => {
     expect(verifyTelnyxSignature(body, signature, vecchio, publicKeyBase64, now)).toBe(false);
   });
 
+  it("accetta la chiave anche in forma SPKI completa, non solo grezza", () => {
+    // `voice.ts` legge la stessa TELNYX_PUBLIC_KEY assumendo SPKI: se il valore
+    // in produzione fosse in quella forma, la verifica deve reggere lo stesso.
+    const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
+    const spki = publicKey.export({ format: "der", type: "spki" }).toString("base64");
+    const signature = signTelnyx(privateKey, timestamp, body);
+    expect(verifyTelnyxSignature(body, signature, timestamp, spki, now)).toBe(true);
+  });
+
+  it("rifiuta una chiave di lunghezza assurda invece di esplodere", () => {
+    const signature = "A".repeat(88);
+    expect(verifyTelnyxSignature(body, signature, timestamp, "bm9wZQ==", now)).toBe(false);
+  });
+
   it("senza intestazioni non passa", () => {
     const { publicKeyBase64 } = telnyxKeypair();
     expect(verifyTelnyxSignature(body, null, timestamp, publicKeyBase64, now)).toBe(false);
