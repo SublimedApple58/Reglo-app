@@ -8,16 +8,19 @@ import {
 import { createWhatsAppReplyNotification } from "@/lib/autoscuole/notifications";
 import {
   parseMetaWebhook,
+  parseTelnyxWebhook,
   parseTwilioWebhook,
   verifyMetaSignature,
+  verifyTelnyxSignature,
   verifyTwilioSignature,
+  type WhatsAppEvent,
 } from "@/lib/autoscuole/whatsapp-webhook";
 
 /**
  * Webhook WhatsApp (REG-500) — stati di consegna e messaggi in arrivo.
  *
- * Accetta entrambe le forme, Meta Cloud API e Twilio, perché la scelta del
- * fornitore si fa al momento di collegare e non deve bloccare il codice.
+ * Accetta tre forme — Telnyx (il fornitore scelto), Meta Cloud API e Twilio —
+ * perché un cambio di fornitore non deve costare una riscrittura.
  *
  * Regola d'oro dei webhook: **rispondere 200 in fretta e sempre**. Meta e Twilio
  * ritentano e, dopo troppi errori, disattivano la sottoscrizione. Quindi qui non
@@ -77,6 +80,35 @@ export async function POST(request: Request) {
       return new NextResponse("", { status: 200 });
     }
 
+    // ── Telnyx: JSON, firma Ed25519 su "timestamp|corpo" ──
+    const telnyxSignature = request.headers.get("telnyx-signature-ed25519");
+    const provider = (process.env.WHATSAPP_PROVIDER ?? "").toLowerCase();
+    if (provider === "telnyx" && !telnyxSignature) {
+      // Senza questo controllo una richiesta priva di intestazione Telnyx
+      // scivolerebbe nel ramo Meta, che senza WHATSAPP_APP_SECRET non verifica
+      // niente: bastava spedire un payload in forma Meta per iniettare eventi.
+      return new NextResponse("bad signature", { status: 403 });
+    }
+    if (telnyxSignature) {
+      const publicKey = process.env.TELNYX_PUBLIC_KEY;
+      if (!publicKey) {
+        // Fallire chiuso è voluto. Senza chiave chiunque potrebbe spacciarsi per
+        // Telnyx e far risultare revocato il consenso di un allievo, o iniettare
+        // risposte finte nella campanella dell'autoscuola.
+        console.error("[whatsapp-webhook] TELNYX_PUBLIC_KEY non configurata");
+        return new NextResponse("not configured", { status: 500 });
+      }
+      const valid = verifyTelnyxSignature(
+        raw,
+        telnyxSignature,
+        request.headers.get("telnyx-timestamp"),
+        publicKey,
+      );
+      if (!valid) return new NextResponse("bad signature", { status: 403 });
+      await handleEvents(parseTelnyxWebhook(JSON.parse(raw)));
+      return NextResponse.json({ received: true });
+    }
+
     // ── Meta Cloud API / 360dialog: JSON, firma HMAC-SHA256 sul corpo grezzo ──
     const appSecret = process.env.WHATSAPP_APP_SECRET;
     if (appSecret) {
@@ -103,7 +135,7 @@ export async function POST(request: Request) {
   }
 }
 
-async function handleEvents(events: ReturnType<typeof parseMetaWebhook>) {
+async function handleEvents(events: WhatsAppEvent[]) {
   for (const event of events) {
     try {
       if (event.type === "status") {

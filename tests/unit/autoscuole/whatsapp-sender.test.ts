@@ -27,6 +27,12 @@ const TWILIO_ENV = {
   }),
 } as unknown as NodeJS.ProcessEnv;
 
+const TELNYX_ENV = {
+  WHATSAPP_PROVIDER: "telnyx",
+  TELNYX_API_KEY: "KEY0123-finta",
+  TELNYX_WHATSAPP_FROM: "+390000000000",
+} as unknown as NodeJS.ProcessEnv;
+
 describe("registro dei template", () => {
   it("ogni template dichiara le variabili che usa nel corpo", () => {
     for (const [kind, template] of Object.entries(WHATSAPP_TEMPLATES)) {
@@ -225,6 +231,94 @@ describe("sendWhatsAppTemplate", () => {
     );
     expect(res).toMatchObject({ ok: false, retriable: false });
     if (!res.ok) expect(res.reason).toContain("ContentSid");
+  });
+
+  it("su Telnyx manda il template nella busta Telnyx, col + davanti al numero", async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { id: "msg_abc" } }),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const res = await sendWhatsAppTemplate(
+      {
+        to: "333 1234567",
+        kind: "morning_reminder_student",
+        values: { nome: "Marco", ora: "10:00", autoscuola: "Reglo" },
+      },
+      TELNYX_ENV,
+    );
+
+    expect(res).toEqual({ ok: true, providerMessageId: "msg_abc" });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://api.telnyx.com/v2/messages/whatsapp");
+    expect(init.headers.Authorization).toBe("Bearer KEY0123-finta");
+
+    const body = JSON.parse(init.body);
+    // Telnyx vuole il +, la Cloud API no: è la differenza che si sbaglia per prima.
+    expect(body.to).toBe("+393331234567");
+    expect(body.from).toBe("+390000000000");
+    expect(body.whatsapp_message.type).toBe("template");
+    expect(body.whatsapp_message.template.name).toBe("promemoria_guida_mattutino");
+    expect(body.whatsapp_message.template.language).toEqual({
+      policy: "deterministic",
+      code: "it",
+    });
+    expect(
+      body.whatsapp_message.template.components[0].parameters.map(
+        (p: { text: string }) => p.text,
+      ),
+    ).toEqual(["Marco", "10:00", "Reglo"]);
+  });
+
+  it("su Telnyx riporta l'errore del fornitore invece di inghiottirlo", async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: async () => ({
+        errors: [{ code: "10015", title: "Invalid parameters", detail: "template not found" }],
+      }),
+    }) as unknown as typeof fetch;
+
+    const res = await sendWhatsAppTemplate(
+      { to: "+393331234567", kind: "morning_reminder_student", values: { nome: "M", ora: "1", autoscuola: "R" } },
+      TELNYX_ENV,
+    );
+
+    expect(res).toMatchObject({ ok: false, retriable: false });
+    if (!res.ok) {
+      expect(res.reason).toContain("template not found");
+      expect(res.reason).toContain("10015");
+    }
+  });
+
+  it("su Telnyx un 5xx è ritentabile, un 4xx no", async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({}),
+    }) as unknown as typeof fetch;
+
+    const res = await sendWhatsAppTemplate(
+      { to: "+393331234567", kind: "morning_reminder_student", values: { nome: "M", ora: "1", autoscuola: "R" } },
+      TELNYX_ENV,
+    );
+    expect(res).toMatchObject({ ok: false, retriable: true });
+  });
+
+  it("senza TELNYX_WHATSAPP_FROM il canale non risulta collegato", () => {
+    const res = resolveWhatsAppSender({
+      WHATSAPP_PROVIDER: "telnyx",
+      TELNYX_API_KEY: "KEY0123-finta",
+    } as unknown as NodeJS.ProcessEnv);
+    expect(res.configured).toBe(false);
+    if (!res.configured) expect(res.reason).toContain("TELNYX_WHATSAPP_FROM");
+    expect(
+      isWhatsAppChannelAvailable({
+        WHATSAPP_PROVIDER: "telnyx",
+        TELNYX_API_KEY: "KEY0123-finta",
+      } as unknown as NodeJS.ProcessEnv),
+    ).toBe(false);
   });
 
   it("senza provider configurato non lancia: torna un motivo da scrivere a log", async () => {

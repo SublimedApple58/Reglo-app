@@ -2,8 +2,10 @@ import crypto from "crypto";
 import {
   isOptOutText,
   parseMetaWebhook,
+  parseTelnyxWebhook,
   parseTwilioWebhook,
   verifyMetaSignature,
+  verifyTelnyxSignature,
   verifyTwilioSignature,
 } from "@/lib/autoscuole/whatsapp-webhook";
 
@@ -232,5 +234,149 @@ describe("parseTwilioWebhook", () => {
   it("ignora quello che non riconosce", () => {
     expect(parseTwilioWebhook({})).toEqual([]);
     expect(parseTwilioWebhook({ MessageStatus: "queued", MessageSid: "SM4" })).toEqual([]);
+  });
+});
+
+/* ──────────────────────────────── Telnyx ────────────────────────────────── */
+
+/** Chiave vera generata al volo: la firma si prova, non si guarda. */
+function telnyxKeypair() {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
+  // Telnyx pubblica la chiave GREZZA a 32 byte in base64, non lo SPKI completo.
+  const raw = publicKey.export({ format: "der", type: "spki" }).subarray(-32);
+  return { publicKeyBase64: raw.toString("base64"), privateKey };
+}
+
+function signTelnyx(privateKey: crypto.KeyObject, timestamp: string, body: string) {
+  return crypto
+    .sign(null, Buffer.from(`${timestamp}|${body}`, "utf8"), privateKey)
+    .toString("base64");
+}
+
+describe("verifyTelnyxSignature", () => {
+  const body = JSON.stringify({ data: { event_type: "message.received" } });
+  const now = new Date("2026-09-22T10:00:00Z");
+  const timestamp = String(Math.floor(now.getTime() / 1000));
+
+  it("accetta una firma autentica", () => {
+    const { publicKeyBase64, privateKey } = telnyxKeypair();
+    const signature = signTelnyx(privateKey, timestamp, body);
+    expect(verifyTelnyxSignature(body, signature, timestamp, publicKeyBase64, now)).toBe(true);
+  });
+
+  it("rifiuta un corpo manomesso dopo la firma", () => {
+    const { publicKeyBase64, privateKey } = telnyxKeypair();
+    const signature = signTelnyx(privateKey, timestamp, body);
+    const tampered = JSON.stringify({ data: { event_type: "message.finalized" } });
+    expect(verifyTelnyxSignature(tampered, signature, timestamp, publicKeyBase64, now)).toBe(false);
+  });
+
+  it("rifiuta la firma di un'altra chiave", () => {
+    const { publicKeyBase64 } = telnyxKeypair();
+    const impostore = telnyxKeypair();
+    const signature = signTelnyx(impostore.privateKey, timestamp, body);
+    expect(verifyTelnyxSignature(body, signature, timestamp, publicKeyBase64, now)).toBe(false);
+  });
+
+  it("rifiuta una richiesta vecchia, anche se la firma è buona (replay)", () => {
+    const { publicKeyBase64, privateKey } = telnyxKeypair();
+    const vecchio = String(Math.floor(now.getTime() / 1000) - 10 * 60);
+    const signature = signTelnyx(privateKey, vecchio, body);
+    expect(verifyTelnyxSignature(body, signature, vecchio, publicKeyBase64, now)).toBe(false);
+  });
+
+  it("senza intestazioni non passa", () => {
+    const { publicKeyBase64 } = telnyxKeypair();
+    expect(verifyTelnyxSignature(body, null, timestamp, publicKeyBase64, now)).toBe(false);
+    expect(verifyTelnyxSignature(body, "abc", null, publicKeyBase64, now)).toBe(false);
+  });
+});
+
+describe("parseTelnyxWebhook", () => {
+  it("legge un messaggio in arrivo", () => {
+    const events = parseTelnyxWebhook({
+      data: {
+        event_type: "message.received",
+        payload: {
+          id: "msg_1",
+          text: "posso spostare la guida?",
+          from: { phone_number: "+393331234567" },
+          to: [{ phone_number: "+390000000000", status: "webhook_delivered" }],
+        },
+      },
+    });
+    expect(events).toEqual([
+      {
+        type: "inbound",
+        from: "+393331234567",
+        text: "posso spostare la guida?",
+        providerMessageId: "msg_1",
+        isOptOut: false,
+      },
+    ]);
+  });
+
+  it("un messaggio in arrivo NON viene scambiato per uno stato di consegna", () => {
+    // `webhook_delivered` in `to[].status` riguarda la consegna del webhook a noi.
+    const events = parseTelnyxWebhook({
+      data: {
+        event_type: "message.received",
+        payload: {
+          id: "msg_2",
+          text: "ciao",
+          from: { phone_number: "+393331234567" },
+          to: [{ phone_number: "+390000000000", status: "delivered" }],
+        },
+      },
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe("inbound");
+  });
+
+  it("riconosce la revoca del consenso in arrivo", () => {
+    const events = parseTelnyxWebhook({
+      data: {
+        event_type: "message.received",
+        payload: {
+          id: "msg_3",
+          text: "CANCELLAMI",
+          from: { phone_number: "+393331234567" },
+        },
+      },
+    });
+    expect(events[0]).toMatchObject({ type: "inbound", isOptOut: true });
+  });
+
+  it("legge uno stato di consegna e l'errore che lo accompagna", () => {
+    const events = parseTelnyxWebhook({
+      data: {
+        event_type: "message.finalized",
+        payload: {
+          id: "msg_4",
+          to: [{ phone_number: "+393331234567", status: "delivery_failed" }],
+          errors: [{ code: "40003", title: "Undeliverable", detail: "numero senza WhatsApp" }],
+        },
+      },
+    });
+    expect(events).toEqual([
+      {
+        type: "status",
+        providerMessageId: "msg_4",
+        status: "failed",
+        recipient: "+393331234567",
+        error: "Undeliverable — numero senza WhatsApp",
+      },
+    ]);
+  });
+
+  it("ignora gli stati di transito e i payload che non c'entrano", () => {
+    expect(
+      parseTelnyxWebhook({
+        data: { event_type: "message.sent", payload: { id: "m", to: [{ status: "queued" }] } },
+      }),
+    ).toEqual([]);
+    expect(parseTelnyxWebhook({ data: { event_type: "call.answered", payload: { id: "c" } } })).toEqual([]);
+    expect(parseTelnyxWebhook({})).toEqual([]);
+    expect(parseTelnyxWebhook(null)).toEqual([]);
   });
 });

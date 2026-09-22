@@ -1,17 +1,21 @@
 /**
  * Invio WhatsApp: un'interfaccia, più adapter (REG-500).
  *
- * La scelta del fornitore NON è sul percorso critico e non va incisa nel codice:
- * tutti e tre i candidati (Meta Cloud API diretta, Twilio, 360dialog) mandano lo
- * stesso template allo stesso numero, cambia solo l'involucro HTTP. Si decide al
- * momento di collegare, su quale onboarding arriva prima, e si cambia idea dopo
- * con una variabile d'ambiente.
+ * **Fornitore scelto: Telnyx** (deciso il 22/09/2026). Telnyx è BSP ufficiale
+ * della WhatsApp Business Platform ed è già il fornitore della voce di Reglo:
+ * stessa chiave API, stessa fattura, stesso portale. Il margine è $0,004/msg
+ * senza canone fisso — più basso di Twilio ($0,005–0,010) — e l'onboarding passa
+ * dall'Embedded Signup di Meta dal portale Telnyx, senza il giro manuale con
+ * System User e Graph API che serve con la Cloud API diretta.
  *
- * Nota sui costi, perché guida la scelta: il margine del fornitore è il termine
- * piccolo (Twilio ~$0,005/msg → ~€10/mese a 2.200 messaggi), le tariffe Meta sono
- * il termine grande e sono identiche per tutti. Sopra i ~10.000 messaggi al mese
- * il margine Twilio smette di essere trascurabile: si passa a `cloud` (€0) o a
- * 360dialog (€49/mese fissi) cambiando `WHATSAPP_PROVIDER`.
+ * Gli adapter `cloud` (Meta diretta / 360dialog) e `twilio` restano nel file come
+ * riferimento e via di fuga, ma non sono la strada: l'account Twilio è sospeso
+ * con saldo negativo e non ci vogliamo dipendere.
+ *
+ * Sui costi, perché non si torni a discuterne: il margine del fornitore è il
+ * termine piccolo (a 2.200 msg/mese, $0,004 fanno ~€8/mese), le tariffe Meta sono
+ * il termine grande e sono identiche per chiunque. Il fornitore si cambia con una
+ * variabile d'ambiente, non con una riscrittura.
  *
  * 360dialog espone la Cloud API con un altro base URL e un altro header di auth:
  * per questo NON ha un adapter suo, riusa quello `cloud`.
@@ -179,6 +183,85 @@ class TwilioSender implements WhatsAppSender {
   }
 }
 
+/* ──────────────────────────────── Telnyx ────────────────────────────────── */
+
+/**
+ * Telnyx fa da tramite verso Meta ma **non** riscrive il modello dei template:
+ * il corpo `whatsapp_message` è la struttura Meta pari pari (nome, lingua,
+ * `components`), incapsulata in una busta Telnyx con `from`/`to` in E.164 col +.
+ *
+ * Conseguenza pratica, ed è la ragione per cui questo adapter è il più semplice
+ * dei tre: i template si scrivono una volta sola e valgono anche se un domani si
+ * passa a Meta diretta. Twilio invece pretende un `ContentSid` per template,
+ * creato a mano in console — quel lavoro non è riutilizzabile.
+ *
+ * La chiave API è la stessa della voce (`TELNYX_API_KEY`): non c'è un account
+ * nuovo da aprire né una credenziale nuova da custodire.
+ */
+class TelnyxSender implements WhatsAppSender {
+  readonly providerName = "telnyx";
+
+  constructor(
+    private readonly config: {
+      apiKey: string;
+      /** Numero mittente registrato su WhatsApp, in E.164. */
+      from: string;
+      baseUrl: string;
+    },
+  ) {}
+
+  async send({ to, kind, values, languageCode = "it" }: WhatsAppSendInput) {
+    const template = getWhatsAppTemplate(kind);
+    const parameters = buildTemplateParameters(kind, values);
+    const res = await fetch(`${this.config.baseUrl}/messages/whatsapp`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.config.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: this.config.from,
+        to,
+        whatsapp_message: {
+          type: "template",
+          template: {
+            name: template.name,
+            // "deterministic" = manda esattamente questa lingua o fallisci. Il
+            // fallback automatico di Meta sceglierebbe una lingua a caso fra
+            // quelle approvate, e l'allievo si vedrebbe arrivare l'inglese.
+            language: { policy: "deterministic", code: languageCode },
+            components: parameters.length
+              ? [
+                  {
+                    type: "body",
+                    parameters: parameters.map((text) => ({ type: "text", text })),
+                  },
+                ]
+              : [],
+          },
+        },
+      }),
+    });
+
+    const payload = (await res.json().catch(() => null)) as {
+      data?: { id?: string };
+      errors?: Array<{ code?: string; title?: string; detail?: string }>;
+    } | null;
+
+    if (!res.ok) {
+      const first = payload?.errors?.[0];
+      const message =
+        [first?.title, first?.detail].filter(Boolean).join(" — ") || `HTTP ${res.status}`;
+      return {
+        ok: false as const,
+        reason: `telnyx ${res.status}: ${message}${first?.code ? ` (${first.code})` : ""}`,
+        retriable: res.status >= 500 || res.status === 429,
+      };
+    }
+    return { ok: true as const, providerMessageId: payload?.data?.id ?? null };
+  }
+}
+
 /* ──────────────────────────── Scelta del sender ──────────────────────────── */
 
 export type SenderResolution =
@@ -220,6 +303,30 @@ export function resolveWhatsAppSender(env: NodeJS.ProcessEnv = process.env): Sen
     };
   }
 
+  if (provider === "telnyx") {
+    // Stessa chiave della voce: se la voce funziona, questa c'è già.
+    const apiKey = env.TELNYX_API_KEY;
+    const from = env.TELNYX_WHATSAPP_FROM;
+    if (!apiKey) {
+      return { configured: false, reason: "TELNYX_API_KEY non configurata" };
+    }
+    if (!from) {
+      return {
+        configured: false,
+        reason:
+          "TELNYX_WHATSAPP_FROM non configurata (il numero mittente registrato su WhatsApp, in E.164)",
+      };
+    }
+    return {
+      configured: true,
+      sender: new TelnyxSender({
+        apiKey,
+        from,
+        baseUrl: env.TELNYX_API_BASE_URL ?? "https://api.telnyx.com/v2",
+      }),
+    };
+  }
+
   if (provider === "twilio") {
     const accountSid = env.TWILIO_ACCOUNT_SID;
     const authToken = env.TWILIO_AUTH_TOKEN;
@@ -245,7 +352,7 @@ export function resolveWhatsAppSender(env: NodeJS.ProcessEnv = process.env): Sen
   return {
     configured: false,
     reason: provider
-      ? `WHATSAPP_PROVIDER="${provider}" non riconosciuto (cloud | 360dialog | twilio)`
+      ? `WHATSAPP_PROVIDER="${provider}" non riconosciuto (telnyx | cloud | 360dialog | twilio)`
       : "WHATSAPP_PROVIDER non impostata: WhatsApp non è collegato",
   };
 }

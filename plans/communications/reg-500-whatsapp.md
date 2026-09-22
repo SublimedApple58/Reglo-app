@@ -1,7 +1,14 @@
 # REG-500 — WhatsApp come canale vero + scelta del canale una volta per tutte
 
-**Stato:** valutazione e piano, 2026-09-21. **Nessun codice scritto**, in attesa di
-approvazione e delle decisioni di Tiziano (provider, costi, verifica Meta).
+**Stato:** aggiornato 2026-09-22. Fase 0 implementata su **staging** (prod non
+toccata). **Provider scelto: Telnyx.** Il codice è pronto lato invio, webhook e
+UI; manca solo l'attivazione manuale del mittente → vedi §7.
+
+**Cambio di rotta del 22/09:** Twilio è stato scartato. Il suo account è sospeso
+con saldo a −280 $ (debito pregresso, non di questo progetto) e non ci vogliamo
+dipendere. Al suo posto **Telnyx**, che Reglo già usa per la voce: BSP ufficiale
+WhatsApp, margine $0,004/msg (il più basso fra i tramiti), nessun canone fisso,
+stessa chiave API e stessa fattura della voce.
 
 ---
 
@@ -85,23 +92,34 @@ WhatsApp** a vuoto.
 Tutte passano da Meta: non esiste WhatsApp Business senza una WABA e senza
 template approvati. Cambia solo chi fa da tramite.
 
-| | Meta Cloud API (diretta) | **Twilio** | 360dialog | Sinch / MessageBird |
+| | **Telnyx** | Meta Cloud API (diretta) | Twilio | 360dialog |
 |---|---|---|---|---|
-| Costo fisso | €0 | €0 | **€49/mese per numero** | contratti, spesso minimi mensili |
-| Margine sul messaggio | nessuno | **~$0,005 a messaggio** (in e out) | nessuno | variabile |
-| Tariffe Meta | a carico | a carico, senza ricarico | a carico | a carico |
-| Integrazione | webhook + Graph API da zero | **il codice c'è già** (`whatsapp.ts` parla Twilio) | API propria, da scrivere | da scrivere |
-| Stesso fornitore della voce Reglo | no | **sì** (i numeri voce +39 0445 0600xx sono Twilio) | no | no |
-| Tempi | più lunghi (gestisci tu WABA, sender, template) | brevi | medi | lunghi |
-| Costo del solo provider a 30.000 msg/mese | **€0** | €138/mese | €49/mese | variabile |
+| Costo fisso | **€0** | €0 | €0 | €49/mese per numero |
+| Margine sul messaggio | **$0,004** | nessuno | $0,005–0,010 | nessuno |
+| Tariffe Meta | a carico, stessa fattura | a carico | a carico | a carico |
+| Registrazione mittente | **Embedded Signup dal portale** | manuale (App + System User) | Embedded Signup | Embedded Signup |
+| Stesso fornitore della voce Reglo | **sì** (la voce è già Telnyx) | no | no | no |
+| Credenziali già in casa | **sì** (`TELNYX_API_KEY` in dev/staging/prod) | no | account **sospeso** | no |
+| Costo del solo provider a 30.000 msg/mese | **€110/mese** | €0 | €138/mese | €49/mese |
 
-**Decisione (21/09, priorità alla velocità): non si sceglie adesso.** Il codice
-parla con tutti e tre attraverso un'interfaccia, e il fornitore si collega a
-onboarding finito. Se bisogna partire oggi: **Twilio**, perché le credenziali
-sono già in mano e l'Embedded Signup è guidato — €10/mese a 2.200 messaggi non è
-un argomento. **Innesco scritto: sopra i ~10.000 messaggi/mese si passa a
-`cloud` (€0) o 360dialog (€49 fissi)**, che con l'astrazione è un cambio di
-variabile d'ambiente.
+**Decisione (22/09): Telnyx.** Tre ragioni, in ordine di peso:
+
+1. **L'account Twilio non è utilizzabile.** È sospeso con saldo a **−280 $**, un
+   debito vecchio non legato a questo progetto. Sbloccarlo vuol dire pagare un
+   arretrato per un fornitore che comunque costa più degli altri: non ha senso.
+2. **Telnyx è già dentro Reglo.** È il fornitore della voce: `TELNYX_API_KEY`
+   esiste già in tutti e tre gli ambienti, l'account è pulito, la fattura è una
+   sola. Non c'è un contratto nuovo, né una credenziale nuova da custodire.
+3. **È BSP ufficiale Meta con il margine più basso fra i tramiti** ($0,004 contro
+   $0,005–0,010 di Twilio) e nessun canone fisso, e l'onboarding passa
+   dall'Embedded Signup — cioè evita il giro manuale con App Meta e System User
+   token che serve con la Cloud API diretta.
+
+Meta diretta resta l'unica a margine zero: a 30.000 msg/mese Telnyx costa €110
+in più. Si tiene come **innesco scritto** — sopra i ~20.000 messaggi al mese
+vale la pena rifare il conto — ma oggi, a ~2.200 msg/mese, il margine Telnyx è
+**~€8/mese** e non giustifica un onboarding più pesante. Il cambio resta una
+variabile d'ambiente: `WHATSAPP_PROVIDER=cloud`.
 
 ### La verifica Meta NON è sul percorso critico (e vale per tutti e tre)
 
@@ -113,16 +131,19 @@ lo stesso per i suoi sender). Il fabbisogno di Reglo col disegno a cascata è
 (250 → 2.000 → 10.000 → illimitato) — e al secondo scaglione si arriva anche
 senza, consegnando 2.000 messaggi in 30 giorni con template di qualità alta.
 
-Da sfatare: **la verifica Twilio (quella dei numeri voce) non conta nulla per
-Meta.** Sono due aziende diverse. La doc Twilio è esplicita: il cliente crea una
-WABA sua e la verifica la completa lui. Nessun BSP può saltarla o riciclarla.
+Da sfatare: **nessuna verifica fatta presso il fornitore vale per Meta.** Non
+valeva la verifica Twilio dei numeri voce e non vale l'account Telnyx già attivo:
+sono aziende diverse. Il cliente crea una WABA sua e la verifica la completa lui.
+Nessun BSP — Telnyx compreso — può saltarla o riciclarla. Questo è anche il
+motivo per cui il cambio Twilio → Telnyx **non fa perdere tempo**: la parte lenta
+(la verifica Meta) non era ancora iniziata, e sarebbe stata identica.
 
-| | Meta diretta | Twilio | 360dialog |
-|---|---|---|---|
-| Registrazione sender | ~1 ora, manuale (App + System User token) | ~1 ora, Embedded Signup | ~1 ora, Embedded Signup |
-| Si manda subito a utenti veri? | sì, 250/giorno | sì, 250/giorno | sì, 250/giorno |
-| Verifica Meta | 1-3 settimane | **identica** | **identica** |
-| Costo a 2.200 msg/mese | €0 | **~€10/mese** | €49/mese |
+| | **Telnyx** | Meta diretta | Twilio | 360dialog |
+|---|---|---|---|---|
+| Registrazione sender | ~1 ora, Embedded Signup | ~1 ora, manuale (App + System User token) | ~1 ora, Embedded Signup | ~1 ora, Embedded Signup |
+| Si manda subito a utenti veri? | sì, 250/giorno | sì, 250/giorno | sì, 250/giorno | sì, 250/giorno |
+| Verifica Meta | **identica** | 1-3 settimane | **identica** | **identica** |
+| Costo a 2.200 msg/mese | **~€8/mese** | €0 | ~€10/mese | €49/mese |
 
 Quello che ci separa davvero dalla produzione non è il fornitore: sono template,
 webhook, numeri e UI — settimane di lavoro, identiche nei tre casi.
@@ -150,52 +171,55 @@ Tariffa Meta *utility* per l'Italia: forchetta **€0,020-0,050** a messaggio
 mezzo). **Non è un preventivo**: il listino vero si scarica solo da dentro un
 account Meta Business.
 
-| Scenario | msg/mese | Tariffe Meta (uguali per tutti) | + Twilio | + 360dialog | + Meta diretta |
-|---|---|---|---|---|---|
-| ~100/giorno | 3.000 | €60-150 | €14 | €49 | **€0** |
-| ~250/giorno (tetto promemoria) | 7.600 | €152-379 | €35 | €49 | **€0** |
-| ~500/giorno | 15.000 | €300-750 | €69 | €49 | **€0** |
-| ~1.000/giorno (WhatsApp primario) | 30.000 | €600-1.500 | €138 | €49 | **€0** |
+| Scenario | msg/mese | Tariffe Meta (uguali per tutti) | + **Telnyx** | + Twilio | + 360dialog | + Meta diretta |
+|---|---|---|---|---|---|---|
+| ~100/giorno | 3.000 | €60-150 | **€11** | €14 | €49 | €0 |
+| ~250/giorno (tetto promemoria) | 7.600 | €152-379 | **€28** | €35 | €49 | €0 |
+| ~500/giorno | 15.000 | €300-750 | **€55** | €69 | €49 | €0 |
+| ~1.000/giorno (WhatsApp primario) | 30.000 | €600-1.500 | **€110** | €138 | €49 | €0 |
 
 Solo il sovrapprezzo del provider, su base annua:
 
-| msg/mese | Twilio | 360dialog | Meta diretta |
-|---|---|---|---|
-| 3.000 | €166 | €588 | €0 |
-| 7.600 | €418 | €588 | €0 |
-| 15.000 | **€828** | €588 | €0 |
-| 30.000 | **€1.656** | €588 | €0 |
+| msg/mese | **Telnyx** | Twilio | 360dialog | Meta diretta |
+|---|---|---|---|---|
+| 3.000 | **€132** | €166 | €588 | €0 |
+| 7.600 | **€334** | €418 | €588 | €0 |
+| 15.000 | **€660** | €828 | €588 | €0 |
+| 30.000 | €1.320 | €1.656 | **€588** | €0 |
 
-**Pareggio Twilio / 360dialog: 10.652 messaggi al mese.** Sopra, 360dialog costa
-meno. **Twilio contro Meta diretta non pareggia mai**: Meta diretta costa meno dal
-primo messaggio, perché non ha né fisso né margine.
+**Pareggio Telnyx / 360dialog: 13.316 messaggi al mese** (€49 ÷ $0,004 al cambio
+~1,08). Sotto quella soglia Telnyx costa meno del canone fisso di 360dialog;
+sopra, il canone vince. **Telnyx contro Meta diretta non pareggia mai**: Meta
+diretta costa meno dal primo messaggio, perché non ha né fisso né margine — è il
+prezzo dell'autonomia totale, non un'offerta migliore.
 
-### Perché cambio raccomandazione
+### Perché Telnyx e non gli altri
 
-Il timore di Tiziano è **strutturalmente giusto**: Twilio è l'unica delle tre
-opzioni il cui costo cresce linearmente con l'uso *sopra* a quello di Meta, senza
-tetto e senza dare niente in cambio che le altre non diano. A 900-1.700 messaggi
-al mese erano 5-8 euro e non valeva la pena di discuterne; a 15-30.000 sono
-800-1.650 euro l'anno di puro sovrapprezzo.
+Il timore di Tiziano su Twilio era **strutturalmente giusto**, e nel frattempo è
+diventato accademico: l'account è sospeso a −280 $ e resta fuori. Ma il
+ragionamento che lo muoveva vale ancora ed è quello che ha scelto Telnyx: fra due
+tramiti che fanno esattamente la stessa cosa, si paga il margine più basso.
+Telnyx costa il **20% in meno** di Twilio a parità di servizio e non ha canone.
 
-E il lavoro che Twilio sembrava risparmiare **va fatto comunque**: i template sono
-un concetto di Meta, non di Twilio, e il webhook serve con qualunque provider.
-Quello che Twilio toglie davvero è la registrazione del mittente e una console più
-comoda — settimana di lavoro, non mesi.
+Il lavoro che un BSP sembra risparmiare **va fatto comunque**: i template sono un
+concetto di Meta, non del tramite, e il webhook serve con chiunque. Quello che il
+BSP toglie davvero è la registrazione del mittente e una console comoda.
 
-- **Meta Cloud API diretta** — la scelta di default. Nessun fisso, nessun margine,
-  il costo è solo quello di Meta. In cambio Reglo fa da BSP a se stessa: se il
-  numero viene segnalato o la *quality rating* scende, non c'è un'assistenza a cui
-  scrivere.
-- **360dialog** — la via di mezzo, e risponde alla lettera al "non voglio che
-  esploda": **€49 al mese fissi, che non crescono mai con l'uso**, più assistenza
-  da BSP ufficiale. A 30.000 messaggi costa un terzo di Twilio.
-- **Twilio** — solo come ripiego se la verifica Meta si impantana e serve mandare
-  qualcosa subito, sapendo che è la più cara a regime.
+- **Telnyx — la scelta.** Margine più basso fra i tramiti, nessun fisso, Embedded
+  Signup, e soprattutto **è già in casa**: stessa chiave API della voce, stessa
+  fattura, account pulito. Zero superficie contrattuale nuova.
+- **Meta Cloud API diretta** — l'unica a margine zero, e resta l'approdo naturale
+  se i volumi crescono molto. In cambio Reglo fa da BSP a se stessa: se il numero
+  viene segnalato o la *quality rating* scende, non c'è un'assistenza a cui
+  scrivere. Oggi non vale €8 al mese.
+- **360dialog** — ha senso solo sopra i ~13.300 messaggi/mese, dove il canone
+  fisso batte il margine. Da riconsiderare se WhatsApp diventa il canale primario.
+- **Twilio** — fuori: account sospeso con debito pregresso, ed era comunque il più
+  caro dei tramiti.
 
 ### Ma il provider è il termine piccolo
 
-A 15.000 messaggi al mese: Meta chiede €300-750, il margine Twilio è €69. Cioè
+A 15.000 messaggi al mese: Meta chiede €300-750, il margine Telnyx è €55. Cioè
 **la scelta del provider vale meno del 10% della bolletta**. Quello che la decide
 davvero è *quanti messaggi si mandano*, e lì i moltiplicatori sono tre:
 
@@ -256,8 +280,9 @@ giorno prima) più quello istruttore, più le notifiche slot libero.
 
 Ma **la push assorbe il 71%**: 863 allievi attivi su 1.216 hanno l'app. Se WhatsApp
 diventa il *ripiego per chi non ha l'app* invece di un doppione, il volume vero è
-circa **il 29% di 3.000-6.000 → 900-1.700 messaggi al mese**. È questo il numero che
-rende Twilio la scelta giusta e che tiene il costo sotto i €50/mese.
+circa **il 29% di 3.000-6.000 → 900-1.700 messaggi al mese**. È questo il numero
+che tiene il costo del tramite sotto i €10/mese e rende il margine Telnyx un
+non-problema.
 
 Ed è anche il motivo per cui la UI deve essere una cascata, non nove caselle.
 
@@ -316,12 +341,12 @@ decide iterando anteprime), non in questo documento.
   categoria, variabili ordinate, testo da sottomettere. Include l'elenco dei
   `kind` che **non** passano da WhatsApp (i broadcast).
 - `lib/autoscuole/whatsapp-sender.ts` — interfaccia `WhatsAppSender` + adapter
-  Cloud API (che serve anche 360dialog) + adapter Twilio, e
-  `isWhatsAppChannelAvailable()` per la UI. 17 test.
+  **Telnyx** (il fornitore scelto), Cloud API (che serve anche 360dialog) e
+  Twilio, più `isWhatsAppChannelAvailable()` per la UI. 21 test.
 - `lib/autoscuole/whatsapp-webhook.ts` + `app/api/webhooks/whatsapp/route.ts` —
-  firma (HMAC-SHA256 Meta / HMAC-SHA1 Twilio), challenge di sottoscrizione,
-  parsing di stati e messaggi in arrivo, riconoscimento della revoca in italiano.
-  19 test.
+  firma (**Ed25519 Telnyx**, HMAC-SHA256 Meta, HMAC-SHA1 Twilio), challenge di
+  sottoscrizione, parsing di stati e messaggi in arrivo, riconoscimento della
+  revoca in italiano. 29 test.
 
 Fatto in questa fase (staging, commit `f774313`):
 - **Ogni** tentativo di invio scrive su `AutoscuolaMessageLog`, anche i promemoria
@@ -357,18 +382,21 @@ Resta da fare in questa fase:
   parte comunque, arriva due volte allo stesso telefono nei rari casi in cui
   entrambe le anagrafiche siano attive.
 
-### Fase 1 — Mittente vero (bloccata sulle decisioni di Tiziano)
-- Scelta provider (raccomandato: **Meta Cloud API diretta**; 360dialog se si vuole
-  assistenza a costo fisso; Twilio solo come ripiego d'emergenza).
-- Meta Business verificato + WABA + numero dedicato + registrazione sender.
-- Rotazione `TWILIO_AUTH_TOKEN` e aggiornamento su Vercel (e ovunque lo usi il
-  voice-runtime).
-- **Blocco:** la verifica Meta richiede documenti aziendali e può richiedere giorni.
-  È il vero collo di bottiglia del "più velocemente possibile".
+### Fase 1 — Mittente vero (attende le azioni manuali di Tiziano)
+- ~~Scelta provider~~ → **fatta: Telnyx** (22/09).
+- Numero Telnyx con messaging profile attivo (l'Embedded Signup **non** accetta
+  numeri di altri operatori).
+- Embedded Signup dal portale Telnyx → Meta Business + WABA + registrazione del
+  mittente con nome visualizzato.
+- `TELNYX_WHATSAPP_FROM`, `TELNYX_PUBLIC_KEY` e `WHATSAPP_PROVIDER=telnyx` su
+  Vercel; webhook puntato su `/api/webhooks/whatsapp`.
+- **Blocco:** la verifica Meta richiede documenti aziendali e può richiedere
+  giorni. **Non** ferma la partenza (250 msg/24h pre-verifica bastano), serve per
+  alzare il tetto dopo.
 
 ### Fase 2 — Template invece di testo libero
-- `WhatsAppSender` come interfaccia + adapter **Cloud API** (e un adapter Twilio
-  tenuto come ripiego: l'interfaccia serve proprio a non restare incastrati).
+- `WhatsAppSender` come interfaccia + adapter **Telnyx** (Cloud API e Twilio
+  restano come ripiego: l'interfaccia serve proprio a non restare incastrati).
 - Registro dei template in codice: `kind → nome template + variabili`, per
   promemoria guida (3 varianti), esame, slot libero, scadenze foglio rosa/certificato
   medico, comunicato.
@@ -409,8 +437,51 @@ Resta da fare in questa fase:
 5. **I broadcast (inviti ai gruppi, slot liberi, scambi) restano su push?**
    È la singola decisione che pesa di più sulla bolletta: da sola vale più di tutti
    i promemoria messi insieme. *Raccomandazione: sì, restano su push.*
-6. **Assistenza o costo zero?** Meta diretta non costa niente ma lascia Reglo senza
-   un interlocutore se il numero viene segnalato; 360dialog costa €49/mese fissi e
-   te lo dà. È una scelta di rischio, non di prezzo.
-4. **Quale numero di telefono** dedicare al mittente (non deve essere già su
-   WhatsApp).
+6. ~~**Assistenza o costo zero?**~~ → **risolta dalla scelta Telnyx** (22/09):
+   assistenza da BSP ufficiale a costo fisso zero, si paga solo $0,004 a messaggio.
+   Era l'unica domanda in cui le due cose si escludevano.
+4. **Quale numero di telefono** dedicare al mittente. Con Telnyx il vincolo è
+   preciso: **deve essere un numero acquistato su Telnyx** con un messaging profile
+   attivo, e **non deve essere già usato** su WhatsApp personale o business.
+   I numeri voce +39 0445 0600xx sono Twilio, quindi non servono: ne va comprato
+   uno nuovo su Telnyx (pochi euro al mese).
+
+---
+
+## 7. Cosa serve a Tiziano per attivare Telnyx
+
+Il codice è pronto e non serve altro da parte mia finché questi passi non sono
+fatti. Sono tutti dal portale Telnyx e da Meta, in quest'ordine.
+
+**Categoria B — meccanici, li può eseguire Hiro dal Mac:**
+
+1. **Comprare un numero su Telnyx** (portale → Numbers → Buy Numbers). Va bene un
+   numero italiano mobile o geografico; **non** un numero già usato su WhatsApp.
+2. **Assegnargli un messaging profile** (Messaging → Messaging Profiles). Senza
+   questo l'Embedded Signup rifiuta il numero.
+3. **Copiare la chiave pubblica dei webhook**: portale → Account Settings → Keys &
+   Credentials → Public Key. Serve per `TELNYX_PUBLIC_KEY`.
+4. **Impostare su Vercel** (progetto `reglo`, ambienti staging e production):
+   - `WHATSAPP_PROVIDER=telnyx`
+   - `TELNYX_WHATSAPP_FROM=<numero in E.164, es. +39…>`
+   - `TELNYX_PUBLIC_KEY=<chiave pubblica>`
+   `TELNYX_API_KEY` c'è già: è la stessa della voce, non va toccata.
+5. **Puntare il webhook WhatsApp** su `https://app.reglo.it/api/webhooks/whatsapp`
+   (e `https://staging.reglo.it/...` per staging).
+
+**Categoria C — decisioni e documenti, solo Tiziano:**
+
+6. **Embedded Signup** (portale Telnyx → Messaging → WhatsApp → Add WhatsApp
+   Business Account). Richiede il login Facebook di un amministratore del Meta
+   Business di Reglo, e sceglie il **nome visualizzato** che vedranno gli allievi
+   (si cambia poi, ma con approvazione Meta: conviene azzeccarlo).
+7. **Verifica del Meta Business** — documenti aziendali (visura, P.IVA, sito,
+   email di dominio). Non blocca la partenza: fino a verifica si mandano 250
+   messaggi business-initiated ogni 24 ore, e il fabbisogno di Reglo è ~73/giorno.
+8. **Sottomissione dei template** a Meta: i testi sono già scritti in
+   `lib/autoscuole/whatsapp-templates.ts`, vanno incollati nel portale e attesa
+   l'approvazione (di solito minuti-ore per la categoria *utility*).
+
+Quando 1-5 sono fatti posso verificare il collegamento su staging **senza
+mandare niente a nessuno**: `APP_ENV=staging` rende gli invii esterni no-op, e
+`isWhatsAppChannelAvailable()` dice se la configurazione regge.
