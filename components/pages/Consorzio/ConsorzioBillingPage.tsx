@@ -27,6 +27,8 @@ import {
   type ConsorzioBillingLesson,
   type ConsorzioBillingSchoolGroup,
 } from "@/lib/actions/consorzio.actions";
+import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
+import { formatStoredName } from "@/lib/autoscuole/student-name-order";
 
 /**
  * Sezione "Fatturazione" del consorzio (?tab=fatturazione) — riproduzione 1:1
@@ -155,6 +157,7 @@ function BillingListSkeleton() {
 }
 
 export function ConsorzioBillingPage() {
+  const nameOrder = useStudentNameOrder();
   const toast = useFeedbackToast();
 
   const [month, setMonth] = React.useState(() => monthKey(new Date()));
@@ -472,7 +475,7 @@ export function ConsorzioBillingPage() {
                           {formatLessonDate(lesson.startsAt)}
                         </span>
                         <span className="w-[170px] shrink-0 truncate text-[14px] font-semibold text-[#222222]">
-                          {lesson.studentName}
+                          {formatStoredName(lesson.studentName, nameOrder)}
                         </span>
                         {lesson.licenseCategory ? (
                           <span
@@ -591,7 +594,7 @@ export function ConsorzioBillingPage() {
             </DialogTitle>
             <DialogDescription>
               {lessonCodesFor
-                ? `${lessonCodesFor.studentName} · ${formatLessonDate(lessonCodesFor.startsAt)}`
+                ? `${formatStoredName(lessonCodesFor.studentName, nameOrder)} · ${formatLessonDate(lessonCodesFor.startsAt)}`
                 : null}
             </DialogDescription>
           </DialogHeader>

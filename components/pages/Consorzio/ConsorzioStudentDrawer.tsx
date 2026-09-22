@@ -22,6 +22,8 @@ import {
   setConsorzioMemberAccountingCodes,
   type ConsorzioStudentDetail,
 } from "@/lib/actions/consorzio.actions";
+import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
+import { formatStoredName, splitStoredName } from "@/lib/autoscuole/student-name-order";
 
 /**
  * Drawer laterale dettaglio allievo del consorzio.
@@ -119,6 +121,7 @@ export function ConsorzioStudentDrawer({
   onChanged?: () => void;
 }) {
   const toast = useFeedbackToast();
+  const nameOrder = useStudentNameOrder();
   const [detail, setDetail] = React.useState<ConsorzioStudentDetail | null>(null);
   const [tab, setTab] = React.useState<DrawerTab>("summary");
   const [pickerOpen, setPickerOpen] = React.useState(false);
@@ -569,10 +572,11 @@ export function ConsorzioStudentDrawer({
                 <StudentAvatar
                   student={{ id: detail.userId, ...nameParts }}
                   size={96}
+                  nameOrder={nameOrder}
                 />
                 <div className="mt-4">
                   <p className="text-lg font-bold tracking-[-0.2px] text-foreground">
-                    {detail.name}
+                    {formatStoredName(detail.name, nameOrder)}
                   </p>
                   <p className="mt-0.5 text-[13px] font-medium text-[#929292]">
                     {detail.email || detail.phone || "Nessun recapito"}
@@ -622,7 +626,7 @@ export function ConsorzioStudentDrawer({
           open={licenseDialogOpen}
           onOpenChange={setLicenseDialogOpen}
           studentId={detail.userId}
-          studentName={detail.name}
+          studentName={formatStoredName(detail.name, nameOrder)}
           currentLicenseCategory={detail.licenseCategory}
           currentTransmission={detail.transmission}
           onSuccess={(next) => {

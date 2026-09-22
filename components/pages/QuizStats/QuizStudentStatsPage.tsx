@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { ClipboardCheck, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
+import { formatStoredName } from "@/lib/autoscuole/student-name-order";
 
 type WeakChapter = {
   chapterNumber: number;
@@ -37,6 +39,7 @@ function ReadinessBadge({ score }: { score: number }) {
 
 function StudentRow({ student }: { student: StudentOverview }) {
   const [expanded, setExpanded] = useState(false);
+  const nameOrder = useStudentNameOrder();
 
   return (
     <>
@@ -46,7 +49,7 @@ function StudentRow({ student }: { student: StudentOverview }) {
       >
         <td className="px-4 py-3">
           <div>
-            <p className="text-sm font-medium text-foreground">{student.studentName}</p>
+            <p className="text-sm font-medium text-foreground">{formatStoredName(student.studentName, nameOrder)}</p>
             <p className="text-xs text-muted-foreground">{student.studentEmail}</p>
           </div>
         </td>

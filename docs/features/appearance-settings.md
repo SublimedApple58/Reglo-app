@@ -21,21 +21,43 @@ abbrevia la parte *omessa*), `studentNameComparator`/`sortStudentsByName`
 (`Intl.Collator` italiano, `sensitivity: "base"`: in produzione convivono
 "VERONICA BILIOTTI" e "Luca rubino") e `asStudentNameOrder`.
 
-**Dove è applicato** (le superfici che hanno già nome e cognome **separati**):
-agenda — picker allievo, blocchi settimana/giorno, popover di dettaglio, titoli,
-picker esame (creazione e pannello) —, lista Allievi (righe, intestazione del
-drawer, selezione multipla, avatar), Pratiche, dialog di riprogrammazione.
-Ordinamento e ricerca inclusi: `studentMatchesQuery` è **indipendente
-dall'ordine**, così chi scrive "Rossi Mario" lo trova anche dove l'app scrive
-"Mario Rossi". La **scrittura** su `User.name` resta sempre `Nome Cognome`: il
-setting è di visualizzazione, non cambia il dato.
+**Dove è applicato: in tutta la web app.** Agenda (picker allievo, blocchi
+settimana/giorno, popover di dettaglio, titoli, picker esame), lista Allievi,
+Pratiche, dialog di riprogrammazione, Dashboard, Scadenze, Pagamenti,
+Cancellazioni tardive, Annulla guida, Gestione guida di gruppo, Fuori
+disponibilità, Statistiche quiz, e le pagine Consorzio (dettaglio autoscuola,
+drawer allievo, Fatturazione). Ordinamento, ricerca e iniziali degli avatar
+inclusi.
 
-**Dove NON è applicato, di proposito**: tutte le superfici che mostrano il campo
-`name` **grezzo** (dashboard, scadenze, pagamenti, cancellazioni tardive, quiz,
-dialoghi di gruppo/fase/patente, pagine Consorzio, backoffice — ~17 file). Lì
-invertire richiederebbe di spezzare la stringa unica in altri 17 punti,
-moltiplicando la superficie su cui l'euristica sbaglia. Si farà insieme al
-debito qui sotto, quando l'inversione sarà gratis e sempre corretta.
+La **scrittura** su `User.name` resta sempre `Nome Cognome`: il setting è di
+visualizzazione, non cambia il dato. E `studentMatchesQuery` è **indipendente
+dall'ordine**, così chi scrive "Rossi Mario" lo trova anche dove l'app scrive
+"Mario Rossi".
+
+### Una sola fonte: il provider
+
+`StudentNameOrderProvider` (`components/pages/Autoscuole/student-name-order-context.tsx`)
+legge il setting **una volta sola** ed è montato in `AutoscuoleShell`; i
+componenti lo consumano con `useStudentNameOrder()`. Fuori dal provider l'hook
+torna il default, quindi un componente riusato altrove non esplode: al massimo
+scrive "Nome Cognome".
+
+> ⚠️ La pagina **Statistiche quiz** (`app/[locale]/autoscuole/quiz-stats`) vive
+> FUORI da `AutoscuoleShell` e monta il provider per conto suo. Ogni nuova pagina
+> fuori dallo shell che mostri nomi di allievi deve fare lo stesso.
+
+### Perché "dati puliti" non esisteva
+
+Il primo giro (22/09) aveva applicato l'ordine solo alle superfici che ricevono
+già `firstName`/`lastName` separati, considerandole "a dati puliti" e lasciando
+indietro quelle che mostrano il campo `name` grezzo. **Era una distinzione
+sbagliata**: quei `firstName`/`lastName` li produce `parseNameParts`
+(`lib/actions/autoscuole.actions.ts`) spezzando `User.name` sul primo spazio —
+**la stessa identica euristica**, solo applicata prima, lato server. Le due
+famiglie non avevano affidabilità diversa, e infatti il QA ha subito trovato la
+tabella allievi del dettaglio autoscuola ancora in "Nome Cognome".
+`splitStoredName` nel modulo condiviso è ora l'unico posto che indovina.
+
 
 > ⚠️ **Debito noto.** `User.name` è **un unico campo di testo**: nome e cognome
 > non esistono separati e si ricavano spezzando sul primo spazio. Sui nomi

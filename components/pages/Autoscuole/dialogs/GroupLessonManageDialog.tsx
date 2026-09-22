@@ -42,6 +42,8 @@ import { MOTO_LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
 import { cn } from "@/lib/utils";
 
 type ResourceOption = { id: string; name: string };
+import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
+import { formatStoredName, storedNameInitials } from "@/lib/autoscuole/student-name-order";
 
 type VehicleWithLicense = {
   id: string;
@@ -206,6 +208,7 @@ export function GroupLessonManageDialog({
   vehiclesEnabled,
   onChanged,
 }: Props) {
+  const nameOrder = useStudentNameOrder();
   const toast = useFeedbackToast();
   const [lesson, setLesson] = React.useState<GroupLessonDetail | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -782,11 +785,11 @@ export function GroupLessonManageDialog({
                       <span className="flex min-w-0 items-center gap-3">
                         <UserPhotoCircle userId={p.studentId} size={36}>
                           <span className="flex size-9 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[12px] font-bold text-[#555555]">
-                            {initialsOf(p.studentName)}
+                            {storedNameInitials(p.studentName, nameOrder)}
                           </span>
                         </UserPhotoCircle>
                         <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold text-foreground">{p.studentName ?? "Allievo"}</span>
+                          <span className="block truncate text-sm font-semibold text-foreground">{p.studentName ? formatStoredName(p.studentName, nameOrder) : "Allievo"}</span>
                           {isMoto ? (
                             <span className="block text-[12px] font-medium text-[#929292]">
                               {p.vehicleName ? (

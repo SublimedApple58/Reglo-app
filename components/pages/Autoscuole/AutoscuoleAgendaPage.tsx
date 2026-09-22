@@ -92,6 +92,7 @@ import {
   studentMatchesQuery,
   type StudentNameOrder,
 } from "@/lib/autoscuole/student-name-order";
+import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
 import { blueLinkClass } from "@/components/pages/Autoscuole/student-detail-ui";
 import {
   AGENDA_COLOR_EXCEPTIONS,
@@ -777,6 +778,7 @@ export function AutoscuoleAgendaPage({
 }: {
   tabs?: React.ReactNode;
 } = {}) {
+  const studentNameOrder = useStudentNameOrder();
   const toast = useFeedbackToast();
   const [appointments, setAppointments] = React.useState<AppointmentRow[]>([]);
   const [manageGroupLessonId, setManageGroupLessonId] = React.useState<string | null>(null);
@@ -787,8 +789,6 @@ export function AutoscuoleAgendaPage({
   // Elenco di id anche parziale: chi non c'è resta in coda in ordine alfabetico.
   // Arriva coi settings (cache Redis) insieme al criterio colore, vedi sotto.
   const [agendaInstructorOrder, setAgendaInstructorOrder] = React.useState<string[]>([]);
-  const [studentNameOrder, setStudentNameOrder] =
-    React.useState<StudentNameOrder>(DEFAULT_STUDENT_NAME_ORDER);
   // Ordinata UNA volta qui: tutto ciò che discende da `instructors` (colonne
   // vista Giorno, filtro Istruttori, select dei dialoghi, stampa) eredita
   // l'ordine dell'autoscuola. La palette colori posizionale NO — resta
@@ -1115,7 +1115,6 @@ export function AutoscuoleAgendaPage({
         setAgendaColorOverrides(res.data.agendaColorOverrides);
         setAgendaColorExceptions(res.data.agendaColorExceptions);
         setAgendaInstructorOrder(res.data.agendaInstructorOrder);
-        setStudentNameOrder(res.data.studentNameOrder);
       }
     });
     return () => {

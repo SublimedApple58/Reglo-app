@@ -28,11 +28,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 type StudentOption = { id: string; firstName: string; lastName: string };
 import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
 import {
-  DEFAULT_STUDENT_NAME_ORDER,
   formatStudentName,
   sortStudentsByName,
   type StudentNameOrder,
 } from "@/lib/autoscuole/student-name-order";
+import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
 type CaseRow = {
   id: string;
   status: string;
@@ -56,10 +56,9 @@ export function AutoscuoleCasesPage({
 }: {
   tabs?: React.ReactNode;
 } = {}) {
+  const studentNameOrder = useStudentNameOrder();
   const toast = useFeedbackToast();
   const [cases, setCases] = React.useState<CaseRow[]>([]);
-  const [studentNameOrder, setStudentNameOrder] =
-    React.useState<StudentNameOrder>(DEFAULT_STUDENT_NAME_ORDER);
   const [students, setStudents] = React.useState<StudentOption[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
@@ -96,18 +95,6 @@ export function AutoscuoleCasesPage({
     }
     setLoading(false);
   }, [toast]);
-
-  React.useEffect(() => {
-
-    // Ordine del nome allievo scelto dall'autoscuola (REG-507).
-
-    getAutoscuolaSettings().then((res) => {
-
-      if (res.success && res.data) setStudentNameOrder(res.data.studentNameOrder);
-
-    });
-
-  }, []);
 
 
   React.useEffect(() => {

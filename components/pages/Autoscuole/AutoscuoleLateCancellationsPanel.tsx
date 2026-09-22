@@ -10,6 +10,8 @@ import {
   getLateCancellations,
   resolveLateCancellation,
 } from "@/lib/actions/autoscuole.actions";
+import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
+import { formatStoredName } from "@/lib/autoscuole/student-name-order";
 
 type LateCancellation = {
   id: string;
@@ -83,6 +85,7 @@ export function AutoscuoleLateCancellationsPanel({
 }: {
   onCountChange?: (count: number) => void;
 }) {
+  const nameOrder = useStudentNameOrder();
   const toast = useFeedbackToast();
   const [items, setItems] = React.useState<LateCancellation[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -179,7 +182,7 @@ export function AutoscuoleLateCancellationsPanel({
         <div key={item.id} className="rounded-[14px] border border-[#dddddd] bg-white p-6">
           <div className="mb-5 flex items-start justify-between gap-4">
             <p className="text-base font-semibold text-foreground">
-              {item.studentName ?? "Allievo sconosciuto"}
+              {item.studentName ? formatStoredName(item.studentName, nameOrder) : "Allievo sconosciuto"}
             </p>
             <div className="flex shrink-0 items-center gap-1.5">
               {item.kind === "no_show" && (

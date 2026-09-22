@@ -144,3 +144,42 @@ export function studentMatchesQuery(student: NameParts, query: string): boolean 
   const last = (student.lastName ?? "").trim().toLowerCase();
   return `${first} ${last}`.includes(q) || `${last} ${first}`.includes(q);
 }
+
+/**
+ * Nome e cognome da `User.name`, che nel database è **un campo solo**.
+ *
+ * È la stessa euristica che il server applica in `parseNameParts`
+ * (`lib/actions/autoscuole.actions.ts`) per costruire la directory allievi: si
+ * spezza sul primo spazio e il resto è cognome. Sta qui perché ci sia **un solo
+ * posto** che indovina, invece di una copia per ogni schermata.
+ *
+ * Da qui la conseguenza che conta: le superfici che ricevono già
+ * `firstName`/`lastName` **non hanno dati più puliti** delle altre — hanno solo
+ * la stessa congettura fatta prima, lato server. Applicarla anche qui non
+ * aggiunge una classe di errore nuova. Vedi REG-508 per la correzione vera.
+ */
+export function splitStoredName(name: string | null | undefined): {
+  firstName: string;
+  lastName: string;
+} {
+  const clean = (name ?? "").trim().replace(/\s+/g, " ");
+  if (!clean) return { firstName: "", lastName: "" };
+  const [first, ...rest] = clean.split(" ");
+  return { firstName: first ?? "", lastName: rest.join(" ") };
+}
+
+/** Come `formatStudentName`, partendo dal campo unico del database. */
+export function formatStoredName(
+  name: string | null | undefined,
+  order: StudentNameOrder = DEFAULT_STUDENT_NAME_ORDER,
+): string {
+  return formatStudentName(splitStoredName(name), order);
+}
+
+/** Iniziali per l'avatar partendo dal campo unico del database. */
+export function storedNameInitials(
+  name: string | null | undefined,
+  order: StudentNameOrder = DEFAULT_STUDENT_NAME_ORDER,
+): string {
+  return studentInitials(splitStoredName(name), order);
+}
