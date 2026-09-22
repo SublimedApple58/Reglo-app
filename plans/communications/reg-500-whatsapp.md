@@ -440,11 +440,11 @@ Resta da fare in questa fase:
 6. ~~**Assistenza o costo zero?**~~ → **risolta dalla scelta Telnyx** (22/09):
    assistenza da BSP ufficiale a costo fisso zero, si paga solo $0,004 a messaggio.
    Era l'unica domanda in cui le due cose si escludevano.
-4. **Quale numero di telefono** dedicare al mittente. Con Telnyx il vincolo è
-   preciso: **deve essere un numero acquistato su Telnyx** con un messaging profile
-   attivo, e **non deve essere già usato** su WhatsApp personale o business.
-   I numeri voce +39 0445 0600xx sono Twilio, quindi non servono: ne va comprato
-   uno nuovo su Telnyx (pochi euro al mese).
+4. ~~**Quale numero di telefono**~~ → **risolta (22/09): un geografico italiano
+   Telnyx**, `+39 02 …` (Milano), $2 una tantum + $2/mese. In Italia Telnyx non
+   vende numeri **mobili** — è un limite regolatorio, non una mancanza del
+   portale — quindi il geografico è l'unica opzione sensata. Resta molto meglio
+   del vecchio mittente Twilio, che era un `+1` americano.
 
 ---
 
@@ -455,8 +455,9 @@ fatti. Sono tutti dal portale Telnyx e da Meta, in quest'ordine.
 
 **Categoria B — meccanici, li può eseguire Hiro dal Mac:**
 
-1. **Comprare un numero su Telnyx** (portale → Numbers → Buy Numbers). Va bene un
-   numero italiano mobile o geografico; **non** un numero già usato su WhatsApp.
+1. **Comprare un numero su Telnyx** (portale → Numbers → Buy Numbers). In Italia
+   ci sono solo **geografici**, niente mobili: va bene, WhatsApp Business supporta
+   ufficialmente i fissi. **Non** un numero già usato su WhatsApp.
 2. **Assegnargli un messaging profile** (Messaging → Messaging Profiles). Senza
    questo l'Embedded Signup rifiuta il numero.
 3. **Copiare la chiave pubblica dei webhook**: portale → Account Settings → Keys &
@@ -475,6 +476,19 @@ fatti. Sono tutti dal portale Telnyx e da Meta, in quest'ordine.
    Business Account). Richiede il login Facebook di un amministratore del Meta
    Business di Reglo, e sceglie il **nome visualizzato** che vedranno gli allievi
    (si cambia poi, ma con approvazione Meta: conviene azzeccarlo).
+
+   > ⚠️ **Verifica per CHIAMATA, e la chiamata deve trovare una persona.**
+   > Su un fisso Meta non manda l'SMS: telefona e detta il PIN. La sua regola è
+   > esplicita — *la chiamata di registrazione non può attraversare un IVR*.
+   > Quindi il numero **non va agganciato a "Reglo Voice AI"**: l'assistente
+   > risponderebbe al posto di una persona e la verifica fallirebbe, per di più in
+   > modo opaco. Va impostato su **"Forward Only"** verso un cellulare vero, e
+   > **provato con una chiamata reale prima** di lanciare la registrazione: i
+   > tentativi falliti hanno un tempo di attesa imposto da Meta.
+   >
+   > Il campo "Connection or Application" del carrello serve solo a questo — è
+   > routing voce, non tocca WhatsApp — e si può lasciare vuoto all'acquisto,
+   > assegnandolo dopo dalle impostazioni del numero.
 7. **Verifica del Meta Business** — documenti aziendali (visura, P.IVA, sito,
    email di dominio). Non blocca la partenza: fino a verifica si mandano 250
    messaggi business-initiated ogni 24 ore, e il fabbisogno di Reglo è ~73/giorno.
