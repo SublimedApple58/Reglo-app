@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
+import { useLocale } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
@@ -90,6 +92,7 @@ import {
   studentMatchesQuery,
   type StudentNameOrder,
 } from "@/lib/autoscuole/student-name-order";
+import { blueLinkClass } from "@/components/pages/Autoscuole/student-detail-ui";
 import {
   AGENDA_COLOR_EXCEPTIONS,
   DEFAULT_AGENDA_COLOR_CRITERION,
@@ -686,9 +689,12 @@ function StudentSearchSelect({
 function StudentContactLines({
   phone,
   schoolName,
+  schoolHref,
 }: {
   phone?: string | null;
   schoolName?: string | null;
+  /** Scheda dell'autoscuola consorziata. Assente → nome non cliccabile. */
+  schoolHref?: string | null;
 }) {
   if (!phone && !schoolName) return null;
   return (
@@ -700,7 +706,20 @@ function StudentContactLines({
       ) : null}
       {schoolName ? (
         <div>
-          Autoscuola: <span className="font-medium text-foreground/85">{schoolName}</span>
+          Autoscuola:{" "}
+          {schoolHref ? (
+            <Link
+              href={schoolHref}
+              className={blueLinkClass}
+              // Il pannello è trascinabile: senza fermare il pointerdown, il
+              // gesto di drag si mangerebbe il click sul link.
+              onPointerDownCapture={(event) => event.stopPropagation()}
+            >
+              {schoolName}
+            </Link>
+          ) : (
+            <span className="font-medium text-foreground/85">{schoolName}</span>
+          )}
         </div>
       ) : null}
     </>
@@ -2564,14 +2583,25 @@ export function AutoscuoleAgendaPage({
     for (const s of students) if (s.phone) map.set(s.id, s.phone);
     return map;
   }, [students]);
-  const schoolNameById = React.useMemo(() => {
-    const map = new Map<string, string>();
+  const schoolByStudentId = React.useMemo(() => {
+    const map = new Map<string, { id: string | null; name: string }>();
     if (!consortium) return map;
     for (const s of students) {
-      if (s.consorzioSchoolName) map.set(s.id, s.consorzioSchoolName);
+      if (s.consorzioSchoolName) {
+        map.set(s.id, { id: s.consorzioSchoolId ?? null, name: s.consorzioSchoolName });
+      }
     }
     return map;
   }, [consortium, students]);
+  const locale = useLocale();
+  const schoolHrefFor = React.useCallback(
+    (studentId: string): string | null => {
+      if (!showSchoolFilter) return null;
+      const school = schoolByStudentId.get(studentId);
+      return school?.id ? `/${locale}/user/autoscuole/scuole/${school.id}` : null;
+    },
+    [locale, schoolByStudentId, showSchoolFilter],
+  );
   // Il badge va solo sulle guide individuali (le guide di gruppo hanno più
   // allievi → niente singolo destinatario da avvisare).
   const neverAccessedFor = React.useCallback(
@@ -3814,7 +3844,8 @@ export function AutoscuoleAgendaPage({
                                       <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
                                       <StudentContactLines
                                         phone={phoneById.get(item.student.id)}
-                                        schoolName={showSchoolFilter ? schoolNameById.get(item.student.id) : null}
+                                        schoolName={showSchoolFilter ? schoolByStudentId.get(item.student.id)?.name : null}
+                                        schoolHref={schoolHrefFor(item.student.id)}
                                       />
                                       <VehicleDetailLines item={item} vehiclesEnabled={vehiclesEnabled} />
                                       <div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>
@@ -4376,7 +4407,8 @@ export function AutoscuoleAgendaPage({
                                   <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
                                   <StudentContactLines
                                     phone={phoneById.get(item.student.id)}
-                                    schoolName={showSchoolFilter ? schoolNameById.get(item.student.id) : null}
+                                    schoolName={showSchoolFilter ? schoolByStudentId.get(item.student.id)?.name : null}
+                                    schoolHref={schoolHrefFor(item.student.id)}
                                   />
                                   <VehicleDetailLines item={item} vehiclesEnabled={vehiclesEnabled} />
                                   <div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>
