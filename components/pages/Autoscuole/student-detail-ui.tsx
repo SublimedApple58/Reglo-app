@@ -4,6 +4,12 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { useUserPhotoUrl } from "@/components/ui/user-photo";
+import {
+  DEFAULT_STUDENT_NAME_ORDER,
+  formatStudentName,
+  studentInitials,
+  type StudentNameOrder,
+} from "@/lib/autoscuole/student-name-order";
 
 /**
  * Primitivi condivisi del dettaglio allievo (lista + drawer): avatar, pill di
@@ -80,10 +86,13 @@ export function StudentAvatar({
   student,
   size = 40,
   photoUrl: photoUrlProp,
+  nameOrder = DEFAULT_STUDENT_NAME_ORDER,
 }: {
   student: { id: string; firstName: string; lastName: string };
   size?: number;
   photoUrl?: string | null;
+  /** Le iniziali seguono l'ordine con cui il nome è scritto accanto (REG-507). */
+  nameOrder?: StudentNameOrder;
 }) {
   const fetchedPhotoUrl = useUserPhotoUrl(student.id);
   const photoUrl = photoUrlProp ?? fetchedPhotoUrl;
@@ -92,7 +101,7 @@ export function StudentAvatar({
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={photoUrl}
-        alt={`${student.firstName} ${student.lastName}`}
+        alt={formatStudentName(student, nameOrder)}
         className="shrink-0 rounded-full object-cover"
         style={{ width: size, height: size }}
       />
@@ -108,7 +117,7 @@ export function StudentAvatar({
         fontSize: size >= 96 ? 30 : size >= 56 ? 20 : 12,
       }}
     >
-      {initialsOf(student.firstName, student.lastName)}
+      {studentInitials(student, nameOrder)}
     </div>
   );
 }

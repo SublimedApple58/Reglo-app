@@ -117,3 +117,30 @@ export function sortStudentsByName<T extends NameParts>(
 ): T[] {
   return [...list].sort(studentNameComparator<T>(order));
 }
+
+/**
+ * Iniziali per l'avatar, nell'ordine in cui il nome viene scritto: se in lista
+ * si legge "Rossi Mario", un avatar "MR" sembra un errore.
+ */
+export function studentInitials(
+  student: NameParts,
+  order: StudentNameOrder = DEFAULT_STUDENT_NAME_ORDER,
+): string {
+  const first = (student.firstName ?? "").trim()[0] ?? "";
+  const last = (student.lastName ?? "").trim()[0] ?? "";
+  const pair = order === "cognome_nome" ? `${last}${first}` : `${first}${last}`;
+  return pair.toUpperCase() || "?";
+}
+
+/**
+ * Ricerca per nome **indipendente dall'ordine**: chi scrive "Rossi Mario" lo
+ * trova anche dove l'app scrive "Mario Rossi", e viceversa. Senza questo, il
+ * setting spezzerebbe le ricerche invece di assecondarle.
+ */
+export function studentMatchesQuery(student: NameParts, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const first = (student.firstName ?? "").trim().toLowerCase();
+  const last = (student.lastName ?? "").trim().toLowerCase();
+  return `${first} ${last}`.includes(q) || `${last} ${first}`.includes(q);
+}

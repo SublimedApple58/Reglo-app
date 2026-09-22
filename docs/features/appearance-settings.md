@@ -21,6 +21,22 @@ abbrevia la parte *omessa*), `studentNameComparator`/`sortStudentsByName`
 (`Intl.Collator` italiano, `sensitivity: "base"`: in produzione convivono
 "VERONICA BILIOTTI" e "Luca rubino") e `asStudentNameOrder`.
 
+**Dove è applicato** (le superfici che hanno già nome e cognome **separati**):
+agenda — picker allievo, blocchi settimana/giorno, popover di dettaglio, titoli,
+picker esame (creazione e pannello) —, lista Allievi (righe, intestazione del
+drawer, selezione multipla, avatar), Pratiche, dialog di riprogrammazione.
+Ordinamento e ricerca inclusi: `studentMatchesQuery` è **indipendente
+dall'ordine**, così chi scrive "Rossi Mario" lo trova anche dove l'app scrive
+"Mario Rossi". La **scrittura** su `User.name` resta sempre `Nome Cognome`: il
+setting è di visualizzazione, non cambia il dato.
+
+**Dove NON è applicato, di proposito**: tutte le superfici che mostrano il campo
+`name` **grezzo** (dashboard, scadenze, pagamenti, cancellazioni tardive, quiz,
+dialoghi di gruppo/fase/patente, pagine Consorzio, backoffice — ~17 file). Lì
+invertire richiederebbe di spezzare la stringa unica in altri 17 punti,
+moltiplicando la superficie su cui l'euristica sbaglia. Si farà insieme al
+debito qui sotto, quando l'inversione sarà gratis e sempre corretta.
+
 > ⚠️ **Debito noto.** `User.name` è **un unico campo di testo**: nome e cognome
 > non esistono separati e si ricavano spezzando sul primo spazio. Sui nomi
 > composti l'euristica sbaglia ("Maria Grazia Rossi" → nome *Maria*, cognome
