@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/db/prisma";
+import { toStoredPhone } from "@/lib/phone-e164";
 import { parseBearerToken, getMobileToken } from "@/lib/mobile-auth";
 import { syncInstructorName } from "@/lib/sync-instructor-name";
 import { formatError } from "@/lib/utils";
@@ -30,7 +31,7 @@ export async function PATCH(request: Request) {
 
     const payload = updateProfileSchema.parse(await request.json());
     const name = payload.name.trim();
-    const phone = payload.phone?.trim() || undefined;
+    const phone = payload.phone !== undefined ? toStoredPhone(payload.phone) : undefined;
 
     const user = await prisma.user.update({
       where: { id: mobileToken.userId },

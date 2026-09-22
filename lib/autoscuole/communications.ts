@@ -4,6 +4,7 @@ import { tokenRegex } from "@/components/shared/token-input/token-utils";
 import { sendDynamicEmail } from "@/email";
 import { prisma as defaultPrisma } from "@/db/prisma";
 import { sendAutoscuolaWhatsApp } from "@/lib/autoscuole/whatsapp";
+import { deliverAndLog } from "@/lib/autoscuole/delivery-log";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
   processAutoscuolaInvoiceFinalization as processAutoscuolaInvoiceFinalizationJob,
@@ -735,40 +736,61 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
         ? `Promemoria: ${formatAutoscuolaDateOnly(appointment.startsAt)} hai l'esame di guida. ${EXAM_REMINDER_SUFFIX}`
         : `Promemoria guida il ${startsAtLabel}. Durata ${durationMinutes} minuti.`;
       if (studentChannels.includes("email") && studentProfile.email) {
-        try {
-          await sendDynamicEmail({
-            to: studentProfile.email,
-            subject: isExam ? "Reglo Autoscuole · Promemoria esame" : "Reglo Autoscuole · Reminder guida",
+        await deliverAndLog(
+          {
+            companyId: service.companyId,
+            kind: "appointment_reminder_student",
+            channel: "email",
+            recipient: studentProfile.email ?? "",
+            appointmentId: appointment.id,
+            studentId: appointment.studentId,
             body,
-          });
-        } catch (error) {
-          console.error("Student reminder email error", error);
-        }
+          },
+          (to) => sendDynamicEmail({
+              to: to,
+              subject: isExam ? "Reglo Autoscuole · Promemoria esame" : "Reglo Autoscuole · Reminder guida",
+              body,
+            }),
+        );
       }
       if (studentChannels.includes("whatsapp") && studentProfile.phone) {
-        try {
-          await sendAutoscuolaWhatsApp({ to: studentProfile.phone, body });
-        } catch (error) {
-          console.error("Student reminder WhatsApp error", error);
-        }
+        await deliverAndLog(
+          {
+            companyId: service.companyId,
+            kind: "appointment_reminder_student",
+            channel: "whatsapp",
+            recipient: studentProfile.phone ?? "",
+            appointmentId: appointment.id,
+            studentId: appointment.studentId,
+            body,
+          },
+          (to) => sendAutoscuolaWhatsApp({ to: to, body }),
+        );
       }
       if (studentChannels.includes("push")) {
         if (appointment.studentId) {
-          try {
-            await sendAutoscuolaPushToUsers({
+          await deliverAndLog(
+            {
               companyId: service.companyId,
-              userIds: [appointment.studentId],
-              title: isExam ? "Promemoria esame" : "Reminder guida",
+              kind: "appointment_reminder_student",
+              channel: "push",
+              recipient: appointment.studentId ?? "",
+              appointmentId: appointment.id,
+              studentId: appointment.studentId,
               body,
-              data: {
-                kind: "appointment_reminder_student",
-                appointmentId: appointment.id,
-                startsAt: appointment.startsAt.toISOString(),
-              },
-            });
-          } catch (error) {
-            console.error("Student reminder push error", error);
-          }
+            },
+            (to) => sendAutoscuolaPushToUsers({
+                companyId: service.companyId,
+                userIds: [to],
+                title: isExam ? "Promemoria esame" : "Reminder guida",
+                body,
+                data: {
+                  kind: "appointment_reminder_student",
+                  appointmentId: appointment.id,
+                  startsAt: appointment.startsAt.toISOString(),
+                },
+              }),
+          );
         }
       }
     }
@@ -790,39 +812,60 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
       const studentName = `${studentProfile.firstName} ${studentProfile.lastName}`.trim();
       const body = `Promemoria guida con ${studentName} il ${startsAtLabel}. Durata ${durationMinutes} minuti.`;
       if (instructorChannels.includes("email") && instructor.user?.email) {
-        try {
-          await sendDynamicEmail({
-            to: instructor.user.email,
-            subject: "Reglo Autoscuole · Reminder guida",
+        await deliverAndLog(
+          {
+            companyId: service.companyId,
+            kind: "appointment_reminder_instructor",
+            channel: "email",
+            recipient: instructor.user?.email ?? "",
+            appointmentId: appointment.id,
+            studentId: appointment.studentId,
             body,
-          });
-        } catch (error) {
-          console.error("Instructor reminder email error", error);
-        }
+          },
+          (to) => sendDynamicEmail({
+              to,
+              subject: "Reglo Autoscuole · Reminder guida",
+              body,
+            }),
+        );
       }
       if (instructorChannels.includes("whatsapp") && instructor.phone) {
-        try {
-          await sendAutoscuolaWhatsApp({ to: instructor.phone, body });
-        } catch (error) {
-          console.error("Instructor reminder WhatsApp error", error);
-        }
+        await deliverAndLog(
+          {
+            companyId: service.companyId,
+            kind: "appointment_reminder_instructor",
+            channel: "whatsapp",
+            recipient: instructor.phone ?? "",
+            appointmentId: appointment.id,
+            studentId: appointment.studentId,
+            body,
+          },
+          (to) => sendAutoscuolaWhatsApp({ to: to, body }),
+        );
       }
       if (instructorChannels.includes("push") && instructor.userId) {
-        try {
-          await sendAutoscuolaPushToUsers({
+        await deliverAndLog(
+          {
             companyId: service.companyId,
-            userIds: [instructor.userId],
-            title: "Reminder guida",
+            kind: "appointment_reminder_instructor",
+            channel: "push",
+            recipient: instructor.userId ?? "",
+            appointmentId: appointment.id,
+            studentId: appointment.studentId,
             body,
-            data: {
-              kind: "appointment_reminder_instructor",
-              appointmentId: appointment.id,
-              startsAt: appointment.startsAt.toISOString(),
-            },
-          });
-        } catch (error) {
-          console.error("Instructor reminder push error", error);
-        }
+          },
+          (to) => sendAutoscuolaPushToUsers({
+              companyId: service.companyId,
+              userIds: [to],
+              title: "Reminder guida",
+              body,
+              data: {
+                kind: "appointment_reminder_instructor",
+                appointmentId: appointment.id,
+                startsAt: appointment.startsAt.toISOString(),
+              },
+            }),
+        );
       }
     }
   }
@@ -911,41 +954,62 @@ export const processAutoscuolaMorningReminders = async ({
         : `Buongiorno! Hai una guida oggi alle ${startsAtLabel.split(" alle ")[1] ?? startsAtLabel}. Durata ${durationMinutes} minuti.`;
 
       if (studentChannels.includes("push") && appointment.studentId) {
-        try {
-          await sendAutoscuolaPushToUsers({
+        await deliverAndLog(
+          {
             companyId: service.companyId,
-            userIds: [appointment.studentId],
-            title: isExam ? "Esame oggi" : "Guida oggi",
+            kind: "morning_reminder_student",
+            channel: "push",
+            recipient: appointment.studentId ?? "",
+            appointmentId: appointment.id,
+            studentId: appointment.studentId,
             body,
-            data: {
-              kind: "morning_reminder_student",
-              appointmentId: appointment.id,
-              startsAt: appointment.startsAt.toISOString(),
-            },
-          });
-        } catch (error) {
-          console.error("Morning reminder push error", error);
-        }
+          },
+          (to) => sendAutoscuolaPushToUsers({
+              companyId: service.companyId,
+              userIds: [to],
+              title: isExam ? "Esame oggi" : "Guida oggi",
+              body,
+              data: {
+                kind: "morning_reminder_student",
+                appointmentId: appointment.id,
+                startsAt: appointment.startsAt.toISOString(),
+              },
+            }),
+        );
       }
 
       if (studentChannels.includes("whatsapp") && studentProfile.phone) {
-        try {
-          await sendAutoscuolaWhatsApp({ to: studentProfile.phone, body });
-        } catch (error) {
-          console.error("Morning reminder WhatsApp error", error);
-        }
+        await deliverAndLog(
+          {
+            companyId: service.companyId,
+            kind: "morning_reminder_student",
+            channel: "whatsapp",
+            recipient: studentProfile.phone ?? "",
+            appointmentId: appointment.id,
+            studentId: appointment.studentId,
+            body,
+          },
+          (to) => sendAutoscuolaWhatsApp({ to: to, body }),
+        );
       }
 
       if (studentChannels.includes("email") && studentProfile.email) {
-        try {
-          await sendDynamicEmail({
-            to: studentProfile.email,
-            subject: isExam ? "Reglo Autoscuole · Esame oggi" : "Reglo Autoscuole · Guida oggi",
+        await deliverAndLog(
+          {
+            companyId: service.companyId,
+            kind: "morning_reminder_student",
+            channel: "email",
+            recipient: studentProfile.email ?? "",
+            appointmentId: appointment.id,
+            studentId: appointment.studentId,
             body,
-          });
-        } catch (error) {
-          console.error("Morning reminder email error", error);
-        }
+          },
+          (to) => sendDynamicEmail({
+              to: to,
+              subject: isExam ? "Reglo Autoscuole · Esame oggi" : "Reglo Autoscuole · Guida oggi",
+              body,
+            }),
+        );
       }
     }
   }
@@ -1038,41 +1102,62 @@ export const processAutoscuolaDayBeforeReminders = async ({
         : `Promemoria: domani hai una guida alle ${timeLabel}. Durata ${durationMinutes} minuti.`;
 
       if (studentChannels.includes("push") && appointment.studentId) {
-        try {
-          await sendAutoscuolaPushToUsers({
+        await deliverAndLog(
+          {
             companyId: service.companyId,
-            userIds: [appointment.studentId],
-            title: isExam ? "Esame domani" : "Guida domani",
+            kind: "day_before_reminder_student",
+            channel: "push",
+            recipient: appointment.studentId ?? "",
+            appointmentId: appointment.id,
+            studentId: appointment.studentId,
             body,
-            data: {
-              kind: "day_before_reminder_student",
-              appointmentId: appointment.id,
-              startsAt: appointment.startsAt.toISOString(),
-            },
-          });
-        } catch (error) {
-          console.error("Day-before reminder push error", error);
-        }
+          },
+          (to) => sendAutoscuolaPushToUsers({
+              companyId: service.companyId,
+              userIds: [to],
+              title: isExam ? "Esame domani" : "Guida domani",
+              body,
+              data: {
+                kind: "day_before_reminder_student",
+                appointmentId: appointment.id,
+                startsAt: appointment.startsAt.toISOString(),
+              },
+            }),
+        );
       }
 
       if (studentChannels.includes("whatsapp") && studentProfile.phone) {
-        try {
-          await sendAutoscuolaWhatsApp({ to: studentProfile.phone, body });
-        } catch (error) {
-          console.error("Day-before reminder WhatsApp error", error);
-        }
+        await deliverAndLog(
+          {
+            companyId: service.companyId,
+            kind: "day_before_reminder_student",
+            channel: "whatsapp",
+            recipient: studentProfile.phone ?? "",
+            appointmentId: appointment.id,
+            studentId: appointment.studentId,
+            body,
+          },
+          (to) => sendAutoscuolaWhatsApp({ to: to, body }),
+        );
       }
 
       if (studentChannels.includes("email") && studentProfile.email) {
-        try {
-          await sendDynamicEmail({
-            to: studentProfile.email,
-            subject: isExam ? "Reglo Autoscuole · Esame domani" : "Reglo Autoscuole · Guida domani",
+        await deliverAndLog(
+          {
+            companyId: service.companyId,
+            kind: "day_before_reminder_student",
+            channel: "email",
+            recipient: studentProfile.email ?? "",
+            appointmentId: appointment.id,
+            studentId: appointment.studentId,
             body,
-          });
-        } catch (error) {
-          console.error("Day-before reminder email error", error);
-        }
+          },
+          (to) => sendDynamicEmail({
+              to: to,
+              subject: isExam ? "Reglo Autoscuole · Esame domani" : "Reglo Autoscuole · Guida domani",
+              body,
+            }),
+        );
       }
     }
   }
