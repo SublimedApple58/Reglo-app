@@ -73,17 +73,45 @@ describe("licenseCategoryEligible (moto hierarchy AM < A1 < A2 < A)", () => {
     expect(licenseCategoryEligible("B", "B")).toBe(true);
   });
 
-  it("non-moto categories (BE/C/CE/D/DE) only self-match — no hierarchy", () => {
+  it("non-moto categories self-match, and never cross into moto", () => {
     for (const c of ["BE", "C", "CE", "D", "DE"]) {
       expect(licenseCategoryEligible(c, c)).toBe(true);
-      expect(licenseCategoryEligible("B", c)).toBe(false);
-      expect(licenseCategoryEligible(c, "B")).toBe(false);
       expect(licenseCategoryEligible(c, "A")).toBe(false);
+      expect(licenseCategoryEligible("A", c)).toBe(false);
     }
-    // No trailer hierarchy either: CE does not serve C nor vice versa.
+  });
+
+  // REG-507: a trailer is not a drivable vehicle. A CE course runs on the C
+  // truck the school actually owns.
+  it("a trailer course runs on its motrice", () => {
+    expect(licenseCategoryEligible("C", "CE")).toBe(true);
+    expect(licenseCategoryEligible("D", "DE")).toBe(true);
+    expect(licenseCategoryEligible("B", "BE")).toBe(true);
+    expect(licenseCategoryEligible("C1", "C1E")).toBe(true);
+    expect(licenseCategoryEligible("D1", "D1E")).toBe(true);
+  });
+
+  it("a vehicle already marked with the trailer category still serves it", () => {
+    // Autoscuola Macchiavello mislabelled its truck as "CE" to work around the
+    // old rule: that fleet must keep working untouched.
+    expect(licenseCategoryEligible("CE", "CE")).toBe(true);
+    expect(licenseCategoryEligible("DE", "DE")).toBe(true);
+  });
+
+  it("the trailer hierarchy runs ONE WAY: a C student may not drive a CE rig", () => {
     expect(licenseCategoryEligible("CE", "C")).toBe(false);
-    expect(licenseCategoryEligible("C", "CE")).toBe(false);
     expect(licenseCategoryEligible("DE", "D")).toBe(false);
+    expect(licenseCategoryEligible("BE", "B")).toBe(false);
+    expect(licenseCategoryEligible("C1E", "C1")).toBe(false);
+  });
+
+  it("does not open the door to unrelated categories", () => {
+    // The tolerance is the motrice, not "anything big".
+    expect(licenseCategoryEligible("D", "CE")).toBe(false);
+    expect(licenseCategoryEligible("C", "DE")).toBe(false);
+    expect(licenseCategoryEligible("C1", "CE")).toBe(false);
+    expect(licenseCategoryEligible("B", "CE")).toBe(false);
+    expect(licenseCategoryEligible("C", "BE")).toBe(false);
   });
 
   it("the top moto A serves every moto below", () => {

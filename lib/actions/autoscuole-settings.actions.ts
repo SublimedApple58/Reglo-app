@@ -36,6 +36,11 @@ import {
 } from "@/lib/autoscuole/agenda-color-criterion";
 import { asAgendaInstructorOrder } from "@/lib/autoscuole/agenda-instructor-order";
 import {
+  asStudentNameOrder,
+  STUDENT_NAME_ORDERS,
+  type StudentNameOrder,
+} from "@/lib/autoscuole/student-name-order";
+import {
   DEFAULT_LESSON_BUFFER_ENABLED,
   DEFAULT_LESSON_BUFFER_MINUTES,
   LESSON_BUFFER_MAX_MINUTES,
@@ -450,6 +455,7 @@ const autoscuolaSettingsPatchSchema = z
     // Ordine custom delle colonne istruttore in agenda (REG-449): elenco di id,
     // anche parziale. Array vuoto = si torna all'ordine alfabetico.
     agendaInstructorOrder: z.array(z.string()).optional(),
+    studentNameOrder: z.enum(STUDENT_NAME_ORDERS).optional(),
   })
   .refine(
     // Almeno un campo presente: check generico su tutte le chiavi dello schema
@@ -657,6 +663,7 @@ export type AutoscuolaSettingsData = {
   agendaColorOverrides: AgendaColorOverrides;
   agendaColorExceptions: AgendaColorExceptions;
   agendaInstructorOrder: string[];
+  studentNameOrder: StudentNameOrder;
 };
 
 const resolveAutoscuolaSettingsData = async (
@@ -1034,6 +1041,7 @@ const resolveAutoscuolaSettingsData = async (
     agendaColorOverrides: asAgendaColorOverrides(limits.agendaColorOverrides),
     agendaColorExceptions: asAgendaColorExceptions(limits.agendaColorExceptions),
     agendaInstructorOrder: asAgendaInstructorOrder(limits.agendaInstructorOrder),
+    studentNameOrder: asStudentNameOrder(limits.studentNameOrder),
   };
 };
 
@@ -1635,6 +1643,9 @@ export async function updateAutoscuolaSettings(
       agendaColorExceptions: asAgendaColorExceptions(
         payload.agendaColorExceptions ?? limits.agendaColorExceptions,
       ),
+      studentNameOrder: asStudentNameOrder(
+        payload.studentNameOrder ?? limits.studentNameOrder,
+      ),
       agendaInstructorOrder: asAgendaInstructorOrder(
         payload.agendaInstructorOrder ?? limits.agendaInstructorOrder,
       ),
@@ -1785,6 +1796,7 @@ export async function updateAutoscuolaSettings(
         agendaColorOverrides: nextLimits.agendaColorOverrides,
         agendaColorExceptions: nextLimits.agendaColorExceptions,
         agendaInstructorOrder: nextLimits.agendaInstructorOrder,
+        studentNameOrder: nextLimits.studentNameOrder,
       },
     };
   } catch (error) {

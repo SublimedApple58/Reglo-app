@@ -255,13 +255,46 @@ export function licensePathBucket(value: unknown): LicensePathBucket {
 }
 
 /**
+ * Motrice (towing vehicle) of each trailer category — REG-507.
+ *
+ * A trailer is NOT a drivable vehicle: no engine, no driving position, no
+ * availability of its own. A truck **is** a C vehicle and **becomes** an
+ * autotreno (CE) when a trailer is hitched to it. So a fleet records motrici,
+ * and a CE course must be able to run on the C truck the school actually owns.
+ *
+ * Until 2026-09-22 it could not: BE/C/CE/D/DE were added (commit `6c83277`,
+ * 02/07/2026) inside the branch written for "B only matches B" — correct for B,
+ * inherited without discussion by the professional categories. The Prisma
+ * schema comment still described a world of `B | AM | A1 | A2 | A` months
+ * later. In production that left the consorzio with 2 CE students and 0 usable
+ * vehicles, while another school had mislabelled its own truck as "CE" to work
+ * around it.
+ */
+const TRAILER_CATEGORY_MOTRICE: Record<string, string> = {
+  BE: "B",
+  C1E: "C1",
+  CE: "C",
+  D1E: "D1",
+  DE: "D",
+};
+
+/**
  * True when a vehicle of `vehicleCategory` is eligible for a student pursuing
- * `studentCategory`, applying the real-world MOTO HIERARCHY:
- *   AM < A1 < A2 < A
- * A moto student may train on any moto of category ≤ their own (e.g. an A2
- * student → A2, A1, AM — but NOT A). Non-moto categories (B, BE, C, CE, D, DE)
- * have NO hierarchy: each only matches itself (a BE course needs a BE-marked
- * vehicle). Cross-class never matches. Same category always matches.
+ * `studentCategory`, applying two real-world hierarchies:
+ *
+ *   MOTO:    AM < A1 < A2 < A
+ *   TRAILER: B < BE · C1 < C1E · C < CE · D1 < D1E · D < DE
+ *
+ * A moto student may train on any moto of category ≤ their own (an A2 student →
+ * A2, A1, AM — but NOT A). A trailer student may train on the corresponding
+ * motrice (a CE student → a C truck) or on a vehicle already marked with the
+ * trailer category.
+ *
+ * Both hierarchies run **one way only**: a C student may NOT use a CE-marked
+ * vehicle, because driving a combination requires the CE licence. Only the
+ * motrici that make sense for that category — never "any vehicle".
+ *
+ * Cross-class never matches. Same category always matches.
  */
 export function licenseCategoryEligible(
   vehicleCategory: string,
@@ -276,9 +309,16 @@ export function licenseCategoryEligible(
       (MOTO_LICENSE_CATEGORIES as readonly string[]).indexOf(studentCategory)
     );
   }
-  // Different classes (moto vs non-moto), or two distinct non-moto categories
-  // (e.g. B vs C, BE vs B) — never eligible.
+  // Trailer course on its motrice: CE → C, DE → D, BE → B, …
+  if (TRAILER_CATEGORY_MOTRICE[studentCategory] === vehicleCategory) return true;
+  // Different classes (moto vs non-moto), or two unrelated non-moto categories
+  // (e.g. B vs C, or a C student on a CE vehicle) — never eligible.
   return false;
+}
+
+/** The motrice category a trailer course can also run on, if any. */
+export function motriceCategoryFor(category: string): string | null {
+  return TRAILER_CATEGORY_MOTRICE[category] ?? null;
 }
 
 /**
