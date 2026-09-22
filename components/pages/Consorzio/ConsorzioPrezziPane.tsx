@@ -19,7 +19,11 @@ import {
   getConsorzioPricing,
   updateConsorzioPricing,
 } from "@/lib/actions/consorzio.actions";
-import type { ConsorzioBillingMode, ConsorzioPricing } from "@/lib/consorzio/pricing";
+import type {
+  ConsorzioBillingMode,
+  ConsorzioPricing,
+  LateCancellationMode,
+} from "@/lib/consorzio/pricing";
 import { cn } from "@/lib/utils";
 
 /**
@@ -47,6 +51,13 @@ const MODE_OPTIONS: Array<{ value: ConsorzioBillingMode; label: string }> = [
   { value: "course", label: "Percorso" },
 ];
 
+// REG-507: il costo dell'assenza può essere una quota del prezzo della guida
+// (quindi diverso per categoria) oppure una cifra unica.
+const ABSENCE_MODE_OPTIONS: Array<{ value: LateCancellationMode; label: string }> = [
+  { value: "percent", label: "Percentuale" },
+  { value: "fixed", label: "Importo fisso" },
+];
+
 const draftKey = (field: AmountField, category: string) => `${field}:${category}`;
 
 const minLeadLabel = (hours: number): string =>
@@ -72,6 +83,7 @@ export function ConsorzioPrezziPane() {
           }
         }
         next.examFee = res.data.examFee !== null ? String(res.data.examFee) : "";
+        next.lateCancellationFixedAmount = String(res.data.lateCancellationFixedAmount);
         setDrafts(next);
       }
       setLoading(false);
@@ -103,6 +115,8 @@ export function ConsorzioPrezziPane() {
       examFee: next.examFee,
       lateCancellationCutoffHours: next.lateCancellationCutoffHours,
       lateCancellationPenaltyPct: next.lateCancellationPenaltyPct,
+      lateCancellationMode: next.lateCancellationMode,
+      lateCancellationFixedAmount: next.lateCancellationFixedAmount,
       guideRequestMinLeadHours: next.guideRequestMinLeadHours,
     });
     if (!res.success) toast.error({ description: res.message });
@@ -138,6 +152,21 @@ export function ConsorzioPrezziPane() {
       else nextMap[category] = value;
       return { ...current, [field]: nextMap };
     });
+  };
+
+  const commitAbsenceAmount = () => {
+    if (!pricing) return;
+    const raw = (drafts.lateCancellationFixedAmount ?? "").trim().replace(",", ".");
+    const parsed = Number(raw);
+    // Un campo svuotato o scritto male torna al valore salvato: meglio non
+    // cambiare niente che azzerare per sbaglio il costo di un'assenza.
+    const value =
+      raw !== "" && Number.isFinite(parsed) && parsed >= 0
+        ? Math.round(parsed * 100) / 100
+        : pricing.lateCancellationFixedAmount;
+    setDrafts((prev) => ({ ...prev, lateCancellationFixedAmount: String(value) }));
+    if (value === pricing.lateCancellationFixedAmount) return;
+    persist((current) => ({ ...current, lateCancellationFixedAmount: value }));
   };
 
   const commitExamFee = () => {
@@ -202,8 +231,10 @@ export function ConsorzioPrezziPane() {
       {/* Cancellazioni tardive */}
       <div className="py-6">
         <div className="text-[15px] font-semibold text-[#222222]">Cancellazioni tardive</div>
-        <p className="mt-[3px] text-sm font-medium leading-[1.45] text-[#929292]">
-          Se l&apos;allievo annulla oltre il cutoff, sulla guida viene applicata la penale.
+        <p className="mt-[3px] max-w-2xl text-sm font-medium leading-[1.45] text-[#929292]">
+          Quanto costa all&apos;autoscuola una guida che l&apos;allievo non ha fatto: se non si
+          presenta, o se annulla oltre il cutoff. Gli annullamenti decisi dal consorzio
+          (istruttore malato, mezzo fermo) non vengono mai addebitati.
         </p>
         <div className="mt-4 grid gap-8 sm:grid-cols-2">
           <div>
@@ -227,24 +258,88 @@ export function ConsorzioPrezziPane() {
             </Select>
           </div>
           <div>
-            <div className="mb-2 text-sm font-medium text-[#444444]">Penale</div>
-            <Select
-              value={String(pricing.lateCancellationPenaltyPct)}
-              onValueChange={(value) =>
-                persist((current) => ({ ...current, lateCancellationPenaltyPct: Number(value) }))
-              }
-            >
-              <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-[12px] border-[#e6e6e6] bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-none">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PENALTY_OPTIONS.map((pct) => (
-                  <SelectItem key={pct} value={String(pct)} className="cursor-pointer">
-                    {pct}% del prezzo della guida
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="mb-2 flex items-center gap-2.5">
+              <span className="text-sm font-medium text-[#444444]">Costo dell&apos;assenza</span>
+              <div
+                role="radiogroup"
+                aria-label="Criterio del costo assenza"
+                className="ml-auto flex h-[34px] items-center gap-1 rounded-[10px] bg-[#f0f0f2] p-1"
+              >
+                {ABSENCE_MODE_OPTIONS.map((option) => {
+                  const selected = option.value === pricing.lateCancellationMode;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      data-testid={`absence-mode-${option.value}`}
+                      onClick={() =>
+                        persist((current) => ({
+                          ...current,
+                          lateCancellationMode: option.value,
+                        }))
+                      }
+                      className={cn(
+                        "h-full cursor-pointer select-none rounded-[8px] px-2.5 text-[12.5px] leading-none transition-all duration-150",
+                        selected
+                          ? "bg-white font-semibold text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.12)]"
+                          : "font-medium text-[#6a6a6a] hover:text-[#222222]",
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {pricing.lateCancellationMode === "fixed" ? (
+              <div className="relative">
+                <input
+                  inputMode="decimal"
+                  aria-label="Costo dell'assenza"
+                  data-testid="absence-fixed-amount-input"
+                  value={drafts.lateCancellationFixedAmount ?? ""}
+                  onChange={(e) =>
+                    setDrafts((prev) => ({
+                      ...prev,
+                      lateCancellationFixedAmount: e.target.value,
+                    }))
+                  }
+                  onBlur={commitAbsenceAmount}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  }}
+                  className="h-[49px] w-full rounded-[12px] border-[1.5px] border-[#e2e2e2] bg-white pl-[18px] pr-[112px] text-[15px] font-semibold text-[#222222] outline-none transition-colors focus:border-[#222222]"
+                />
+                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-[#a0a0a0]">
+                  € / assenza
+                </span>
+              </div>
+            ) : (
+              <Select
+                value={String(pricing.lateCancellationPenaltyPct)}
+                onValueChange={(value) =>
+                  persist((current) => ({ ...current, lateCancellationPenaltyPct: Number(value) }))
+                }
+              >
+                <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-[12px] border-[#e6e6e6] bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-none">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PENALTY_OPTIONS.map((pct) => (
+                    <SelectItem key={pct} value={String(pct)} className="cursor-pointer">
+                      {pct}% del prezzo della guida
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <p className="mt-2 text-[12.5px] font-medium leading-snug text-[#929292]">
+              {pricing.lateCancellationMode === "fixed"
+                ? "La stessa cifra per tutte le patenti."
+                : "Una quota del prezzo della guida, quindi diversa per ogni patente."}
+            </p>
           </div>
         </div>
       </div>

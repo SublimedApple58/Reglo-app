@@ -97,10 +97,17 @@ function CodeChip({ code, small }: { code: string; small?: boolean }) {
 
 
 /** Tag del tipo di voce (le guide normali non ne hanno). */
-function LineKindTag({ label, tone }: { label: string; tone: "course" | "exam" }) {
+function LineKindTag({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "course" | "exam" | "absence";
+}) {
   const palette = {
     course: { background: "#E3F4F1", color: "#0F5E55" },
     exam: { background: "#F0E9FF", color: "#5B3FB0" },
+    absence: { background: "#FDECEC", color: "#B3494F" },
   }[tone];
   return (
     <span
@@ -117,10 +124,12 @@ const groupSummary = (lessons: ConsorzioBillingLesson[]): string => {
   const guides = lessons.filter((l) => l.kind === "guide").length;
   const exams = lessons.filter((l) => l.kind === "exam").length;
   const courses = lessons.filter((l) => l.kind === "course").length;
+  const absences = lessons.filter((l) => l.kind === "absence").length;
   return [
     guides ? `${guides} ${guides === 1 ? "guida" : "guide"}` : null,
     exams ? `${exams} ${exams === 1 ? "esame" : "esami"}` : null,
     courses ? `${courses} ${courses === 1 ? "percorso" : "percorsi"}` : null,
+    absences ? `${absences} ${absences === 1 ? "assenza" : "assenze"}` : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -477,11 +486,15 @@ export function ConsorzioBillingPage() {
                         )}
                         {lesson.kind === "course" && <LineKindTag label="Percorso" tone="course" />}
                         {lesson.kind === "exam" && <LineKindTag label="Esame" tone="exam" />}
+                        {lesson.kind === "absence" && (
+                          <LineKindTag label="Assenza" tone="absence" />
+                        )}
                         <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#929292]">
                           {lesson.kind === "course"
                             ? "Prezzo unico · guide incluse"
                             : [
                                 lesson.kind === "exam" ? null : `${lesson.durationMinutes} min`,
+                                lesson.kind === "absence" ? "guida non svolta" : null,
                                 lesson.instructorName,
                                 lesson.vehicleName,
                               ]
