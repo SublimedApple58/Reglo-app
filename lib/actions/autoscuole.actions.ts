@@ -8471,6 +8471,15 @@ export async function setExamOutcome(input: z.infer<typeof setExamOutcomeSchema>
       }
     }
 
+    // L'agenda serve il bootstrap da una cache Redis: senza questo bump il
+    // client rilegge il payload vecchio e l'esito appena salvato non si vede.
+    // È il bug trovato in QA su staging il 23/09 — la action girava, la
+    // modalina restava identica.
+    await invalidateAutoscuoleCache({
+      companyId: membership.companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA],
+    });
+
     return {
       success: true as const,
       data: { outcome: payload.outcome, licenseNumber, promoted },
