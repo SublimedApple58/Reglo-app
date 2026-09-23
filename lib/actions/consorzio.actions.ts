@@ -820,6 +820,8 @@ export type ConsorzioStudentDetail = {
   licenseCategory: string | null;
   /** Fase percorso, stessa semantica della tabella allievi della scheda autoscuola. */
   studentPhase: ConsorzioStudentPhase;
+  /** Numero di patente conseguita, se registrato (sta sull'allievo). */
+  licenseNumber: string | null;
   /** Fasi che il server accetterebbe per questa company (vedi readPhasesEnabled). */
   phasesEnabled: Array<"TEORIA" | "PRATICA">;
   transmission: string | null;
@@ -845,6 +847,8 @@ export type ConsorzioStudentDetail = {
     instructorName: string | null;
     price: number;
     settled: boolean;
+    /** "idoneo" | "respinto" | null = non ancora registrato. */
+    outcome: string | null;
   }>;
   /** Riepilogo costi verso l'autoscuola (stessa semantica prezzi della Fatturazione). */
   costs: {
@@ -869,6 +873,7 @@ export async function getConsorzioStudentDetail(userId: string) {
         userId: true,
         licenseCategory: true,
         studentPhase: true,
+        licenseNumber: true,
         transmission: true,
         user: { select: { name: true, email: true, phone: true } },
         consorzioSchool: { select: { name: true, city: true } },
@@ -898,6 +903,7 @@ export async function getConsorzioStudentDetail(userId: string) {
           cancelledAt: true,
           startsAt: true,
           endsAt: true,
+          examOutcome: true,
           instructor: { select: { name: true } },
           vehicle: { select: { name: true } },
           consorzioBilling: { select: { settledAt: true, priceAmount: true } },
@@ -965,6 +971,7 @@ export async function getConsorzioStudentDetail(userId: string) {
         ? decimalToNumber(appt.consorzioBilling.priceAmount)
         : examPrice(pricing),
       settled: Boolean(appt.consorzioBilling?.settledAt),
+      outcome: appt.examOutcome,
     }));
     const examsAmount = exams.reduce((sum, exam) => sum + exam.price, 0);
 
@@ -990,6 +997,7 @@ export async function getConsorzioStudentDetail(userId: string) {
       schoolCity: member.consorzioSchool?.city ?? null,
       licenseCategory: member.licenseCategory,
       studentPhase: member.studentPhase,
+      licenseNumber: member.licenseNumber,
       phasesEnabled: readPhasesEnabled(company),
       transmission: member.transmission,
       lessonsCount: guideAppointments.length - absencesCount,

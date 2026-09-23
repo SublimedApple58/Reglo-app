@@ -88,11 +88,18 @@ import { getAutoscuolaLocations } from "@/lib/actions/autoscuola-locations.actio
 import { StudentMediaSection } from "@/components/pages/Autoscuole/StudentMediaSection";
 import { useUserPhotoUrl, invalidateUserPhoto } from "@/components/ui/user-photo";
 import { ChangeStudentPhaseDialog } from "@/components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog";
+import {
+  ExamOutcomePanel,
+  ExamOutcomePill,
+  type ExamOutcomeRow,
+} from "@/components/pages/Autoscuole/ExamOutcomePanel";
+import { asExamOutcome, canRecordExamOutcome } from "@/lib/autoscuole/exam-outcome";
 import { EditStudentLicenseDialog } from "@/components/pages/Autoscuole/dialogs/EditStudentLicenseDialog";
 import { InviteCodeDialog } from "@/components/pages/Autoscuole/dialogs/InviteCodeDialog";
 import { ToolbarFilters } from "@/components/pages/Autoscuole/filters/ToolbarFilters";
 import {
   formatStudentName,
+  studentInitials,
   studentNameComparator,
   type StudentNameOrder,
 } from "@/lib/autoscuole/student-name-order";
@@ -391,6 +398,8 @@ type LessonEntry = {
   manualPaymentStatus: string | null;
   creditApplied: boolean;
   lateCancellationAction: string | null;
+  /** Esito esame: "idoneo" | "respinto" | null = non ancora registrato. */
+  examOutcome?: string | null;
   notes: string | null;
   createdAt: string | Date | null;
   /** Set when this lesson was a group lesson: seats filled / capacity + kind. */
@@ -445,6 +454,8 @@ type StudentRegister = {
     count: number;
   }>;
   lessons: LessonEntry[];
+  /** Numero di patente conseguita (sta sull'allievo, non sull'esame). */
+  licenseNumber?: string | null;
 };
 
 type StudentCredits = {
@@ -912,6 +923,23 @@ export function AutoscuoleStudentsPage({
   // Pagellino (REG-443): riga dello storico espansa per consultare tutte le
   // voci. Una sola alla volta, come il resto della lista.
   const [openEvalLessonId, setOpenEvalLessonId] = React.useState<string | null>(null);
+  // Esame di cui si sta registrando l'esito: la modalina è la stessa dell'agenda.
+  const [outcomeLessonId, setOutcomeLessonId] = React.useState<string | null>(null);
+  /**
+   * Il numero di patente vive sull'ALLIEVO, quindi si mostra sotto UN solo
+   * esame: il più recente fra gli idonei. Scriverlo sotto tutti farebbe
+   * comparire lo stesso numero due volte a chi ha preso la B e poi la CQC.
+   */
+  const latestIdoneoLessonId = React.useMemo(() => {
+    if (!register?.lessons) return null;
+    const idonei = register.lessons.filter(
+      (l) => l.type === "esame" && asExamOutcome(l.examOutcome) === "idoneo",
+    );
+    if (idonei.length === 0) return null;
+    return idonei.reduce((latest, l) =>
+      new Date(l.startsAt).getTime() > new Date(latest.startsAt).getTime() ? l : latest,
+    ).id;
+  }, [register]);
   const [esitoDraft, setEsitoDraft] = React.useState<Outcome>(null);
   const [noteSaving, setNoteSaving] = React.useState<string | null>(null);
 
@@ -3235,6 +3263,22 @@ export function AutoscuoleStudentsPage({
                       </span>
                     ))
                   )}
+                  {isExam && <ExamOutcomePill outcome={lesson.examOutcome} />}
+                  {isExam && !asExamOutcome(lesson.examOutcome) &&
+                    canRecordExamOutcome({
+                      type: lesson.type,
+                      status: lesson.status,
+                      studentId: register?.student?.id ?? null,
+                      startsAt: startDate,
+                    }) && (
+                      <button
+                        type="button"
+                        onClick={() => setOutcomeLessonId(lesson.id)}
+                        className="cursor-pointer text-[12px] font-medium text-[#428bff] hover:underline"
+                      >
+                        Registra esito
+                      </button>
+                    )}
                   {/* Stellina storica: solo sulle guide che NON hanno il pagellino,
                       altrimenti sarebbe un secondo voto accanto alla chip. */}
                   {lesson.rating != null && !lesson.evaluations?.length && (
@@ -3248,6 +3292,14 @@ export function AutoscuoleStudentsPage({
                 <p className="mb-1.5 text-[13px] font-medium text-[#6a6a6a]">
                   {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
                 </p>
+                {lesson.id === latestIdoneoLessonId && register?.licenseNumber ? (
+                  <p className="mb-1.5 text-[13px] font-medium text-[#929292]">
+                    Patente{" "}
+                    <span className="font-semibold tabular-nums text-foreground">
+                      {register.licenseNumber}
+                    </span>
+                  </p>
+                ) : null}
                 <EvaluationRecap
                   lessonId={lesson.id}
                   rows={lesson.evaluations}
@@ -3895,6 +3947,39 @@ export function AutoscuoleStudentsPage({
         copiedCode={copiedCode}
         onCopy={copyCode}
       />
+
+      {/* Modalina "Registra esito": stesso componente dell'agenda, affiancato al
+          drawer (largo 600) invece che al pannello esame. */}
+      {(() => {
+        const lesson = register?.lessons?.find((l) => l.id === outcomeLessonId);
+        const student = register?.student;
+        if (!lesson || !student) return null;
+        const rows: ExamOutcomeRow[] = [
+          {
+            appointmentId: lesson.id,
+            studentId: student.id,
+            name: formatStudentName(student, studentNameOrder),
+            subtitle: register?.licenseCategory
+              ? `Patente ${register.licenseCategory}${register.transmission === "automatic" ? " · autom." : ""}`
+              : null,
+            initials: studentInitials(student, studentNameOrder),
+            examReady: Boolean(register?.examReady),
+            outcome: asExamOutcome(lesson.examOutcome),
+          },
+        ];
+        return (
+          <ExamOutcomePanel
+            open
+            onClose={() => setOutcomeLessonId(null)}
+            subtitle={`Esame del ${new Date(lesson.startsAt).toLocaleDateString("it-IT", { day: "numeric", month: "long" })}`}
+            rows={rows}
+            searchable={false}
+            licenseNumberByStudent={{ [student.id]: register?.licenseNumber ?? null }}
+            onRegistered={() => void loadRegister(student.id)}
+            className="fixed right-[calc(min(600px,100vw)+14px)] top-[110px] z-[210]"
+          />
+        );
+      })()}
 
       {/* ── Detail panel ── */}
       <DetailPanel

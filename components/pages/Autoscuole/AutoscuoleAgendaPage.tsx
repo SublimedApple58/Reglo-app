@@ -16,6 +16,12 @@ import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { PageHeader } from "@/components/ui/page-header";
 import { SegmentedPill } from "@/components/ui/segmented-pill";
+import {
+  ExamOutcomePanel,
+  ExamOutcomePill,
+  type ExamOutcomeRow,
+} from "@/components/pages/Autoscuole/ExamOutcomePanel";
+import { asExamOutcome, canRecordExamOutcome } from "@/lib/autoscuole/exam-outcome";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -172,6 +178,8 @@ type AppointmentRow = {
   // Tipo guida moto di una guida di GRUPPO moto (vive sul container, non sul
   // posto): stesso badge, sorgente diversa da motoLessonType.
   groupLessonMotoType?: string | null;
+  /** Esito esame: "idoneo" | "respinto" | null = non ancora registrato. */
+  examOutcome?: string | null;
   notes?: string | null;
 };
 
@@ -1064,6 +1072,9 @@ export function AutoscuoleAgendaPage({
   const [examPanelStudentSearch, setExamPanelStudentSearch] = React.useState("");
   const [examPanelPending, setExamPanelPending] = React.useState(false);
   const [examPanelBrowseOpen, setExamPanelBrowseOpen] = React.useState(false);
+  // Le due modaline laterali sono sorelle e occupano lo stesso posto: aprirne
+  // una chiude l'altra.
+  const [examOutcomeOpen, setExamOutcomeOpen] = React.useState(false);
   // Modello DRAFT: orario/istruttore/allievi/note si modificano in locale e si
   // applicano con un unico "Salva modifiche" (niente auto-save a ogni tocco).
   const [examNoteDraft, setExamNoteDraft] = React.useState("");
@@ -5179,6 +5190,32 @@ export function AutoscuoleAgendaPage({
             )
               // Come nel picker di creazione: i "pronti" salgono in cima anche qui.
               .sort((a, b) => Number(Boolean(b.examReady)) - Number(Boolean(a.examReady)));
+            // Esito esame: vive sulla RIGA dell'appuntamento, quindi la fonte è
+            // eg.appointments (una riga per iscritto), non la lista studenti.
+            const examOutcomeByStudent = new Map(
+              eg.appointments
+                .filter((a) => !isExamPlaceholder(a))
+                .map((a) => [a.student.id, asExamOutcome(a.examOutcome)] as const),
+            );
+            const examOutcomeRows: ExamOutcomeRow[] = eg.appointments
+              .filter((a) => !isExamPlaceholder(a) && canRecordExamOutcome({
+                type: a.type,
+                status: a.status,
+                studentId: a.student.id,
+                startsAt: a.startsAt,
+              }))
+              .map((a) => ({
+                appointmentId: a.id,
+                studentId: a.student.id,
+                name: formatStudentName(a.student, studentNameOrder),
+                subtitle: a.student.licenseCategory
+                  ? `Patente ${a.student.licenseCategory}${a.student.transmission === "automatic" ? " · autom." : ""}`
+                  : null,
+                initials: examStudentInitials(a.student, studentNameOrder),
+                examReady: Boolean(a.student.examReady),
+                outcome: asExamOutcome(a.examOutcome),
+              }));
+            const examOutcomeMissing = examOutcomeRows.filter((r) => !r.outcome).length;
             // Diff draft vs salvato → abilita il bottone unico "Salva modifiche".
             const origTime = examHasTime ? `${String(egStart.getHours()).padStart(2, "0")}:${String(egStart.getMinutes()).padStart(2, "0")}` : null;
             const origInstructorId = eg.instructorId ?? null;
@@ -5368,6 +5405,8 @@ export function AutoscuoleAgendaPage({
                               ) : null}
                             </span>
                           </span>
+                          <span className="flex shrink-0 items-center gap-2">
+                          <ExamOutcomePill outcome={examOutcomeByStudent.get(s.id)} />
                           <button
                             type="button"
                             title="Rimuovi dall'esame"
@@ -5377,6 +5416,7 @@ export function AutoscuoleAgendaPage({
                           >
                             <Trash2 className="size-4" strokeWidth={1.8} />
                           </button>
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -5399,6 +5439,33 @@ export function AutoscuoleAgendaPage({
                       <Plus className="size-4" strokeWidth={2} />
                       {examAddable.length > 0 ? `Sfoglia allievi · ${examAddable.length}` : "Tutti gli allievi aggiunti"}
                     </button>
+                    {/* Registra esito: CTA primario finché c'è da fare, bottone
+                        qualunque quando non c'è più. Un'interfaccia che grida
+                        sempre non grida mai. */}
+                    {examOutcomeRows.length > 0 && (
+                      examOutcomeMissing > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => { setExamPanelBrowseOpen(false); setExamOutcomeOpen((v) => !v); }}
+                          className="ml-2 inline-flex cursor-pointer select-none items-center gap-[9px] rounded-full bg-[#222222] px-5 py-3 text-sm font-semibold text-white shadow-cta transition-colors hover:bg-black"
+                        >
+                          <Check className="size-4" strokeWidth={2.2} />
+                          Registra esito
+                          <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#facc15] px-[7px] py-px text-[12px] font-extrabold text-[#3d3000]">
+                            {examOutcomeMissing}
+                          </span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => { setExamPanelBrowseOpen(false); setExamOutcomeOpen((v) => !v); }}
+                          className="ml-2 inline-flex cursor-pointer select-none items-center gap-2 rounded-full border-[1.5px] border-[#dddddd] px-[22px] py-[11px] text-sm font-semibold text-[#6a6a6a] transition-colors hover:border-[#222222] hover:bg-[#f7f7f7]"
+                        >
+                          <Check className="size-4 text-[#1a7f50]" strokeWidth={2.2} />
+                          Esiti registrati
+                        </button>
+                      )
+                    )}
                   </div>
 
                   {/* Note — editabili */}
@@ -5545,6 +5612,16 @@ export function AutoscuoleAgendaPage({
                     </motion.div>
                   )}
                 </AnimatePresence>
+
+                {/* Modalina "Registra esito": stessa forma e stesso posto di
+                    "Aggiungi allievi" — due operazioni sorelle sull'esame. */}
+                <ExamOutcomePanel
+                  open={examOutcomeOpen}
+                  onClose={() => setExamOutcomeOpen(false)}
+                  rows={examOutcomeRows}
+                  onRegistered={() => load({ silent: true })}
+                  className="absolute left-[calc(100%+14px)] top-0"
+                />
               </>
             );
           })()}

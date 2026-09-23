@@ -526,3 +526,11 @@
     /* ombra in tinta: profondità, come prima */
     0 6px 16px var(--agenda-card-shadow, rgba(15, 23, 42, 0.14));
 }
+
+/* Conferma di un esito esame registrato: la riga si illumina del proprio
+   colore e svanisce, così il salvataggio si vede senza interrompere nulla.
+   Vedi components/pages/Autoscuole/ExamOutcomePanel.tsx. */
+@keyframes examOutcomeWash {
+  from { background: var(--exam-wash); }
+  to { background: transparent; }
+}
