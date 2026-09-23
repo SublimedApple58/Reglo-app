@@ -50,15 +50,40 @@ function formatAmount(change: PricingChange, value: number | null): React.ReactN
   return change.unit === "pct" ? `${value}%` : euro(value);
 }
 
-/** "10 esami e 5 guide", senza le voci che non esistono. */
-function describeAffected({ lessons, exams, courses }: PricingImpact): string {
+/**
+ * "10 esami e 5 guide", più la desinenza con cui concordare ciò che segue.
+ *
+ * Serve perché le tre voci hanno generi diversi — un esame, una guida, un
+ * percorso — e concordare a occhio produce "1 percorso già passata restano",
+ * che è quello che usciva prima. In italiano un insieme misto va al maschile
+ * plurale; una sola voce segue il proprio genere.
+ */
+function describeAffected({ lessons, exams, courses }: PricingImpact): {
+  text: string;
+  /** "o" | "i" | "a" | "e": desinenza di "passat-", "saldat-". */
+  suffix: string;
+  /** Il verbo già coniugato: "resta" / "restano". */
+  singular: boolean;
+} {
   const parts: string[] = [];
   if (exams) parts.push(`${exams} ${exams === 1 ? "esame" : "esami"}`);
   if (lessons) parts.push(`${lessons} ${lessons === 1 ? "guida" : "guide"}`);
   if (courses) parts.push(`${courses} ${courses === 1 ? "percorso" : "percorsi"}`);
-  if (parts.length === 0) return "";
-  if (parts.length === 1) return parts[0];
-  return `${parts.slice(0, -1).join(", ")} e ${parts[parts.length - 1]}`;
+
+  const total = lessons + exams + courses;
+  const singular = total === 1;
+  // Femminile solo se le uniche voci in gioco sono guide.
+  const feminine = lessons > 0 && exams === 0 && courses === 0;
+  const suffix = feminine ? (singular ? "a" : "e") : singular ? "o" : "i";
+
+  const text =
+    parts.length === 0
+      ? ""
+      : parts.length === 1
+        ? parts[0]
+        : `${parts.slice(0, -1).join(", ")} e ${parts[parts.length - 1]}`;
+
+  return { text, suffix, singular };
 }
 
 function Option({
@@ -178,10 +203,11 @@ export function PricingApplyDialog({
             onSelect={() => setApplyTo("future")}
             description={
               <>
-                {affected ? (
+                {affected.text ? (
                   <>
-                    <b className="font-semibold text-[#6a6a6a]">{affected}</b> già
-                    {impact.total === 1 ? " passata" : " passate"} restano al prezzo di prima.{" "}
+                    <b className="font-semibold text-[#6a6a6a]">{affected.text}</b>{" "}
+                    già passat{affected.suffix}{" "}
+                    {affected.singular ? "resta" : "restano"} al prezzo di prima.{" "}
                   </>
                 ) : null}
                 Il nuovo listino vale da adesso.
@@ -194,11 +220,11 @@ export function PricingApplyDialog({
             onSelect={() => setApplyTo("past")}
             description={
               <>
-                {affected ? (
+                {affected.text ? (
                   <>
-                    <b className="font-semibold text-[#6a6a6a]">{affected}</b> già
-                    {impact.total === 1 ? " passata" : " passate"} e non ancora
-                    {impact.total === 1 ? " saldata" : " saldate"} passano al nuovo prezzo.{" "}
+                    <b className="font-semibold text-[#6a6a6a]">{affected.text}</b>{" "}
+                    già passat{affected.suffix} e non ancora saldat{affected.suffix}{" "}
+                    {affected.singular ? "passa" : "passano"} al nuovo prezzo.{" "}
                   </>
                 ) : null}
                 È il comportamento di oggi.
