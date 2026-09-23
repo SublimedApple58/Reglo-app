@@ -863,6 +863,9 @@ const listDirectoryStudents = async (companyId: string) => {
     studentPhase: member.studentPhase,
     examReady: member.examReady,
     examReadyAt: member.examReadyAt ? member.examReadyAt.toISOString() : null,
+    // Numero di patente: serve alla modalina "Registra esito" aperta
+    // dall'agenda, per rivedere quello già inserito invece di un campo vuoto.
+    licenseNumber: member.licenseNumber ?? null,
     // Luogo di default (REG-392): id + NOME → prefill del campo Luogo (label
     // inclusa) alla selezione dell'allievo nel form di prenotazione.
     defaultLocationId: member.defaultLocationId ?? null,
