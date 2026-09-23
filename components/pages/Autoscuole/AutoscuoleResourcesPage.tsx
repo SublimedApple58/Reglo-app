@@ -107,6 +107,7 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   getAutoscuolaSettings,
+  getChannelReachAction,
   updateAutoscuolaSettings,
   triggerEmptySlotNotification,
 } from "@/lib/actions/autoscuole-settings.actions";
@@ -673,6 +674,25 @@ export function AutoscuoleResourcesPage({
     },
     [toast],
   );
+
+  // Raggiungibilità per canale (REG-500): caricata SOLO quando si apre il
+  // pannello dei promemoria. Scorre gli allievi della company, quindi non sta
+  // nel bootstrap delle impostazioni che gira su ogni schermata.
+  const [channelReach, setChannelReach] = React.useState<
+    { push: { reachable: number; total: number }; whatsapp: { reachable: number; total: number }; email: { reachable: number; total: number } } | undefined
+  >(undefined);
+  const [whatsappAvailable, setWhatsappAvailable] = React.useState(false);
+  const channelReachRequested = React.useRef(false);
+
+  React.useEffect(() => {
+    if (configTab !== "reminders" || channelReachRequested.current) return;
+    channelReachRequested.current = true;
+    void getChannelReachAction().then((res) => {
+      if (!res.success || !res.data) return;
+      setChannelReach(res.data.reach);
+      setWhatsappAvailable(res.data.whatsappAvailable);
+    });
+  }, [configTab]);
 
   const loadSettings = React.useCallback(async () => {
     const res = await getAutoscuolaSettings();
@@ -2154,6 +2174,8 @@ export function AutoscuoleResourcesPage({
             slotFillChannels={slotFillChannels}
             studentReminderChannels={studentReminderChannels}
             instructorReminderChannels={instructorReminderChannels}
+            whatsappAvailable={whatsappAvailable}
+            channelReach={channelReach}
             updateReminderSettings={updateReminderSettings}
             emptySlotNotificationEnabled={emptySlotNotificationEnabled}
             setEmptySlotNotificationEnabled={saveEmptySlotNotificationEnabled}
