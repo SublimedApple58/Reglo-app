@@ -304,6 +304,15 @@ model CompanyMember {
   role                      String                 @default("member")
   autoscuolaRole            AutoscuolaRole         @default(STUDENT)
   studentPhase              AutoscuolaStudentPhase @default(PRATICA)
+  /// Numero della patente conseguita, inserito a mano quando si registra un
+  /// esame come "idoneo" — oppure dall'anagrafica, per chi arriva già patentato
+  /// (comunissimo in consorzio: la CQC si fa su chi ha la C da anni).
+  /// Sta sull'allievo e non sull'esame perché è un attributo della PERSONA:
+  /// resta valido anche se quell'esame viene annullato o ripulito. Facoltativo
+  /// anche per un idoneo: il numero spesso si conosce giorni dopo, e non deve
+  /// impedire di registrare subito l'esito.
+  licenseNumber             String?
+  licenseObtainedAt         DateTime?              @db.Timestamp(6)
   /// When the student was first granted a quiz license seat by the school owner.
   /// Null = never granted. Once set, the seat is "burnt" for life on this student
   /// (nominal license, non-reassignable). Drives the quiz tab visibility in mobile.
@@ -514,6 +523,17 @@ model AutoscuolaAppointment {
   /// booked the over-limit guide"). slot_fill/group_lesson/exam intentionally
   /// bypass the weekly booking limit.
   bookingSource                String?
+  /// Esito di un esame (type = "esame"), registrabile dall'agenda, dal dettaglio
+  /// allievo e dall'app istruttore: "idoneo" | "respinto". Null = non ancora
+  /// registrato — che NON significa "in attesa di giudizio": un esame futuro è
+  /// semplicemente senza esito. Sta sulla riga dell'appuntamento perché un esame
+  /// è già una riga per allievo (vedi materializeExamSlot), quindi ogni
+  /// partecipante ha naturalmente il proprio esito. Un allievo respinto che
+  /// ripete l'esame ha due righe con due esiti: lo storico non si sovrascrive.
+  /// Vocabolario e regole in lib/autoscuole/exam-outcome.ts.
+  examOutcome                  String?
+  examOutcomeAt                DateTime? @db.Timestamp(6)
+  examOutcomeByUserId          String?   @db.Uuid
   createdAt                    DateTime  @default(now()) @db.Timestamp(6)
   updatedAt                    DateTime  @updatedAt
 

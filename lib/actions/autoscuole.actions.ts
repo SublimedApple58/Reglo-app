@@ -47,6 +47,12 @@ import {
 import { isInstructor, isOwner, isStudent } from "@/lib/autoscuole/roles";
 import { canManageLessonPayments } from "@/lib/autoscuole/lesson-payments";
 import { LICENSE_CATEGORIES, TRANSMISSIONS, isMotoLicenseCategory, vehicleServesLicense } from "@/lib/autoscuole/license";
+import {
+  EXAM_OUTCOMES,
+  canRecordExamOutcome,
+  normalizeLicenseNumber,
+  phaseAfterExamOutcome,
+} from "@/lib/autoscuole/exam-outcome";
 import { FOLLOW_CAR_CATEGORY, parseFollowCarRulesFromLimits, type FollowCarRules } from "@/lib/autoscuole/follow-car";
 import { MOTO_LESSON_TYPES } from "@/lib/autoscuole/moto-lesson-type";
 import {
@@ -1112,6 +1118,9 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           locationId: true,
           groupLessonId: true,
           motoLessonType: true,
+          // Esito esame: il pannello di gestione lo mostra sulla riga dell'iscritto
+          // e la modalina "Registra esito" ci si apre sopra. Viaggia con ...rest.
+          examOutcome: true,
           cancellationKind: true,
           cancellationReason: true,
           replacedByAppointmentId: true,
@@ -1370,6 +1379,8 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           locationId: gl.locationId,
           groupLessonId: gl.id,
           motoLessonType: null,
+          // Una guida di gruppo vuota non è un esame: nessun esito, mai.
+          examOutcome: null,
           cancellationKind: null,
           cancellationReason: null,
           replacedByAppointmentId: null,
@@ -2076,6 +2087,7 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
           manualPaymentStatus: true,
           creditApplied: true,
           lateCancellationAction: true,
+          examOutcome: true,
           notes: true,
           createdAt: true,
           groupLessonId: true,
@@ -2179,6 +2191,10 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
           : null,
         licenseCategory: studentMembership.licenseCategory ?? null,
         transmission: studentMembership.transmission ?? null,
+        // Numero di patente: sta sull'ALLIEVO, non sull'esame. Lo storico guide
+        // lo mostra sotto l'ultimo esame idoneo — non sotto tutti, altrimenti
+        // chi ha preso B e poi CQC vedrebbe lo stesso numero due volte.
+        licenseNumber: studentMembership.licenseNumber ?? null,
         groupLessonsOptIn: studentMembership.groupLessonsOptIn ?? false,
         quizSeatGrantedAt: studentMembership.quizSeatGrantedAt
           ? studentMembership.quizSeatGrantedAt.toISOString()
@@ -2203,6 +2219,7 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
             manualPaymentStatus: raw?.manualPaymentStatus ?? null,
             creditApplied: raw?.creditApplied ?? false,
             lateCancellationAction: raw?.lateCancellationAction ?? null,
+            examOutcome: raw?.examOutcome ?? null,
             notes: raw?.notes ?? null,
             createdAt: raw?.createdAt ?? null,
             group: raw?.groupLessonId ? registerGlInfo.get(raw.groupLessonId) ?? null : null,
@@ -8330,6 +8347,143 @@ export async function updateStudentPhase(
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
+  }
+}
+
+const setExamOutcomeSchema = z.object({
+  appointmentId: z.string().uuid(),
+  /// null = cancella l'esito registrato per errore e riporta l'esame a "non
+  /// ancora registrato". La fase dell'allievo NON viene riportata indietro: è
+  /// una decisione che spetta al titolare, non un effetto collaterale.
+  outcome: z.enum(EXAM_OUTCOMES).nullable(),
+  licenseNumber: z.string().max(40).nullable().optional(),
+});
+
+/**
+ * Registra (o cancella) l'esito di un esame.
+ *
+ * **Punto unico.** La chiamano tutti e tre gli ingressi previsti — pannello
+ * esame dell'agenda, tab Guide del dettaglio allievo (autoscuole e consorzio),
+ * app istruttore. Se la logica si sdoppiasse, i tre posti divergerebbero al
+ * primo ritocco: è esattamente com'è nato il crash di REG-511.
+ *
+ * Accessibile anche agli ISTRUTTORI, non solo al titolare: è l'istruttore che
+ * accompagna l'esame e ne conosce l'esito per primo, e deve poterlo segnare
+ * dall'app.
+ */
+export async function setExamOutcome(input: z.infer<typeof setExamOutcomeSchema>) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    ensureAutoscuolaRole(membership, ["OWNER", "INSTRUCTOR"]);
+    const payload = setExamOutcomeSchema.parse(input);
+
+    const appointment = await prisma.autoscuolaAppointment.findFirst({
+      where: { id: payload.appointmentId, companyId: membership.companyId },
+      select: {
+        id: true,
+        type: true,
+        status: true,
+        studentId: true,
+        startsAt: true,
+        examOutcome: true,
+      },
+    });
+    if (!appointment) {
+      return { success: false as const, message: "Esame non trovato." };
+    }
+    if (!canRecordExamOutcome(appointment)) {
+      return {
+        success: false as const,
+        message:
+          appointment.type !== "esame"
+            ? "Questo appuntamento non è un esame."
+            : appointment.status === "cancelled"
+              ? "L'esame è annullato: non si può registrarne l'esito."
+              : !appointment.studentId
+                ? "Questo esame non ha ancora iscritti."
+                : "L'esame non è ancora iniziato.",
+      };
+    }
+    const studentId = appointment.studentId as string;
+
+    const now = new Date();
+    const licenseNumber = payload.outcome
+      ? normalizeLicenseNumber(payload.outcome, payload.licenseNumber)
+      : null;
+
+    await prisma.autoscuolaAppointment.update({
+      where: { id: appointment.id },
+      data: {
+        examOutcome: payload.outcome,
+        examOutcomeAt: payload.outcome ? now : null,
+        examOutcomeByUserId: payload.outcome ? membership.userId : null,
+      },
+    });
+
+    // Un idoneo chiude il percorso: l'allievo diventa PATENTATO, senza chiedere
+    // conferma (decisione di Tiziano). Da qui in poi non compare più nel picker
+    // allievo dell'app istruttore, che mostra solo la fase PRATICA (REG-499).
+    const nextPhase = payload.outcome ? phaseAfterExamOutcome(payload.outcome) : null;
+    let promoted = false;
+    if (nextPhase || licenseNumber) {
+      const student = await prisma.companyMember.findFirst({
+        where: {
+          companyId: membership.companyId,
+          userId: studentId,
+          autoscuolaRole: "STUDENT",
+        },
+        select: { studentPhase: true },
+      });
+      if (student) {
+        promoted = Boolean(nextPhase) && student.studentPhase !== nextPhase;
+        await prisma.companyMember.updateMany({
+          where: {
+            companyId: membership.companyId,
+            userId: studentId,
+            autoscuolaRole: "STUDENT",
+          },
+          data: {
+            ...(nextPhase && {
+              studentPhase: nextPhase,
+              phaseClassifiedAt: now,
+              // "Pronto per l'esame" non ha più senso: l'esame è stato dato.
+              examReady: false,
+              examReadyAt: null,
+              examReadyBy: null,
+            }),
+            // Il numero si scrive solo se c'è: un idoneo senza numero non
+            // cancella quello inserito prima (arriva spesso giorni dopo).
+            ...(licenseNumber && { licenseNumber, licenseObtainedAt: now }),
+          },
+        });
+        if (promoted && nextPhase) {
+          void notifyStudentPhaseChange({
+            companyId: membership.companyId,
+            studentUserId: studentId,
+            fromPhase: student.studentPhase as
+              | "AWAITING"
+              | "TEORIA"
+              | "PRATICA"
+              | "PATENTATO",
+            toPhase: nextPhase,
+          });
+        }
+      }
+    }
+
+    return {
+      success: true as const,
+      data: { outcome: payload.outcome, licenseNumber, promoted },
+      message: !payload.outcome
+        ? "Esito rimosso."
+        : payload.outcome === "idoneo"
+          ? promoted
+            ? "Esame superato. L'allievo è ora patentato."
+            : "Esame superato."
+          : "Esito registrato.",
+    };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
   }
 }
 

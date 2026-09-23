@@ -13,6 +13,12 @@ import {
   studentPhaseLabel,
 } from "@/components/pages/Consorzio/student-phase";
 import {
+  ExamOutcomePanel,
+  ExamOutcomePill,
+  type ExamOutcomeRow,
+} from "@/components/pages/Autoscuole/ExamOutcomePanel";
+import { asExamOutcome } from "@/lib/autoscuole/exam-outcome";
+import {
   Pill,
   StudentAvatar,
   blueLinkClass,
@@ -28,7 +34,7 @@ import {
   type ConsorzioStudentDetail,
 } from "@/lib/actions/consorzio.actions";
 import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
-import { formatStoredName, splitStoredName } from "@/lib/autoscuole/student-name-order";
+import { formatStoredName, splitStoredName, storedNameInitials } from "@/lib/autoscuole/student-name-order";
 
 /**
  * Drawer laterale dettaglio allievo del consorzio.
@@ -133,6 +139,9 @@ export function ConsorzioStudentDrawer({
   const [busy, setBusy] = React.useState(false);
   const [licenseDialogOpen, setLicenseDialogOpen] = React.useState(false);
   const [phaseDialogOpen, setPhaseDialogOpen] = React.useState(false);
+  // Esame di cui si sta registrando l'esito: stessa modalina di agenda e
+  // dettaglio allievo delle autoscuole.
+  const [outcomeExamId, setOutcomeExamId] = React.useState<string | null>(null);
   const [editingPhone, setEditingPhone] = React.useState(false);
   const [phoneDraft, setPhoneDraft] = React.useState("");
   const [phoneSaving, setPhoneSaving] = React.useState(false);
@@ -439,6 +448,18 @@ export function ConsorzioStudentDrawer({
                     Esame
                   </span>
                 )}
+                {row.kind === "exam" && <ExamOutcomePill outcome={row.outcome} />}
+                {row.kind === "exam" &&
+                  !asExamOutcome(row.outcome) &&
+                  new Date(row.startsAt).getTime() <= Date.now() && (
+                    <button
+                      type="button"
+                      className={blueLinkClass}
+                      onClick={() => setOutcomeExamId(row.appointmentId)}
+                    >
+                      Registra esito
+                    </button>
+                  )}
                 {row.kind === "guide" && row.absence && (
                   <span
                     className="inline-flex rounded-[6px] px-[7px] py-[3px] text-[11px] font-bold"
@@ -672,6 +693,36 @@ export function ConsorzioStudentDrawer({
           }}
         />
       )}
+
+      {detail && outcomeExamId && (() => {
+        const exam = detail.exams.find((e) => e.appointmentId === outcomeExamId);
+        if (!exam) return null;
+        const rows: ExamOutcomeRow[] = [
+          {
+            appointmentId: exam.appointmentId,
+            studentId: detail.userId,
+            name: formatStoredName(detail.name, nameOrder),
+            subtitle: detail.licenseCategory ? `Patente ${detail.licenseCategory}` : null,
+            initials: storedNameInitials(detail.name, nameOrder),
+            outcome: asExamOutcome(exam.outcome),
+          },
+        ];
+        return (
+          <ExamOutcomePanel
+            open
+            onClose={() => setOutcomeExamId(null)}
+            subtitle={`Esame del ${new Date(exam.startsAt).toLocaleDateString("it-IT", { day: "numeric", month: "long" })}`}
+            rows={rows}
+            searchable={false}
+            licenseNumberByStudent={{ [detail.userId]: detail.licenseNumber }}
+            onRegistered={() => {
+              void refresh();
+              onChanged?.();
+            }}
+            className="fixed right-[calc(min(600px,100vw)+14px)] top-[110px] z-[210]"
+          />
+        );
+      })()}
 
       {detail && (
         <ChangeStudentPhaseDialog
