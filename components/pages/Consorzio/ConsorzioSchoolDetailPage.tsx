@@ -42,6 +42,12 @@ import {
 } from "@/lib/actions/consorzio.actions";
 import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
 import { formatStoredName, storedNameInitials } from "@/lib/autoscuole/student-name-order";
+import { SegmentedPill } from "@/components/ui/segmented-pill";
+import {
+  matchesPhaseFilter,
+  StudentPhaseBadge,
+  type PhaseFilter,
+} from "@/components/pages/Consorzio/student-phase";
 
 /**
  * Dettaglio autoscuola consorziata — riproduzione 1:1 del prototipo
@@ -151,13 +157,16 @@ function SchoolDetailSkeleton() {
           {Array.from({ length: 2 }).map((_, i) => (
             <div
               key={i}
-              className="grid grid-cols-[1.6fr_90px_1fr_110px_70px_1.2fr] items-center gap-x-3.5 border-b border-[#f2f2f2] px-4 py-3.5"
+              className="grid grid-cols-[1.6fr_170px_1fr_110px_70px_1.2fr] items-center gap-x-3.5 border-b border-[#f2f2f2] px-4 py-3.5"
             >
               <div className="flex min-w-0 items-center gap-3">
                 <Skeleton className="size-8 shrink-0 rounded-full" />
                 <Skeleton className="h-3.5 w-32 max-w-full rounded" />
               </div>
-              <Skeleton className="h-[25px] w-10 rounded-full" />
+              <div className="flex items-center gap-1.5">
+                <Skeleton className="h-[25px] w-10 rounded-full" />
+                <Skeleton className="h-[25px] w-20 rounded-full" />
+              </div>
               <Skeleton className="h-3.5 w-24 max-w-full rounded" />
               <Skeleton className="h-3.5 w-14 rounded" />
               <div className="flex justify-end">
@@ -202,6 +211,22 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
 
   // Drawer laterale dettaglio allievo (click sulla riga, come nel prototipo).
   const [drawerUserId, setDrawerUserId] = React.useState<string | null>(null);
+
+  // Filtro fase percorso: patentati vs percorso ancora in corso.
+  const [phaseFilter, setPhaseFilter] = React.useState<PhaseFilter>("all");
+
+  const phaseCounts = React.useMemo(() => {
+    let patentati = 0;
+    for (const student of students) {
+      if (student.studentPhase === "PATENTATO") patentati += 1;
+    }
+    return { all: students.length, pratica: students.length - patentati, patentati };
+  }, [students]);
+
+  const visibleStudents = React.useMemo(
+    () => students.filter((student) => matchesPhaseFilter(student.studentPhase, phaseFilter)),
+    [students, phaseFilter],
+  );
 
   const load = React.useCallback(async () => {
     const [schoolRes, codesRes] = await Promise.all([
@@ -413,25 +438,45 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
               · {students.length}
             </span>
           </h2>
-          <button
-            type="button"
-            onClick={() => setAddStudentOpen(true)}
-            className="flex cursor-pointer items-center gap-1.5 rounded-full border border-[#dddddd] bg-white px-4 py-[9px] text-[14px] font-semibold text-[#222222] transition-colors hover:bg-[#f7f7f7]"
-          >
-            <Plus className="h-4 w-4" />
-            Aggiungi allievo
-          </button>
+          <div className="flex items-center gap-3">
+            {students.length > 0 && (
+              <SegmentedPill
+                value={phaseFilter}
+                onChange={setPhaseFilter}
+                options={[
+                  { value: "all", label: "Tutti", count: phaseCounts.all },
+                  { value: "pratica", label: "In pratica", count: phaseCounts.pratica },
+                  { value: "patentati", label: "Patentati", count: phaseCounts.patentati },
+                ]}
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => setAddStudentOpen(true)}
+              className="flex cursor-pointer items-center gap-1.5 rounded-full border border-[#dddddd] bg-white px-4 py-[9px] text-[14px] font-semibold text-[#222222] transition-colors hover:bg-[#f7f7f7]"
+            >
+              <Plus className="h-4 w-4" />
+              Aggiungi allievo
+            </button>
+          </div>
         </div>
 
         {students.length === 0 ? (
           <div className="mt-4 rounded-3xl border border-dashed border-neutral-200 bg-white/60 p-10 text-center text-sm font-medium text-neutral-500">
             Nessun allievo per questa autoscuola.
           </div>
+        ) : visibleStudents.length === 0 ? (
+          <div className="mt-4 rounded-3xl border border-dashed border-neutral-200 bg-white/60 p-10 text-center text-sm font-medium text-neutral-500">
+            {phaseFilter === "patentati"
+              ? "Nessun allievo ha ancora completato il percorso."
+              : "Tutti gli allievi di questa autoscuola hanno completato il percorso."}
+          </div>
         ) : (
           <div className="mt-3">
-            {/* Griglia del prototipo: 1.6fr 90px 1fr 110px 70px 1.2fr, gap 14 */}
-            <div className="grid grid-cols-[1.6fr_90px_1fr_110px_70px_1.2fr] gap-x-3.5 border-b border-[#ebebeb] px-4 pb-2.5">
-              {["Allievo", "Patente", "Istruttore", "Ultima guida", "Guide", "Codici contabili"].map(
+            {/* Griglia del prototipo, con la colonna patente allargata da 90 a
+                170px per ospitare anche il badge di fase percorso. */}
+            <div className="grid grid-cols-[1.6fr_170px_1fr_110px_70px_1.2fr] gap-x-3.5 border-b border-[#ebebeb] px-4 pb-2.5">
+              {["Allievo", "Patente · Fase", "Istruttore", "Ultima guida", "Guide", "Codici contabili"].map(
                 (header, index) => (
                   <div
                     key={header}
@@ -442,11 +487,11 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
                 ),
               )}
             </div>
-            {students.map((student) => (
+            {visibleStudents.map((student) => (
               <div
                 key={student.userId}
                 onClick={() => setDrawerUserId(student.userId)}
-                className="grid cursor-pointer grid-cols-[1.6fr_90px_1fr_110px_70px_1.2fr] items-center gap-x-3.5 rounded-[10px] border-b border-[#f2f2f2] px-4 py-3.5 transition-colors hover:bg-[#fafafa]"
+                className="grid cursor-pointer grid-cols-[1.6fr_170px_1fr_110px_70px_1.2fr] items-center gap-x-3.5 rounded-[10px] border-b border-[#f2f2f2] px-4 py-3.5 transition-colors hover:bg-[#fafafa]"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#111111] text-[11px] font-bold text-white">
@@ -456,7 +501,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
                     {formatStoredName(student.name, nameOrder)}
                   </span>
                 </div>
-                <div>
+                <div className="flex flex-wrap items-center gap-1.5">
                   {student.licenseCategory ? (
                     <span
                       className="inline-flex items-center whitespace-nowrap px-2.5 py-1 text-[12px] font-bold leading-[1.4]"
@@ -467,6 +512,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
                   ) : (
                     "—"
                   )}
+                  <StudentPhaseBadge phase={student.studentPhase} />
                 </div>
                 <div className="truncate text-[13.5px] font-medium text-[#444444]">
                   {student.instructorName ?? "—"}

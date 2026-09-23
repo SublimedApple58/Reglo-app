@@ -246,10 +246,20 @@ export async function listConsorzioSchools() {
   }
 }
 
+/**
+ * Fase del percorso di un allievo di consorzio. L'enum del database ne ha
+ * quattro, ma su un account consorzio `phasesEnabled` non contempla la teoria:
+ * `updateStudentPhase` rifiuta esplicitamente TEORIA e AWAITING, quindi qui si
+ * arriva solo a PRATICA (il default dello schema) o a PATENTATO.
+ */
+export type ConsorzioStudentPhase = "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
+
 export type ConsorzioSchoolStudent = {
   userId: string;
   name: string;
   licenseCategory: string | null;
+  /** Fase percorso: distingue chi sta ancora guidando da chi ha preso la patente. */
+  studentPhase: ConsorzioStudentPhase;
   instructorName: string | null;
   lastLessonAt: string | null;
   lessonsCount: number;
@@ -274,6 +284,7 @@ export async function getConsorzioSchool(schoolId: string) {
       select: {
         userId: true,
         licenseCategory: true,
+        studentPhase: true,
         user: { select: { name: true } },
         assignedInstructor: { select: { name: true } },
         consorzioAccountingCodes: {
@@ -326,6 +337,7 @@ export async function getConsorzioSchool(schoolId: string) {
       userId: member.userId,
       name: member.user.name ?? "—",
       licenseCategory: member.licenseCategory,
+      studentPhase: member.studentPhase,
       instructorName: member.assignedInstructor?.name ?? null,
       lastLessonAt: lessonStats.get(member.userId)?.lastAt?.toISOString() ?? null,
       lessonsCount: lessonStats.get(member.userId)?.count ?? 0,
@@ -806,6 +818,10 @@ export type ConsorzioStudentDetail = {
   schoolName: string | null;
   schoolCity: string | null;
   licenseCategory: string | null;
+  /** Fase percorso, stessa semantica della tabella allievi della scheda autoscuola. */
+  studentPhase: ConsorzioStudentPhase;
+  /** Fasi che il server accetterebbe per questa company (vedi readPhasesEnabled). */
+  phasesEnabled: Array<"TEORIA" | "PRATICA">;
   transmission: string | null;
   lessonsCount: number;
   certifiedMinutes: number;
@@ -852,6 +868,7 @@ export async function getConsorzioStudentDetail(userId: string) {
       select: {
         userId: true,
         licenseCategory: true,
+        studentPhase: true,
         transmission: true,
         user: { select: { name: true, email: true, phone: true } },
         consorzioSchool: { select: { name: true, city: true } },
@@ -972,6 +989,8 @@ export async function getConsorzioStudentDetail(userId: string) {
       schoolName: member.consorzioSchool?.name ?? null,
       schoolCity: member.consorzioSchool?.city ?? null,
       licenseCategory: member.licenseCategory,
+      studentPhase: member.studentPhase,
+      phasesEnabled: readPhasesEnabled(company),
       transmission: member.transmission,
       lessonsCount: guideAppointments.length - absencesCount,
       certifiedMinutes,
@@ -1020,6 +1039,25 @@ const pricingSchema = z.object({
   lateCancellationFixedAmount: z.number().min(0).max(10000),
   guideRequestMinLeadHours: z.number().int().min(0).max(336),
 });
+
+/**
+ * Fasi percorso attive sulla company, con lo **stesso fallback del server**:
+ * `updateStudentPhase` ricade su `["PRATICA"]` quando il campo non c'è, e sul
+ * consorzio non c'è. Si legge invece di cablarlo, così il dialogo mostra
+ * esattamente le fasi che l'azione accetterebbe: se un giorno il consorzio
+ * attivasse la teoria, l'interfaccia la seguirebbe da sé.
+ */
+const readPhasesEnabled = (
+  company: { services?: Array<{ serviceKey: string; limits: unknown }> | null },
+): Array<"TEORIA" | "PRATICA"> => {
+  const service = company.services?.find((s) => s.serviceKey === "AUTOSCUOLE");
+  const raw = (service?.limits as Record<string, unknown> | null)?.phasesEnabled;
+  if (!Array.isArray(raw)) return ["PRATICA"];
+  const parsed = raw.filter(
+    (p): p is "TEORIA" | "PRATICA" => p === "TEORIA" || p === "PRATICA",
+  );
+  return parsed.length ? parsed : ["PRATICA"];
+};
 
 const readPricing = (
   company: { services?: Array<{ serviceKey: string; limits: unknown }> | null },

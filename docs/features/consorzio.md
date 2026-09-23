@@ -89,6 +89,44 @@ svolta") e nel drawer allievo come bucket **Assenze** nel Riepilogo costi, più
 un badge sulla riga della guida. Le due schermate usano la stessa regola, così
 non possono dire cifre diverse sullo stesso allievo.
 
+## Fase percorso: patentati vs percorso in corso
+
+La tabella allievi della **scheda autoscuola** distingue chi sta ancora
+guidando da chi ha preso la patente: filtro **Tutti / In pratica / Patentati**
+(`SegmentedPill` con contatori, sopra la tabella) e badge di fase accanto a
+quello della patente su ogni riga. La colonna "Patente" è diventata
+"Patente · Fase" e passa da 90 a 170px per ospitare le due pastiglie.
+
+> **Perché il filtro e il comando nascono insieme.** Il dato
+> (`CompanyMember.studentPhase`) esisteva da sempre, ma il consorzio non aveva
+> modo né di leggerlo né di impostarlo: in produzione tutti e 12 gli allievi
+> erano `PRATICA` — il **default dello schema** — con `phaseClassifiedAt` nullo.
+> Aggiungere solo i filtri avrebbe prodotto per sempre "In pratica 12 ·
+> Patentati 0". Perciò il drawer allievo ha ora **Fase percorso** in Anagrafica,
+> con "Modifica" che apre `ChangeStudentPhaseDialog` (lo stesso del dettaglio
+> allievo delle autoscuole normali, riusato così com'è).
+
+Su un account consorzio le fasi raggiungibili sono **due**: `PRATICA` e
+`PATENTATO`. `updateStudentPhase` rifiuta `TEORIA` e `AWAITING` quando la fase
+teoria non è attiva, e sul consorzio `phasesEnabled` non è impostato (fallback
+`["PRATICA"]`). Per questo il filtro ha tre voci e non cinque: due pastiglie
+che non possono popolarsi sono peggio di due assenti. Il valore non è cablato:
+`getConsorzioStudentDetail` restituisce `phasesEnabled` leggendolo dai limits
+con lo stesso fallback del server, così se un giorno la teoria venisse attivata
+il dialogo la mostrerebbe da sé.
+
+**Conseguenza fuori da questa pagina**: marcare un allievo `PATENTATO` azzera
+`examReady` e lo toglie dal picker "Seleziona allievo" dell'app istruttore
+(REG-499 mostra solo `PRATICA`). L'agenda web non filtra per fase, quindi il
+titolare può comunque prenotargli una guida. È reversibile: basta riportarlo a
+`PRATICA`.
+
+Presentazione condivisa in `components/pages/Consorzio/student-phase.tsx`
+(`StudentPhaseBadge` senza bordo per la tabella, `STUDENT_PHASE_PILL_TONE` per
+la `Pill` bordata del drawer, `matchesPhaseFilter`). Il filtro "In pratica" è
+definito come **non-PATENTATO**, non come `=== PRATICA`: una fase ereditata non
+deve far sparire un allievo da entrambe le viste.
+
 ## Categorie patente superiori (C1, C1E, D1, D1E, CQC, ADR)
 
 Aggiunte alla lista canonica `LICENSE_CATEGORIES` (`lib/autoscuole/license.ts`), bucket `pro`, match veicolo **stretto** (self-match, nessuna gerarchia — mappa eligibilità CQC/ADR da confermare col consorzio). CQC/ADR sono qualificazioni modellate come pseudo-categorie (evita una seconda dimensione su member/veicoli/tariffe).
@@ -101,7 +139,7 @@ Aggiunte alla lista canonica `LICENSE_CATEGORIES` (`lib/autoscuole/license.ts`),
 - **Shell**: `AutoscuoleNav.tsx` (`consortiumNavItems`: Agenda | Autoscuole `?tab=scuole` | Fatturazione `?tab=fatturazione` + icone `public/images/nav/autoscuole-3d.png`/`fatturazione-3d.png`), `AutoscuoleTabsPage.tsx` (tab nuove + redirect fuori-modalità). Hamburger INVARIATO (il prototipo lo tiene identico; la voce "Chiave di accesso" del prototipo non esiste ancora, fuori scope)
 - **Actions**: `lib/actions/consorzio.actions.ts` (schools CRUD + stats, codici, pricing, fatturazione, guide request accept/reject), `lib/actions/user.actions.ts` (`createCompanyUser` esteso con `consorzioSchoolId` + `accountingCodeIds` + `phone`, ed email/password FACOLTATIVE per gli allievi di consorzio — vedi sotto)
 - **Aggiungi allievo (REG-460 + REG-464)**: `components/pages/Consorzio/ConsorzioStudentCreateDialog.tsx`, dialog DEDICATO (non più `AdminUsersCreateDialog`, che è tornato al solo uso Directory/istruttori). Obbligatori **nome, cognome, telefono**; `Accesso all'app` (email + password) e `Codici contabili` sono sezioni COLLASSATE con riepilogo, e il corpo della modale scorre: l'altezza non dipende più da quanti codici ha il consorzio (era il bug REG-460). Senza email l'account nasce con **email segnaposto** `allievo+<uuid>@no-app.reglo.local` e `password = null` → non può accedere (auth web e mobile richiedono entrambe `user.password`); `lib/users/placeholder-email.ts` (`buildPlaceholderEmail`, `isPlaceholderEmail`, `displayEmail`) la nasconde in UI mostrando "—". Stesso precedente degli account anonimizzati (`deleted+<id>@deleted.reglo.local`). Il segnaposto NON genera invii: le uniche mail transazionali sono gli inviti company
-- **UI**: `components/pages/Consorzio/` — `ConsorzioSchoolsPage`, `ConsorzioSchoolDetailPage` (route `autoscuole/scuole/[schoolId]`), `ConsorzioBillingPage`, `ConsorzioPrezziPane` (sub-tab "Prezzi" in `BookingsTab.tsx`, al posto di "Crediti e prezzi" che per il consorzio è nascosto). Stile 1:1 dal prototipo (computed styles estratti via Playwright); asset estratti dal prototipo: icone nav (`public/images/nav/autoscuole-3d.png`, `fatturazione-3d.png`) e sfera di cristallo del placeholder mesi futuri in Fatturazione (`public/images/3d/sfera-cristallo-3d.png`, copy "Non riusciamo ANCORA a vedere nel futuro"). Card richiesta = `GuideRequestCard.tsx`. **Drawer allievo** = `ConsorzioStudentDrawer.tsx` (click su riga allievo nel dettaglio scuola). **REG-465**: ha la stessa forma del dettaglio allievo delle autoscuole normali — `DetailPanel` condiviso (600px, backdrop, slide 220ms, Escape), header centrato con avatar 96 + nome + recapito + pill (autoscuola, categoria) e tab **Riepilogo / Guide / Costi** — costruito sui primitivi condivisi estratti da `AutoscuoleStudentsPage` in `components/pages/Autoscuole/student-detail-ui.tsx` (`Pill`, `StudentAvatar`, `blueLinkClass`, `sectionLabelClass`, `splitFullName`). Riepilogo = anagrafica (telefono modificabile inline via `updateStudentPhone`, percorso patente via `EditStudentLicenseDialog`, già consorzio-aware) + **codici contabili** (vedi/aggiungi/rimuovi, la parte consorzio-only) + attività col consorzio; Guide = guide ed esami in un'unica lista con badge Certificata/Da certificare = `ConsorzioLessonBilling.settledAt`; Costi = riepilogo costi verso l'autoscuola. Backend `getConsorzioStudentDetail` (espone anche `email`/`phone`/`transmission`); `ConsorzioAccountingCode.description` aggiunto con migration `20260903195222`. Gotcha tema: `rounded-md/xl` in questa app valgono 12/18px (scala radius custom) — nelle superfici pixel-perfect usare SEMPRE radius espliciti
+- **UI**: `components/pages/Consorzio/` — `ConsorzioSchoolsPage`, `ConsorzioSchoolDetailPage` (route `autoscuole/scuole/[schoolId]`), `ConsorzioBillingPage`, `ConsorzioPrezziPane` (sub-tab "Prezzi" in `BookingsTab.tsx`, al posto di "Crediti e prezzi" che per il consorzio è nascosto). Stile 1:1 dal prototipo (computed styles estratti via Playwright); asset estratti dal prototipo: icone nav (`public/images/nav/autoscuole-3d.png`, `fatturazione-3d.png`) e sfera di cristallo del placeholder mesi futuri in Fatturazione (`public/images/3d/sfera-cristallo-3d.png`, copy "Non riusciamo ANCORA a vedere nel futuro"). Card richiesta = `GuideRequestCard.tsx`. **Drawer allievo** = `ConsorzioStudentDrawer.tsx` (click su riga allievo nel dettaglio scuola). **REG-465**: ha la stessa forma del dettaglio allievo delle autoscuole normali — `DetailPanel` condiviso (600px, backdrop, slide 220ms, Escape), header centrato con avatar 96 + nome + recapito + pill (autoscuola, categoria) e tab **Riepilogo / Guide / Costi** — costruito sui primitivi condivisi estratti da `AutoscuoleStudentsPage` in `components/pages/Autoscuole/student-detail-ui.tsx` (`Pill`, `StudentAvatar`, `blueLinkClass`, `sectionLabelClass`, `splitFullName`). Riepilogo = anagrafica (telefono modificabile inline via `updateStudentPhone`, percorso patente via `EditStudentLicenseDialog`, **fase percorso** via `ChangeStudentPhaseDialog` — entrambi già consorzio-aware) + **codici contabili** (vedi/aggiungi/rimuovi, la parte consorzio-only) + attività col consorzio; Guide = guide ed esami in un'unica lista con badge Certificata/Da certificare = `ConsorzioLessonBilling.settledAt`; Costi = riepilogo costi verso l'autoscuola. Backend `getConsorzioStudentDetail` (espone anche `email`/`phone`/`transmission`); `ConsorzioAccountingCode.description` aggiunto con migration `20260903195222`. Gotcha tema: `rounded-md/xl` in questa app valgono 12/18px (scala radius custom) — nelle superfici pixel-perfect usare SEMPRE radius espliciti
 - **Richiesta guida (ricevente)**: `lib/autoscuole/notifications.ts` (`createConsortiumGuideRequestNotification`, kind `consortium_guide_request`), `OwnerNotificationsBell.tsx` (riga cliccabile → **primo click-through della campanella**: `?tab=agenda&guideRequestId=…`), `AutoscuoleAgendaPage.tsx` (stato `guideRequest`/`guideDraft`, ghost tratteggiato AMBRA "In attesa" nella colonna dell'istruttore scelto, card `CreateEventPopover` "Richiesta di guida" con picker istruttore obbligatorio + Accetta/Rifiuta; il click su un altro slot della griglia SPOSTA il draft, come gli altri flussi)
 - **Seed dev**: `scripts/seed-consorzio-company.mjs` (consorzio@reglo.it / Reglo2026!, 2 istruttori CON account+membership — l'agenda mostra solo istruttori con `userId` —, 5 mezzi, 3 scuole, 6 allievi, tariffe, richiesta pending + notifica, guida demo)
 
