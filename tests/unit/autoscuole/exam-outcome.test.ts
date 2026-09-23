@@ -92,4 +92,12 @@ describe("normalizeLicenseNumber", () => {
   it("su un respinto il numero si scarta: è un errore di compilazione", () => {
     expect(normalizeLicenseNumber("respinto", "GE1234567X")).toBeNull();
   });
+
+  it("stringa vuota e null danno lo stesso esito: nessun numero", () => {
+    // La differenza fra "cancella" e "non toccare" la fa il CHIAMANTE mandando
+    // o omettendo il campo (undefined), non questa funzione.
+    expect(normalizeLicenseNumber("idoneo", "")).toBeNull();
+    expect(normalizeLicenseNumber("idoneo", null)).toBeNull();
+    expect(normalizeLicenseNumber("idoneo", undefined)).toBeNull();
+  });
 });

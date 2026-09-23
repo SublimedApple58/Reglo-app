@@ -8362,6 +8362,9 @@ const setExamOutcomeSchema = z.object({
   /// ancora registrato". La fase dell'allievo NON viene riportata indietro: è
   /// una decisione che spetta al titolare, non un effetto collaterale.
   outcome: z.enum(EXAM_OUTCOMES).nullable(),
+  /// `undefined` = non toccare il numero già registrato (è il caso di chi
+  /// sceglie "Idoneo" senza digitare niente: il numero arriva spesso giorni
+  /// dopo). `null` o stringa vuota = cancellalo davvero. Una stringa = scrivila.
   licenseNumber: z.string().max(40).nullable().optional(),
 });
 
@@ -8413,6 +8416,9 @@ export async function setExamOutcome(input: z.infer<typeof setExamOutcomeSchema>
     const studentId = appointment.studentId as string;
 
     const now = new Date();
+    // Distinguere "non toccare" da "cancella" è ciò che permette di correggere
+    // un numero digitato male: senza, si poteva solo sovrascriverlo.
+    const touchesNumber = payload.licenseNumber !== undefined;
     const licenseNumber = payload.outcome
       ? normalizeLicenseNumber(payload.outcome, payload.licenseNumber)
       : null;
@@ -8431,7 +8437,7 @@ export async function setExamOutcome(input: z.infer<typeof setExamOutcomeSchema>
     // allievo dell'app istruttore, che mostra solo la fase PRATICA (REG-499).
     const nextPhase = payload.outcome ? phaseAfterExamOutcome(payload.outcome) : null;
     let promoted = false;
-    if (nextPhase || licenseNumber) {
+    if (nextPhase || touchesNumber) {
       const student = await prisma.companyMember.findFirst({
         where: {
           companyId: membership.companyId,
@@ -8457,9 +8463,13 @@ export async function setExamOutcome(input: z.infer<typeof setExamOutcomeSchema>
               examReadyAt: null,
               examReadyBy: null,
             }),
-            // Il numero si scrive solo se c'è: un idoneo senza numero non
-            // cancella quello inserito prima (arriva spesso giorni dopo).
-            ...(licenseNumber && { licenseNumber, licenseObtainedAt: now }),
+            // Il numero si tocca solo quando il chiamante lo manda davvero:
+            // un idoneo scelto senza digitare niente non cancella quello
+            // inserito prima, ma svuotare il campo sì.
+            ...(touchesNumber && {
+              licenseNumber,
+              licenseObtainedAt: licenseNumber ? now : null,
+            }),
           },
         });
         if (promoted && nextPhase) {
