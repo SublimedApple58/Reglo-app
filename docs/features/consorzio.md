@@ -93,9 +93,11 @@ non possono dire cifre diverse sullo stesso allievo.
 
 La tabella allievi della **scheda autoscuola** distingue chi sta ancora
 guidando da chi ha preso la patente: filtro **Tutti / In pratica / Patentati**
-(`SegmentedPill` con contatori, sopra la tabella) e badge di fase accanto a
-quello della patente su ogni riga. La colonna "Patente" è diventata
-"Patente · Fase" e passa da 90 a 170px per ospitare le due pastiglie.
+(`SegmentedPill` con contatori, sopra la tabella) e una colonna **Fase** per
+ogni riga. La griglia passa da sei a sette colonne
+(`1.6fr 84px 116px 1fr 110px 70px 1.2fr`): la fase sta per conto suo e non
+appiccicata alla patente — primo giro le due pastiglie condividevano una cella
+allargata, ed era esattamente il difetto che si vedeva.
 
 > **Perché il filtro e il comando nascono insieme.** Il dato
 > (`CompanyMember.studentPhase`) esisteva da sempre, ma il consorzio non aveva
