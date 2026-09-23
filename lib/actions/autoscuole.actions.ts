@@ -1639,6 +1639,9 @@ export async function getAutoscuolaStudents(search?: string) {
         groupLessonsOptIn: m.groupLessonsOptIn ?? false,
         examReady: m.examReady,
         examReadyAt: m.examReadyAt ? m.examReadyAt.toISOString() : null,
+        // Serve alla modalina "Registra esito" aperta dall'agenda: senza, il
+        // numero già registrato non si rivede riaprendo il pannello.
+        licenseNumber: m.licenseNumber ?? null,
         defaultLocationId: m.defaultLocationId ?? null,
         defaultLocationName: m.defaultLocation?.name ?? null,
       })),
