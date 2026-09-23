@@ -202,7 +202,12 @@ export function ConsorzioStudentDrawer({
         <p className={sectionLabelClass}>Anagrafica</p>
         <div className="grid grid-cols-2 gap-x-6 gap-y-3.5">
           <Field label="Nome">
-            <p className="text-sm font-medium text-foreground">{data.name}</p>
+            {/* Anche qui l'ordine scelto dall'autoscuola (REG-507): l'header
+                del drawer e la tabella sotto lo applicavano già, questo campo
+                no — la stessa schermata scriveva il nome in due modi. */}
+            <p className="text-sm font-medium text-foreground">
+              {formatStoredName(data.name, nameOrder)}
+            </p>
           </Field>
           <Field label="Email">
             <p className="break-all text-sm font-medium text-foreground">{data.email || "—"}</p>
