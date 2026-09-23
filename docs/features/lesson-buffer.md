@@ -44,6 +44,14 @@ e la guida viene creata senza pausa.
 L'avviso è **solo per lo staff**: `isStudentActor` lo salta, l'allievo non
 decide l'agenda dell'istruttore.
 
+> ⚠️ **Il client deve saperlo gestire.** Fino al 23/09/2026 l'app mobile non
+> conosceva questo codice: lo mostrava nell'alert generico «Errore … OK», che ha
+> un solo bottone, quindi la conferma non si poteva dare e la guida restava
+> impossibile da prenotare da app (REG-509) — mentre da web funzionava. Ora il
+> mobile tiene i codici di conferma in un elenco (`CONFIRMABLE_CODES` in
+> `BookingForm.tsx`). **Se si aggiunge un nuovo `code` di conferma lato server,
+> va aggiunto anche lì**, altrimenti nasce muto.
+
 ## Setting
 
 In `CompanyService.limits` (JSON, nessuna migrazione):
