@@ -105,6 +105,17 @@ export function ExamOutcomePanel({
   const [pending, setPending] = React.useState<string | null>(null);
   const [washed, setWashed] = React.useState<string | null>(null);
   const [numbers, setNumbers] = React.useState<Record<string, string>>({});
+  /**
+   * Esiti **confermati dal server** in questa sessione del pannello.
+   *
+   * Non è un optimistic update: si scrive solo dopo che la action ha risposto
+   * ok. Serve perché le `rows` arrivano dal genitore, che le rilegge da una
+   * fonte che può essere in ritardo — in QA la cache Redis dell'agenda serviva
+   * il payload vecchio e il pannello restava identico pur avendo salvato. Il
+   * bump della cache è il fix vero; questo rende il pannello indipendente dai
+   * tempi di chi lo ospita.
+   */
+  const [confirmed, setConfirmed] = React.useState<Record<string, ExamOutcome | null>>({});
 
   React.useEffect(() => {
     if (!open) {
@@ -117,15 +128,25 @@ export function ExamOutcomePanel({
   const rowsKey = rows.map((r) => r.appointmentId).join("|");
   React.useEffect(() => {
     setNumbers({});
+    setConfirmed({});
   }, [rowsKey]);
+
+  /** Le righe come le vede l'utente: props + ciò che il server ha confermato. */
+  const effective = React.useMemo(
+    () =>
+      rows.map((r) =>
+        r.appointmentId in confirmed ? { ...r, outcome: confirmed[r.appointmentId] } : r,
+      ),
+    [rows, confirmed],
+  );
 
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => r.name.toLowerCase().includes(q));
-  }, [rows, query]);
+    if (!q) return effective;
+    return effective.filter((r) => r.name.toLowerCase().includes(q));
+  }, [effective, query]);
 
-  const missing = rows.filter((r) => !r.outcome).length;
+  const missing = effective.filter((r) => !r.outcome).length;
   const showSearch = searchable ?? rows.length > 6;
 
   const choose = async (row: ExamOutcomeRow, outcome: ExamOutcome) => {
@@ -143,6 +164,9 @@ export function ExamOutcomePanel({
       toast.error({ description: res.message ?? "Impossibile registrare l'esito." });
       return;
     }
+    // Il server ha risposto: da qui la riga mostra il valore vero, senza
+    // aspettare che il genitore rilegga i dati.
+    setConfirmed((prev) => ({ ...prev, [row.appointmentId]: next }));
     if (next) {
       setWashed(row.appointmentId);
       window.setTimeout(() => setWashed((w) => (w === row.appointmentId ? null : w)), 700);
