@@ -34,6 +34,10 @@ import { InlineToggle } from "@/components/ui/inline-toggle";
 import { TimePickerInput } from "@/components/ui/time-picker";
 import { PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 import { cn } from "@/lib/utils";
+import {
+  ChannelCascade,
+  type ChannelReach,
+} from "@/components/pages/Autoscuole/settings/ChannelCascade";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -127,6 +131,10 @@ export type SettingsTabProps = {
   slotFillChannels: ChannelValue[];
   studentReminderChannels: ChannelValue[];
   instructorReminderChannels: ChannelValue[];
+  /** WhatsApp è collegato davvero? Se no, la riga non è accendibile (REG-500). */
+  whatsappAvailable?: boolean;
+  /** Quanti allievi raggiunge ogni canale; omessi, le righe mostrano il testo generico. */
+  channelReach?: Partial<Record<ChannelValue, ChannelReach>>;
   updateReminderSettings: (patch: {
     studentReminderMinutes?: number;
     instructorReminderMinutes?: number;
@@ -588,6 +596,8 @@ function SettingsTab({
   slotFillChannels,
   studentReminderChannels,
   instructorReminderChannels,
+  whatsappAvailable = false,
+  channelReach,
   updateReminderSettings,
   emptySlotNotificationEnabled,
   setEmptySlotNotificationEnabled,
@@ -712,32 +722,44 @@ function SettingsTab({
               />
             </div>
 
-            {/* Modalità di invio */}
-            <div className="mb-2.5 mt-6">
-              <div className="text-[13px] font-semibold text-[#222222]">Modalità di invio</div>
-              <div className="mt-0.5 text-xs font-medium text-[#929292]">
-                Sconsigliamo l&apos;email per la scarsa leggibilità.
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <ChannelCard
-                title="Promemoria allievo"
+            {/* ── Come avvisiamo gli allievi: la cascata (REG-500) ──
+                Sostituisce le tre card a spunte. La vecchia matrice resta sotto
+                "Personalizza", per chi davvero vuole canali diversi per
+                istruttori e cancellazioni: le tre chiavi salvate non cambiano,
+                quindi nessuna migrazione e nessuna autoscuola da riconfigurare. */}
+            <div className="mt-6">
+              <ChannelCascade
                 value={studentReminderChannels}
                 onChange={(next) => updateReminderSettings({ studentReminderChannels: next })}
-              />
-              <ChannelCard
-                title="Promemoria istruttore"
-                value={instructorReminderChannels}
-                onChange={(next) => updateReminderSettings({ instructorReminderChannels: next })}
-                disabled={!instructorReminderEnabled}
-              />
-              <ChannelCard
-                title="Cancellazioni"
-                info="Quando un allievo annulla una guida, invia una notifica per riempire lo slot rimasto libero."
-                value={slotFillChannels}
-                onChange={(next) => updateReminderSettings({ slotFillChannels: next })}
+                whatsapp={{ state: whatsappAvailable ? "ready" : "not_configured" }}
+                reach={channelReach}
               />
             </div>
+
+            <details className="group border-b border-[#ebebeb]">
+              <summary className="flex cursor-pointer list-none items-center justify-between py-[18px] text-[15px] font-semibold text-[#222222]">
+                Personalizza per tipo di messaggio
+                <ChevronDown
+                  className="size-[17px] text-[#b4b4b4] transition-transform duration-200 group-open:rotate-180"
+                  strokeWidth={2}
+                  aria-hidden
+                />
+              </summary>
+              <div className="grid gap-3 pb-[18px] sm:grid-cols-2">
+                <ChannelCard
+                  title="Promemoria istruttore"
+                  value={instructorReminderChannels}
+                  onChange={(next) => updateReminderSettings({ instructorReminderChannels: next })}
+                  disabled={!instructorReminderEnabled}
+                />
+                <ChannelCard
+                  title="Cancellazioni"
+                  info="Quando un allievo annulla una guida, invia una notifica per riempire lo slot rimasto libero."
+                  value={slotFillChannels}
+                  onChange={(next) => updateReminderSettings({ slotFillChannels: next })}
+                />
+              </div>
+            </details>
 
             {/* Rimando a Invia comunicato (flat come nel proto, niente box) */}
             <div className="mt-6 flex flex-wrap items-center gap-2 text-sm font-medium text-[#6a6a6a]">

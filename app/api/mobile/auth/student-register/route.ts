@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/db/prisma";
+import { toStoredPhone } from "@/lib/phone-e164";
 import { studentRegisterSchema } from "@/lib/validators";
 import { hash } from "@/lib/encrypt";
 import { releaseEmailIfOrphaned } from "@/lib/account-deletion";
@@ -139,7 +140,7 @@ export async function POST(request: Request) {
         data: {
           name: parsed.name,
           email: parsed.email.toLowerCase(),
-          phone: parsed.phone.trim(),
+          phone: toStoredPhone(parsed.phone),
           password: passwordHash,
           role: "user",
           activeCompanyId: company.id,

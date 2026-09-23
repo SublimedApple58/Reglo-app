@@ -60,6 +60,11 @@ model User {
   address                              Json?                                  @db.Json
   paymentMethod                        String?
   phone                                String?
+  /// Quando l'utente ha chiesto di non ricevere più messaggi su WhatsApp
+  /// (ha risposto STOP, o equivalente in italiano, al numero di Reglo).
+  /// Null = può riceverli. Onorarla non e' cortesia: ignorare una revoca fa
+  /// scendere la quality rating di Meta e alla lunga fa bloccare il mittente.
+  whatsappOptOutAt                     DateTime?                              @db.Timestamp(6)
   createdAt                            DateTime                               @default(now()) @db.Timestamp(6)
   updatedAt                            DateTime                               @updatedAt
   account                              Account[]
@@ -1325,25 +1330,35 @@ model AutoscuolaMessageRule {
 model AutoscuolaMessageLog {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId     String   @db.Uuid
-  ruleId        String   @db.Uuid
-  templateId    String   @db.Uuid
+  /// Null per i promemoria automatici: non nascono da una regola configurata.
+  /// Erano obbligatori, ed è il motivo per cui i promemoria non potevano
+  /// scrivere qui e i loro fallimenti restavano muti (REG-500).
+  ruleId        String?  @db.Uuid
+  templateId    String?  @db.Uuid
+  /// Che messaggio era: `appointment_reminder_student`, `morning_reminder_student`,
+  /// … Per i messaggi da regola resta null, la regola dice già tutto.
+  kind          String?
   appointmentId String?  @db.Uuid
   studentId     String?  @db.Uuid
   channel       String
   recipient     String
   status        String   @default("sent")
   error         String?
+  /// Id del messaggio lato fornitore, per agganciare gli stati di consegna che
+  /// arrivano dal webhook.
+  providerMessageId String?
   payload       Json?
   sentAt        DateTime @default(now()) @db.Timestamp(6)
 
-  company     Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  rule        AutoscuolaMessageRule     @relation(fields: [ruleId], references: [id], onDelete: Cascade)
-  template    AutoscuolaMessageTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  company     Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  rule        AutoscuolaMessageRule?     @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  template    AutoscuolaMessageTemplate? @relation(fields: [templateId], references: [id], onDelete: Cascade)
   appointment AutoscuolaAppointment?    @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   student     User?                     @relation(fields: [studentId], references: [id], onDelete: SetNull)
 
   @@unique([ruleId, appointmentId, recipient, channel])
   @@index([companyId])
+  @@index([companyId, sentAt(sort: Desc)])
   @@index([ruleId])
   @@index([appointmentId])
 }
