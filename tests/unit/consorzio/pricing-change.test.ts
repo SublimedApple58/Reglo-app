@@ -89,3 +89,14 @@ describe("lateCancellationModeChanged", () => {
     expect(lateCancellationModeChanged(base, con({}))).toBe(false);
   });
 });
+
+describe("il dialogo compare solo quando serve", () => {
+  it("una regola cambiata non apre niente, una tariffa sì", () => {
+    // pricingAffectsPast è la condizione che il pane interroga prima di
+    // chiedere: il dialogo non deve comparire per il cutoff o il preavviso.
+    expect(pricingAffectsPast(base, con({ lateCancellationCutoffHours: 12 }))).toBe(false);
+    expect(pricingAffectsPast(base, con({ guideRequestMinLeadHours: 12 }))).toBe(false);
+    expect(pricingAffectsPast(base, con({ examFee: 20 }))).toBe(true);
+    expect(pricingAffectsPast(base, con({ lateCancellationFixedAmount: 30 }))).toBe(true);
+  });
+});
