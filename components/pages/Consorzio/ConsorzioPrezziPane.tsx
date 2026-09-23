@@ -75,25 +75,37 @@ export function ConsorzioPrezziPane() {
   // Draft testuale degli input tariffa (consente campo vuoto durante l'editing).
   const [drafts, setDrafts] = React.useState<Record<string, string>>({});
 
+  /**
+   * Le caselle di testo ricostruite dal listino. Gli importi hanno uno stato
+   * testuale proprio (si può scrivere "12," mentre si digita), quindi
+   * rimettere a posto il listino non basta: vanno riscritte anche queste.
+   */
+  const draftsFrom = React.useCallback((value: ConsorzioPricing) => {
+    const next: Record<string, string> = {};
+    for (const category of CONSORTIUM_LICENSE_CATEGORIES) {
+      for (const field of ["hourlyByCategory", "courseByCategory"] as const) {
+        const amount = value[field][category];
+        next[draftKey(field, category)] = amount !== undefined ? String(amount) : "";
+      }
+    }
+    next.examFee = value.examFee !== null ? String(value.examFee) : "";
+    next.lateCancellationFixedAmount = String(value.lateCancellationFixedAmount);
+    return next;
+  }, []);
+
   React.useEffect(() => {
     getConsorzioPricing().then((res) => {
       if (res.success) {
         setPricing(res.data);
         latestRef.current = res.data;
-        const next: Record<string, string> = {};
-        for (const category of CONSORTIUM_LICENSE_CATEGORIES) {
-          for (const field of ["hourlyByCategory", "courseByCategory"] as const) {
-            const value = res.data[field][category];
-            next[draftKey(field, category)] = value !== undefined ? String(value) : "";
-          }
-        }
-        next.examFee = res.data.examFee !== null ? String(res.data.examFee) : "";
-        next.lateCancellationFixedAmount = String(res.data.lateCancellationFixedAmount);
-        setDrafts(next);
+        // Il listino appena letto È quello salvato: senza questo, annullare il
+        // primo dialogo non avrebbe niente a cui tornare.
+        savedRef.current = res.data;
+        setDrafts(draftsFrom(res.data));
       }
       setLoading(false);
     });
-  }, []);
+  }, [draftsFrom]);
 
   // Ultimo listino voluto + coda dei salvataggi: ogni invio manda lo stato più
   // recente e parte solo quando il precedente è finito, così due tocchi rapidi
@@ -102,14 +114,19 @@ export function ConsorzioPrezziPane() {
   const queueRef = React.useRef<Promise<void>>(Promise.resolve());
 
   /**
-   * "Da quando vale il nuovo prezzo?" — si chiede alla PRIMA modifica che
-   * toccherebbe voci già passate, e la risposta vale per il resto della visita.
+   * "Da quando vale il nuovo prezzo?" — si chiede a **ogni** cambio di tariffa
+   * che toccherebbe voci già passate, non una volta sola per visita.
    *
-   * Il pane salva da solo a ogni campo che perde il fuoco: chiedere ogni volta
-   * significherebbe un dialogo per ogni cifra ritoccata. Chi riapre la pagina
-   * se lo ritrova chiesto di nuovo — la scelta non si eredita fra visite.
+   * Il primo giro teneva la risposta per tutta la sessione: dopo la prima
+   * scelta, cambiare una seconda tariffa salvava in silenzio. Bocciato in QA, e
+   * a ragione — due ritocchi diversi sono due decisioni diverse.
+   *
+   * Non serve tenere traccia di cosa è già stato chiesto: la sonda confronta il
+   * listino nuovo con quello **già salvato**, quindi riporta sempre e solo la
+   * differenza non ancora decisa.
    */
-  const applyChoiceRef = React.useRef<"future" | "past" | null>(null);
+  /** Ultimo listino davvero salvato: serve a rimettere a posto se si annulla. */
+  const savedRef = React.useRef<ConsorzioPricing | null>(null);
   const answerRef = React.useRef<((choice: "future" | "past" | null) => void) | null>(null);
   const [impact, setImpact] = React.useState<PricingImpact | null>(null);
   const [applyOpen, setApplyOpen] = React.useState(false);
@@ -139,36 +156,44 @@ export function ConsorzioPrezziPane() {
       guideRequestMinLeadHours: next.guideRequestMinLeadHours,
     };
 
-    // Prima volta che si tocca una tariffa in questa visita: si guarda se il
-    // cambio riscriverebbe qualcosa di già passato, e in quel caso si chiede.
-    if (applyChoiceRef.current === null) {
-      const probe = await getConsorzioPricingChangeImpact(payload);
-      if (probe.success && probe.data.total > 0 &&
-          (probe.data.changes.length > 0 || probe.data.modeChanged)) {
-        setImpact(probe.data);
-        setApplyOpen(true);
-        const choice = await new Promise<"future" | "past" | null>((resolve) => {
-          answerRef.current = resolve;
-        });
-        answerRef.current = null;
-        setApplyOpen(false);
-        setApplySaving(false);
-        // Annullato: il listino non si salva, e la domanda resta in piedi per
-        // la prossima modifica.
-        if (choice === null) return;
-        applyChoiceRef.current = choice;
-      } else {
-        // Niente passato da riscrivere: non c'è nulla da chiedere.
-        applyChoiceRef.current = "past";
+    // Si guarda se QUESTO cambio riscriverebbe qualcosa di già passato. La
+    // sonda parte dal listino salvato, quindi vede solo ciò che è nuovo.
+    let applyTo: "future" | "past" = "past";
+    const probe = await getConsorzioPricingChangeImpact(payload);
+    if (
+      probe.success &&
+      probe.data.total > 0 &&
+      (probe.data.changes.length > 0 || probe.data.modeChanged)
+    ) {
+      setImpact(probe.data);
+      setApplyOpen(true);
+      const choice = await new Promise<"future" | "past" | null>((resolve) => {
+        answerRef.current = resolve;
+      });
+      answerRef.current = null;
+      setApplyOpen(false);
+      setApplySaving(false);
+      if (choice === null) {
+        // Annullato: il campo torna al valore salvato, altrimenti resterebbe a
+        // schermo una cifra che il database non ha.
+        const restored = savedRef.current;
+        if (restored) {
+          latestRef.current = restored;
+          setPricing(restored);
+          setDrafts(draftsFrom(restored));
+        }
+        return;
       }
+      applyTo = choice;
     }
 
-    const res = await updateConsorzioPricing({
-      ...payload,
-      applyTo: applyChoiceRef.current ?? "past",
-    });
-    if (!res.success) toast.error({ description: res.message });
-  }, [toast]);
+    const res = await updateConsorzioPricing({ ...payload, applyTo });
+    if (!res.success) {
+      toast.error({ description: res.message });
+      return;
+    }
+    savedRef.current = next;
+  }, [toast, draftsFrom]);
 
   /** Applica una modifica al listino più recente e la mette in coda di salvataggio. */
   const persist = React.useCallback(
