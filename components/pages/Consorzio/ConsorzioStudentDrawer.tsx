@@ -7,6 +7,11 @@ import { FadeIn } from "@/components/ui/fade-in";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { EditStudentLicenseDialog } from "@/components/pages/Autoscuole/dialogs/EditStudentLicenseDialog";
+import { ChangeStudentPhaseDialog } from "@/components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog";
+import {
+  STUDENT_PHASE_PILL_TONE,
+  studentPhaseLabel,
+} from "@/components/pages/Consorzio/student-phase";
 import {
   Pill,
   StudentAvatar,
@@ -127,6 +132,7 @@ export function ConsorzioStudentDrawer({
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [licenseDialogOpen, setLicenseDialogOpen] = React.useState(false);
+  const [phaseDialogOpen, setPhaseDialogOpen] = React.useState(false);
   const [editingPhone, setEditingPhone] = React.useState(false);
   const [phoneDraft, setPhoneDraft] = React.useState("");
   const [phoneSaving, setPhoneSaving] = React.useState(false);
@@ -270,6 +276,20 @@ export function ConsorzioStudentDrawer({
                 type="button"
                 className={blueLinkClass}
                 onClick={() => setLicenseDialogOpen(true)}
+              >
+                Modifica
+              </button>
+            </div>
+          </Field>
+          <Field label="Fase percorso">
+            <div className="flex items-center gap-2">
+              <Pill tone={STUDENT_PHASE_PILL_TONE[data.studentPhase]}>
+                {studentPhaseLabel(data.studentPhase)}
+              </Pill>
+              <button
+                type="button"
+                className={blueLinkClass}
+                onClick={() => setPhaseDialogOpen(true)}
               >
                 Modifica
               </button>
@@ -584,6 +604,9 @@ export function ConsorzioStudentDrawer({
                   <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
                     {detail.schoolName && <Pill tone="gray">{detail.schoolName}</Pill>}
                     {detail.licenseCategory && <Pill tone="blue">{detail.licenseCategory}</Pill>}
+                    <Pill tone={STUDENT_PHASE_PILL_TONE[detail.studentPhase]}>
+                      {studentPhaseLabel(detail.studentPhase)}
+                    </Pill>
                   </div>
                 </div>
               </div>
@@ -640,6 +663,27 @@ export function ConsorzioStudentDrawer({
                 : prev,
             );
             void refresh();
+            onChanged?.();
+          }}
+        />
+      )}
+
+      {detail && (
+        <ChangeStudentPhaseDialog
+          open={phaseDialogOpen}
+          onOpenChange={setPhaseDialogOpen}
+          studentId={detail.userId}
+          studentName={formatStoredName(detail.name, nameOrder)}
+          currentPhase={detail.studentPhase}
+          // La teoria non è raggiungibile su un account consorzio, quindi il
+          // campo della data d'esame teorico non compare mai: si passa null.
+          currentTheoryExamAt={null}
+          phasesEnabled={detail.phasesEnabled}
+          onSuccess={(next) => {
+            setDetail((prev) => (prev ? { ...prev, studentPhase: next.phase } : prev));
+            void refresh();
+            // La tabella sotto mostra il badge e i contatori dei filtri:
+            // senza questo resterebbe indietro fino al prossimo caricamento.
             onChanged?.();
           }}
         />

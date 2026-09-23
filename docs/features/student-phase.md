@@ -38,6 +38,7 @@ Migrazioni:
 | Cron orchestrator | `trigger/autoscuole-reminders.ts` |
 | Web dialog cambio fase titolare | `components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog.tsx` |
 | Web allievi (banner + tab In attesa/Teoria/Pratica/Patentati; redesign Airbnb 2026-07 con detail panel destro) | `components/pages/Autoscuole/AutoscuoleStudentsPage.tsx` |
+| Web consorzio (filtro Tutti/In pratica/Patentati + badge di riga + cambio fase dal drawer) | `components/pages/Consorzio/ConsorzioSchoolDetailPage.tsx`, `ConsorzioStudentDrawer.tsx`, `student-phase.tsx` |
 | Web settings (auto-assign toggle) | `components/pages/Autoscuole/tabs/SettingsTab.tsx` |
 | Backoffice card licenze + fasi | `components/pages/Backoffice/BackofficeCompaniesPage.tsx` |
 | Backoffice resolve dialog | `components/pages/Backoffice/BackofficeResolveTeoriaDeactivationDialog.tsx` |
