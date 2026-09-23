@@ -157,7 +157,9 @@ export function ExamOutcomePanel({
     const res = await setExamOutcome({
       appointmentId: row.appointmentId,
       outcome: next,
-      licenseNumber: next === "idoneo" ? numbers[row.appointmentId] ?? null : null,
+      // Scegliere l'esito non tocca il numero: lo scrive solo il campo, al blur.
+      // Così "Idoneo" cliccato per errore e poi corretto non perde il numero.
+      licenseNumber: undefined,
     });
     setPending(null);
     if (!res.success) {
