@@ -157,16 +157,14 @@ function SchoolDetailSkeleton() {
           {Array.from({ length: 2 }).map((_, i) => (
             <div
               key={i}
-              className="grid grid-cols-[1.6fr_170px_1fr_110px_70px_1.2fr] items-center gap-x-3.5 border-b border-[#f2f2f2] px-4 py-3.5"
+              className="grid grid-cols-[1.6fr_84px_116px_1fr_110px_70px_1.2fr] items-center gap-x-3.5 border-b border-[#f2f2f2] px-4 py-3.5"
             >
               <div className="flex min-w-0 items-center gap-3">
                 <Skeleton className="size-8 shrink-0 rounded-full" />
                 <Skeleton className="h-3.5 w-32 max-w-full rounded" />
               </div>
-              <div className="flex items-center gap-1.5">
-                <Skeleton className="h-[25px] w-10 rounded-full" />
-                <Skeleton className="h-[25px] w-20 rounded-full" />
-              </div>
+              <Skeleton className="h-[25px] w-10 rounded-full" />
+              <Skeleton className="h-[25px] w-[88px] rounded-full" />
               <Skeleton className="h-3.5 w-24 max-w-full rounded" />
               <Skeleton className="h-3.5 w-14 rounded" />
               <div className="flex justify-end">
@@ -473,14 +471,14 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
           </div>
         ) : (
           <div className="mt-3">
-            {/* Griglia del prototipo, con la colonna patente allargata da 90 a
-                170px per ospitare anche il badge di fase percorso. */}
-            <div className="grid grid-cols-[1.6fr_170px_1fr_110px_70px_1.2fr] gap-x-3.5 border-b border-[#ebebeb] px-4 pb-2.5">
-              {["Allievo", "Patente · Fase", "Istruttore", "Ultima guida", "Guide", "Codici contabili"].map(
+            {/* Griglia del prototipo con una colonna in più: la fase percorso
+                sta per conto suo, non appiccicata alla patente. */}
+            <div className="grid grid-cols-[1.6fr_84px_116px_1fr_110px_70px_1.2fr] gap-x-3.5 border-b border-[#ebebeb] px-4 pb-2.5">
+              {["Allievo", "Patente", "Fase", "Istruttore", "Ultima guida", "Guide", "Codici contabili"].map(
                 (header, index) => (
                   <div
                     key={header}
-                    className={`text-[11px] font-bold uppercase tracking-[0.7px] text-[#929292] ${index === 4 ? "text-right" : ""}`}
+                    className={`text-[11px] font-bold uppercase tracking-[0.7px] text-[#929292] ${index === 5 ? "text-right" : ""}`}
                   >
                     {header}
                   </div>
@@ -491,7 +489,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
               <div
                 key={student.userId}
                 onClick={() => setDrawerUserId(student.userId)}
-                className="grid cursor-pointer grid-cols-[1.6fr_170px_1fr_110px_70px_1.2fr] items-center gap-x-3.5 rounded-[10px] border-b border-[#f2f2f2] px-4 py-3.5 transition-colors hover:bg-[#fafafa]"
+                className="grid cursor-pointer grid-cols-[1.6fr_84px_116px_1fr_110px_70px_1.2fr] items-center gap-x-3.5 rounded-[10px] border-b border-[#f2f2f2] px-4 py-3.5 transition-colors hover:bg-[#fafafa]"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#111111] text-[11px] font-bold text-white">
@@ -501,7 +499,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
                     {formatStoredName(student.name, nameOrder)}
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div>
                   {student.licenseCategory ? (
                     <span
                       className="inline-flex items-center whitespace-nowrap px-2.5 py-1 text-[12px] font-bold leading-[1.4]"
@@ -512,6 +510,8 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
                   ) : (
                     "—"
                   )}
+                </div>
+                <div>
                   <StudentPhaseBadge phase={student.studentPhase} />
                 </div>
                 <div className="truncate text-[13.5px] font-medium text-[#444444]">
