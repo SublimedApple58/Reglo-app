@@ -26,6 +26,10 @@ import {
 } from "@/lib/consorzio/pricing";
 import { resolveConsortiumGuideRequestNotification } from "@/lib/autoscuole/notifications";
 import { requireConsortium } from "@/lib/service-access";
+import {
+  diffConsorzioPricing,
+  lateCancellationModeChanged,
+} from "@/lib/consorzio/pricing-change";
 import { displayEmail } from "@/lib/users/placeholder-email";
 import { formatError } from "@/lib/utils";
 
@@ -1088,6 +1092,108 @@ export async function getConsorzioPricing() {
   try {
     const { company } = await requireConsortium();
     return { success: true as const, data: readPricing(company) };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+/**
+ * Anteprima di cosa comporta salvare un nuovo listino: quali cifre cambiano e
+ * quante voci **già passate e non ancora congelate** ne sarebbero toccate.
+ *
+ * Il prezzo di una voce non esiste finché non nasce la sua riga di billing (al
+ * primo toggle saldata/fatturata): finché non c'è, la Fatturazione lo calcola
+ * live col listino corrente. Quindi le voci senza riga sono esattamente quelle
+ * che un ritocco di tariffa riscriverebbe — e sono quelle che il dialogo deve
+ * saper contare.
+ *
+ * Le voci **già saldate** non compaiono mai in questo conteggio: hanno il
+ * prezzo congelato e non cambiano in nessun caso (deciso da Tiziano il 23/09).
+ */
+export async function getConsorzioPricingChangeImpact(
+  input: z.infer<typeof pricingSchema>,
+) {
+  try {
+    const { membership, company } = await requireConsortium();
+    const companyId = membership.companyId;
+    const payload = pricingSchema.parse(input);
+    const prev = readPricing(company);
+    // parseConsorzioPricing legge i LIMITS, non il listino: passargli il form
+    // nudo restituirebbe i default e ogni diff risulterebbe vuoto.
+    const next = parseConsorzioPricing({ consorzioPricing: payload });
+
+    const changes = diffConsorzioPricing(prev, next);
+    const modeChanged = lateCancellationModeChanged(prev, next);
+    if (changes.length === 0 && !modeChanged) {
+      return {
+        success: true as const,
+        data: { changes: [], modeChanged: false, lessons: 0, exams: 0, courses: 0, total: 0 },
+      };
+    }
+
+    const studentIds = (
+      await prisma.companyMember.findMany({
+        where: { companyId, autoscuolaRole: "STUDENT", consorzioSchoolId: { not: null } },
+        select: { userId: true },
+      })
+    ).map((m) => m.userId);
+
+    if (studentIds.length === 0) {
+      return {
+        success: true as const,
+        data: { changes, modeChanged, lessons: 0, exams: 0, courses: 0, total: 0 },
+      };
+    }
+
+    const now = new Date();
+    const [pastAppointments, frozenCourses, coursesDue] = await Promise.all([
+      prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId,
+          studentId: { in: studentIds },
+          startsAt: { lt: now },
+          type: { not: "group_lesson" },
+          // Le annullate non fanno conto, salvo le assenze addebitabili: quelle
+          // le riconosce isBillableAbsence più sotto.
+          consorzioBilling: null,
+        },
+        select: {
+          type: true,
+          status: true,
+          cancellationKind: true,
+          cancelledAt: true,
+          startsAt: true,
+        },
+      }),
+      prisma.consorzioCourseBilling.count({
+        where: { consorzioCompanyId: companyId, settledAt: { not: null } },
+      }),
+      prisma.consorzioCourseBilling.count({
+        where: { consorzioCompanyId: companyId, settledAt: null },
+      }),
+    ]);
+
+    const billable = pastAppointments.filter(
+      (appt) =>
+        appt.status !== "cancelled" ||
+        isBillableAbsence(appt, prev.lateCancellationCutoffHours),
+    );
+    const exams = billable.filter((a) => a.type === "esame").length;
+    const lessons = billable.length - exams;
+
+    return {
+      success: true as const,
+      data: {
+        changes,
+        modeChanged,
+        lessons,
+        exams,
+        // I percorsi già congelati non si toccano; quelli aperti sì.
+        courses: coursesDue,
+        frozenCourses,
+        total: lessons + exams + coursesDue,
+      },
+    };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
