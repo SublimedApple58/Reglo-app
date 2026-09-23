@@ -137,7 +137,7 @@ import {
 import { NeverAccessedNudge } from "@/components/pages/Autoscuole/NeverAccessedNudge";
 import { UserPhotoCircle } from "@/components/ui/user-photo";
 
-type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; neverAccessed?: boolean; studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO"; examReady?: boolean; examReadyAt?: string | null; defaultLocationId?: string | null; consorzioSchoolId?: string | null; consorzioSchoolName?: string | null };
+type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; neverAccessed?: boolean; studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO"; examReady?: boolean; examReadyAt?: string | null; licenseNumber?: string | null; defaultLocationId?: string | null; consorzioSchoolId?: string | null; consorzioSchoolName?: string | null };
 type ResourceOption = {
   id: string;
   name: string;
@@ -5216,6 +5216,9 @@ export function AutoscuoleAgendaPage({
                 outcome: asExamOutcome(a.examOutcome),
               }));
             const examOutcomeMissing = examOutcomeRows.filter((r) => !r.outcome).length;
+            const examLicenseNumbers = Object.fromEntries(
+              examOutcomeRows.map((r) => [r.studentId, studentById.get(r.studentId)?.licenseNumber ?? null]),
+            );
             // Diff draft vs salvato → abilita il bottone unico "Salva modifiche".
             const origTime = examHasTime ? `${String(egStart.getHours()).padStart(2, "0")}:${String(egStart.getMinutes()).padStart(2, "0")}` : null;
             const origInstructorId = eg.instructorId ?? null;
@@ -5619,6 +5622,7 @@ export function AutoscuoleAgendaPage({
                   open={examOutcomeOpen}
                   onClose={() => setExamOutcomeOpen(false)}
                   rows={examOutcomeRows}
+                  licenseNumberByStudent={examLicenseNumbers}
                   onRegistered={() => load({ silent: true })}
                   className="absolute left-[calc(100%+14px)] top-0"
                 />
