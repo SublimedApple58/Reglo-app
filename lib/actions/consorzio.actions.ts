@@ -1199,10 +1199,167 @@ export async function getConsorzioPricingChangeImpact(
   }
 }
 
-export async function updateConsorzioPricing(input: z.infer<typeof pricingSchema>) {
+/**
+ * Congela il listino **vecchio** sulle voci già passate che non hanno ancora
+ * un prezzo scritto, così un ritocco di tariffa non le riscriva.
+ *
+ * Riusa la stessa forma del toggle saldata/fatturata: una riga di billing con
+ * `priceAmount` valorizzato e i flag nulli significa "prezzo bloccato, non
+ * ancora saldata". Nessun modello nuovo.
+ *
+ * Tocca SOLO le voci senza riga: quelle che una riga ce l'hanno — comprese
+ * tutte le saldate — restano esattamente dove sono.
+ */
+const freezeConsorzioPastPrices = async (
+  companyId: string,
+  pricing: ConsorzioPricing,
+  now: Date,
+): Promise<{ lessons: number; courses: number }> => {
+  const members = await prisma.companyMember.findMany({
+    where: { companyId, autoscuolaRole: "STUDENT", consorzioSchoolId: { not: null } },
+    select: { userId: true, consorzioSchoolId: true, licenseCategory: true },
+  });
+  if (members.length === 0) return { lessons: 0, courses: 0 };
+  const byUser = new Map(members.map((m) => [m.userId, m] as const));
+
+  const pastAppointments = await prisma.autoscuolaAppointment.findMany({
+    where: {
+      companyId,
+      studentId: { in: members.map((m) => m.userId) },
+      startsAt: { lt: now },
+      type: { not: "group_lesson" },
+      consorzioBilling: null,
+    },
+    select: {
+      id: true,
+      studentId: true,
+      type: true,
+      status: true,
+      cancellationKind: true,
+      cancelledAt: true,
+      startsAt: true,
+      endsAt: true,
+    },
+  });
+
+  const rows = pastAppointments.flatMap((appt) => {
+    const member = appt.studentId ? byUser.get(appt.studentId) : undefined;
+    if (!member?.consorzioSchoolId) return [];
+    const absence = isBillableAbsence(appt, pricing.lateCancellationCutoffHours);
+    if (appt.status === "cancelled" && !absence) return [];
+    const minutes = lessonMinutes(appt.startsAt, appt.endsAt);
+    // Stessa regola della Fatturazione e del drawer: un'assenza costa la
+    // penale, non il prezzo pieno della guida.
+    const price =
+      appt.type === "esame"
+        ? examPrice(pricing)
+        : absence
+          ? absencePrice(pricing, member.licenseCategory, minutes)
+          : guidePrice(pricing, member.licenseCategory, minutes);
+    return [
+      {
+        appointmentId: appt.id,
+        consorzioCompanyId: companyId,
+        schoolId: member.consorzioSchoolId,
+        priceAmount: price,
+      },
+    ];
+  });
+
+  if (rows.length > 0) {
+    await prisma.consorzioLessonBilling.createMany({ data: rows, skipDuplicates: true });
+  }
+
+  // ── Percorsi ──
+  // Un percorso vive nel mese della PRIMA guida dell'allievo: lo stesso
+  // criterio con cui la Fatturazione lo mostra quando non è ancora congelato.
+  const frozen = await prisma.consorzioCourseBilling.findMany({
+    where: { consorzioCompanyId: companyId },
+    select: { studentUserId: true, licenseCategory: true },
+  });
+  const frozenKeys = new Set(frozen.map((r) => `${r.studentUserId}:${r.licenseCategory}`));
+  const courseMembers = members.filter(
+    (m) =>
+      m.licenseCategory &&
+      billingModeFor(pricing, m.licenseCategory) === "course" &&
+      !frozenKeys.has(`${m.userId}:${m.licenseCategory}`),
+  );
+
+  let courses = 0;
+  if (courseMembers.length > 0) {
+    const firstGuides = await prisma.autoscuolaAppointment.groupBy({
+      by: ["studentId"],
+      where: {
+        companyId,
+        studentId: { in: courseMembers.map((m) => m.userId) },
+        status: { not: "cancelled" },
+        type: { notIn: ["esame", "group_lesson"] },
+      },
+      _min: { startsAt: true },
+    });
+    const firstByUser = new Map(
+      firstGuides.map((row) => [row.studentId as string, row._min.startsAt] as const),
+    );
+    const courseRows = courseMembers.flatMap((m) => {
+      const first = firstByUser.get(m.userId);
+      // Senza una prima guida il percorso non compare ancora in Fatturazione:
+      // non c'è niente da congelare.
+      if (!first || !m.consorzioSchoolId || !m.licenseCategory) return [];
+      const price = coursePrice(pricing, m.licenseCategory);
+      if (price === null) return [];
+      return [
+        {
+          consorzioCompanyId: companyId,
+          schoolId: m.consorzioSchoolId,
+          studentUserId: m.userId,
+          licenseCategory: m.licenseCategory,
+          priceAmount: price,
+          billingMonth: `${first.getFullYear()}-${String(first.getMonth() + 1).padStart(2, "0")}`,
+        },
+      ];
+    });
+    if (courseRows.length > 0) {
+      const res = await prisma.consorzioCourseBilling.createMany({
+        data: courseRows,
+        skipDuplicates: true,
+      });
+      courses = res.count;
+    }
+  }
+
+  return { lessons: rows.length, courses };
+};
+
+/**
+ * Salva il listino.
+ *
+ * `applyTo` risponde alla domanda del dialogo "Da quando vale il nuovo
+ * prezzo?": `"future"` congela il listino VECCHIO sulle voci già passate che
+ * non hanno ancora un prezzo scritto, `"past"` non fa nulla e lascia che il
+ * nuovo listino le rideterminini — il comportamento storico.
+ *
+ * Il default è `"past"` perché è ciò che il sistema ha sempre fatto: chi chiama
+ * senza specificare (un client vecchio, uno script) non si ritrova un
+ * congelamento che non ha chiesto.
+ */
+export async function updateConsorzioPricing(
+  input: z.infer<typeof pricingSchema> & { applyTo?: "future" | "past" },
+) {
   try {
-    const { membership } = await requireConsortium();
+    const { membership, company } = await requireConsortium();
     const payload = pricingSchema.parse(input);
+    const applyTo = input.applyTo === "future" ? "future" : "past";
+
+    // Il congelamento va fatto PRIMA di scrivere il listino nuovo: deve
+    // fotografare i prezzi vecchi, che fra un istante non saranno più leggibili.
+    let frozen = { lessons: 0, courses: 0 };
+    if (applyTo === "future") {
+      frozen = await freezeConsorzioPastPrices(
+        membership.companyId,
+        readPricing(company),
+        new Date(),
+      );
+    }
 
     const service = await prisma.companyService.findFirst({
       where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
@@ -1250,7 +1407,7 @@ export async function updateConsorzioPricing(input: z.infer<typeof pricingSchema
       segments: [AUTOSCUOLE_CACHE_SEGMENTS.SETTINGS],
     });
 
-    return { success: true as const };
+    return { success: true as const, data: { applyTo, frozen } };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }

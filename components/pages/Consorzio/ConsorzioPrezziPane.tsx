@@ -17,8 +17,13 @@ import {
 } from "@/lib/autoscuole/license";
 import {
   getConsorzioPricing,
+  getConsorzioPricingChangeImpact,
   updateConsorzioPricing,
 } from "@/lib/actions/consorzio.actions";
+import {
+  PricingApplyDialog,
+  type PricingImpact,
+} from "@/components/pages/Consorzio/PricingApplyDialog";
 import type {
   ConsorzioBillingMode,
   ConsorzioPricing,
@@ -96,6 +101,20 @@ export function ConsorzioPrezziPane() {
   const latestRef = React.useRef<ConsorzioPricing | null>(null);
   const queueRef = React.useRef<Promise<void>>(Promise.resolve());
 
+  /**
+   * "Da quando vale il nuovo prezzo?" — si chiede alla PRIMA modifica che
+   * toccherebbe voci già passate, e la risposta vale per il resto della visita.
+   *
+   * Il pane salva da solo a ogni campo che perde il fuoco: chiedere ogni volta
+   * significherebbe un dialogo per ogni cifra ritoccata. Chi riapre la pagina
+   * se lo ritrova chiesto di nuovo — la scelta non si eredita fra visite.
+   */
+  const applyChoiceRef = React.useRef<"future" | "past" | null>(null);
+  const answerRef = React.useRef<((choice: "future" | "past" | null) => void) | null>(null);
+  const [impact, setImpact] = React.useState<PricingImpact | null>(null);
+  const [applyOpen, setApplyOpen] = React.useState(false);
+  const [applySaving, setApplySaving] = React.useState(false);
+
   const send = React.useCallback(async () => {
     const next = latestRef.current;
     if (!next) return;
@@ -103,7 +122,7 @@ export function ConsorzioPrezziPane() {
       Object.fromEntries(
         CONSORTIUM_LICENSE_CATEGORIES.map((category) => [category, next[field][category] ?? null]),
       ) as Record<ConsortiumLicenseCategory, number | null>;
-    const res = await updateConsorzioPricing({
+    const payload = {
       hourlyByCategory: amounts("hourlyByCategory"),
       courseByCategory: amounts("courseByCategory"),
       billingModeByCategory: Object.fromEntries(
@@ -118,6 +137,35 @@ export function ConsorzioPrezziPane() {
       lateCancellationMode: next.lateCancellationMode,
       lateCancellationFixedAmount: next.lateCancellationFixedAmount,
       guideRequestMinLeadHours: next.guideRequestMinLeadHours,
+    };
+
+    // Prima volta che si tocca una tariffa in questa visita: si guarda se il
+    // cambio riscriverebbe qualcosa di già passato, e in quel caso si chiede.
+    if (applyChoiceRef.current === null) {
+      const probe = await getConsorzioPricingChangeImpact(payload);
+      if (probe.success && probe.data.total > 0 &&
+          (probe.data.changes.length > 0 || probe.data.modeChanged)) {
+        setImpact(probe.data);
+        setApplyOpen(true);
+        const choice = await new Promise<"future" | "past" | null>((resolve) => {
+          answerRef.current = resolve;
+        });
+        answerRef.current = null;
+        setApplyOpen(false);
+        setApplySaving(false);
+        // Annullato: il listino non si salva, e la domanda resta in piedi per
+        // la prossima modifica.
+        if (choice === null) return;
+        applyChoiceRef.current = choice;
+      } else {
+        // Niente passato da riscrivere: non c'è nulla da chiedere.
+        applyChoiceRef.current = "past";
+      }
+    }
+
+    const res = await updateConsorzioPricing({
+      ...payload,
+      applyTo: applyChoiceRef.current ?? "past",
     });
     if (!res.success) toast.error({ description: res.message });
   }, [toast]);
@@ -197,6 +245,16 @@ export function ConsorzioPrezziPane() {
 
   return (
     <div className="divide-y divide-[#ebebeb]">
+      <PricingApplyDialog
+        open={applyOpen}
+        impact={impact}
+        saving={applySaving}
+        onCancel={() => answerRef.current?.(null)}
+        onConfirm={(choice) => {
+          setApplySaving(true);
+          answerRef.current?.(choice);
+        }}
+      />
       {/* Richieste di guida */}
       <div className="pb-6 pt-1">
         <div className="text-[15px] font-semibold text-[#222222]">Richieste di guida</div>

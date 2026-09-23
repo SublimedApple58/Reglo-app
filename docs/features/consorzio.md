@@ -129,6 +129,45 @@ la `Pill` bordata del drawer, `matchesPhaseFilter`). Il filtro "In pratica" è
 definito come **non-PATENTATO**, non come `=== PRATICA`: una fase ereditata non
 deve far sparire un allievo da entrambe le viste.
 
+## Da quando vale un nuovo prezzo
+
+Cambiando una tariffa nel pane Prezzi, il consorzio sceglie se il nuovo
+prezzo vale **solo d'ora in poi** o **anche per le voci già passate**.
+Prima veniva applicato al passato in automatico, senza chiedere.
+
+> **Perché succedeva.** Il prezzo di una voce **non esiste** finché non nasce
+> la sua riga di billing, al primo toggle saldata/fatturata: prima di allora la
+> Fatturazione lo calcola live col listino corrente. Quindi un ritocco di
+> tariffa non "ricalcola" il passato — lo **rivela**, perché quel passato non
+> ha mai avuto un prezzo scritto. In produzione il consorzio ha **zero** righe
+> di `ConsorzioLessonBilling`: 10 esami e 5 guide passate, tutti esposti.
+
+**Come funziona**: `getConsorzioPricingChangeImpact` confronta listino vecchio e
+nuovo (`lib/consorzio/pricing-change.ts`) e conta le voci passate senza riga di
+billing. Se c'è qualcosa da chiedere si apre `PricingApplyDialog`; la risposta
+arriva a `updateConsorzioPricing` come `applyTo`.
+
+Con `applyTo: "future"` il listino **vecchio** viene congelato sulle voci
+passate che non hanno ancora un prezzo — righe `ConsorzioLessonBilling` /
+`ConsorzioCourseBilling` con `priceAmount` valorizzato e flag nulli, la stessa
+forma che crea il toggle. Con `applyTo: "past"` non si fa nulla: è il
+comportamento storico, ed è il default per chi chiama l'action senza scegliere.
+
+**Cosa è una tariffa e cosa no.** Entrano tariffe orarie, prezzi percorso,
+tariffa esame e **le penali** (un'assenza addebitata è una voce di costo), più
+il *criterio* del costo assenza, che pur non essendo una cifra cambia il conto.
+Restano fuori `lateCancellationCutoffHours` e `guideRequestMinLeadHours`: sono
+regole — decidono *se* un'assenza è addebitabile e il preavviso delle richieste
+— e non rideterminano l'importo di nulla.
+
+**Le voci già saldate non cambiano mai**, in nessuno dei due casi: hanno già il
+prezzo congelato.
+
+> ⚠️ Il pane Prezzi **salva da solo** a ogni campo che perde il fuoco: non ha un
+> bottone "Salva". Per questo la domanda si pone **una volta per visita**, alla
+> prima modifica che toccherebbe il passato, e la risposta vale per le
+> successive. Chiedere a ogni cifra ritoccata sarebbe un dialogo per campo.
+
 ## Categorie patente superiori (C1, C1E, D1, D1E, CQC, ADR)
 
 Aggiunte alla lista canonica `LICENSE_CATEGORIES` (`lib/autoscuole/license.ts`), bucket `pro`, match veicolo **stretto** (self-match, nessuna gerarchia — mappa eligibilità CQC/ADR da confermare col consorzio). CQC/ADR sono qualificazioni modellate come pseudo-categorie (evita una seconda dimensione su member/veicoli/tariffe).
