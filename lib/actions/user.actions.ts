@@ -10,6 +10,7 @@ import { auth, signIn, signOut } from '@/auth';
 import { isRedirectError } from 'next/dist/client/components/redirect-error';
 import { hash } from '../encrypt';
 import { prisma } from '@/db/prisma';
+import { toStoredPhone } from "@/lib/phone-e164";
 import { syncInstructorName } from '../sync-instructor-name';
 import { formatError } from '../utils';
 import { z } from 'zod';
@@ -185,7 +186,7 @@ export async function updateProfile(user: { name: string; email: string; phone?:
       },
       data: {
         name: user.name,
-        ...(user.phone !== undefined ? { phone: user.phone?.trim() || null } : {}),
+        ...(user.phone !== undefined ? { phone: toStoredPhone(user.phone) } : {}),
       },
     });
 
@@ -753,7 +754,7 @@ export async function createCompanyUser(input: {
           name: input.name.trim(),
           email,
           password: hashedPassword,
-          phone: typedPhone || null,
+          phone: toStoredPhone(typedPhone),
           role: 'user',
           activeCompanyId: input.companyId,
         },
