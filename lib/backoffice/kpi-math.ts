@@ -5,7 +5,7 @@
  */
 
 export type KpiBucketUnit = "hour" | "day" | "week" | "month";
-export type KpiCompanyKind = "autoscuola" | "segretaria" | "consorzio";
+export type KpiCompanyKind = "autoscuola" | "segretaria" | "consorzio" | "consorziata";
 
 /** Stati in cui una guida "è avvenuta" ai fini dei conteggi. */
 export const DONE_STATUSES = new Set(["completed", "checked_in", "pending_review"]);
@@ -127,6 +127,13 @@ export const companyKindOf = (limits: unknown): KpiCompanyKind => {
   const l = (limits ?? {}) as Record<string, unknown>;
   if (l.accountKind === "consorzio") return "consorzio";
   if (l.secretaryOnly === true) return "segretaria";
+  // Autoscuola collegata a un consorzio. Etichettata a parte perché il grosso
+  // di queste (37 in produzione al collegamento) non ha comprato Reglo: conta
+  // nel totale registrate, ma non deve entrare nelle medie per-autoscuola —
+  // farebbe media con zero guide proprie. Vedi docs/features/consorzio.md.
+  if (typeof l.affiliateOf === "string" && l.affiliateOf.trim().length > 0) {
+    return "consorziata";
+  }
   return "autoscuola";
 };
 

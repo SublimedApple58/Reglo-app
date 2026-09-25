@@ -19,6 +19,7 @@ import {
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { compare, hash } from '@/lib/encrypt';
+import { attachSiblingAffiliateInvites } from '@/lib/consorzio/affiliate-invites';
 import { isRedirectError } from 'next/dist/client/components/redirect-error';
 
 const INVITE_TTL_DAYS = 7;
@@ -424,6 +425,14 @@ export async function acceptCompanyInvite(
       });
     }
 
+    // Titolare di più sedi consorziate: un solo invito vale per tutte
+    // (REG-454). No-op per ogni invito che non sia di una consorziata.
+    await attachSiblingAffiliateInvites({
+      userId,
+      email: invite.email,
+      acceptedInviteId: invite.id,
+    });
+
     return {
       success: true,
       message: `You joined ${invite.company.name}`,
@@ -510,6 +519,12 @@ export async function acceptCompanyInviteWithPassword(
       });
     }
 
+    await attachSiblingAffiliateInvites({
+      userId: user.id,
+      email: invite.email,
+      acceptedInviteId: invite.id,
+    });
+
     await signIn('credentials', {
       email: invite.email,
       password: payload.password,
@@ -590,6 +605,12 @@ export async function acceptCompanyInviteAndRegister(
       }
 
       return user;
+    });
+
+    await attachSiblingAffiliateInvites({
+      userId: createdUser.id,
+      email: invite.email,
+      acceptedInviteId: invite.id,
     });
 
     await signIn('credentials', {

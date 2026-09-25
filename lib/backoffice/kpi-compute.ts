@@ -127,6 +127,8 @@ export type BackofficeKpis = {
     plansCovered: number;
     companiesTotal: number;
     activeCompanies: number;
+    /** Consorziate collegate ma senza Reglo attivo: nel totale, fuori dalle medie. */
+    affiliateInactiveCompanies: number;
     newCompanies: number;
     /** Autoscuole interne di prova tenute fuori da TUTTI i conteggi. */
     excludedCompanies: number;
@@ -423,6 +425,20 @@ export async function computeKpis(
     const serviceOf = (c: (typeof companies)[number]) =>
       c.services.find((s) => s.serviceKey === "AUTOSCUOLE");
     const activeCompanies = companies.filter((c) => serviceOf(c)?.status === "ACTIVE");
+    // Consorziate senza Reglo: registrate e contate nel totale (decisione di
+    // Tiziano, 25/09), ma FUORI da ogni media per-autoscuola — non hanno guide
+    // proprie, quindi abbasserebbero ogni rapporto senza dire niente di vero.
+    const affiliateInactiveIds = new Set(
+      companies
+        .filter((c) => {
+          const service = serviceOf(c);
+          return (
+            service?.status !== "ACTIVE" &&
+            companyKindOf(service?.limits) === "consorziata"
+          );
+        })
+        .map((c) => c.id),
+    );
     const newCompanies = companies.filter(
       (c) => c.createdAt >= from && c.createdAt < toExclusive,
     ).length;
@@ -520,7 +536,10 @@ export async function computeKpis(
     }
 
     // ── Classifica autoscuole ─────────────────────────────────────────────
+    // Le consorziate senza Reglo restano fuori dalla classifica: 37 righe a
+    // zero seppellirebbero le autoscuole vere. Il loro numero sta in headline.
     const companyRows: KpiCompanyRow[] = companies
+      .filter((c) => !affiliateInactiveIds.has(c.id))
       .map((c) => {
         const stat = perCompany.get(c.id);
         const service = serviceOf(c);
@@ -880,6 +899,7 @@ export async function computeKpis(
           plansCovered: plans.length,
           companiesTotal: companies.length,
           activeCompanies: activeCompanies.length,
+          affiliateInactiveCompanies: affiliateInactiveIds.size,
           newCompanies,
           excludedCompanies: excludedCompanyIds.length,
           lessonsDone: delta(lessonsDone, prevDone),

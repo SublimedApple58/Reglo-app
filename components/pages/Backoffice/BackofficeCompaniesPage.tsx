@@ -70,9 +70,11 @@ import { BackofficeCompanyDocumentsDialog } from "@/components/pages/Backoffice/
 import { BackofficeCompanyPlanDialog } from "@/components/pages/Backoffice/BackofficeCompanyPlanDialog";
 import {
   DEFAULT_SERVICE_LIMITS,
+  isConsortium,
   type CompanyServiceInfo,
   type ServiceLimits,
 } from "@/lib/services";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 export type BackofficeCompanyRow = {
@@ -880,6 +882,7 @@ export default function BackofficeCompaniesPage({
 }) {
   const toast = useFeedbackToast();
   const [query, setQuery] = useState("");
+  const router = useRouter();
   const [selected, setSelected] = useState<BackofficeCompanyRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [docsCompany, setDocsCompany] = useState<{ id: string; name: string } | null>(null);
@@ -1014,7 +1017,21 @@ export default function BackofficeCompaniesPage({
                 const studentCount = company.androidStudents + company.iosStudents;
 
                 return (
-                  <TableRow key={company.id} className="cursor-pointer hover:bg-gray-50/50" onClick={() => { setSelected(company); setDrawerOpen(true); }}>
+                  <TableRow
+                    key={company.id}
+                    className="cursor-pointer hover:bg-gray-50/50"
+                    onClick={() => {
+                      // Un CONSORZIO ha una pagina sua: il drawer del servizio
+                      // non basta più, servono le sue autoscuole consorziate
+                      // (REG-454). Le altre company restano col drawer.
+                      if (isConsortium(company.services)) {
+                        router.push(`/it/backoffice/consorzi/${company.id}`);
+                        return;
+                      }
+                      setSelected(company);
+                      setDrawerOpen(true);
+                    }}
+                  >
                     <TableCell>
                       <div className="flex items-center gap-2.5">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#f2f2f2] text-xs font-bold text-[#222222]">

@@ -110,6 +110,25 @@ export type ServiceLimits = {
    */
   accountKind?: "consorzio";
   /**
+   * Company che è un'**autoscuola consorziata**: id della company consorzio a
+   * cui è collegata. Denormalizzazione di `ConsorzioSchool.linkedCompanyId`,
+   * scritta SOLO dalle azioni di collegamento/scollegamento (backoffice), che
+   * aggiornano le due cose nella stessa transazione.
+   *
+   * Esiste per il percorso di lettura: il gate di ogni pagina deve sapere "sei
+   * una consorziata" senza una query cross-company a ogni render, e i limits
+   * stanno già in cache Redis (segmento SETTINGS). Le action che attraversano
+   * il confine fra i due tenant NON si fidano di questo campo: rileggono
+   * `ConsorzioSchool`, che è l'autorità.
+   *
+   * Combinato con lo stato del servizio dà i tre stati della consorziata:
+   * servizio ACTIVE = autoscuola piena + agenda consorzio; servizio DISABLED =
+   * vista ridotta (richieste di guida al consorzio e poco altro). Una company
+   * DISABLED **senza** questo campo resta il vicolo cieco di sempre.
+   * Vedi docs/features/consorzio.md.
+   */
+  affiliateOf?: string;
+  /**
    * Prezzi del consorzio verso le autoscuole consorziate (solo accountKind
    * "consorzio"). `hourlyByCategory` = tariffa oraria in € per categoria
    * (prezzo guida = durata/60 × tariffa). Cancellazioni tardive: oltre il
@@ -189,3 +208,30 @@ export const isSecretaryOnly = (
 export const isConsortium = (
   services: CompanyServiceInfo[] | null | undefined,
 ): boolean => getServiceLimits(services, "AUTOSCUOLE").accountKind === "consorzio";
+
+/**
+ * Id della company CONSORZIO a cui questa autoscuola è collegata, oppure null.
+ * Null-safe su stringhe vuote: un `affiliateOf: ""` scritto per sbaglio non
+ * deve far credere che la company sia una consorziata.
+ */
+export const affiliateConsorzioId = (
+  services: CompanyServiceInfo[] | null | undefined,
+): string | null => {
+  const value = getServiceLimits(services, "AUTOSCUOLE").affiliateOf;
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+};
+
+/** true se la company è un'autoscuola collegata a un consorzio (servizio attivo o no). */
+export const isConsorzioAffiliate = (
+  services: CompanyServiceInfo[] | null | undefined,
+): boolean => affiliateConsorzioId(services) !== null;
+
+/**
+ * true per la **vista ridotta**: consorziata che non ha (ancora) comprato
+ * Reglo. È l'unico caso in cui un servizio DISABLED non mostra il cartello
+ * bloccante ma una app funzionante in piccolo.
+ */
+export const isAffiliateWithoutReglo = (
+  services: CompanyServiceInfo[] | null | undefined,
+): boolean =>
+  isConsorzioAffiliate(services) && !isServiceActive(services, "AUTOSCUOLE", true);

@@ -179,6 +179,12 @@ function SchoolDetailSkeleton() {
   );
 }
 
+import {
+  listConsorzioSchoolsAccess,
+  type AffiliateSchoolRow,
+} from "@/lib/actions/consorzio-affiliate.actions";
+import { SchoolAccessCard } from "./SchoolAccessCard";
+
 export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
   const nameOrder = useStudentNameOrder();
   const router = useRouter();
@@ -190,6 +196,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
   const [stats, setStats] = React.useState<Stats | null>(null);
   const [students, setStudents] = React.useState<ConsorzioSchoolStudent[]>([]);
   const [codes, setCodes] = React.useState<Array<{ id: string; code: string }>>([]);
+  const [accessRow, setAccessRow] = React.useState<AffiliateSchoolRow | null>(null);
 
   const [editOpen, setEditOpen] = React.useState(false);
   const [editForm, setEditForm] = React.useState({
@@ -227,9 +234,10 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
   );
 
   const load = React.useCallback(async () => {
-    const [schoolRes, codesRes] = await Promise.all([
+    const [schoolRes, codesRes, accessRes] = await Promise.all([
       getConsorzioSchool(schoolId),
       listConsorzioAccountingCodes(),
+      listConsorzioSchoolsAccess(),
     ]);
     if (schoolRes.success) {
       setSchool(schoolRes.data.school);
@@ -239,6 +247,9 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
       toast.error({ description: schoolRes.message });
     }
     if (codesRes.success) setCodes(codesRes.data.codes);
+    if (accessRes.success) {
+      setAccessRow(accessRes.data.find((row) => row.schoolId === schoolId) ?? null);
+    }
     setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId]);
@@ -426,6 +437,13 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
           ))}
         </div>
       </div>
+
+      {/* Accesso a Reglo del titolare (REG-454) */}
+      {accessRow && (
+        <div className="mt-4 lg:max-w-[625px]">
+          <SchoolAccessCard row={accessRow} onChanged={() => void load()} />
+        </div>
+      )}
 
       {/* Allievi */}
       <div className="mt-9">

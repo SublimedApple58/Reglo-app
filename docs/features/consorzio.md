@@ -184,6 +184,85 @@ Aggiunte alla lista canonica `LICENSE_CATEGORIES` (`lib/autoscuole/license.ts`),
 - **Richiesta guida (ricevente)**: `lib/autoscuole/notifications.ts` (`createConsortiumGuideRequestNotification`, kind `consortium_guide_request`), `OwnerNotificationsBell.tsx` (riga cliccabile → **primo click-through della campanella**: `?tab=agenda&guideRequestId=…`), `AutoscuoleAgendaPage.tsx` (stato `guideRequest`/`guideDraft`, ghost tratteggiato AMBRA "In attesa" nella colonna dell'istruttore scelto, card `CreateEventPopover` "Richiesta di guida" con picker istruttore obbligatorio + Accetta/Rifiuta; il click su un altro slot della griglia SPOSTA il draft, come gli altri flussi)
 - **Seed dev**: `scripts/seed-consorzio-company.mjs` (consorzio@reglo.it / Reglo2026!, 2 istruttori CON account+membership — l'agenda mostra solo istruttori con `userId` —, 5 mezzi, 3 scuole, 6 allievi, tariffe, richiesta pending + notifica, guida demo)
 
+## Autoscuole consorziate come Company Reglo (REG-454)
+
+Una consorziata non è più solo un'anagrafica: diventa una **Company Reglo**
+registrata, contata fra le autoscuole, col servizio AUTOSCUOLE **spento**
+finché non compra Reglo. Gli stati sono tre, e vanno tenuti distinti perché
+sono assi indipendenti:
+
+| Stato | `CompanyService.status` | `limits.affiliateOf` | Cosa vede il titolare |
+|---|---|---|---|
+| Autoscuola cliente | ACTIVE | assente | tutto, come sempre |
+| Consorziata **con** Reglo | ACTIVE | presente | tutto + agenda consorzio (REG-429) |
+| Consorziata **senza** Reglo | DISABLED | presente | vista ridotta (REG-429) |
+| Registrata da sola | DISABLED | assente | cartello "Servizio non attivo", invariato |
+
+**Doppia scrittura, voluta.** `ConsorzioSchool.linkedCompanyId` è l'autorità;
+`limits.affiliateOf` (id del consorzio) è la copia che il percorso di **lettura**
+consulta senza una query cross-company a ogni render — i limits stanno già in
+cache Redis (segmento SETTINGS). Le due cose si scrivono nella stessa
+transazione (`linkConsorzioSchoolToCompany`, `createAffiliateCompanyForSchool`,
+`unlinkConsorzioSchool`) e invalidano la cache di **entrambe** le company.
+`requireAffiliateSchool` (`lib/service-access.ts`) non si fida del flag:
+rilegge `ConsorzioSchool` e restituisce lo `schoolId`, perché ogni query a valle
+deve restare filtrata su quella scuola. Non richiede il servizio attivo — è il
+senso della vista ridotta.
+
+Attenzione a `isServiceActive(..., fallbackActive = true)`: una company **senza**
+riga di servizio risulta attiva. Per questo ogni percorso che crea una
+consorziata crea sempre anche la riga, `DISABLED`.
+
+### Inviti al titolare
+
+Ogni consorziata deve poter entrare nella sua autoscuola anche senza Reglo
+acquistato. L'accesso nasce per **invito**: il titolare riceve un link, sceglie
+lui la password, entra. Il consorzio non vede e non imposta password.
+
+Gli inviti partono **sia dal backoffice sia dall'account consorzio**
+(`inviteAffiliateOwnerFromBackoffice` / `inviteAffiliateOwnerFromConsorzio`,
+stessa funzione interna). Stati per scuola: `not_linked` · `not_invited` ·
+`invited` · `expired` · `active`, calcolati una volta sola in
+`readAffiliateSchoolRows` e mostrati identici nelle due viste.
+
+> **Perché un invito vale per più sedi.** In produzione 37 consorziate hanno
+> **24 email distinte**: `amministrazione@autoscuola2go.it` copre cinque sedi
+> ODOS. `User.email` è unique, quindi "un account per scuola" non esiste — esiste
+> **un titolare con più sedi**, cioè un utente con più membership (lo switcher
+> "Le tue sedi" c'era già). Invitare una sede prepara l'invito per tutte le sedi
+> di quel titolare in quel consorzio e manda **una sola** mail;
+> `attachSiblingAffiliateInvites` (`lib/consorzio/affiliate-invites.ts`) crea le
+> altre membership al momento dell'accettazione, agganciata ai tre percorsi di
+> accept esistenti e **solo** per inviti verso company con `affiliateOf`.
+
+"Copia link" esiste perché le mail si perdono (e su staging gli invii esterni
+sono no-op): il link è lo stesso token, si manda su WhatsApp. "Invita tutte le
+non invitate" mostra l'anteprima raggruppata per email e richiede una conferma
+esplicita — sono mail vere verso clienti veri.
+
+### Dove
+
+| Scope | File |
+|---|---|
+| Helper + guardia | `lib/services.ts` (`affiliateConsorzioId`, `isConsorzioAffiliate`, `isAffiliateWithoutReglo`), `lib/service-access.ts` (`requireAffiliateSchool`) |
+| Azioni | `lib/actions/consorzio-affiliate.actions.ts` (collega/crea/scollega/inviti/bulk), `lib/consorzio/affiliate-invites.ts` |
+| Nome Company | `lib/consorzio/affiliate-name.ts` — Title Case dall'anagrafica in MAIUSCOLO (`ODOS S.CROCE` → `Odos S.Croce`); un nome già curato non si tocca |
+| Backoffice | `app/[locale]/backoffice/consorzi/[companyId]/page.tsx`, `BackofficeConsorzioDetailPage.tsx`, `AffiliateLinkDialog.tsx`, `AffiliateBulkInviteDialog.tsx`; la riga di un consorzio in `BackofficeCompaniesPage` ora **naviga** invece di aprire il drawer |
+| Account consorzio | `ConsorzioSchoolsPage` (colonna Accesso + filtro + invito massivo), `SchoolAccessCard.tsx`, `school-access.tsx` (badge e filtro condivisi) |
+| Backfill | `scripts/backfill-consorzio-affiliates.ts` (`--dry-run`, idempotente, **mai** su prod senza ok) |
+
+**Nessuna migrazione**: `linkedCompanyId` e il suo indice esistevano già, il
+resto vive nei `limits` JSON.
+
+### KPI
+
+`companyKindOf` ha un quarto valore, `consorziata`. Le consorziate **senza**
+Reglo attivo restano nel totale registrate (`companiesTotal`) e hanno un
+contatore proprio (`affiliateInactiveCompanies`), ma escono dalla classifica
+autoscuole e da ogni media per-autoscuola: 37 righe a zero guide
+seppellirebbero le scuole vere e abbasserebbero ogni rapporto senza dire niente
+di vero (decisione di Tiziano, 25/09).
+
 ## Accettazione richiesta
 
 `acceptConsorzioGuideRequest({requestId, instructorId, startsAt})`: transazione pending→accepted + `AutoscuolaAppointment` (`type:"guida"`, `bookingSource:"consortium_request"`); **istruttore obbligatorio** (la card lo chiede: il prototipo non lo aveva ma l'agenda è a colonne-istruttore); conflitti su istruttore E veicolo → errore, richiesta resta pending; slot ≠ richiesto → `movedToStartsAt` (azione "Sposta"). La notifica di ritorno alla scuola è un no-op fino alla fase affiliate (oggi nessun sender: le richieste nascono solo dal seed).

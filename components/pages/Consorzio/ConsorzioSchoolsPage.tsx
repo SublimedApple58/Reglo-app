@@ -71,7 +71,7 @@ const emptySchoolForm = {
 function SchoolListSkeleton() {
   return (
     <div>
-      <div className="grid grid-cols-[1.6fr_1fr_96px_70px_130px_1fr_92px] gap-x-7 border-b border-[#ebebeb] px-4 pb-2.5">
+      <div className="grid grid-cols-[1.6fr_1fr_96px_118px_70px_120px_1fr_92px] gap-x-4 border-b border-[#ebebeb] px-4 pb-2.5">
         {Array.from({ length: 6 }).map((_, i) => (
           <Skeleton key={i} className="h-3 w-16 max-w-full rounded" />
         ))}
@@ -79,7 +79,7 @@ function SchoolListSkeleton() {
       {Array.from({ length: 4 }).map((_, i) => (
         <div
           key={i}
-          className="grid grid-cols-[1.6fr_1fr_96px_70px_130px_1fr_92px] items-center gap-x-7 border-b border-[#f2f2f2] px-4 py-3.5"
+          className="grid grid-cols-[1.6fr_1fr_96px_118px_70px_120px_1fr_92px] items-center gap-x-4 border-b border-[#f2f2f2] px-4 py-3.5"
         >
           <div className="flex min-w-0 items-center gap-3">
             <Skeleton className="size-9 shrink-0 rounded-full" />
@@ -101,6 +101,14 @@ function SchoolListSkeleton() {
   );
 }
 
+import { SegmentedPill } from "@/components/ui/segmented-pill";
+import {
+  listConsorzioSchoolsAccess,
+  type AffiliateSchoolRow,
+} from "@/lib/actions/consorzio-affiliate.actions";
+import { AffiliateBulkInviteDialog } from "@/components/pages/Backoffice/AffiliateBulkInviteDialog";
+import { AccessBadge, matchesAccessFilter, type AccessFilter } from "./school-access";
+
 export function ConsorzioSchoolsPage() {
   const router = useRouter();
   const locale = useLocale();
@@ -111,17 +119,29 @@ export function ConsorzioSchoolsPage() {
   const [totalStudents, setTotalStudents] = React.useState(0);
   const [search, setSearch] = React.useState("");
 
+  const [access, setAccess] = React.useState<Map<string, AffiliateSchoolRow>>(new Map());
+  const [accessFilter, setAccessFilter] = React.useState<AccessFilter>("all");
+  const [bulkOpen, setBulkOpen] = React.useState(false);
+
   const [addOpen, setAddOpen] = React.useState(false);
   const [addForm, setAddForm] = React.useState(emptySchoolForm);
   const [saving, setSaving] = React.useState(false);
 
   const load = React.useCallback(async () => {
-    const res = await listConsorzioSchools();
+    // Le due letture viaggiano insieme: la seconda porta lo stato di accesso
+    // del titolare (REG-454), che vive sul collegamento e non sull'anagrafica.
+    const [res, accessRes] = await Promise.all([
+      listConsorzioSchools(),
+      listConsorzioSchoolsAccess(),
+    ]);
     if (res.success) {
       setSchools(res.data.schools);
       setTotalStudents(res.data.totalStudents);
     } else {
       toast.error({ description: res.message });
+    }
+    if (accessRes.success) {
+      setAccess(new Map(accessRes.data.map((row) => [row.schoolId, row])));
     }
     setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -140,6 +160,25 @@ export function ConsorzioSchoolsPage() {
         .some((value) => (value as string).toLowerCase().includes(query)),
     );
   }, [schools, search]);
+
+  const visible = React.useMemo(
+    () =>
+      filtered.filter((school) =>
+        matchesAccessFilter(accessFilter, access.get(school.id)?.access),
+      ),
+    [filtered, accessFilter, access],
+  );
+
+  const accessCounts = React.useMemo(() => {
+    let active = 0;
+    let pending = 0;
+    for (const school of schools) {
+      if (access.get(school.id)?.access === "active") active += 1;
+      else pending += 1;
+    }
+    return { all: schools.length, active, pending };
+  }, [schools, access]);
+
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -178,6 +217,15 @@ export function ConsorzioSchoolsPage() {
               className="w-full border-0 bg-transparent p-0 text-[15px] font-medium text-[#222222] outline-none placeholder:text-[#a0a0a0]"
             />
           </div>
+          {accessCounts.pending > 0 && (
+            <button
+              type="button"
+              onClick={() => setBulkOpen(true)}
+              className="flex cursor-pointer items-center gap-2 rounded-full border border-[#dddddd] bg-white px-[16px] py-[10px] text-sm font-semibold text-[#222222] transition-colors hover:bg-[#f7f7f7]"
+            >
+              Invita i titolari non invitati · {accessCounts.pending}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setAddOpen(true)}
@@ -189,10 +237,24 @@ export function ConsorzioSchoolsPage() {
         </div>
       </div>
 
+      {!loading && schools.length > 0 && (
+        <div className="mt-5">
+          <SegmentedPill
+            value={accessFilter}
+            onChange={setAccessFilter}
+            options={[
+              { value: "all", label: "Tutte", count: accessCounts.all },
+              { value: "active", label: "Accedono", count: accessCounts.active },
+              { value: "pending", label: "Da invitare", count: accessCounts.pending },
+            ]}
+          />
+        </div>
+      )}
+
       <div className="mt-[22px]">
         {loading ? (
           <SchoolListSkeleton />
-        ) : filtered.length === 0 ? (
+        ) : visible.length === 0 ? (
           <FadeIn>
           <div className="rounded-3xl border border-dashed border-neutral-200 bg-white/60 p-12 text-center text-sm font-medium text-neutral-500">
             {schools.length === 0
@@ -204,25 +266,25 @@ export function ConsorzioSchoolsPage() {
           <FadeIn>
           <div>
             {/* Griglia del prototipo: 1.6fr 1fr 70px 140px 1fr 92px, gap 28 */}
-            <div className="grid grid-cols-[1.6fr_1fr_96px_70px_130px_1fr_92px] gap-x-7 border-b border-[#ebebeb] px-4 pb-2.5">
-              {["Autoscuola", "Titolare", "Codice", "Allievi", "Ultima guida", "Mezzo più usato", "Stato"].map(
+            <div className="grid grid-cols-[1.6fr_1fr_96px_118px_70px_120px_1fr_92px] gap-x-4 border-b border-[#ebebeb] px-4 pb-2.5">
+              {["Autoscuola", "Titolare", "Codice", "Accesso", "Allievi", "Ultima guida", "Mezzo più usato", "Stato"].map(
                 (header, index) => (
                   <div
                     key={header}
-                    className={`text-[11px] font-bold uppercase tracking-[0.7px] text-[#929292] ${index === 3 ? "text-right" : ""}`}
+                    className={`text-[11px] font-bold uppercase tracking-[0.7px] text-[#929292] ${index === 4 ? "text-right" : ""}`}
                   >
                     {header}
                   </div>
                 ),
               )}
             </div>
-            {filtered.map((school) => {
+            {visible.map((school) => {
               const badge = STATUS_BADGE[school.status] ?? STATUS_BADGE.active;
               return (
                 <div
                   key={school.id}
                   onClick={() => router.push(`/${locale}/user/autoscuole/scuole/${school.id}`)}
-                  className="grid cursor-pointer grid-cols-[1.6fr_1fr_96px_70px_130px_1fr_92px] items-center gap-x-7 rounded-[10px] border-b border-[#f2f2f2] px-4 py-3.5 transition-colors hover:bg-[#fafafa]"
+                  className="grid cursor-pointer grid-cols-[1.6fr_1fr_96px_118px_70px_120px_1fr_92px] items-center gap-x-4 rounded-[10px] border-b border-[#f2f2f2] px-4 py-3.5 transition-colors hover:bg-[#fafafa]"
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#e6e6e6] bg-white text-[12px] font-bold text-[#444444]">
@@ -251,6 +313,9 @@ export function ConsorzioSchoolsPage() {
                     ) : (
                       <span className="text-[13px] font-medium text-[#b0b0b0]">—</span>
                     )}
+                  </div>
+                  <div className="min-w-0">
+                    <AccessBadge status={access.get(school.id)?.access ?? "not_linked"} />
                   </div>
                   <div className="text-right text-[14px] font-semibold text-[#222222]">
                     {school.studentsCount}
@@ -375,6 +440,16 @@ export function ConsorzioSchoolsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {bulkOpen && (
+        <AffiliateBulkInviteDialog
+          onClose={() => setBulkOpen(false)}
+          onDone={() => {
+            setBulkOpen(false);
+            void load();
+          }}
+        />
+      )}
     </div>
   );
 }
