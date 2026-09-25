@@ -149,6 +149,19 @@ export function SchoolAccessCard({
             {row.invite && row.invite.email !== (row.email ?? "") && (
               <Row label="Invito mandato a" value={row.invite.email} />
             )}
+            {row.sharedWith.length > 0 && (
+              <Row
+                label="Sedi coperte da questo invito"
+                value={
+                  <span>
+                    {row.sharedWith.length + 1}{" "}
+                    <span className="font-medium text-[#929292]">
+                      · {[row.schoolName, ...row.sharedWith].join(", ")}
+                    </span>
+                  </span>
+                }
+              />
+            )}
           </dl>
 
           <div className="mt-[18px] flex flex-wrap items-center gap-2.5">

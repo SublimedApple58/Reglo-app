@@ -297,7 +297,11 @@ export default function BackofficeConsorzioDetailPage({ detail }: { detail: Cons
                           ? `scade fra ${daysLeft(school.invite.expiresAt)} giorni`
                           : school.access === "expired" && school.invite
                             ? `inviato a ${school.invite.email}`
-                            : school.email || "nessuna email in anagrafica"}
+                            : `${school.email || "nessuna email in anagrafica"}${
+                                school.sharedWith.length
+                                  ? ` · ${school.sharedWith.length + 1} sedi`
+                                  : ""
+                              }`}
                     </p>
                   </TableCell>
                   <TableCell className="text-right font-semibold">{school.studentsCount}</TableCell>

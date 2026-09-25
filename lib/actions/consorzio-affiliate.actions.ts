@@ -66,6 +66,12 @@ export type AffiliateSchoolRow = {
   owners: Array<{ name: string; email: string }>;
   /** Invito pendente/scaduto, per Reinvia e Copia link. */
   invite: { email: string; token: string; expiresAt: string; expired: boolean } | null;
+  /**
+   * Altre sedi dello stesso consorzio che condividono questa email: un invito
+   * le copre tutte. Senza questa riga, un titolare con cinque sedi sembra
+   * "invitato" su una sola e "da invitare" sulle altre quattro.
+   */
+  sharedWith: string[];
 };
 
 const schoolIdSchema = z.object({ schoolId: z.string().uuid() });
@@ -145,6 +151,14 @@ async function readAffiliateSchoolRows(
     if (!inviteByCompany.has(invite.companyId)) inviteByCompany.set(invite.companyId, invite);
   }
 
+  // Email → nomi delle scuole collegate che la condividono (vedi `sharedWith`).
+  const schoolsByEmail = new Map<string, string[]>();
+  for (const school of schools) {
+    const email = (school.email ?? "").trim().toLowerCase();
+    if (!email || !school.linkedCompanyId) continue;
+    schoolsByEmail.set(email, [...(schoolsByEmail.get(email) ?? []), school.name]);
+  }
+
   const now = Date.now();
   return schools.map((school) => {
     const company = school.linkedCompanyId
@@ -193,6 +207,9 @@ async function readAffiliateSchoolRows(
             expired,
           }
         : null,
+      sharedWith: (schoolsByEmail.get((school.email ?? "").trim().toLowerCase()) ?? []).filter(
+        (name) => name !== school.name,
+      ),
     };
   });
 }
