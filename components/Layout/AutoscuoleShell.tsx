@@ -11,6 +11,7 @@ import { Plus, Check, Menu } from "lucide-react";
 import {
   BellProtoIcon,
   ClockProtoIcon,
+  KeyProtoIcon,
   GearProtoIcon,
   HelpCircleProtoIcon,
   LogoutProtoIcon,
@@ -42,7 +43,8 @@ import { ComunicatoDialog } from "@/components/Layout/ComunicatoDialog";
 import { AgendaPauseNewsDialog } from "@/components/Layout/news/AgendaPauseNewsDialog";
 import { OwnerNotificationsBell } from "@/components/Layout/OwnerNotificationsBell";
 import { FeedbackDialog } from "@/components/Layout/FeedbackDialog";
-import { isSecretaryOnly, isServiceActive } from "@/lib/services";
+import { isAffiliateWithoutReglo, isSecretaryOnly, isServiceActive } from "@/lib/services";
+import { LockedMenuItem } from "@/components/pages/Autoscuole/locked/LockedMenuItem";
 import { cn } from "@/lib/utils";
 import { StudentNameOrderProvider } from "@/components/pages/Autoscuole/student-name-order-context";
 
@@ -148,6 +150,17 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
     () => isServiceActive(company?.services ?? null, "AUTOSCUOLE", true),
     [company?.services],
   );
+  /**
+   * Autoscuola consorziata che non ha (ancora) comprato Reglo: la shell è
+   * quella di sempre — stesse tab, stessa campanella, stesso menu — e cambia
+   * solo che alcune voci sono bloccate (REG-429). È l'unico caso in cui un
+   * servizio spento non porta al cartello "Servizio non attivo".
+   */
+  const affiliateReduced = React.useMemo(
+    () => isAffiliateWithoutReglo(company?.services ?? null),
+    [company?.services],
+  );
+  const shellActive = serviceActive || affiliateReduced;
   // Modalità "solo Segretaria": nasconde le voci operative "guida" del menu.
   const secretaryOnly = React.useMemo(
     () => isSecretaryOnly(company?.services ?? null),
@@ -176,13 +189,13 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
 
           {/* Tab centrali */}
           <div className="flex items-stretch justify-center overflow-x-auto [scrollbar-width:none]">
-            {serviceActive && <AutoscuoleNav />}
+            {shellActive && <AutoscuoleNav />}
           </div>
 
           {/* Avatar sede + hamburger */}
           <div className="flex items-center justify-end gap-2.5">
             {/* Campanella notifiche titolare (annullamenti allievi) */}
-            {serviceActive && <OwnerNotificationsBell />}
+            {shellActive && <OwnerNotificationsBell />}
             {/* Avatar → switcher autoscuola */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -305,31 +318,59 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                     <GearProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
                     <span className="text-[15px] font-medium">Impostazioni dell&apos;account</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => router.push("/admin/users")}
-                    className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
-                  >
-                    <UsersProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
-                    <span className="text-[15px] font-medium">Utenti</span>
-                  </DropdownMenuItem>
-                  {!secretaryOnly && (
+                  {affiliateReduced ? (
+                    <LockedMenuItem
+                      feature="utenti"
+                      icon={<UsersProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />}
+                    />
+                  ) : (
                     <DropdownMenuItem
-                      onClick={() => router.push("/user/autoscuole/ore-guida")}
+                      onClick={() => router.push("/admin/users")}
                       className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                     >
-                      <ClockProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
-                      <span className="text-[15px] font-medium">Ore guida</span>
+                      <UsersProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                      <span className="text-[15px] font-medium">Utenti</span>
                     </DropdownMenuItem>
                   )}
-                  {!secretaryOnly && (
-                    <DropdownMenuItem
-                      onClick={() => setComunicatoOpen(true)}
-                      className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
-                    >
-                      <BellProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
-                      <span className="text-[15px] font-medium">Invia comunicato</span>
-                    </DropdownMenuItem>
-                  )}
+                  {/* "Chiave di accesso" esiste solo nella vista ridotta: la
+                      funzione non c'è ancora nell'app, nel prototipo è una
+                      voce bloccata e Tiziano ha chiesto di tenerla (25/09). */}
+                  {affiliateReduced ? (
+                    <LockedMenuItem
+                      feature="chiave"
+                      icon={<KeyProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />}
+                    />
+                  ) : null}
+                  {!secretaryOnly &&
+                    (affiliateReduced ? (
+                      <LockedMenuItem
+                        feature="oreGuida"
+                        icon={<ClockProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />}
+                      />
+                    ) : (
+                      <DropdownMenuItem
+                        onClick={() => router.push("/user/autoscuole/ore-guida")}
+                        className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
+                      >
+                        <ClockProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                        <span className="text-[15px] font-medium">Ore guida</span>
+                      </DropdownMenuItem>
+                    ))}
+                  {!secretaryOnly &&
+                    (affiliateReduced ? (
+                      <LockedMenuItem
+                        feature="comunicato"
+                        icon={<BellProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />}
+                      />
+                    ) : (
+                      <DropdownMenuItem
+                        onClick={() => setComunicatoOpen(true)}
+                        className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
+                      >
+                        <BellProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                        <span className="text-[15px] font-medium">Invia comunicato</span>
+                      </DropdownMenuItem>
+                    ))}
                   <DropdownMenuItem
                     onClick={() => router.push("/user/autoscuole/assistenza")}
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
@@ -342,13 +383,20 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                       </span>
                     )}
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setFeedbackOpen(true)}
-                    className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
-                  >
-                    <StarProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
-                    <span className="text-[15px] font-medium">Lascia un feedback</span>
-                  </DropdownMenuItem>
+                  {affiliateReduced ? (
+                    <LockedMenuItem
+                      feature="feedback"
+                      icon={<StarProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />}
+                    />
+                  ) : (
+                    <DropdownMenuItem
+                      onClick={() => setFeedbackOpen(true)}
+                      className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
+                    >
+                      <StarProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                      <span className="text-[15px] font-medium">Lascia un feedback</span>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator className="my-2 bg-[#ededed]" />
                   {/* Teaser referral (statico, come il proto) */}
                   <div className="flex cursor-default items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left">

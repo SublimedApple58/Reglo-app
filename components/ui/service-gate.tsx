@@ -6,7 +6,7 @@ import { useAtomValue } from "jotai";
 import { ShieldAlert, Mail, CalendarCheck } from "lucide-react";
 
 import { companyAtom, companyListAtom } from "@/atoms/company.store";
-import { isServiceActive, type ServiceKey } from "@/lib/services";
+import { isAffiliateWithoutReglo, isServiceActive, type ServiceKey } from "@/lib/services";
 import { cn } from "@/lib/utils";
 
 export function ServiceGate({
@@ -39,6 +39,11 @@ export function ServiceGate({
   }, [company, companyList, service]);
 
   if (active) return <>{children}</>;
+  // Consorziata senza Reglo: entra lo stesso, in vista ridotta (REG-429). Il
+  // cartello resta per chi si è registrato da solo e non è collegato a nulla.
+  if (service === "AUTOSCUOLE" && isAffiliateWithoutReglo(company?.services ?? null)) {
+    return <>{children}</>;
+  }
   if (!showBlocked) return null;
 
   const mailtoHref = `mailto:support@reglo.it?subject=${encodeURIComponent("Attivazione nuova sede autoscuola")}`;

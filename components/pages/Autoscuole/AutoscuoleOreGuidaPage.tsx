@@ -5,6 +5,11 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, BookOpen, Download } from "lucide-react";
 
+import { useAtomValue } from "jotai";
+
+import { companyAtom } from "@/atoms/company.store";
+import { isAffiliateWithoutReglo } from "@/lib/services";
+import { LockedSection, LOCKED_SECTIONS } from "./locked/LockedSection";
 import { FadeIn } from "@/components/ui/fade-in";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -158,6 +163,13 @@ const BAR_MIN_HEIGHT = 8;
 type Meta = { measuredUntil: string | null; partial: boolean };
 
 export function AutoscuoleOreGuidaPage() {
+  // Consorziata senza Reglo: il report non esiste per lei (REG-429). La voce
+  // nel menu è già bloccata; questa è la guardia per chi arriva via URL.
+  const lockedCompany = useAtomValue(companyAtom);
+  if (isAffiliateWithoutReglo(lockedCompany?.services ?? null)) {
+    return <LockedSection {...LOCKED_SECTIONS.oreGuida} />;
+  }
+
   const router = useRouter();
   const [preset, setPreset] = React.useState<PresetKey>("settimana");
   const [range, setRange] = React.useState<Range>(() => presetRange("settimana"));

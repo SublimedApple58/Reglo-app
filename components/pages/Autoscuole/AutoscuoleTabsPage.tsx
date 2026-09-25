@@ -7,7 +7,8 @@ import { useLocale } from "next-intl";
 import { useAtomValue } from "jotai";
 
 import { companyAtom } from "@/atoms/company.store";
-import { isConsortium, isSecretaryOnly } from "@/lib/services";
+import { isAffiliateWithoutReglo, isConsortium, isSecretaryOnly } from "@/lib/services";
+import { LockedSection, LOCKED_SECTIONS } from "./locked/LockedSection";
 import { AutoscuoleRinnoviTeaser } from "./AutoscuoleRinnoviTeaser";
 
 const AutoscuoleStudentsPage = dynamic(
@@ -93,6 +94,11 @@ export function AutoscuoleTabsPage() {
   const company = useAtomValue(companyAtom);
   const secretaryOnly = isSecretaryOnly(company?.services ?? null);
   const consortium = isConsortium(company?.services ?? null);
+  // Consorziata senza Reglo: le sezioni non comprate mostrano la card del
+  // lucchetto invece del contenuto (REG-429). L'Agenda resterà l'unica
+  // funzionante: la vista ridotta serve a mandare richieste al consorzio
+  // (Fase 7). Fino ad allora è bloccata anche lei.
+  const affiliateReduced = isAffiliateWithoutReglo(company?.services ?? null);
 
   const initialTab = React.useMemo(
     () => normalizeTab(searchParams.get("tab")),
@@ -171,8 +177,20 @@ export function AutoscuoleTabsPage() {
 
   return (
     <div className="w-full">
-      {activeTab === "students" ? <AutoscuoleStudentsPage tabs={null} /> : null}
-      {activeTab === "agenda" ? <AutoscuoleAgendaPage tabs={null} /> : null}
+      {activeTab === "students" ? (
+        affiliateReduced ? (
+          <LockedSection {...LOCKED_SECTIONS.students} />
+        ) : (
+          <AutoscuoleStudentsPage tabs={null} />
+        )
+      ) : null}
+      {activeTab === "agenda" ? (
+        affiliateReduced ? (
+          <LockedSection {...LOCKED_SECTIONS.agenda} />
+        ) : (
+          <AutoscuoleAgendaPage tabs={null} />
+        )
+      ) : null}
       {activeTab === "settings" ? <AutoscuoleResourcesPage tabs={null} /> : null}
       {activeTab === "payments" ? <AutoscuolePaymentsPage tabs={null} /> : null}
       {activeTab === "rinnovi" ? <AutoscuoleRinnoviTeaser /> : null}

@@ -9,7 +9,8 @@ import { Plus, ChevronLeft, ChevronRight, X, type LucideIcon } from "lucide-reac
 
 import { companyAtom } from "@/atoms/company.store";
 import { LicenseCategorySelectItems } from "./LicenseCategorySelectItems";
-import { isConsortium, isSecretaryOnly } from "@/lib/services";
+import {
+  isAffiliateWithoutReglo, isConsortium, isSecretaryOnly } from "@/lib/services";
 
 import {
   BellProtoIcon,
@@ -338,6 +339,13 @@ const CONFIG_PANE_GROUPS: Array<
 // Voce "Fatturazione e pagamenti" — SOLO account consorzio (placeholder
 // Reglo × Fatture in Cloud): nel prototipo chiude il primo gruppo della
 // sidebar, dopo "Sede e luoghi". Vedi docs/features/consorzio.md.
+/**
+ * Pane che restano aperte a una consorziata senza Reglo (REG-429): l'anagrafica
+ * e la sede. La sede in particolare è il dato che serve il giorno in cui
+ * accende Reglo, ed è l'onboarding che il prototipo lascia attivo.
+ */
+const AFFILIATE_OPEN_PANES: ConfigPane[] = ["business", "locations"];
+
 const CONSORZIO_BILLING_PANE = {
   key: "consorzioBilling" as ConfigPane,
   label: "Fatturazione e pagamenti",
@@ -395,6 +403,7 @@ export function AutoscuoleResourcesPage({
   // Account consorzio: il primo gruppo della sidebar guadagna "Fatturazione e
   // pagamenti" (placeholder Reglo × Fatture in Cloud), come nel prototipo.
   const consortium = isConsortium(company?.services ?? null);
+  const affiliateReduced = isAffiliateWithoutReglo(company?.services ?? null);
   const paneGroups = React.useMemo(() => {
     if (secretaryOnly) return [CONFIG_PANE_GROUPS[CONFIG_PANE_GROUPS.length - 1]];
     if (!consortium) return CONFIG_PANE_GROUPS;
@@ -404,6 +413,8 @@ export function AutoscuoleResourcesPage({
   }, [secretaryOnly, consortium]);
   const [configTab, setConfigTab] = React.useState<ConfigPane>(() => {
     if (secretaryOnly) return "voice";
+    // Consorziata senza Reglo: si entra su una pane aperta, mai su una bloccata.
+    if (isAffiliateWithoutReglo(company?.services ?? null)) return "business";
     // "students" (Gestione allievi) e "payments" (Fatturazione e pagamenti)
     // sono i vecchi pane ora fusi in "bookings" (link legacy in giro per l'app).
     const raw = searchParams?.get("pane");
@@ -2237,20 +2248,49 @@ export function AutoscuoleResourcesPage({
                   {groupIndex > 0 && <div className="my-1.5 hidden h-px bg-[#ebebeb] lg:mx-1 lg:block" />}
                   {group.map((pane) => {
                     const active = configTab === pane.key;
+                    // Consorziata senza Reglo: restano aperte solo le pane che
+                    // servono comunque (anagrafica e sede). Le altre portano il
+                    // lucchetto e non si aprono — REG-429.
+                    const locked = affiliateReduced && !AFFILIATE_OPEN_PANES.includes(pane.key);
                     return (
                       <button
                         key={pane.key}
                         type="button"
-                        onClick={() => goToPane(pane.key)}
+                        onClick={() => {
+                          if (locked) return;
+                          goToPane(pane.key);
+                        }}
+                        aria-disabled={locked || undefined}
                         className={cn(
-                          "flex shrink-0 cursor-pointer select-none items-center gap-3 whitespace-nowrap rounded-[10px] px-4 py-2.5 text-[14px] transition-colors lg:gap-4 lg:px-5 lg:py-4 lg:text-[17px]",
-                          active
+                          "flex shrink-0 select-none items-center gap-3 whitespace-nowrap rounded-[10px] px-4 py-2.5 text-[14px] transition-colors lg:gap-4 lg:px-5 lg:py-4 lg:text-[17px]",
+                          locked
+                            ? "cursor-default font-medium text-[#9d9d9d] [&_svg]:stroke-[#bdbdbd]"
+                            : "cursor-pointer",
+                          !locked && active
                             ? "bg-[#f2f2f2] font-semibold text-foreground"
-                            : "font-medium text-[#444444] hover:text-foreground",
+                            : !locked
+                              ? "font-medium text-[#444444] hover:text-foreground"
+                              : undefined,
                         )}
                       >
                         <pane.icon className="size-5 shrink-0 lg:size-6" strokeWidth={1.9} />
                         {pane.label}
+                        {locked ? (
+                          <svg
+                            className="ml-auto shrink-0"
+                            width="15"
+                            height="15"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="#bdbdbd"
+                            strokeWidth={2.1}
+                            strokeLinecap="round"
+                            aria-hidden
+                          >
+                            <rect x="4" y="11" width="16" height="10" rx="2" />
+                            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                          </svg>
+                        ) : null}
                       </button>
                     );
                   })}

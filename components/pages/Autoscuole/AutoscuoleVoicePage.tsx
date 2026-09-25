@@ -1,5 +1,11 @@
 "use client";
 
+import { useAtomValue } from "jotai";
+
+import { companyAtom } from "@/atoms/company.store";
+import { isAffiliateWithoutReglo } from "@/lib/services";
+import { LockedSection, LOCKED_SECTIONS } from "./locked/LockedSection";
+
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { usePathname, useRouter } from "next/navigation";
@@ -384,6 +390,13 @@ function VoicePageSkeleton() {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function AutoscuoleVoicePage() {
+  // Consorziata senza Reglo: la Segretaria AI è una funzione a pagamento
+  // (REG-429). Guardia per la tab e per chi arriva via URL.
+  const lockedCompany = useAtomValue(companyAtom);
+  if (isAffiliateWithoutReglo(lockedCompany?.services ?? null)) {
+    return <LockedSection {...LOCKED_SECTIONS.voice} />;
+  }
+
   const router = useRouter();
   const pathname = usePathname() ?? "";
 
