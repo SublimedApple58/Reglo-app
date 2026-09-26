@@ -181,3 +181,60 @@ export const LOCKED_FEATURES: Record<LockedFeatureKey, LockedFeature> = {
     ),
   },
 };
+
+/**
+ * Voci **bloccate del menu "+"** dell'agenda, nell'ordine del prototipo: una
+ * consorziata senza Reglo può creare solo richieste al consorzio (REG-429,
+ * Fase 7). Appuntamento, Esame, Evento bloccante, Guida di gruppo e Segna
+ * festivo restano lì, grigie e col lucchetto — l'agenda della scuola è la
+ * funzione che non ha comprato.
+ */
+export const LOCKED_MENU_ITEMS: Array<{ label: string; icon: React.ReactNode }> = [
+  {
+    label: "Appuntamento",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#bdbdbd" strokeWidth={1.8} strokeLinecap="round" aria-hidden>
+        <path d="M5 16h14M5 16l1.4-4.2A2 2 0 0 1 8.3 10h7.4a2 2 0 0 1 1.9 1.3L19 16M5 16v2M19 16v2" />
+        <circle cx="7.5" cy="16" r="1" />
+        <circle cx="16.5" cy="16" r="1" />
+      </svg>
+    ),
+  },
+  {
+    label: "Esame",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#bdbdbd" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M12 4 2 9l10 5 10-5-10-5Z" />
+        <path d="M6 11.5V16c0 1.1 2.7 2.5 6 2.5s6-1.4 6-2.5v-4.5" />
+      </svg>
+    ),
+  },
+  {
+    label: "Evento bloccante",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#bdbdbd" strokeWidth={1.8} aria-hidden>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M5.6 5.6l12.8 12.8" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    label: "Guida di gruppo",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#bdbdbd" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19" />
+        <circle cx="10" cy="8" r="3" />
+        <path d="M20 19v-1.5a3.5 3.5 0 0 0-2.6-3.4M15.5 5.2a3 3 0 0 1 0 5.6" />
+      </svg>
+    ),
+  },
+  {
+    label: "Segna festivo",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#bdbdbd" strokeWidth={1.8} strokeLinecap="round" aria-hidden>
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+      </svg>
+    ),
+  },
+];

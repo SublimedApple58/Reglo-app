@@ -9,6 +9,7 @@ import { useAtomValue } from "jotai";
 import { companyAtom } from "@/atoms/company.store";
 import { isAffiliateWithoutReglo, isConsortium, isSecretaryOnly } from "@/lib/services";
 import { LockedSection, LOCKED_SECTIONS } from "./locked/LockedSection";
+import { AffiliateAgendaPage } from "./locked/AffiliateAgendaPage";
 import { AllieviLockedCard } from "./locked/SectionLockedCards";
 import { AutoscuoleRinnoviTeaser } from "./AutoscuoleRinnoviTeaser";
 
@@ -96,10 +97,12 @@ export function AutoscuoleTabsPage() {
   const secretaryOnly = isSecretaryOnly(company?.services ?? null);
   const consortium = isConsortium(company?.services ?? null);
   // Consorziata senza Reglo: le sezioni non comprate mostrano la card del
-  // lucchetto invece del contenuto (REG-429). L'Agenda resterà l'unica
-  // funzionante: la vista ridotta serve a mandare richieste al consorzio
-  // (Fase 7). Fino ad allora è bloccata anche lei.
+  // lucchetto invece del contenuto (REG-429). L'Agenda è l'eccezione: in scope
+  // Consorzio serve a mandare richieste di guida, ed è roba da **titolare** —
+  // gli altri membri vedono la card. Il server lo ripete comunque
+  // (`requireAffiliateOwner`): questo qui è solo l'interfaccia.
   const affiliateReduced = isAffiliateWithoutReglo(company?.services ?? null);
+  const affiliateOwner = affiliateReduced && company?.role === "admin";
 
   const initialTab = React.useMemo(
     () => normalizeTab(searchParams.get("tab")),
@@ -211,7 +214,11 @@ export function AutoscuoleTabsPage() {
       ) : null}
       {activeTab === "agenda" ? (
         affiliateReduced ? (
-          <LockedSection {...LOCKED_SECTIONS.agenda} />
+          affiliateOwner ? (
+            <AffiliateAgendaPage />
+          ) : (
+            <LockedSection {...LOCKED_SECTIONS.agenda} />
+          )
         ) : (
           <AutoscuoleAgendaPage tabs={null} />
         )
