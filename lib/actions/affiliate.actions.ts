@@ -328,6 +328,12 @@ export type AffiliateAgendaData = {
   requests: AffiliateGuideRequestRow[];
   /** La richiesta di `focusRequestId`, anche se fuori finestra. */
   focusRequest: AffiliateGuideRequestRow | null;
+  /**
+   * Richieste ancora in attesa **da qui in avanti**, non solo nella settimana
+   * mostrata: è il numero in testata, e una richiesta in attesa la settimana
+   * prossima è esattamente quella che il titolare non deve perdere di vista.
+   */
+  pendingTotal: number;
 };
 
 const agendaRangeSchema = z.object({
@@ -365,7 +371,7 @@ export async function getAffiliateAgenda(input: z.infer<typeof agendaRangeSchema
     const from = new Date(payload.from);
     const to = new Date(payload.to);
 
-    const [instructors, vehicles, service, requests] = await Promise.all([
+    const [instructors, vehicles, service, requests, pendingTotal] = await Promise.all([
       prisma.autoscuolaInstructor.findMany({
         where: { companyId: consorzioCompanyId, status: "active" },
         orderBy: { name: "asc" },
@@ -394,6 +400,14 @@ export async function getAffiliateAgenda(input: z.infer<typeof agendaRangeSchema
           student: { select: { name: true } },
           vehicle: { select: { name: true } },
           appointment: { select: { instructorId: true, startsAt: true, endsAt: true } },
+        },
+      }),
+      prisma.consorzioGuideRequest.count({
+        where: {
+          consorzioCompanyId,
+          schoolId,
+          status: "pending",
+          requestedStartsAt: { gte: new Date() },
         },
       }),
     ]);
@@ -437,6 +451,7 @@ export async function getAffiliateAgenda(input: z.infer<typeof agendaRangeSchema
         })),
       requests: requests.map(toRequestRow),
       focusRequest: null,
+      pendingTotal,
     };
 
     if (payload.focusRequestId && !data.requests.some((r) => r.id === payload.focusRequestId)) {

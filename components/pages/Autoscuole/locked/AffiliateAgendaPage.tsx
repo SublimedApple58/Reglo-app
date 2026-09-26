@@ -303,7 +303,7 @@ export function AffiliateAgendaPage({
         request.status === "accepted" && formatYmd(new Date(request.startsAt)) === today,
     ).length;
   }, [data]);
-  const pendingCount = data?.requests.filter((r) => r.status === "pending").length ?? 0;
+  const pendingCount = data?.pendingTotal ?? 0;
 
   if (scope === "autoscuola" && !onScope) {
     return (
