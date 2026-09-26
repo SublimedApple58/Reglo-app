@@ -281,6 +281,16 @@ ridisegnano a occhio.
 c'è ancora, nel prototipo è una voce bloccata, e Tiziano ha chiesto di tenerla
 come teaser.
 
+**Dietro le card delle sezioni bloccate non c'è il bianco.** C'è la sezione
+piena e **sfocata**: per l'agenda è la griglia vera alimentata da
+`locked/demo-agenda.ts` (dati statici e locali — nessuna chiamata al server,
+nessun dato di altre autoscuole, durate scelte su tutta la scala per mostrare
+la tavolozza), per la Segretaria le chiamate in sospeso. `LockedBackdrop`
+accetta anche un `header` che resta **nitido e usabile** sopra la sfocatura: da
+scope "Autoscuola" la toolbar sotto è inerte, e senza il segmented lì sopra da
+quella vista non si tornerebbe più indietro. Rinnovi resta il teaser esistente,
+che è già pieno.
+
 **Le sezioni bloccate delle Impostazioni si aprono.** Come nel prototipo: il
 titolo resta nitido, sotto c'è uno scheletro sfocato e sopra la card della
 funzione con la sua anteprima e i due CTA
@@ -331,21 +341,35 @@ resto dell'app resta chiuso da `requireServiceAccess`.
 ### Richieste di guida al consorzio (REG-429, Fase 7)
 
 L'**Agenda in scope Consorzio** è l'unica sezione operativa della vista ridotta
-(`locked/AffiliateAgendaPage.tsx`, solo web, **solo titolare**). Il segmented
-`Consorzio | Autoscuola` c'è come nel prototipo: lo scope "Autoscuola" — la sua
-agenda — è la funzione non comprata e mostra il lucchetto.
+(solo web, **solo titolare**). Il segmented `Consorzio | Autoscuola` c'è come
+nel prototipo: lo scope "Autoscuola" — la sua agenda — è la funzione non
+comprata.
 
-Sulla griglia (stessa gutter oraria e stessi 1,2 px al minuto dell'agenda vera,
-colonne giorno × istruttore del consorzio) compaiono due cose:
+> **È l'agenda, non una sua copia.** `AutoscuoleAgendaPage` accetta una
+> **`AgendaSource`**: `fetchBootstrap` (da dove arrivano i dati, al posto di
+> `/api/autoscuole/agenda/bootstrap`), `readOnly` (niente pannello d'azione
+> sulle card, niente creazione dagli slot), `onCardClick` e `menu` (voci del
+> "+" e del menu-slot, comprese quelle bloccate col lucchetto).
+> `locked/AffiliateAgendaPage.tsx` è un involucro sottile che mappa richieste e
+> slot occupati in `AppointmentRow[]`. Il primo giro aveva una griglia
+> riscritta a mano ed è stata **bocciata**: stessi contenuti, ma etichette
+> troncate, blocchi di un'altra taglia, toolbar diversa. Chi domani aggiunge
+> una vista dell'agenda parta da `AgendaSource`.
 
-- le **proprie richieste**, nei quattro stati: in attesa (giallo tratteggiato),
-  confermata (verde), rifiutata (rossa), annullata (grigia barrata). Una
-  controproposta del consorzio ("Proponi un altro orario") si legge sul blocco;
-- gli **slot occupati** dal consorzio: grigi, etichetta "OCCUPATO", **nessun
-  nome e nessun tipo**. `getAffiliateAgenda` seleziona tre campi
-  dell'appuntamento — inizio, fine, istruttore — e nient'altro. Sapere *quando*
-  il consorzio è pieno serve a non chiedere l'impossibile; sapere *chi* c'è
-  dentro è affare del consorzio e delle altre consorziate.
+Sulla griglia — quella vera: colonne giorno × istruttore, intestazioni, badge
+di oggi, card, colori, hover, toolbar — compaiono due cose:
+
+- le **proprie richieste**, nei quattro stati. Gli stati stanno in
+  `getStatusMeta` accanto a tutti gli altri (`consortium_pending` ambra
+  tratteggiato — la stessa lingua del ghost che l'agenda già usa per una
+  richiesta —, `consortium_rejected`, `consortium_cancelled`), e una accettata
+  usa lo stato `scheduled`, quindi prende il colore per durata come una guida
+  qualunque. Una controproposta si legge sul blocco e il click apre il dialogo;
+- gli **slot occupati** dal consorzio (`consortium_busy`, grigio rigato):
+  **nessun nome e nessun tipo**, solo l'orario. `getAffiliateAgenda` seleziona
+  tre campi dell'appuntamento — inizio, fine, istruttore — e nient'altro.
+  Sapere *quando* il consorzio è pieno serve a non chiedere l'impossibile;
+  sapere *chi* c'è dentro è affare del consorzio e delle altre consorziate.
 
 Il menu "+" ha **solo "Richieste"**: appuntamento, esame, evento bloccante,
 guida di gruppo e "segna festivo" restano lì col lucchetto.
@@ -358,6 +382,14 @@ nasce nel consorzio taggato con la scuola, senza credenziali (REG-464).
 All'invio la richiesta nasce `pending` e arriva nella **campanella del
 consorzio**; annullarla finché è in attesa cancella anche quella riga, perché
 non c'è più niente da gestire.
+
+**La scheda allievo modifica fase e percorso patente.** Senza, la pastiglia
+"Foglio rosa" restava lì a vita. `setAffiliateStudentPhase` e
+`setAffiliateStudentLicense` stanno nella lista bianca, dietro
+`requireAffiliateOwner` e filtrate su `schoolId`; i dialoghi sono quelli veri
+(`ChangeStudentPhaseDialog`, `EditStudentLicenseDialog`), che hanno preso un
+`save` opzionale. Le fasi raggiungibili sono quelle del **consorzio** — Foglio
+rosa e Patentato — perché TEORIA vorrebbe una sua licenza quiz.
 
 > **Confine fra tenant.** Queste action leggono e scrivono nella company del
 > **consorzio**, non in quella di chi chiama: sono le prime della piattaforma a
