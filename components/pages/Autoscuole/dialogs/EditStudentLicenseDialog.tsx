@@ -40,6 +40,16 @@ type Props = {
   currentLicenseCategory?: string | null;
   currentTransmission?: string | null;
   onSuccess: (next: { licenseCategory: string; transmission: string }) => void;
+  /**
+   * Chi scrive davvero. Di default `updateStudentLicensePath` sulla company
+   * corrente; la vista ridotta della consorziata passa la propria action,
+   * perché l'allievo vive nella company del consorzio (REG-429).
+   */
+  save?: (input: {
+    studentId: string;
+    licenseCategory: string;
+    transmission: string;
+  }) => Promise<{ success: boolean; message?: string }>;
 };
 
 export function EditStudentLicenseDialog({
@@ -50,6 +60,7 @@ export function EditStudentLicenseDialog({
   currentLicenseCategory,
   currentTransmission,
   onSuccess,
+  save,
 }: Props) {
   const toast = useFeedbackToast();
   const [licenseCategory, setLicenseCategory] = React.useState<string>(
@@ -81,11 +92,13 @@ export function EditStudentLicenseDialog({
     event.preventDefault();
     setSaving(true);
     try {
-      const res = await updateStudentLicensePath({
-        studentId,
-        licenseCategory: licenseCategory as LicenseCategory,
-        transmission: transmission as Transmission,
-      });
+      const res = save
+        ? await save({ studentId, licenseCategory, transmission })
+        : await updateStudentLicensePath({
+            studentId,
+            licenseCategory: licenseCategory as LicenseCategory,
+            transmission: transmission as Transmission,
+          });
       if (!res.success) {
         toast.error({ description: res.message ?? "Errore aggiornamento percorso patente." });
         return;

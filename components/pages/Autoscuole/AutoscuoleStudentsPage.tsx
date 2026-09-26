@@ -115,6 +115,8 @@ import { createCompanyUser } from "@/lib/actions/user.actions";
 import {
   createAffiliateStudent,
   listAffiliateStudents,
+  setAffiliateStudentLicense,
+  setAffiliateStudentPhase,
   updateAffiliateStudentPhone,
 } from "@/lib/actions/affiliate.actions";
 import { useAtomValue } from "jotai";
@@ -2482,22 +2484,18 @@ export function AutoscuoleStudentsPage({
                       }`
                     : "—"}
                 </p>
-                {!affiliate && (
-                  <button type="button" className={blueLinkClass} onClick={() => setLicenseDialogOpen(true)}>
-                    Modifica
-                  </button>
-                )}
+                <button type="button" className={blueLinkClass} onClick={() => setLicenseDialogOpen(true)}>
+                  Modifica
+                </button>
               </div>
             </div>
             <div>
               <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Fase percorso</p>
               <div className="flex flex-wrap items-center gap-2">
                 <Pill tone={phaseBadge.tone}>{phaseBadge.label}</Pill>
-                {!affiliate && (
-                  <button type="button" className={blueLinkClass} onClick={() => setPhaseDialogOpen(true)}>
-                    Cambia fase
-                  </button>
-                )}
+                <button type="button" className={blueLinkClass} onClick={() => setPhaseDialogOpen(true)}>
+                  Cambia fase
+                </button>
                 {!affiliate && register.studentPhase === "AWAITING" && (
                   <button
                     type="button"
@@ -4300,9 +4298,16 @@ export function AutoscuoleStudentsPage({
           studentName={formatStudentName(register.student, studentNameOrder)}
           currentPhase={register.studentPhase ?? "PRATICA"}
           currentTheoryExamAt={register.theoryExamAt ?? null}
-          phasesEnabled={quizCtx?.phasesEnabled}
+          // Vista ridotta: le fasi sono quelle del CONSORZIO, che non ha la
+          // teoria attiva → Foglio rosa e Patentato (stesse del suo drawer).
+          phasesEnabled={affiliate ? ["PRATICA"] : quizCtx?.phasesEnabled}
           hasQuizSeat={Boolean(register.quizSeatGrantedAt)}
           quizSeatsAvailable={quizCtx?.available ?? 0}
+          save={
+            affiliate
+              ? ({ studentId, phase }) => setAffiliateStudentPhase({ userId: studentId, phase })
+              : undefined
+          }
           onSuccess={({ phase, theoryExamAt, grantedSeat }) => {
             setRegister((prev) =>
               prev
@@ -4333,6 +4338,12 @@ export function AutoscuoleStudentsPage({
           studentName={formatStudentName(register.student, studentNameOrder)}
           currentLicenseCategory={register.licenseCategory ?? null}
           currentTransmission={register.transmission ?? null}
+          save={
+            affiliate
+              ? ({ studentId, licenseCategory, transmission }) =>
+                  setAffiliateStudentLicense({ userId: studentId, licenseCategory, transmission })
+              : undefined
+          }
           onSuccess={({ licenseCategory, transmission }) => {
             setRegister((prev) =>
               prev ? { ...prev, licenseCategory, transmission } : prev,

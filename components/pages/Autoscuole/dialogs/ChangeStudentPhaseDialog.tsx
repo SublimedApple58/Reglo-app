@@ -90,6 +90,16 @@ type Props = {
   /** Number of quiz seats currently available for the autoscuola. */
   quizSeatsAvailable?: number;
   onSuccess: (next: { phase: StudentPhase; theoryExamAt: string | null; grantedSeat?: boolean }) => void;
+  /**
+   * Chi scrive davvero la fase. Di default `updateStudentPhase`, cioè la
+   * company corrente. La vista ridotta della consorziata passa la sua action
+   * (`setAffiliateStudentPhase`), perché l'allievo vive nella company del
+   * consorzio: stesso dialogo, stessa UX, destinazione diversa.
+   */
+  save?: (input: {
+    studentId: string;
+    phase: StudentPhase;
+  }) => Promise<{ success: boolean; message?: string }>;
 };
 
 export function ChangeStudentPhaseDialog({
@@ -103,6 +113,7 @@ export function ChangeStudentPhaseDialog({
   hasQuizSeat,
   quizSeatsAvailable = 0,
   onSuccess,
+  save,
 }: Props) {
   const toast = useFeedbackToast();
   const [phase, setPhase] = React.useState<StudentPhase>(currentPhase);
@@ -142,17 +153,19 @@ export function ChangeStudentPhaseDialog({
     event.preventDefault();
     setSaving(true);
     try {
-      const res = await updateStudentPhase({
-        studentId,
-        phase,
-        theoryExamDate:
-          phase === "TEORIA" && theoryExamDate
-            ? new Date(theoryExamDate).toISOString()
-            : phase === "TEORIA"
-              ? null
-              : undefined,
-        ...(needsSeat && { grantSeat: true }),
-      });
+      const res = save
+        ? await save({ studentId, phase })
+        : await updateStudentPhase({
+            studentId,
+            phase,
+            theoryExamDate:
+              phase === "TEORIA" && theoryExamDate
+                ? new Date(theoryExamDate).toISOString()
+                : phase === "TEORIA"
+                  ? null
+                  : undefined,
+            ...(needsSeat && { grantSeat: true }),
+          });
       if (!res.success) {
         toast.error({ description: res.message ?? "Errore aggiornamento fase." });
         return;

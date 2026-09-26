@@ -305,6 +305,8 @@ export type AffiliateGuideRequestRow = {
   requestedStartsAt: string;
   durationMinutes: number;
   studentName: string;
+  /** Categoria patente dell'allievo: la card dell'agenda la mostra come le altre. */
+  licenseCategory: string | null;
   vehicleName: string | null;
   /** Colonna: valorizzata solo quando il consorzio ha accettato e assegnato un istruttore. */
   instructorId: string | null;
@@ -412,6 +414,18 @@ export async function getAffiliateAgenda(input: z.infer<typeof agendaRangeSchema
       }),
     ]);
 
+    // La categoria patente vive sul CompanyMember, non sulla richiesta: serve
+    // alla card dell'agenda, che mostra "Patente B" come per tutte le altre.
+    const members = await prisma.companyMember.findMany({
+      where: {
+        companyId: consorzioCompanyId,
+        consorzioSchoolId: schoolId,
+        autoscuolaRole: "STUDENT",
+      },
+      select: { userId: true, licenseCategory: true },
+    });
+    const licenseByStudent = new Map(members.map((m) => [m.userId, m.licenseCategory]));
+
     // Le guide nate dalle richieste già accettate di QUESTA scuola si disegnano
     // dalla richiesta (verde "Confermata"): tenerle anche fra gli occupati
     // significherebbe due blocchi sovrapposti sullo stesso slot.
@@ -449,7 +463,7 @@ export async function getAffiliateAgenda(input: z.infer<typeof agendaRangeSchema
             row.endsAt ?? new Date(row.startsAt.getTime() + 60 * 60000)
           ).toISOString(),
         })),
-      requests: requests.map(toRequestRow),
+      requests: requests.map((request) => toRequestRow(request, licenseByStudent)),
       focusRequest: null,
       pendingTotal,
     };
@@ -463,7 +477,7 @@ export async function getAffiliateAgenda(input: z.infer<typeof agendaRangeSchema
           appointment: { select: { instructorId: true, startsAt: true, endsAt: true } },
         },
       });
-      if (extra) data.focusRequest = toRequestRow(extra);
+      if (extra) data.focusRequest = toRequestRow(extra, licenseByStudent);
     }
 
     return { success: true as const, data };
@@ -480,12 +494,16 @@ type GuideRequestWithRelations = {
   movedToStartsAt: Date | null;
   proposedStartsAt: Date | null;
   proposedDurationMinutes: number | null;
+  studentUserId: string;
   student: { name: string | null };
   vehicle: { name: string } | null;
   appointment: { instructorId: string | null; startsAt: Date; endsAt: Date | null } | null;
 };
 
-const toRequestRow = (request: GuideRequestWithRelations): AffiliateGuideRequestRow => {
+const toRequestRow = (
+  request: GuideRequestWithRelations,
+  licenseByStudent?: Map<string, string | null>,
+): AffiliateGuideRequestRow => {
         const effectiveStart = request.appointment?.startsAt ?? request.requestedStartsAt;
         return {
           id: request.id,
@@ -503,6 +521,7 @@ const toRequestRow = (request: GuideRequestWithRelations): AffiliateGuideRequest
               )
             : request.durationMinutes,
           studentName: request.student.name ?? "—",
+          licenseCategory: licenseByStudent?.get(request.studentUserId) ?? null,
           vehicleName: request.vehicle?.name ?? null,
           instructorId: request.appointment?.instructorId ?? null,
           moved: request.movedToStartsAt !== null,
@@ -722,6 +741,137 @@ export async function respondToAffiliateProposedSlot(
     });
 
     return { success: true as const, data: { accepted: true } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const phaseSchema = z.object({
+  userId: z.string().uuid(),
+  phase: z.enum(["AWAITING", "TEORIA", "PRATICA", "PATENTATO"]),
+});
+
+/**
+ * Fase del percorso di un allievo, dalla scheda della vista ridotta
+ * (REG-429 + REG-512).
+ *
+ * Senza questa, la pastiglia "Foglio rosa" restava lì a vita: la scuola vede
+ * il suo allievo prendere la patente e non ha modo di dirlo. È la stessa
+ * operazione che fa il consorzio dal suo drawer, con lo stesso dialogo.
+ *
+ * Le fasi raggiungibili sono quelle della company del **consorzio**, che non
+ * ha la teoria attiva: restano PRATICA (foglio rosa) e PATENTATO. TEORIA e
+ * AWAITING vorrebbero una licenza quiz del consorzio, e non è roba che possa
+ * decidere l'autoscuola.
+ */
+export async function setAffiliateStudentPhase(input: z.infer<typeof phaseSchema>) {
+  try {
+    const { consorzioCompanyId, schoolId, schoolSuspended } = await requireAffiliateOwner();
+    if (schoolSuspended) {
+      throw new Error("Autoscuola sospesa dal consorzio: contatta il consorzio.");
+    }
+    const payload = phaseSchema.parse(input);
+
+    // L'allievo deve essere di QUESTA scuola: il filtro è la guardia, non un
+    // dettaglio della query.
+    const member = await prisma.companyMember.findFirst({
+      where: {
+        companyId: consorzioCompanyId,
+        userId: payload.userId,
+        consorzioSchoolId: schoolId,
+        autoscuolaRole: "STUDENT",
+      },
+      select: { studentPhase: true },
+    });
+    if (!member) throw new Error("Allievo non trovato.");
+
+    const service = await prisma.companyService.findFirst({
+      where: { companyId: consorzioCompanyId, serviceKey: "AUTOSCUOLE" },
+      select: { limits: true },
+    });
+    const raw = (service?.limits as Record<string, unknown> | null)?.phasesEnabled;
+    const phasesEnabled: Array<"TEORIA" | "PRATICA"> = Array.isArray(raw)
+      ? raw.filter((p): p is "TEORIA" | "PRATICA" => p === "TEORIA" || p === "PRATICA")
+      : ["PRATICA"];
+
+    if (
+      (payload.phase === "TEORIA" || payload.phase === "AWAITING") &&
+      !phasesEnabled.includes("TEORIA")
+    ) {
+      throw new Error("Il consorzio non ha la fase teoria attiva.");
+    }
+    if (payload.phase === "PRATICA" && !phasesEnabled.includes("PRATICA")) {
+      throw new Error("Il consorzio non ha la fase pratica attiva.");
+    }
+
+    await prisma.companyMember.updateMany({
+      where: {
+        companyId: consorzioCompanyId,
+        userId: payload.userId,
+        consorzioSchoolId: schoolId,
+        autoscuolaRole: "STUDENT",
+      },
+      data: { studentPhase: payload.phase, phaseClassifiedAt: new Date() },
+    });
+
+    return { success: true as const, message: "Fase aggiornata." };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const licenseSchema = z.object({
+  userId: z.string().uuid(),
+  licenseCategory: z.string().trim().min(1),
+  transmission: z.string().trim().min(1),
+});
+
+/**
+ * Percorso patente dell'allievo (categoria + cambio).
+ *
+ * Coerente con la creazione: l'autoscuola sceglie già categoria e cambio
+ * quando aggiunge l'anagrafica, e non poterli correggere dopo lascia un vicolo
+ * cieco su un errore di battitura. Stesso dialogo della scheda normale.
+ */
+export async function setAffiliateStudentLicense(input: z.infer<typeof licenseSchema>) {
+  try {
+    const { consorzioCompanyId, schoolId, schoolSuspended } = await requireAffiliateOwner();
+    if (schoolSuspended) {
+      throw new Error("Autoscuola sospesa dal consorzio: contatta il consorzio.");
+    }
+    const payload = licenseSchema.parse(input);
+    if (!isLicenseCategory(payload.licenseCategory)) {
+      throw new Error("Categoria patente non valida.");
+    }
+    if (!isTransmission(payload.transmission)) {
+      throw new Error("Cambio non valido.");
+    }
+
+    const member = await prisma.companyMember.findFirst({
+      where: {
+        companyId: consorzioCompanyId,
+        userId: payload.userId,
+        consorzioSchoolId: schoolId,
+        autoscuolaRole: "STUDENT",
+      },
+      select: { userId: true },
+    });
+    if (!member) throw new Error("Allievo non trovato.");
+
+    await prisma.companyMember.updateMany({
+      where: {
+        companyId: consorzioCompanyId,
+        userId: payload.userId,
+        consorzioSchoolId: schoolId,
+        autoscuolaRole: "STUDENT",
+      },
+      data: {
+        licenseCategory: payload.licenseCategory,
+        transmission: payload.transmission,
+      },
+    });
+
+    return { success: true as const, message: "Percorso patente aggiornato." };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
