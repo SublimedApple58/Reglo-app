@@ -9,6 +9,8 @@ import { useAtomValue } from "jotai";
 import { companyAtom } from "@/atoms/company.store";
 import { isAffiliateWithoutReglo, isConsortium, isSecretaryOnly } from "@/lib/services";
 import { LockedSection, LOCKED_SECTIONS } from "./locked/LockedSection";
+import { AllieviLockedCard } from "./locked/SectionLockedCards";
+import { AffiliateStudentsPage } from "./locked/AffiliateStudentsPage";
 import { AutoscuoleRinnoviTeaser } from "./AutoscuoleRinnoviTeaser";
 
 const AutoscuoleStudentsPage = dynamic(
@@ -111,6 +113,14 @@ export function AutoscuoleTabsPage() {
     setActiveTab(tab);
   }, [searchParams]);
 
+  // La card degli Allievi si vede una volta per visita: dopo "Prova" si resta
+  // sulle anagrafiche finché si cambia tab.
+  const [allieviProvato, setAllieviProvato] = React.useState(false);
+  React.useEffect(() => {
+    if (activeTab !== "students") setAllieviProvato(false);
+  }, [activeTab]);
+
+
   // Modalità "solo Segretaria": le tab dell'autoscuola (agenda/allievi/…) non
   // esistono — reindirizza alla pagina Segretaria. Le Impostazioni restano
   // accessibili (mostreranno solo il pane Segretaria).
@@ -179,7 +189,13 @@ export function AutoscuoleTabsPage() {
     <div className="w-full">
       {activeTab === "students" ? (
         affiliateReduced ? (
-          <LockedSection {...LOCKED_SECTIONS.students} />
+          // "Prova" apre le anagrafiche, che nella vista ridotta funzionano
+          // davvero: senza un allievo in elenco non si può chiedere una guida.
+          allieviProvato ? (
+            <AffiliateStudentsPage />
+          ) : (
+            <AllieviLockedCard onProva={() => setAllieviProvato(true)} />
+          )
         ) : (
           <AutoscuoleStudentsPage tabs={null} />
         )

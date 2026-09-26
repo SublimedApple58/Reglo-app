@@ -4,7 +4,7 @@ import { useAtomValue } from "jotai";
 
 import { companyAtom } from "@/atoms/company.store";
 import { isAffiliateWithoutReglo } from "@/lib/services";
-import { LockedSection, LOCKED_SECTIONS } from "./locked/LockedSection";
+import { SegretariaLockedCard } from "./locked/SectionLockedCards";
 
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
@@ -394,7 +394,7 @@ export function AutoscuoleVoicePage() {
   // (REG-429). Guardia per la tab e per chi arriva via URL.
   const lockedCompany = useAtomValue(companyAtom);
   if (isAffiliateWithoutReglo(lockedCompany?.services ?? null)) {
-    return <LockedSection {...LOCKED_SECTIONS.voice} />;
+    return <SegretariaLockedCard />;
   }
 
   const router = useRouter();
