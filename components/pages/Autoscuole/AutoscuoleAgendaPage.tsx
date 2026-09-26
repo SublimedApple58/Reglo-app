@@ -6688,9 +6688,15 @@ function getScheduledDurationClass(appointment: AppointmentRow): string {
  * le richieste al consorzio (REG-429). Per tutto il resto vince il colore per
  * durata/patente scelto dal titolare.
  */
-/** Le richieste al consorzio portano lo stato scritto sulla card, come nel prototipo. */
-const consortiumStatusLabel = (status: string, meta: { shortLabel: string }) =>
-  status.toLowerCase().startsWith("consortium_") ? meta.shortLabel : null;
+/**
+ * Le richieste al consorzio portano lo stato scritto sulla card, come nel
+ * prototipo. Lo slot occupato no: lì il nome È già "Occupato", e ripeterlo
+ * sopra farebbe leggere la stessa parola due volte.
+ */
+const consortiumStatusLabel = (status: string, meta: { shortLabel: string }) => {
+  const s = status.toLowerCase();
+  return s.startsWith("consortium_") && s !== "consortium_busy" ? meta.shortLabel : null;
+};
 
 const usesStatusTint = (status: string) => {
   const s = status.toLowerCase();
