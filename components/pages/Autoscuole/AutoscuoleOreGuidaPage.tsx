@@ -162,13 +162,19 @@ const BAR_MIN_HEIGHT = 8;
 
 type Meta = { measuredUntil: string | null; partial: boolean };
 
+/**
+ * Consorziata senza Reglo: il report non esiste per lei (REG-429). Il
+ * controllo sta nel wrapper — dentro, gli hook devono restare incondizionati.
+ */
 export function AutoscuoleOreGuidaPage() {
-  // Consorziata senza Reglo: il report non esiste per lei (REG-429). La voce
-  // nel menu è già bloccata; questa è la guardia per chi arriva via URL.
-  const lockedCompany = useAtomValue(companyAtom);
-  if (isAffiliateWithoutReglo(lockedCompany?.services ?? null)) {
+  const company = useAtomValue(companyAtom);
+  if (isAffiliateWithoutReglo(company?.services ?? null)) {
     return <LockedSection {...LOCKED_SECTIONS.oreGuida} />;
   }
+  return <AutoscuoleOreGuidaPageInner />;
+}
+
+function AutoscuoleOreGuidaPageInner() {
 
   const router = useRouter();
   const [preset, setPreset] = React.useState<PresetKey>("settimana");

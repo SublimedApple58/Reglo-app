@@ -389,13 +389,20 @@ function VoicePageSkeleton() {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+/**
+ * Consorziata senza Reglo: la Segretaria AI è a pagamento (REG-429). Il
+ * controllo sta in un wrapper e non dentro il componente vero: lì gli hook
+ * sono decine e un return anticipato li renderebbe condizionali.
+ */
 export function AutoscuoleVoicePage() {
-  // Consorziata senza Reglo: la Segretaria AI è una funzione a pagamento
-  // (REG-429). Guardia per la tab e per chi arriva via URL.
-  const lockedCompany = useAtomValue(companyAtom);
-  if (isAffiliateWithoutReglo(lockedCompany?.services ?? null)) {
+  const company = useAtomValue(companyAtom);
+  if (isAffiliateWithoutReglo(company?.services ?? null)) {
     return <SegretariaLockedCard />;
   }
+  return <AutoscuoleVoicePageInner />;
+}
+
+function AutoscuoleVoicePageInner() {
 
   const router = useRouter();
   const pathname = usePathname() ?? "";
