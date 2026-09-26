@@ -134,7 +134,7 @@ function NewMenu({ onRichiesta }: { onRichiesta: () => void }) {
               setOpen(false);
               onRichiesta();
             }}
-            className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[15px] font-medium text-foreground transition-colors hover:bg-[#f4f4f4]"
+            className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[15px] font-medium text-foreground outline-none transition-colors hover:bg-[#f4f4f4]"
           >
             <CalendarPlusIcon />
             Richieste
@@ -168,6 +168,27 @@ function MiniPadlock() {
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#bdbdbd" strokeWidth={2.1} strokeLinecap="round" aria-hidden>
       <rect x="4" y="11" width="16" height="10" rx="2" />
       <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
+  );
+}
+
+function TruckIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="#6a6a6a"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2"
+    >
+      <path d="M3 7h10v9H3zM13 10h4l3 3v3h-7z" />
+      <circle cx="7" cy="18" r="1.6" />
+      <circle cx="17" cy="18" r="1.6" />
     </svg>
   );
 }
@@ -735,7 +756,7 @@ function GuideRequestDialog({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/20 p-6">
-      <div className="w-full max-w-[420px] rounded-[24px] bg-white p-6 shadow-[0_26px_70px_rgba(10,20,30,0.24)]">
+      <div className="w-full max-w-[490px] rounded-[24px] bg-white p-6 shadow-[0_26px_70px_rgba(10,20,30,0.24)]">
         <div className="mb-1 flex items-start justify-between gap-3">
           <h2 className="text-[20px] font-bold tracking-[-0.3px] text-foreground">
             Richiesta di guida
@@ -766,14 +787,14 @@ function GuideRequestDialog({
         </div>
 
         <p className="mb-1.5 text-[12px] font-semibold text-[#555555]">Durata</p>
-        <div className="mb-4 flex flex-wrap gap-2">
+        <div className="mb-4 grid grid-cols-5 gap-2">
           {DURATIONS.map((value) => (
             <button
               key={value}
               type="button"
               onClick={() => setDuration(value)}
               className={cn(
-                "cursor-pointer rounded-full px-4 py-2 text-[13px] transition-colors",
+                "cursor-pointer whitespace-nowrap rounded-full px-2 py-2 text-[13px] transition-colors",
                 value === duration
                   ? "bg-[#222222] font-semibold text-white"
                   : "border border-[#dddddd] font-medium text-foreground hover:bg-[#f7f7f7]",
@@ -890,18 +911,31 @@ function GuideRequestDialog({
         )}
 
         <p className="mb-1.5 text-[12px] font-semibold text-[#555555]">Veicolo del consorzio</p>
-        <select
-          value={vehicleId ?? ""}
-          onChange={(event) => setVehicleId(event.target.value || null)}
-          className="mb-4 w-full cursor-pointer rounded-[12px] border border-[#e2e2e2] bg-white px-3.5 py-2.5 text-[14px] font-medium text-foreground"
-        >
-          <option value="">Scegli un veicolo (facoltativo)</option>
-          {data.vehicles.map((vehicle) => (
-            <option key={vehicle.id} value={vehicle.id}>
-              {vehicle.name}
-            </option>
-          ))}
-        </select>
+        <div className="relative mb-4">
+          <TruckIcon />
+          <select
+            value={vehicleId ?? ""}
+            onChange={(event) => setVehicleId(event.target.value || null)}
+            className="w-full cursor-pointer appearance-none rounded-[12px] border border-[#e2e2e2] bg-white py-2.5 pl-10 pr-9 text-[14px] font-medium text-foreground outline-none"
+          >
+            <option value="">Scegli un veicolo</option>
+            {data.vehicles.map((vehicle) => (
+              <option key={vehicle.id} value={vehicle.id}>
+                {vehicle.name}
+              </option>
+            ))}
+          </select>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden
+            className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2"
+          >
+            <path d="M6 9l6 6 6-6" stroke="#9a9a9a" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </div>
 
         {leadError && (
           <p className="mb-3 text-[12.5px] font-medium text-[#b3261e]">{leadError}</p>

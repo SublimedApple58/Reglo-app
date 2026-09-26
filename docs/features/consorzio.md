@@ -265,8 +265,8 @@ toglie struttura.
 | Dove | Bloccato | Aperto |
 |---|---|---|
 | Menu hamburger | Utenti · Ore guida · Invia comunicato · Lascia un feedback · **Chiave di accesso** | Area personale · Impostazioni account · Centro assistenza · Esci |
-| Impostazioni | tutte le pane tranne le due a destra | Informazioni aziendali · **Sede e luoghi** |
-| Sezioni | Agenda (fino alla Fase 7) · Segretaria · Ore guida | **Allievi** (vedi sotto) · Rinnovi (teaser esistente) |
+| Impostazioni | tutte le pane tranne una: si **aprono** e mostrano la loro card | Informazioni aziendali |
+| Sezioni | Segretaria · Ore guida | **Agenda** in scope Consorzio (Fase 7) · **Allievi** (vedi sotto) · Rinnovi (teaser esistente) |
 
 **I dialoghi non sono ricostruzioni.** Ogni voce bloccata, al passaggio del
 mouse, apre il pannello del prototipo con la **sua** anteprima: le tre foto
@@ -281,21 +281,45 @@ ridisegnano a occhio.
 c'è ancora, nel prototipo è una voce bloccata, e Tiziano ha chiesto di tenerla
 come teaser.
 
-**Allievi è l'eccezione**: non è bloccata. La card mostra il valore della
-sezione completa e il suo CTA **"Prova"** apre le **anagrafiche**, che
-funzionano davvero. È l'unica cosa che una consorziata senza Reglo può fare —
-e serve, perché senza un allievo in elenco non si può chiedere una guida al
-consorzio. Gli allievi **non nascono nella company della scuola**: nascono in
-quella del CONSORZIO, taggati con `consorzioSchoolId`, dove il consorzio li
-vede e dove la richiesta di guida andrà a cercarli.
+**Le sezioni bloccate delle Impostazioni si aprono.** Come nel prototipo: il
+titolo resta nitido, sotto c'è uno scheletro sfocato e sopra la card della
+funzione con la sua anteprima e i due CTA
+(`components/pages/Autoscuole/locked/LockedSettingsPane.tsx`). Quattro card
+sono copiate dal prototipo parola per parola — Prenotazioni e allievi
+("Prenotazioni in autonomia"), Policy tipi guida, Promemoria e notifiche,
+Veicoli; per le altre, che nel prototipo non ce l'hanno, si usa la forma
+generica col lucchetto. Nessuna action server viene chiamata: il contenuto vero
+non si monta.
 
-`lib/actions/affiliate.actions.ts` è la **lista bianca**: tre action
+**Allievi non è una pagina a parte: è `AutoscuoleStudentsPage`** con il flag
+`affiliate`. Stesso layout, stessi filtri, stessa tabella, stesso drawer, stesso
+dialogo di creazione — cambia **da dove arrivano gli allievi** e cosa resta
+disponibile. Il primo tentativo era una pagina nuova scritta da zero ed è stato
+bocciato: la vista ridotta aggiunge lucchetti, non reinventa schermate. Sopra
+la pagina (sfocata, come nel prototipo) sta la card con il CTA **"Prova"**, che
+la scopre.
+
+In modalità `affiliate` non si montano progressi, pagellino, crediti, quiz,
+blocchi prenotazione, azioni di massa e assegnazione istruttore: **non
+falliscono, proprio non partono**. La scheda allievo si ferma al Riepilogo
+(anagrafica, telefono modificabile). Gli allievi **non nascono nella company
+della scuola**: nascono in quella del CONSORZIO, taggati con
+`consorzioSchoolId`, dove il consorzio li vede e dove la richiesta di guida
+andrà a cercarli.
+
+`lib/actions/affiliate.actions.ts` è la **lista bianca**, tutta dietro
+`requireAffiliateSchool` e filtrata sulla scuola del chiamante: anagrafiche
 (`listAffiliateStudents`, `createAffiliateStudent`,
-`updateAffiliateStudentPhone`), tutte dietro `requireAffiliateSchool`, tutte
-filtrate sulla scuola del chiamante. Tutto il resto dell'app resta chiuso da
-`requireServiceAccess`, che su servizio DISABLED rifiuta: le sezioni bloccate
-non montano nemmeno il contenuto, perché mandare in errore delle action per poi
-coprirle con un velo sarebbe solo rumore nei log.
+`updateAffiliateStudentPhone`) e richieste di guida (Fase 7, sotto). Tutto il
+resto dell'app resta chiuso da `requireServiceAccess`.
+
+> **Nessun toast `SERVICE_NOT_ACTIVE`, mai.** Le fetch partivano prima che si
+> sapesse di che company si tratta: con `services` a null `isServiceActive`
+> risponde "attivo" (fallback voluto), quindi la pagina si montava in modalità
+> normale e chiamava tutto. Ora si aspetta la company, nella vista ridotta
+> quelle fetch non partono, e `useFeedbackToast` silenzia comunque quel codice
+> (finisce in `console.debug`): è una guardia, non un guasto, e in faccia
+> all'utente non ci va.
 
 > ⚠️ **Il controllo sta nei wrapper, non dentro i componenti.** In Segretaria e
 > Ore guida il primo tentativo metteva il `return` della card prima delle
@@ -303,6 +327,48 @@ coprirle con un velo sarebbe solo rumore nei log.
 > in errore** (due deploy falliti, staging rimasto indietro senza accorgersene).
 > `tsc` e `next lint --file` non lo vedono: **`pnpm lint` sull'intero progetto
 > sì**, ed è quello che gira in build.
+
+### Richieste di guida al consorzio (REG-429, Fase 7)
+
+L'**Agenda in scope Consorzio** è l'unica sezione operativa della vista ridotta
+(`locked/AffiliateAgendaPage.tsx`, solo web, **solo titolare**). Il segmented
+`Consorzio | Autoscuola` c'è come nel prototipo: lo scope "Autoscuola" — la sua
+agenda — è la funzione non comprata e mostra il lucchetto.
+
+Sulla griglia (stessa gutter oraria e stessi 1,2 px al minuto dell'agenda vera,
+colonne giorno × istruttore del consorzio) compaiono due cose:
+
+- le **proprie richieste**, nei quattro stati: in attesa (giallo tratteggiato),
+  confermata (verde), rifiutata (rossa), annullata (grigia barrata). Una
+  controproposta del consorzio ("Proponi un altro orario") si legge sul blocco;
+- gli **slot occupati** dal consorzio: grigi, etichetta "OCCUPATO", **nessun
+  nome e nessun tipo**. `getAffiliateAgenda` seleziona tre campi
+  dell'appuntamento — inizio, fine, istruttore — e nient'altro. Sapere *quando*
+  il consorzio è pieno serve a non chiedere l'impossibile; sapere *chi* c'è
+  dentro è affare del consorzio e delle altre consorziate.
+
+Il menu "+" ha **solo "Richieste"**: appuntamento, esame, evento bloccante,
+guida di gruppo e "segna festivo" restano lì col lucchetto.
+
+Il dialogo di invio (giorno, orario, durata 30/45/60/90/120, allievo, veicolo
+del consorzio) applica **`guideRequestMinLeadHours`** con lo stesso helper che
+il consorzio usa quando sposta o propone uno slot: la regola è una sola e vale
+per chi lo slot lo sceglie. L'allievo si può **creare al volo** dal dialogo —
+nasce nel consorzio taggato con la scuola, senza credenziali (REG-464).
+All'invio la richiesta nasce `pending` e arriva nella **campanella del
+consorzio**; annullarla finché è in attesa cancella anche quella riga, perché
+non c'è più niente da gestire.
+
+> **Confine fra tenant.** Queste action leggono e scrivono nella company del
+> **consorzio**, non in quella di chi chiama: sono le prime della piattaforma a
+> farlo. Per questo ognuna passa da `requireAffiliateOwner` →
+> `requireAffiliateSchool`, che **rilegge `ConsorzioSchool`** e pretende
+> `linkedCompanyId === membership.companyId`, e ogni query resta filtrata su
+> `schoolId`. Il flag `limits.affiliateOf` è una cache di lettura: da solo non
+> autorizza niente.
+
+Le decisioni di dettaglio prese senza prototipo stanno in
+[reg-429-decisioni-notturne.md](reg-429-decisioni-notturne.md).
 
 ### KPI
 

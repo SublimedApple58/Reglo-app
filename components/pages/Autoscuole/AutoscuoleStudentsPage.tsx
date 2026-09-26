@@ -2099,7 +2099,12 @@ export function AutoscuoleStudentsPage({
   /* ── Rows ────────────────────────────────────────────────────────── */
 
   /** Checkbox di riga della selezione multipla (REG-442). */
-  const renderSelectCell = (student: Student) => (
+  const renderSelectCell = (student: Student) =>
+    // Senza azioni di massa (vista ridotta) la colonna resta, vuota: i grid
+    // template delle righe contano le colonne.
+    affiliate ? (
+      <div />
+    ) : (
     <div className="flex items-center justify-center">
       <Checkbox
         checked={selectedIds.has(student.id)}
@@ -2108,7 +2113,7 @@ export function AutoscuoleStudentsPage({
         className="size-[18px] rounded-[5px] border-[#cfcfcf] data-[state=checked]:border-[#111111] data-[state=checked]:bg-[#111111]"
       />
     </div>
-  );
+    );
 
   /**
    * Testata della selezione: "seleziona tutti" sull'intera lista filtrata del
@@ -3602,7 +3607,7 @@ export function AutoscuoleStudentsPage({
                   onChange={(next) => setPhaseTab(next)}
                   options={phaseTabOptions}
                 />
-                {phaseTab === "pratica" && (
+                {phaseTab === "pratica" && !affiliate && (
                   <>
                     <div className="mx-1 h-5 w-px shrink-0 bg-[#dddddd]" />
                     {([
