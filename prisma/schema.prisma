@@ -1837,6 +1837,11 @@ model ConsorzioGuideRequest {
   respondedAt             DateTime? @db.Timestamp(6)
   respondedByUserId       String?   @db.Uuid
   note                    String?
+  /// L'autoscuola ha tolto dalla propria agenda una richiesta ormai chiusa
+  /// (rifiutata o annullata). È solo il SUO lato: la riga resta, e il consorzio
+  /// continua a vederla nel suo storico. Cancellarla davvero sarebbe una
+  /// scrittura distruttiva su dati che sono anche di un altro tenant.
+  dismissedBySchoolAt     DateTime? @db.Timestamp(6)
   /// Controproposta del consorzio ("Proponi un altro orario"): slot/durata/mezzo
   /// proposti all'autoscuola, che dovrà confermare (flusso affiliate — oggi la
   /// notifica alla scuola è un no-op). La richiesta resta `pending`: il

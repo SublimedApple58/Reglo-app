@@ -48,9 +48,17 @@ export const useDemoAgendaSource = () =>
     [],
   );
 
-/** Anteprima agenda: la griglia vera, alimentata da dati finti. */
-function AgendaPreview() {
-  const source = useDemoAgendaSource();
+/**
+ * Anteprima agenda: la griglia vera, alimentata da dati finti. Sfocata è
+ * **solo la griglia** — la toolbar resta nitida, altrimenti l'utente si
+ * ritrova chiuso in una pagina senza comandi.
+ */
+function AgendaPreview({ card }: { card?: React.ReactNode }) {
+  const demo = useDemoAgendaSource();
+  const source = React.useMemo(
+    () => (card ? { ...demo, overlay: { node: card, blur: true } } : demo),
+    [demo, card],
+  );
   return <AutoscuoleAgendaPage tabs={null} source={source} />;
 }
 
@@ -176,8 +184,9 @@ export function LockedSection({
   if (!preview) {
     return <div className="flex min-h-[60vh] items-center justify-center p-6">{card}</div>;
   }
-  // La card è ancorata al viewport sotto l'header: l'anteprima può essere alta
-  // quanto vuole, il cartello resta dove si guarda.
+  // Agenda: il cartello sta sopra la sola griglia, la toolbar resta viva.
+  if (preview === "agenda") return <AgendaPreview card={card} />;
+  // Segretaria: non ha una toolbar da salvare, si sfoca tutto.
   return <LockedBackdrop preview={preview}>{card}</LockedBackdrop>;
 }
 

@@ -235,6 +235,20 @@ export type AgendaSource = {
   readOnly?: boolean;
   /** Click su una card, al posto del pannello standard. */
   onCardClick?: (appointmentId: string) => void;
+  /**
+   * Cartello sopra la **sola griglia**: la toolbar (titolo, frecce data,
+   * Settimana/Giorno, zoom, Filtri, ricerca, "+") resta nitida e usabile.
+   * Serve alle anteprime delle sezioni non comprate: sfocare anche i comandi
+   * significherebbe chiudere l'utente lì dentro.
+   */
+  overlay?: { node: React.ReactNode; blur?: boolean };
+  /** X in hover su una card: la sorgente dice su quali e cosa fare. */
+  dismissCard?: {
+    can: (appointmentId: string) => boolean;
+    /** `false` = non riuscito, la card torna al suo posto. */
+    run: (appointmentId: string) => Promise<boolean>;
+    title?: string;
+  };
   /** Voci del menu "+" e del menu-slot. Sostituiscono quelle standard. */
   menu?: {
     items: Array<{
@@ -585,12 +599,20 @@ const filterStudentsBySchool = <T extends { consorzioSchoolId?: string | null }>
   return list.filter((s) => s.consorzioSchoolId === schoolId);
 };
 
-function StudentSearchSelect({
+/**
+ * Selettore allievo dell'agenda: un campo che apre un flyout **affiancato**
+ * alla card, con ricerca e lista. È il pattern della creazione guida, e lo usa
+ * anche la richiesta al consorzio (REG-429) — un secondo selettore scritto a
+ * parte sarebbe un secondo posto dove sbagliare.
+ */
+export function StudentSearchSelect({
   students,
   instructors,
   value,
   onChange,
   nameOrder = DEFAULT_STUDENT_NAME_ORDER,
+  placeholder = "Cerca allievo...",
+  footer,
 }: {
   students: StudentOption[];
   /** Per mostrare in lista il nome dell'istruttore assegnato all'allievo. */
@@ -598,6 +620,9 @@ function StudentSearchSelect({
   value: string;
   onChange: (id: string) => void;
   nameOrder?: StudentNameOrder;
+  placeholder?: string;
+  /** Azione in fondo al flyout (es. "Nuovo allievo"). */
+  footer?: (close: () => void) => React.ReactNode;
 }) {
   const [query, setQuery] = React.useState("");
   const [open, setOpen] = React.useState(false);
@@ -657,7 +682,7 @@ function StudentSearchSelect({
       <input
         ref={inputRef}
         className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none transition focus:border-primary"
-        placeholder="Cerca allievo..."
+        placeholder={placeholder}
         value={open ? query : selected ? formatStudentName(selected, nameOrder) : query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -675,8 +700,10 @@ function StudentSearchSelect({
             className="fixed z-[60] overflow-y-auto rounded-[14px] border border-[#e3e3e3] bg-white p-1.5 shadow-[0_16px_48px_rgba(0,0,0,0.16)]"
             style={{ left: panelPos.left, top: panelPos.top, width: PANEL_W, maxHeight: PANEL_MAX_H }}
           >
-            {filtered.length === 0 ? (
+            {filtered.length === 0 && !footer ? (
               <div className="px-3 py-2 text-sm text-muted-foreground">Nessun risultato</div>
+            ) : filtered.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-muted-foreground">Nessun allievo trovato</div>
             ) : (
               filtered.map((s) => {
                 const assignedInstructor = s.assignedInstructorId
@@ -714,6 +741,12 @@ function StudentSearchSelect({
                 );
               })
             )}
+            {footer ? (
+              <>
+                <div className="my-1 h-px bg-[#f0f0f0]" />
+                {footer(() => setOpen(false))}
+              </>
+            ) : null}
           </div>,
           document.body,
         )}
@@ -1451,6 +1484,15 @@ export function AutoscuoleAgendaPage({
   }, [appointments]);
 
   const bootstrapRequestRef = React.useRef(0);
+  // Copia stabile degli appuntamenti: serve a rimettere a posto una card
+  // tolta in ottimistico se il server dice di no.
+  // Card sotto il mouse: la X di "togli dall'agenda" vive FUORI dal bottone
+  // della card (glielo sovrappone), quindi `group-hover` non la raggiunge.
+  const [hoveredCardId, setHoveredCardId] = React.useState<string | null>(null);
+  const appointmentsRef = React.useRef<AppointmentRow[]>([]);
+  React.useEffect(() => {
+    appointmentsRef.current = appointments;
+  }, [appointments]);
   const calendarScrollRef = React.useRef<HTMLDivElement>(null);
   const hasAutoScrolled = React.useRef(false);
 
@@ -1789,6 +1831,23 @@ export function AutoscuoleAgendaPage({
   // Ghost della Richiesta guida del consorzio: blocco tratteggiato AMBRA
   // (stato "IN ATTESA" del prototipo) nella colonna dell'istruttore scelto.
   // Si sposta cliccando un altro slot della griglia (vedi openSlotMenu).
+  /**
+   * "Togli dall'agenda" sulla card: sparisce subito e torna al suo posto se il
+   * server rifiuta. Nessun toast rosso — è un gesto reversibile, non un errore
+   * da sventolare.
+   */
+  const dismissAppointment = React.useCallback(
+    async (appointmentId: string) => {
+      const dismiss = source?.dismissCard;
+      if (!dismiss) return;
+      const before = appointmentsRef.current;
+      setAppointments((prev) => prev.filter((row) => row.id !== appointmentId));
+      const ok = await dismiss.run(appointmentId).catch(() => false);
+      if (!ok) setAppointments(before);
+    },
+    [source],
+  );
+
   const renderGuideRequestGhost = (day: Date, colId: string | null) => {
     if (!guideRequest || !guideDraft) return null;
     if (guideDraft.ymd !== formatYmd(day)) return null;
@@ -3634,6 +3693,8 @@ export function AutoscuoleAgendaPage({
         {loading ? (
           <AgendaGridSkeleton columns={viewMode === "week" ? 7 : 4} />
         ) : (<FadeIn>
+        <div className={source?.overlay ? "relative" : undefined}>
+        <div className={source?.overlay?.blur ? "pointer-events-none select-none blur-[3px]" : undefined}>
 
         {/* ── WEEKLY VIEW (istruttori, o veicoli per il consorzio) ── */}
         {viewMode === "week" && (() => {
@@ -3970,10 +4031,21 @@ export function AutoscuoleAgendaPage({
                                     e.stopPropagation();
                                     source?.onCardClick?.(item.id);
                                   }}
-                                  onMouseEnter={hasNotesInstr ? () => setHoveredNoteId(item.id) : undefined}
-                                  onMouseLeave={hasNotesInstr ? () => setHoveredNoteId((c) => (c === item.id ? null : c)) : undefined}
+                                  onMouseEnter={() => {
+                                    setHoveredCardId(item.id);
+                                    if (hasNotesInstr) setHoveredNoteId(item.id);
+                                  }}
+                                  onMouseLeave={() => {
+                                    setHoveredCardId((c) => (c === item.id ? null : c));
+                                    if (hasNotesInstr) setHoveredNoteId((c) => (c === item.id ? null : c));
+                                  }}
                                 >
                                   <div className={cn("flex h-full flex-col overflow-hidden rounded-[8px] p-1", isCompact ? "p-0.5" : "")}>
+                                    {consortiumStatusLabel(item.status, statusMeta) ? (
+                                      <div className="truncate text-[8px] font-bold uppercase tracking-[0.06em] opacity-80">
+                                        {consortiumStatusLabel(item.status, statusMeta)}
+                                      </div>
+                                    ) : null}
                                     <div className={cn("font-bold truncate text-[10px]", isExamInstr ? "text-violet-800" : isGroupLessonInstr ? glTintInstr.name : "")}>{isExamInstr ? "🎓 " : ""}{isGroupLessonInstr ? item.student.firstName : formatStudentNameShort(item.student, studentNameOrder)}</div>
                                     <div className={cn("text-[8px] truncate", isExamInstr ? "text-violet-600" : isGroupLessonInstr ? glTintInstr.time : "text-muted-foreground")}>{isExamInstr ? "Esame · " : isGroupLessonInstr ? `${glTintInstr.label} · ` : ""}{formatTimeRange(start, end)}{isCompact && licenseTag ? ` · ${licenseTag}` : ""}</div>
                                     {!isCompact && licenseTag ? (
@@ -4051,6 +4123,25 @@ export function AutoscuoleAgendaPage({
                               </PopoverPrimitive.Portal>
                             ) : null}
                             </PopoverPrimitive.Root>
+                            {source?.dismissCard?.can(item.id) ? (
+                              <button
+                                type="button"
+                                title={source.dismissCard.title ?? "Togli dall'agenda"}
+                                aria-label={source.dismissCard.title ?? "Togli dall'agenda"}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void dismissAppointment(item.id);
+                                }}
+                                onMouseEnter={() => setHoveredCardId(item.id)}
+                                className={cn(
+                                  "absolute z-40 size-[18px] items-center justify-center rounded-full bg-white/90 text-[#6a6a6a] shadow-[0_2px_8px_rgba(0,0,0,0.18)] transition-colors hover:bg-white hover:text-foreground",
+                                  hoveredCardId === item.id ? "flex" : "hidden",
+                                )}
+                                style={{ top: Math.max(0, top + 3), right: 5 }}
+                              >
+                                <X className="size-3" strokeWidth={2.4} />
+                              </button>
+                            ) : null}
                             {neverAccessedFor(item) ? (
                               <div className="absolute z-30" style={{ top: Math.max(0, top - 4), right: 2 }}>
                                 <NeverAccessedNudge
@@ -4501,8 +4592,14 @@ export function AutoscuoleAgendaPage({
                                 event.stopPropagation();
                                 source?.onCardClick?.(item.id);
                               }}
-                              onMouseEnter={hasNotesDay ? () => setHoveredNoteId(item.id) : undefined}
-                              onMouseLeave={hasNotesDay ? () => setHoveredNoteId((c) => (c === item.id ? null : c)) : undefined}
+                              onMouseEnter={() => {
+                                setHoveredCardId(item.id);
+                                if (hasNotesDay) setHoveredNoteId(item.id);
+                              }}
+                              onMouseLeave={() => {
+                                setHoveredCardId((c) => (c === item.id ? null : c));
+                                if (hasNotesDay) setHoveredNoteId((c) => (c === item.id ? null : c));
+                              }}
                             >
                               <div className={cn("flex h-full flex-col overflow-hidden", isCompact ? "gap-0.5" : "gap-1")}>
                               {isPendingAction ? (
@@ -4616,6 +4713,25 @@ export function AutoscuoleAgendaPage({
                           </PopoverPrimitive.Portal>
                         ) : null}
                         </PopoverPrimitive.Root>
+                        {source?.dismissCard?.can(item.id) ? (
+                          <button
+                            type="button"
+                            title={source.dismissCard.title ?? "Togli dall'agenda"}
+                            aria-label={source.dismissCard.title ?? "Togli dall'agenda"}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void dismissAppointment(item.id);
+                            }}
+                            onMouseEnter={() => setHoveredCardId(item.id)}
+                            className={cn(
+                              "absolute z-40 size-[20px] items-center justify-center rounded-full bg-white/90 text-[#6a6a6a] shadow-[0_2px_8px_rgba(0,0,0,0.18)] transition-colors hover:bg-white hover:text-foreground",
+                              hoveredCardId === item.id ? "flex" : "hidden",
+                            )}
+                            style={{ top: Math.max(0, top + 4), right: 8 }}
+                          >
+                            <X className="size-3.5" strokeWidth={2.4} />
+                          </button>
+                        ) : null}
                         {neverAccessedFor(item) ? (
                           <div className="absolute z-30" style={{ top: Math.max(0, top - 5), right: 3 }}>
                             <NeverAccessedNudge
@@ -4767,6 +4883,13 @@ export function AutoscuoleAgendaPage({
         </div>
         </div>
         )}
+        </div>
+        {source?.overlay ? (
+          <div className="pointer-events-none absolute inset-0 z-30 flex items-start justify-center px-4 pt-16">
+            <div className="pointer-events-auto">{source.overlay.node}</div>
+          </div>
+        ) : null}
+        </div>
         </FadeIn>)}
       </div>
 
@@ -6565,6 +6688,10 @@ function getScheduledDurationClass(appointment: AppointmentRow): string {
  * le richieste al consorzio (REG-429). Per tutto il resto vince il colore per
  * durata/patente scelto dal titolare.
  */
+/** Le richieste al consorzio portano lo stato scritto sulla card, come nel prototipo. */
+const consortiumStatusLabel = (status: string, meta: { shortLabel: string }) =>
+  status.toLowerCase().startsWith("consortium_") ? meta.shortLabel : null;
+
 const usesStatusTint = (status: string) => {
   const s = status.toLowerCase();
   return (

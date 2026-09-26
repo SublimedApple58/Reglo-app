@@ -310,6 +310,10 @@ export type AffiliateGuideRequestRow = {
   vehicleName: string | null;
   /** Colonna: valorizzata solo quando il consorzio ha accettato e assegnato un istruttore. */
   instructorId: string | null;
+  /** Nome dell'istruttore assegnato, per la card. Null finché non è accettata. */
+  instructorName: string | null;
+  /** Una richiesta chiusa (rifiutata o annullata) si può togliere dall'agenda. */
+  dismissable: boolean;
   /** La richiesta è stata accettata su uno slot diverso da quello chiesto. */
   moved: boolean;
   /** Controproposta del consorzio ancora da confermare (oggi sola lettura). */
@@ -392,6 +396,9 @@ export async function getAffiliateAgenda(input: z.infer<typeof agendaRangeSchema
         where: {
           consorzioCompanyId,
           schoolId,
+          // Tolte dall'agenda dall'autoscuola: restano nello storico del
+          // consorzio, ma qui non si vedono più.
+          dismissedBySchoolAt: null,
           OR: [
             { requestedStartsAt: { gte: from, lt: to } },
             { movedToStartsAt: { gte: from, lt: to } },
@@ -401,7 +408,14 @@ export async function getAffiliateAgenda(input: z.infer<typeof agendaRangeSchema
         include: {
           student: { select: { name: true } },
           vehicle: { select: { name: true } },
-          appointment: { select: { instructorId: true, startsAt: true, endsAt: true } },
+          appointment: {
+            select: {
+              instructorId: true,
+              startsAt: true,
+              endsAt: true,
+              instructor: { select: { name: true } },
+            },
+          },
         },
       }),
       prisma.consorzioGuideRequest.count({
@@ -474,7 +488,14 @@ export async function getAffiliateAgenda(input: z.infer<typeof agendaRangeSchema
         include: {
           student: { select: { name: true } },
           vehicle: { select: { name: true } },
-          appointment: { select: { instructorId: true, startsAt: true, endsAt: true } },
+          appointment: {
+            select: {
+              instructorId: true,
+              startsAt: true,
+              endsAt: true,
+              instructor: { select: { name: true } },
+            },
+          },
         },
       });
       if (extra) data.focusRequest = toRequestRow(extra, licenseByStudent);
@@ -497,7 +518,12 @@ type GuideRequestWithRelations = {
   studentUserId: string;
   student: { name: string | null };
   vehicle: { name: string } | null;
-  appointment: { instructorId: string | null; startsAt: Date; endsAt: Date | null } | null;
+  appointment: {
+    instructorId: string | null;
+    startsAt: Date;
+    endsAt: Date | null;
+    instructor: { name: string } | null;
+  } | null;
 };
 
 const toRequestRow = (
@@ -524,6 +550,9 @@ const toRequestRow = (
           licenseCategory: licenseByStudent?.get(request.studentUserId) ?? null,
           vehicleName: request.vehicle?.name ?? null,
           instructorId: request.appointment?.instructorId ?? null,
+          instructorName: request.appointment?.instructor?.name ?? null,
+          dismissable:
+            request.status === "rejected" || request.status === "cancelled",
           moved: request.movedToStartsAt !== null,
           proposedStartsAt: request.proposedStartsAt?.toISOString() ?? null,
           proposedDurationMinutes: request.proposedDurationMinutes,
@@ -872,6 +901,40 @@ export async function setAffiliateStudentLicense(input: z.infer<typeof licenseSc
     });
 
     return { success: true as const, message: "Percorso patente aggiornato." };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+/**
+ * "Togli dall'agenda" una richiesta ormai chiusa (rifiutata o annullata).
+ *
+ * Non cancella la riga: la marca `dismissedBySchoolAt`. È una scrittura su un
+ * dato che vive nella company del **consorzio** e che il consorzio continua a
+ * vedere nel suo storico — cancellarla davvero significherebbe far sparire
+ * qualcosa dal tavolo di un altro. Una in attesa o già accettata non si tocca:
+ * lì c'è ancora qualcosa da fare o una guida vera.
+ */
+export async function dismissAffiliateGuideRequest(requestId: string) {
+  try {
+    const { consorzioCompanyId, schoolId } = await requireAffiliateOwner();
+    const id = z.string().uuid().parse(requestId);
+
+    const request = await prisma.consorzioGuideRequest.findFirst({
+      where: { id, consorzioCompanyId, schoolId },
+      select: { id: true, status: true },
+    });
+    if (!request) throw new Error("Richiesta non trovata.");
+    if (request.status !== "rejected" && request.status !== "cancelled") {
+      throw new Error("Si possono togliere solo le richieste già chiuse.");
+    }
+
+    await prisma.consorzioGuideRequest.update({
+      where: { id: request.id },
+      data: { dismissedBySchoolAt: new Date() },
+    });
+
+    return { success: true as const };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }

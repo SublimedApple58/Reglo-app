@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import {
   cancelAffiliateGuideRequest,
   createAffiliateStudent,
+  dismissAffiliateGuideRequest,
   getAffiliateAgenda,
   listAffiliateStudents,
   respondToAffiliateProposedSlot,
@@ -43,16 +44,11 @@ import {
 } from "@/lib/actions/affiliate.actions";
 import {
   AutoscuoleAgendaPage,
+  StudentSearchSelect,
   type AgendaBootstrapPayload,
   type AgendaSource,
 } from "@/components/pages/Autoscuole/AutoscuoleAgendaPage";
-import {
-  LockedBackdrop,
-  LockedCard,
-  LOCKED_SECTIONS,
-  useDemoAgendaSource,
-} from "./LockedSection";
-import { SegmentedPill } from "@/components/ui/segmented-pill";
+import { LockedCard, LOCKED_SECTIONS, useDemoAgendaSource } from "./LockedSection";
 
 const DURATIONS = [30, 45, 60, 90, 120];
 
@@ -102,14 +98,23 @@ function toBootstrap(data: AffiliateAgendaData, from: Date, to: Date): AgendaBoo
       student: { id: `req:${request.id}`, firstName, lastName },
       instructor: { id: columnId, name: nameOf(columnId) },
       vehicle: request.vehicleName ? { id: `veh:${request.id}`, name: request.vehicleName } : null,
-      notes: request.proposedStartsAt
-        ? `Il consorzio propone ${new Date(request.proposedStartsAt).toLocaleString("it-IT", {
-            day: "numeric",
-            month: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-          })}`
-        : null,
+      // Note della card: tutto quello che la richiesta sa e la card non ha già
+      // in una riga sua (istruttore, mezzo, controproposta).
+      notes:
+        [
+          request.proposedStartsAt
+            ? `Il consorzio propone ${new Date(request.proposedStartsAt).toLocaleString("it-IT", {
+                day: "numeric",
+                month: "short",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}`
+            : null,
+          request.instructorName ? `Istruttore · ${request.instructorName}` : null,
+          request.vehicleName ? `Mezzo · ${request.vehicleName}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n") || null,
     };
   });
 
@@ -170,6 +175,7 @@ export function AffiliateAgendaPage({
   scope?: Scope;
   onScope?: (value: Scope) => void;
 } = {}) {
+  const toast = useFeedbackToast();
   const [scopeState, setScopeState] = React.useState<Scope>("consorzio");
   const scope = scopeProp ?? scopeState;
   const setScope = onScope ?? setScopeState;
@@ -187,6 +193,14 @@ export function AffiliateAgendaPage({
   const deepLinkId = searchParams?.get("guideRequestId") ?? null;
   const handledRequestRef = React.useRef<string | null>(null);
 
+  /**
+   * Richieste viste finora, per id. **Non** si sostituisce a ogni fetch:
+   * l'agenda ne fa due (la settimana mostrata e il prefetch della successiva),
+   * e la seconda azzerava la lista mentre a schermo c'erano ancora le card
+   * della prima — la X di "togli dall'agenda" non compariva mai.
+   */
+  const requestsRef = React.useRef<Map<string, AffiliateGuideRequestRow>>(new Map());
+
   const fetchBootstrap = React.useCallback(
     async (from: Date, to: Date) => {
       const res = await getAffiliateAgenda({
@@ -196,6 +210,15 @@ export function AffiliateAgendaPage({
       });
       if (!res.success) throw new Error(res.message);
       setData(res.data);
+      // Subito, non in un effetto: l'agenda disegna le card nel render che
+      // segue questa promise, e `dismissCard.can` legge da qui. Con un
+      // `useEffect` la X non compariva al primo giro.
+      // Subito, non in un effetto: l'agenda disegna le card nel render che
+      // segue questa promise, e `dismissCard.can` legge da qui.
+      for (const request of res.data.requests) requestsRef.current.set(request.id, request);
+      if (res.data.focusRequest) {
+        requestsRef.current.set(res.data.focusRequest.id, res.data.focusRequest);
+      }
       return toBootstrap(res.data, from, to);
     },
     [deepLinkId],
@@ -204,24 +227,33 @@ export function AffiliateAgendaPage({
   // Click-through dalla campanella: porta al dialogo della controproposta.
   React.useEffect(() => {
     if (!deepLinkId || !data || handledRequestRef.current === deepLinkId) return;
-    const target =
-      data.requests.find((request) => request.id === deepLinkId) ?? data.focusRequest;
+    const target = requestsRef.current.get(deepLinkId) ?? data.focusRequest;
     if (!target) return;
     handledRequestRef.current = deepLinkId;
     if (target.proposedStartsAt) setProposal(target);
   }, [deepLinkId, data]);
 
-  const requestsRef = React.useRef<AffiliateGuideRequestRow[]>([]);
-  React.useEffect(() => {
-    requestsRef.current = data?.requests ?? [];
-  }, [data]);
 
   const source: AgendaSource = React.useMemo(
     () => ({
       fetchBootstrap,
       readOnly: true,
+      dismissCard: {
+        title: "Togli dall'agenda",
+        can: (id) => requestsRef.current.get(id)?.dismissable ?? false,
+        run: async (id) => {
+          const res = await dismissAffiliateGuideRequest(id);
+          if (!res.success) {
+            // Niente rosso: è un gesto reversibile, non un guasto.
+            toast.info({ description: res.message ?? "Non è stato possibile toglierla." });
+            return false;
+          }
+          requestsRef.current.delete(id);
+          return true;
+        },
+      },
       onCardClick: (appointmentId) => {
-        const request = requestsRef.current.find((r) => r.id === appointmentId);
+        const request = requestsRef.current.get(appointmentId);
         if (!request) return; // slot occupato: non c'è niente da aprire
         if (request.proposedStartsAt) {
           setProposal(request);
@@ -256,7 +288,7 @@ export function AffiliateAgendaPage({
         ],
       },
     }),
-    [fetchBootstrap],
+    [fetchBootstrap, toast],
   );
 
   const scopeControl = React.useMemo(
@@ -265,12 +297,12 @@ export function AffiliateAgendaPage({
   );
 
   // Vista ridotta, scope Autoscuola: l'agenda propria è la funzione non
-  // comprata. Dietro la card c'è un'agenda piena (finta) e sfocata, e sopra
-  // resta il segmented — altrimenti da qui non si tornerebbe più indietro.
+  // comprata. Sfocata è **solo la griglia**: la toolbar — segmented compreso —
+  // resta nitida e usabile, altrimenti da qui non si tornerebbe più indietro.
   // Con Reglo attivo (Fase 8) questo ramo non si raggiunge: quella vista la
   // monta il chiamante.
   if (scope === "autoscuola" && !onScope) {
-    return <AutoscuolaScopeLocked scope={scope} onScope={setScope} />;
+    return <AutoscuolaScopeLocked scopeControl={scopeControl} />;
   }
 
   return (
@@ -382,7 +414,6 @@ function GuideRequestDialog({
 
   const [students, setStudents] = React.useState<AffiliateStudent[]>([]);
   const [studentId, setStudentId] = React.useState<string | null>(null);
-  const [studentQuery, setStudentQuery] = React.useState("");
   const [creatingStudent, setCreatingStudent] = React.useState(false);
   const [newStudent, setNewStudent] = React.useState({ firstName: "", lastName: "", phone: "" });
   const [savingStudent, setSavingStudent] = React.useState(false);
@@ -395,17 +426,19 @@ function GuideRequestDialog({
     void loadStudents();
   }, [loadStudents]);
 
-  const filtered = React.useMemo(() => {
-    const term = studentQuery.trim().toLowerCase();
-    if (!term) return students.slice(0, 6);
-    return students
-      .filter((student) =>
-        `${student.firstName} ${student.lastName}`.toLowerCase().includes(term),
-      )
-      .slice(0, 6);
-  }, [students, studentQuery]);
-
-  const selected = students.find((student) => student.id === studentId) ?? null;
+  /** Forma attesa dal selettore dell'agenda (che è quello vero). */
+  const pickerStudents = React.useMemo(
+    () =>
+      students.map((student) => ({
+        id: student.id,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        email: student.email,
+        phone: student.phone,
+        licenseCategory: student.licenseCategory,
+      })),
+    [students],
+  );
 
   const startsAt = React.useMemo(() => {
     const [hours, minutes] = time.split(":").map((value) => Number(value));
@@ -437,7 +470,6 @@ function GuideRequestDialog({
     setNewStudent({ firstName: "", lastName: "", phone: "" });
     await loadStudents();
     setStudentId(res.data.userId);
-    setStudentQuery(`${newStudent.firstName} ${newStudent.lastName}`.trim());
   };
 
   const send = async () => {
@@ -499,107 +531,76 @@ function GuideRequestDialog({
       </div>
 
       <p className="mb-1.5 text-[12px] font-semibold text-[#555555]">Allievo</p>
-      {selected ? (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-[12px] border border-[#e2e2e2] px-3.5 py-2.5">
-          <span className="truncate text-[14px] font-semibold text-foreground">
-            {selected.firstName} {selected.lastName}
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              setStudentId(null);
-              setStudentQuery("");
-            }}
-            className="shrink-0 cursor-pointer text-[13px] font-semibold text-[#6a6a6a] underline"
-          >
-            Cambia
-          </button>
+      {creatingStudent ? (
+        // "Nuovo allievo" dal flyout: le tre cose che servono, niente di più
+        // (stesso trattamento degli allievi creati dal consorzio, REG-464).
+        <div className="mb-4 space-y-2 rounded-[12px] border border-[#e2e2e2] bg-[#fafafa] p-3">
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              autoFocus
+              placeholder="Nome"
+              value={newStudent.firstName}
+              onChange={(event) =>
+                setNewStudent((prev) => ({ ...prev, firstName: event.target.value }))
+              }
+            />
+            <Input
+              placeholder="Cognome"
+              value={newStudent.lastName}
+              onChange={(event) =>
+                setNewStudent((prev) => ({ ...prev, lastName: event.target.value }))
+              }
+            />
+          </div>
+          <Input
+            placeholder="Telefono"
+            value={newStudent.phone}
+            onChange={(event) => setNewStudent((prev) => ({ ...prev, phone: event.target.value }))}
+          />
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setCreatingStudent(false)}
+              className="cursor-pointer text-[13px] font-semibold text-[#6a6a6a] underline"
+            >
+              Annulla
+            </button>
+            <button
+              type="button"
+              disabled={
+                savingStudent ||
+                !newStudent.firstName.trim() ||
+                !newStudent.lastName.trim() ||
+                newStudent.phone.trim().length < 5
+              }
+              onClick={() => void submitStudent()}
+              className="cursor-pointer rounded-full bg-[#222222] px-4 py-2 text-[13px] font-bold text-white disabled:opacity-40"
+            >
+              {savingStudent ? <LoadingDots /> : "Aggiungi"}
+            </button>
+          </div>
         </div>
       ) : (
         <div className="mb-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={studentQuery}
-              onChange={(event) => setStudentQuery(event.target.value)}
-              placeholder="Cerca allievo…"
-              className="pl-9"
-            />
-          </div>
-          <div className="mt-1.5 overflow-hidden rounded-[12px] border border-[#ececec]">
-            {filtered.map((student) => (
-              <button
-                key={student.id}
-                type="button"
-                onClick={() => setStudentId(student.id)}
-                className="flex w-full cursor-pointer items-center justify-between gap-3 border-b border-[#f4f4f4] px-3.5 py-2.5 text-left text-[13.5px] font-medium text-foreground transition-colors last:border-b-0 hover:bg-[#f7f7f7]"
-              >
-                <span className="truncate">
-                  {student.firstName} {student.lastName}
-                </span>
-                <span className="shrink-0 text-[12px] text-[#929292]">{student.phone ?? ""}</span>
-              </button>
-            ))}
-            {!creatingStudent ? (
+          <StudentSearchSelect
+            students={pickerStudents}
+            value={studentId ?? ""}
+            onChange={(id) => setStudentId(id)}
+            placeholder="Cerca allievo…"
+            footer={(close) => (
               <button
                 type="button"
-                onClick={() => setCreatingStudent(true)}
-                className="flex w-full cursor-pointer items-center gap-2 px-3.5 py-2.5 text-left text-[13.5px] font-semibold text-foreground transition-colors hover:bg-[#f7f7f7]"
+                onClick={() => {
+                  close();
+                  setCreatingStudent(true);
+                }}
+                className="flex w-full cursor-pointer items-center gap-2 rounded-[9px] px-3 py-2 text-left text-sm font-semibold text-foreground transition-colors hover:bg-[#f7f7f7]"
               >
                 <Plus className="size-4" />
                 Nuovo allievo
               </button>
-            ) : (
-              <div className="space-y-2 bg-[#fafafa] p-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <Input
-                    autoFocus
-                    placeholder="Nome"
-                    value={newStudent.firstName}
-                    onChange={(event) =>
-                      setNewStudent((prev) => ({ ...prev, firstName: event.target.value }))
-                    }
-                  />
-                  <Input
-                    placeholder="Cognome"
-                    value={newStudent.lastName}
-                    onChange={(event) =>
-                      setNewStudent((prev) => ({ ...prev, lastName: event.target.value }))
-                    }
-                  />
-                </div>
-                <Input
-                  placeholder="Telefono"
-                  value={newStudent.phone}
-                  onChange={(event) =>
-                    setNewStudent((prev) => ({ ...prev, phone: event.target.value }))
-                  }
-                />
-                <div className="flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setCreatingStudent(false)}
-                    className="cursor-pointer text-[13px] font-semibold text-[#6a6a6a] underline"
-                  >
-                    Annulla
-                  </button>
-                  <button
-                    type="button"
-                    disabled={
-                      savingStudent ||
-                      !newStudent.firstName.trim() ||
-                      !newStudent.lastName.trim() ||
-                      newStudent.phone.trim().length < 5
-                    }
-                    onClick={() => void submitStudent()}
-                    className="cursor-pointer rounded-full bg-[#222222] px-4 py-2 text-[13px] font-bold text-white disabled:opacity-40"
-                  >
-                    {savingStudent ? <LoadingDots /> : "Aggiungi"}
-                  </button>
-                </div>
-              </div>
             )}
-          </div>
+          />
         </div>
       )}
 
@@ -823,30 +824,24 @@ function CancelRequestDialog({
 
 /* ── Scope "Autoscuola" nella vista ridotta ─────────────────────────── */
 
+/**
+ * L'agenda propria non è comprata: si vede piena (dati finti) ma **sfocata**,
+ * con il cartello sopra. A restare nitida è la toolbar, segmented compreso —
+ * uno solo, quello vero: un secondo switch sopra il velo sarebbe un doppione
+ * e confonderebbe.
+ */
 function AutoscuolaScopeLocked({
-  scope,
-  onScope,
+  scopeControl,
 }: {
-  scope: Scope;
-  onScope: (value: Scope) => void;
+  scopeControl: { value: Scope; onChange: (value: Scope) => void };
 }) {
-  const demoSource = useDemoAgendaSource();
-  return (
-    <LockedBackdrop
-      backdrop={<AutoscuoleAgendaPage tabs={null} source={demoSource} />}
-      header={
-        <SegmentedPill
-          value={scope}
-          onChange={onScope}
-          className="bg-white shadow-[0_10px_30px_rgba(10,20,30,0.12)]"
-          options={[
-            { value: "consorzio", label: "Consorzio" },
-            { value: "autoscuola", label: "Autoscuola" },
-          ]}
-        />
-      }
-    >
-      <LockedCard {...LOCKED_SECTIONS.agenda} />
-    </LockedBackdrop>
+  const demo = useDemoAgendaSource();
+  const source: AgendaSource = React.useMemo(
+    () => ({
+      ...demo,
+      overlay: { node: <LockedCard {...LOCKED_SECTIONS.agenda} />, blur: true },
+    }),
+    [demo],
   );
+  return <AutoscuoleAgendaPage tabs={null} source={source} consorzioScope={scopeControl} />;
 }
