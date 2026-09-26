@@ -2462,14 +2462,16 @@ export function AutoscuoleStudentsPage({
                 </div>
               )}
             </div>
-            <div>
-              <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Case attiva</p>
-              <p className="text-sm font-medium text-foreground">
-                {register.activeCase
-                  ? `${register.activeCase.status}${register.activeCase.category ? ` · ${register.activeCase.category}` : ""}`
-                  : "Nessuna"}
-              </p>
-            </div>
+            {!affiliate && (
+              <div>
+                <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Case attiva</p>
+                <p className="text-sm font-medium text-foreground">
+                  {register.activeCase
+                    ? `${register.activeCase.status}${register.activeCase.category ? ` · ${register.activeCase.category}` : ""}`
+                    : "Nessuna"}
+                </p>
+              </div>
+            )}
             <div>
               <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Percorso patente</p>
               <div className="flex items-center gap-2">
@@ -4154,11 +4156,16 @@ export function AutoscuoleStudentsPage({
                   className="hidden"
                   onChange={handleDrawerPhotoChange}
                 />
+                {/* Foto e firma sono del servizio attivo: nella vista ridotta
+                    l'avatar resta, il caricamento no. */}
                 <button
                   type="button"
-                  onClick={() => drawerPhotoInputRef.current?.click()}
-                  className="block cursor-pointer"
-                  title="Modifica foto profilo"
+                  onClick={() => {
+                    if (affiliate) return;
+                    drawerPhotoInputRef.current?.click();
+                  }}
+                  className={affiliate ? "block cursor-default" : "block cursor-pointer"}
+                  title={affiliate ? undefined : "Modifica foto profilo"}
                 >
                   <StudentAvatar
                     student={panelHeaderStudent}
@@ -4168,6 +4175,7 @@ export function AutoscuoleStudentsPage({
                   />
                 </button>
                 {/* Pill "Modifica" (stile area personale) + download foto accanto */}
+                {!affiliate && (
                 <div className="absolute -bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1.5">
                   <button
                     type="button"
@@ -4218,6 +4226,7 @@ export function AutoscuoleStudentsPage({
                     </DropdownMenu>
                   )}
                 </div>
+                )}
               </div>
             )}
             <div className="mt-4">
