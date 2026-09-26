@@ -367,6 +367,39 @@ non c'è più niente da gestire.
 > `schoolId`. Il flag `limits.affiliateOf` è una cache di lettura: da solo non
 > autorizza niente.
 
+### La consorziata che Reglo ce l'ha (Fase 8)
+
+Non cambia niente di quello che già fa: stessa agenda, stessi allievi, stesse
+impostazioni. In più, accanto alla navigazione data dell'agenda, compare il
+segmented **`Consorzio | Autoscuola`** del prototipo. "Autoscuola" è la sua
+agenda vera (`AutoscuoleAgendaPage`, prop `consorzioScope`), "Consorzio" è la
+vista delle richieste (`AffiliateAgendaPage` con scope controllato da fuori):
+sono due componenti diversi, quindi lo stato dello scope vive in
+`AutoscuoleTabsPage`. Il segmented lo vede solo il **titolare**.
+
+Le action delle richieste funzionano identiche nei due casi:
+`requireAffiliateSchool` **non** richiede il servizio attivo — è voluto, ed è
+quello che rende la Fase 8 quasi gratis.
+
+### La risposta torna all'autoscuola (Fase 9)
+
+Accettazione, rifiuto e controproposta del consorzio finiscono nella
+**campanella della scuola** (`notifyAffiliateOfGuideResponse`, destinatario
+`ConsorzioSchool.linkedCompanyId`; scuola non collegata = no-op, non errore).
+Sono gli stessi `kind` della campanella del consorzio — le righe sono
+per-company — più `consortium_guide_proposed`, cliccabile: porta all'agenda
+sulla richiesta giusta, spostandosi di settimana se serve
+(`getAffiliateAgenda({ focusRequestId })`).
+
+Sulla controproposta l'autoscuola risponde con
+`respondToAffiliateProposedSlot`:
+
+- **accetta** → la richiesta si sposta sull'orario proposto e **resta
+  `pending`**. L'appuntamento lo crea il consorzio: la proposta non contiene un
+  istruttore, e sceglierlo qui vorrebbe dire indovinare. Il consorzio se la
+  ritrova in campanella sullo slot che ha proposto lui;
+- **rifiuta** → i campi `proposed*` si azzerano e resta la richiesta originale.
+
 Le decisioni di dettaglio prese senza prototipo stanno in
 [reg-429-decisioni-notturne.md](reg-429-decisioni-notturne.md).
 
