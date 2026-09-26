@@ -1,33 +1,29 @@
 "use client";
 
 /**
- * Agenda in **scope Consorzio** di un'autoscuola consorziata senza Reglo
- * (REG-429, Fase 7).
+ * Agenda in **scope Consorzio** di un'autoscuola consorziata (REG-429, Fase 7).
  *
- * È l'unica sezione operativa della vista ridotta: da qui la scuola chiede una
- * guida al consorzio e segue cosa ne è stato. La griglia è quella dell'agenda
- * vera (stessa gutter oraria, stesse colonne giorno × istruttore, stessi
- * 1,2 px al minuto), ma i blocchi sono solo due cose:
+ * Non è un'agenda diversa: è **l'agenda**. Griglia, colonne per istruttore,
+ * intestazioni giorno, badge di oggi, altezza delle righe, card, colori,
+ * hover, toolbar, vista Settimana/Giorno — tutto arriva da
+ * `AutoscuoleAgendaPage`, che qui riceve solo una `source`: da dove prendere i
+ * dati e cosa si può fare.
  *
- * - le **proprie richieste**, nei quattro stati (in attesa, confermata,
- *   rifiutata, annullata);
- * - gli **slot già occupati** dal consorzio — grigi, senza nome e senza tipo.
- *   Servono a non chiedere uno slot impossibile; chi ci sia dentro è affare
- *   del consorzio e delle altre consorziate (`getAffiliateAgenda` seleziona
- *   tre campi proprio per questo).
+ * Il primo giro aveva una griglia riscritta a mano: stessi contenuti, ma
+ * sembrava un'altra applicazione (etichette troncate, blocchi di un'altra
+ * taglia, toolbar diversa). Bocciata da Tiziano, e giustamente.
  *
- * Lo scope "Autoscuola" — l'agenda propria — è la funzione non comprata: lì
- * c'è la card del lucchetto.
+ * Cosa finisce sulla griglia:
+ * - le **richieste della scuola** nei quattro stati, come card normali con lo
+ *   stato nella tinta (`consortium_*` in `getStatusMeta`);
+ * - gli **slot occupati** dal consorzio: ci sono, ma senza nome e senza tipo —
+ *   `getAffiliateAgenda` legge tre campi dell'appuntamento e nient'altro.
  */
 
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, Plus, Search, X } from "lucide-react";
-import * as PopoverPrimitive from "@radix-ui/react-popover";
+import { Ban, CalendarPlus, Car, GraduationCap, Plus, Search, Sun, Users, X } from "lucide-react";
 
-import { PageWrapper } from "@/components/Layout/PageWrapper";
-import { PageHeader } from "@/components/ui/page-header";
-import { SegmentedPill } from "@/components/ui/segmented-pill";
 import { Input } from "@/components/ui/input";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
@@ -45,342 +41,258 @@ import {
   type AffiliateGuideRequestRow,
   type AffiliateStudent,
 } from "@/lib/actions/affiliate.actions";
-import { LockedSection, LOCKED_SECTIONS } from "./LockedSection";
-import { LOCKED_MENU_ITEMS } from "./locked-features";
+import {
+  AutoscuoleAgendaPage,
+  type AgendaBootstrapPayload,
+  type AgendaSource,
+} from "@/components/pages/Autoscuole/AutoscuoleAgendaPage";
+import {
+  LockedBackdrop,
+  LockedCard,
+  LOCKED_SECTIONS,
+  useDemoAgendaSource,
+} from "./LockedSection";
+import { SegmentedPill } from "@/components/ui/segmented-pill";
 
-/* ── Griglia: stesse costanti dell'agenda vera ───────────────────────── */
-
-const DAY_START_HOUR = 7;
-const DAY_END_HOUR = 21;
-const PIXELS_PER_MINUTE = 1.2;
-const TOTAL_MINUTES = (DAY_END_HOUR - DAY_START_HOUR) * 60;
-const GRID_HEIGHT = TOTAL_MINUTES * PIXELS_PER_MINUTE;
 const DURATIONS = [30, 45, 60, 90, 120];
 
 const pad = (n: number) => String(n).padStart(2, "0");
-const addDays = (date: Date, days: number) => {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-};
-const startOfWeek = (date: Date) => {
-  const next = new Date(date);
-  next.setHours(0, 0, 0, 0);
-  // Lunedì come primo giorno, come nell'agenda vera.
-  next.setDate(next.getDate() - ((next.getDay() + 6) % 7));
-  return next;
-};
 const formatYmd = (date: Date) =>
   `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-const shortDate = (date: Date) =>
-  date.toLocaleDateString("it-IT", { day: "numeric", month: "short" });
 
-/** Minuti dall'inizio della griglia; null se lo slot cade fuori dalla fascia. */
-const offsetMinutes = (iso: string) => {
-  const date = new Date(iso);
-  return date.getHours() * 60 + date.getMinutes() - DAY_START_HOUR * 60;
+const splitName = (name: string) => {
+  const clean = (name ?? "").trim().replace(/\s+/g, " ");
+  if (!clean) return { firstName: "—", lastName: "" };
+  const [first, ...rest] = clean.split(" ");
+  return { firstName: first, lastName: rest.join(" ") };
 };
 
-/* ── Stati delle richieste, con i colori del prototipo ───────────────── */
-
-const REQUEST_STYLES: Record<
-  AffiliateGuideRequestRow["status"],
-  { label: string; className: string; nameClassName: string }
-> = {
-  pending: {
-    label: "In attesa",
-    className: "border-[1.5px] border-dashed border-[#e0b93a] bg-[#fdf3d4]",
-    nameClassName: "text-[#8a6d0b]",
-  },
-  accepted: {
-    label: "Confermata",
-    className: "border border-[#bde5cb] bg-[#e7f6ec]",
-    nameClassName: "text-[#177e45]",
-  },
-  rejected: {
-    label: "Rifiutata",
-    className: "border border-[#f3c6c6] bg-[#fdeaea]",
-    nameClassName: "text-[#b3261e]",
-  },
-  cancelled: {
-    label: "Annullata",
-    className: "border border-[#e2e2e2] bg-[#f1f1f1]",
-    nameClassName: "text-[#8a8a8a] line-through",
-  },
+/** Stato della richiesta → stato dell'appuntamento, che l'agenda sa già tingere. */
+const STATUS_BY_REQUEST: Record<AffiliateGuideRequestRow["status"], string> = {
+  pending: "consortium_pending",
+  accepted: "scheduled",
+  rejected: "consortium_rejected",
+  cancelled: "consortium_cancelled",
 };
-
-/* ── Menu "+" — solo Richieste, il resto col lucchetto ───────────────── */
-
-function NewMenu({ onRichiesta }: { onRichiesta: () => void }) {
-  const [open, setOpen] = React.useState(false);
-  return (
-    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
-      <PopoverPrimitive.Trigger asChild>
-        <button
-          type="button"
-          title="Nuovo"
-          className="flex size-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#222222] text-white transition-opacity hover:opacity-90"
-        >
-          <Plus className="size-[18px]" strokeWidth={2.2} />
-        </button>
-      </PopoverPrimitive.Trigger>
-      <PopoverPrimitive.Portal>
-        <PopoverPrimitive.Content
-          align="end"
-          sideOffset={10}
-          className="z-[60] w-[260px] rounded-[18px] border border-[#ececec] bg-white p-2 shadow-dropdown outline-none"
-        >
-          <button
-            type="button"
-            onClick={() => {
-              setOpen(false);
-              onRichiesta();
-            }}
-            className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[15px] font-medium text-foreground outline-none transition-colors hover:bg-[#f4f4f4]"
-          >
-            <CalendarPlusIcon />
-            Richieste
-          </button>
-          <div className="my-1.5 h-px bg-[#f0f0f0]" />
-          {LOCKED_MENU_ITEMS.map((item, index) => (
-            <React.Fragment key={item.label}>
-              {index === LOCKED_MENU_ITEMS.length - 1 && (
-                <div className="my-1.5 h-px bg-[#f0f0f0]" />
-              )}
-              <div
-                className="flex cursor-default items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium text-[#9a9a9a]"
-                title="Funzione extra di Reglo"
-              >
-                {item.icon}
-                {item.label}
-                <span className="ml-auto flex shrink-0 items-center">
-                  <MiniPadlock />
-                </span>
-              </div>
-            </React.Fragment>
-          ))}
-        </PopoverPrimitive.Content>
-      </PopoverPrimitive.Portal>
-    </PopoverPrimitive.Root>
-  );
-}
-
-function MiniPadlock() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#bdbdbd" strokeWidth={2.1} strokeLinecap="round" aria-hidden>
-      <rect x="4" y="11" width="16" height="10" rx="2" />
-      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-    </svg>
-  );
-}
-
-function TruckIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="#6a6a6a"
-      strokeWidth={1.7}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-      className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2"
-    >
-      <path d="M3 7h10v9H3zM13 10h4l3 3v3h-7z" />
-      <circle cx="7" cy="18" r="1.6" />
-      <circle cx="17" cy="18" r="1.6" />
-    </svg>
-  );
-}
-
-function CalendarPlusIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#222222" strokeWidth={1.8} strokeLinecap="round" aria-hidden>
-      <rect x="3" y="5" width="18" height="16" rx="3" />
-      <path d="M8 3v4M16 3v4M3 10h18M12 14v4M10 16h4" />
-    </svg>
-  );
-}
-
-/* ── Pagina ──────────────────────────────────────────────────────────── */
-
-type Scope = "consorzio" | "autoscuola";
-type ViewMode = "week" | "day";
 
 /**
- * `scope`/`onScope` arrivano da fuori quando la pagina è una delle due viste di
- * un'autoscuola che Reglo **ce l'ha** (Fase 8): lì lo scope va condiviso con
- * l'agenda vera, che è un componente diverso. Senza props la pagina se lo
- * gestisce da sé (vista ridotta).
+ * Dati della consorziata → payload di bootstrap dell'agenda.
+ *
+ * Le richieste ancora in attesa non hanno un istruttore (lo sceglie il
+ * consorzio accettando): finiscono nella prima colonna, che è dove la scuola
+ * le va a cercare. Inventare un istruttore sarebbe peggio.
  */
+function toBootstrap(data: AffiliateAgendaData, from: Date, to: Date): AgendaBootstrapPayload {
+  const instructors = data.instructors.length
+    ? data.instructors
+    : [{ id: "__consorzio__", name: "Consorzio" }];
+  const fallbackColumn = instructors[0].id;
+  const nameOf = (id: string) => instructors.find((i) => i.id === id)?.name ?? "";
+
+  const requests = data.requests.map((request) => {
+    const { firstName, lastName } = splitName(request.studentName);
+    const startsAt = new Date(request.startsAt);
+    const columnId = request.instructorId ?? fallbackColumn;
+    return {
+      id: request.id,
+      type: "guida",
+      status: STATUS_BY_REQUEST[request.status],
+      startsAt: startsAt.toISOString(),
+      endsAt: new Date(startsAt.getTime() + request.durationMinutes * 60000).toISOString(),
+      student: { id: `req:${request.id}`, firstName, lastName },
+      instructor: { id: columnId, name: nameOf(columnId) },
+      vehicle: request.vehicleName ? { id: `veh:${request.id}`, name: request.vehicleName } : null,
+      notes: request.proposedStartsAt
+        ? `Il consorzio propone ${new Date(request.proposedStartsAt).toLocaleString("it-IT", {
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          })}`
+        : null,
+    };
+  });
+
+  const busy = data.busy.map((slot, index) => {
+    const columnId = slot.instructorId ?? fallbackColumn;
+    return {
+      id: `busy:${index}`,
+      type: "guida",
+      status: "consortium_busy",
+      startsAt: slot.startsAt,
+      endsAt: slot.endsAt,
+      // Nessun nome: è il punto. La card mostra "Occupato" e basta.
+      student: { id: `busy:${index}`, firstName: "Occupato", lastName: "" },
+      instructor: { id: columnId, name: nameOf(columnId) },
+      vehicle: null,
+    };
+  });
+
+  return {
+    appointments: [...requests, ...busy],
+    // La card mostra "Patente X" leggendo da qui (`studentLicenseById`), non
+    // dall'appuntamento: stessa strada dell'agenda vera.
+    students: data.requests.map((request) => {
+      const { firstName, lastName } = splitName(request.studentName);
+      return {
+        id: `req:${request.id}`,
+        firstName,
+        lastName,
+        licenseCategory: request.licenseCategory,
+      };
+    }),
+    instructors,
+    vehicles: data.vehicles,
+    vehiclesEnabled: false,
+    groupLessonsEnabled: false,
+    holidays: [],
+    instructorBlocks: [],
+    meta: {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      generatedAt: new Date().toISOString(),
+      count: requests.length + busy.length,
+    },
+  };
+}
+
+type Scope = "consorzio" | "autoscuola";
+
 export function AffiliateAgendaPage({
   scope: scopeProp,
   onScope,
 }: {
+  /**
+   * Presenti quando la pagina è una delle due viste di un'autoscuola che Reglo
+   * **ce l'ha** (Fase 8): lì lo scope è condiviso con l'agenda vera, che è un
+   * componente diverso. Senza props se lo gestisce da sé (vista ridotta).
+   */
   scope?: Scope;
   onScope?: (value: Scope) => void;
 } = {}) {
-  const toast = useFeedbackToast();
   const [scopeState, setScopeState] = React.useState<Scope>("consorzio");
   const scope = scopeProp ?? scopeState;
   const setScope = onScope ?? setScopeState;
-  const [viewMode, setViewMode] = React.useState<ViewMode>("week");
-  const [anchor, setAnchor] = React.useState(() => startOfWeek(new Date()));
-  const [dayFocus, setDayFocus] = React.useState(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return today;
-  });
+
   const [data, setData] = React.useState<AffiliateAgendaData | null>(null);
-  const [loading, setLoading] = React.useState(true);
+  const [reloadKey, setReloadKey] = React.useState(0);
+  const reload = React.useCallback(() => setReloadKey((n) => n + 1), []);
 
-  const days = React.useMemo(
-    () =>
-      viewMode === "day"
-        ? [dayFocus]
-        : Array.from({ length: 7 }, (_, index) => addDays(anchor, index)),
-    [viewMode, anchor, dayFocus],
-  );
-
-  const range = React.useMemo(() => {
-    const from = new Date(days[0]);
-    from.setHours(0, 0, 0, 0);
-    const to = addDays(new Date(days[days.length - 1]), 1);
-    to.setHours(0, 0, 0, 0);
-    return { from: from.toISOString(), to: to.toISOString() };
-  }, [days]);
+  const [requestOpen, setRequestOpen] = React.useState(false);
+  const [prefill, setPrefill] = React.useState<{ ymd: string; time: string } | null>(null);
+  const [proposal, setProposal] = React.useState<AffiliateGuideRequestRow | null>(null);
+  const [cancelTarget, setCancelTarget] = React.useState<AffiliateGuideRequestRow | null>(null);
 
   const searchParams = useSearchParams();
   const deepLinkId = searchParams?.get("guideRequestId") ?? null;
-
-  const load = React.useCallback(async () => {
-    const res = await getAffiliateAgenda({
-      ...range,
-      ...(deepLinkId ? { focusRequestId: deepLinkId } : {}),
-    });
-    if (res.success) setData(res.data);
-    else toast.error({ description: res.message });
-    setLoading(false);
-    // toast è stabile (useMemo su un hook), tenerlo qui rifarebbe il fetch
-    // a ogni render del provider
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range, deepLinkId]);
-
-  React.useEffect(() => {
-    void load();
-  }, [load]);
-
-  /* ── Dialogo "Richiesta di guida" ── */
-  const [dialogOpen, setDialogOpen] = React.useState(false);
-  /* ── Controproposta del consorzio da confermare (Fase 9) ── */
-  const [proposal, setProposal] = React.useState<AffiliateGuideRequestRow | null>(null);
-
-  // Click-through dalla campanella: `?guideRequestId=…` porta l'agenda sulla
-  // settimana della richiesta e, se c'è una controproposta, apre il dialogo.
-  // `handledRequestRef` evita che si riapra a ogni ricarica dopo la chiusura.
   const handledRequestRef = React.useRef<string | null>(null);
+
+  const fetchBootstrap = React.useCallback(
+    async (from: Date, to: Date) => {
+      const res = await getAffiliateAgenda({
+        from: from.toISOString(),
+        to: to.toISOString(),
+        ...(deepLinkId ? { focusRequestId: deepLinkId } : {}),
+      });
+      if (!res.success) throw new Error(res.message);
+      setData(res.data);
+      return toBootstrap(res.data, from, to);
+    },
+    [deepLinkId],
+  );
+
+  // Click-through dalla campanella: porta al dialogo della controproposta.
   React.useEffect(() => {
     if (!deepLinkId || !data || handledRequestRef.current === deepLinkId) return;
     const target =
       data.requests.find((request) => request.id === deepLinkId) ?? data.focusRequest;
     if (!target) return;
     handledRequestRef.current = deepLinkId;
-    // Fuori settimana: ci si sposta sopra, così il blocco si vede davvero.
-    if (!data.requests.some((request) => request.id === deepLinkId)) {
-      setAnchor(startOfWeek(new Date(target.startsAt)));
-      setDayFocus(new Date(new Date(target.startsAt).setHours(0, 0, 0, 0)));
-    }
     if (target.proposedStartsAt) setProposal(target);
   }, [deepLinkId, data]);
 
-  const todayCount = React.useMemo(() => {
-    if (!data) return 0;
-    const today = formatYmd(new Date());
-    return data.requests.filter(
-      (request) =>
-        request.status === "accepted" && formatYmd(new Date(request.startsAt)) === today,
-    ).length;
+  const requestsRef = React.useRef<AffiliateGuideRequestRow[]>([]);
+  React.useEffect(() => {
+    requestsRef.current = data?.requests ?? [];
   }, [data]);
-  const pendingCount = data?.pendingTotal ?? 0;
 
+  const source: AgendaSource = React.useMemo(
+    () => ({
+      fetchBootstrap,
+      readOnly: true,
+      onCardClick: (appointmentId) => {
+        const request = requestsRef.current.find((r) => r.id === appointmentId);
+        if (!request) return; // slot occupato: non c'è niente da aprire
+        if (request.proposedStartsAt) {
+          setProposal(request);
+          return;
+        }
+        if (request.status === "pending") setCancelTarget(request);
+      },
+      menu: {
+        items: [
+          {
+            key: "richiesta",
+            label: "Richieste",
+            icon: <CalendarPlus className="size-4 text-foreground" strokeWidth={1.7} />,
+            onSelect: (slot) => {
+              setPrefill(slot ? { ymd: slot.ymd, time: slot.time } : null);
+              setRequestOpen(true);
+            },
+          },
+        ],
+        // Ci sono, si vedono, non si usano: è il senso della vista ridotta.
+        locked: [
+          { key: "appuntamento", label: "Appuntamento", icon: <Car className="size-4" strokeWidth={1.7} /> },
+          { key: "esame", label: "Esame", icon: <GraduationCap className="size-4" strokeWidth={1.7} /> },
+          { key: "blocco", label: "Evento bloccante", icon: <Ban className="size-4" strokeWidth={1.7} /> },
+          { key: "gruppo", label: "Guida di gruppo", icon: <Users className="size-4" strokeWidth={1.7} /> },
+          {
+            key: "festivo",
+            label: "Segna festivo",
+            icon: <Sun className="size-4" strokeWidth={1.7} />,
+            separatorBefore: true,
+          },
+        ],
+      },
+    }),
+    [fetchBootstrap],
+  );
+
+  const scopeControl = React.useMemo(
+    () => ({ value: scope, onChange: setScope }),
+    [scope, setScope],
+  );
+
+  // Vista ridotta, scope Autoscuola: l'agenda propria è la funzione non
+  // comprata. Dietro la card c'è un'agenda piena (finta) e sfocata, e sopra
+  // resta il segmented — altrimenti da qui non si tornerebbe più indietro.
+  // Con Reglo attivo (Fase 8) questo ramo non si raggiunge: quella vista la
+  // monta il chiamante.
   if (scope === "autoscuola" && !onScope) {
-    return (
-      <PageWrapper title="Agenda" subTitle="Agenda guide ed esami." hideHero>
-        <div className="mx-auto w-full max-w-7xl space-y-5">
-          <PageHeader title="Agenda" subtitle={["La tua agenda arriva con Reglo"]} />
-          <Toolbar
-            scope={scope}
-            onScope={setScope}
-            viewMode={viewMode}
-            onViewMode={setViewMode}
-            label=""
-            onPrev={() => undefined}
-            onNext={() => undefined}
-            onNuovo={() => undefined}
-            hideNav
-          />
-          <LockedSection {...LOCKED_SECTIONS.agenda} />
-        </div>
-      </PageWrapper>
-    );
+    return <AutoscuolaScopeLocked scope={scope} onScope={setScope} />;
   }
 
-  const rangeLabel =
-    viewMode === "day"
-      ? dayFocus.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" })
-      : `${shortDate(days[0])} - ${shortDate(days[6])}`;
-
   return (
-    <PageWrapper title="Agenda" subTitle="Richieste di guida al consorzio." hideHero>
-      <div className="mx-auto w-full max-w-7xl space-y-5">
-        <PageHeader
-          title="Agenda"
-          subtitle={[
-            `${todayCount} guide col consorzio oggi`,
-            `${pendingCount} richieste in attesa`,
-          ]}
-        />
+    <>
+      <AutoscuoleAgendaPage
+        key={reloadKey}
+        tabs={null}
+        source={source}
+        consorzioScope={scopeControl}
+      />
 
-        <Toolbar
-          scope={scope}
-          onScope={setScope}
-          viewMode={viewMode}
-          onViewMode={setViewMode}
-          label={rangeLabel}
-          onPrev={() =>
-            viewMode === "day"
-              ? setDayFocus((prev) => addDays(prev, -1))
-              : setAnchor((prev) => addDays(prev, -7))
-          }
-          onNext={() =>
-            viewMode === "day"
-              ? setDayFocus((prev) => addDays(prev, 1))
-              : setAnchor((prev) => addDays(prev, 7))
-          }
-          onNuovo={() => setDialogOpen(true)}
-        />
-
-        {data?.schoolSuspended && (
-          <div className="rounded-[14px] border border-[#f3c6c6] bg-[#fdeaea] px-4 py-3 text-[13.5px] font-medium text-[#b3261e]">
-            La tua autoscuola è sospesa dal consorzio: non puoi inviare nuove richieste.
-          </div>
-        )}
-
-        <AgendaGrid
-          days={days}
+      {requestOpen && data && (
+        <GuideRequestDialog
           data={data}
-          loading={loading}
-          onCancel={load}
-          onProposal={setProposal}
+          prefill={prefill}
+          onClose={() => setRequestOpen(false)}
+          onSent={() => {
+            setRequestOpen(false);
+            reload();
+          }}
         />
-
-        <p className="text-[12.5px] leading-relaxed text-[#929292]">
-          I blocchi grigi sono slot già occupati dal consorzio: vedi quando è pieno, non chi c&apos;è
-          dentro. Il consorzio può accettare la richiesta, rifiutarla o proporti un altro orario.
-        </p>
-      </div>
+      )}
 
       {proposal && (
         <ProposalDialog
@@ -388,366 +300,82 @@ export function AffiliateAgendaPage({
           onClose={() => setProposal(null)}
           onDone={() => {
             setProposal(null);
-            void load();
+            reload();
           }}
         />
       )}
 
-      {dialogOpen && data && (
-        <GuideRequestDialog
-          data={data}
-          onClose={() => setDialogOpen(false)}
-          onSent={() => {
-            setDialogOpen(false);
-            void load();
+      {cancelTarget && (
+        <CancelRequestDialog
+          request={cancelTarget}
+          onClose={() => setCancelTarget(null)}
+          onDone={() => {
+            setCancelTarget(null);
+            reload();
           }}
         />
       )}
-    </PageWrapper>
+    </>
   );
 }
 
-/* ── Toolbar ─────────────────────────────────────────────────────────── */
+/* ── Guscio comune dei dialoghi ──────────────────────────────────────── */
 
-function Toolbar({
-  scope,
-  onScope,
-  viewMode,
-  onViewMode,
-  label,
-  onPrev,
-  onNext,
-  onNuovo,
-  hideNav = false,
+function DialogShell({
+  title,
+  subtitle,
+  onClose,
+  children,
+  width = 490,
 }: {
-  scope: Scope;
-  onScope: (value: Scope) => void;
-  viewMode: ViewMode;
-  onViewMode: (value: ViewMode) => void;
-  label: string;
-  onPrev: () => void;
-  onNext: () => void;
-  onNuovo: () => void;
-  hideNav?: boolean;
+  title: string;
+  subtitle?: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  width?: number;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      {!hideNav && (
-        <div className="flex items-center gap-1">
+    <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/20 p-6">
+      <div
+        className="w-full rounded-[24px] bg-white p-6 shadow-[0_26px_70px_rgba(10,20,30,0.24)]"
+        style={{ maxWidth: width }}
+      >
+        <div className="mb-1 flex items-start justify-between gap-3">
+          <h2 className="text-[20px] font-bold tracking-[-0.3px] text-foreground">{title}</h2>
           <button
             type="button"
-            onClick={onPrev}
-            className="flex size-[30px] cursor-pointer items-center justify-center rounded-full text-[#555] transition-colors hover:bg-[#f2f2f2]"
+            onClick={onClose}
+            aria-label="Chiudi"
+            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#f0f0f0]"
           >
-            <ChevronLeft className="size-4" />
-          </button>
-          <span className="min-w-[130px] select-none text-center text-[15px] font-semibold text-foreground">
-            {label}
-          </span>
-          <button
-            type="button"
-            onClick={onNext}
-            className="flex size-[30px] cursor-pointer items-center justify-center rounded-full text-[#555] transition-colors hover:bg-[#f2f2f2]"
-          >
-            <ChevronRight className="size-4" />
+            <X className="size-4 text-[#6a6a6a]" />
           </button>
         </div>
-      )}
-      <SegmentedPill
-        value={scope}
-        onChange={onScope}
-        options={[
-          { value: "consorzio", label: "Consorzio" },
-          { value: "autoscuola", label: "Autoscuola" },
-        ]}
-      />
-      <SegmentedPill
-        value={viewMode}
-        onChange={onViewMode}
-        options={[
-          { value: "week", label: "Settimana" },
-          { value: "day", label: "Giorno" },
-        ]}
-      />
-      <div className="min-w-2 flex-1" />
-      {!hideNav && <NewMenu onRichiesta={onNuovo} />}
-    </div>
-  );
-}
-
-/* ── Griglia ─────────────────────────────────────────────────────────── */
-
-function AgendaGrid({
-  days,
-  data,
-  loading,
-  onCancel,
-  onProposal,
-}: {
-  days: Date[];
-  data: AffiliateAgendaData | null;
-  loading: boolean;
-  onCancel: () => void;
-  onProposal: (request: AffiliateGuideRequestRow) => void;
-}) {
-  const hourMarks = Array.from(
-    { length: DAY_END_HOUR - DAY_START_HOUR + 1 },
-    (_, index) => DAY_START_HOUR + index,
-  );
-  const instructors = data?.instructors ?? [];
-  // Senza istruttori (consorzio appena nato) resta una colonna per giorno:
-  // le richieste devono potersi comunque vedere.
-  const columns = instructors.length ? instructors : [{ id: "__none__", name: "Consorzio" }];
-  const totalCols = columns.length * days.length;
-  const today = formatYmd(new Date());
-
-  if (loading) {
-    return <div className="h-[420px] w-full animate-pulse rounded-[18px] bg-[#f6f6f6]" />;
-  }
-
-  return (
-    <div className="overflow-hidden rounded-[18px] border border-[#ececec] bg-white">
-      <div className="overflow-auto">
-        <div
-          className="min-w-max"
-          style={{
-            display: "grid",
-            gridTemplateColumns: `56px repeat(${totalCols}, minmax(86px, 1fr))`,
-          }}
-        >
-          {/* Intestazione: giorno + colonne istruttore */}
-          <div className="sticky left-0 z-20 row-span-2 border-b border-[#ececec] bg-white" />
-          {days.map((day) => {
-            const isToday = formatYmd(day) === today;
-            return (
-              <div
-                key={`hdr-${day.toISOString()}`}
-                className={cn(
-                  "flex h-[52px] flex-col items-center justify-center gap-px border-b border-l border-[#eeeeee]",
-                  isToday ? "bg-[#fafafa]" : "bg-white",
-                )}
-                style={{ gridColumn: `span ${columns.length}` }}
-              >
-                <span className="text-[10px] font-semibold uppercase tracking-[0.5px] text-[#aaaaaa]">
-                  {day.toLocaleDateString("it-IT", { weekday: "short" })}
-                </span>
-                <span
-                  className={cn(
-                    "flex size-[26px] items-center justify-center rounded-full text-[13px] font-bold",
-                    isToday ? "bg-[#222222] text-white" : "text-foreground",
-                  )}
-                >
-                  {day.getDate()}
-                </span>
-              </div>
-            );
-          })}
-          {days.map((day) =>
-            columns.map((column, index) => (
-              <div
-                key={`sub-${day.toISOString()}-${column.id}`}
-                className={cn(
-                  "flex min-w-0 items-center justify-center border-b border-l py-1.5",
-                  index === 0 ? "border-l-[#dddddd]" : "border-l-[#f0f0f0]",
-                  "border-b-[#ececec]",
-                )}
-              >
-                <span className="block w-0 min-w-full truncate px-1 text-center text-[9.5px] font-medium text-muted-foreground">
-                  {column.name.split(" ")[0]}
-                </span>
-              </div>
-            )),
-          )}
-
-          {/* Gutter oraria */}
-          <div
-            className="sticky left-0 z-20 border-r border-[#eeeeee] bg-[#fafafa]"
-            style={{ height: GRID_HEIGHT }}
-          >
-            {hourMarks.map((hour) => (
-              <div
-                key={hour}
-                className="absolute left-0 right-0 flex items-start"
-                style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}
-              >
-                <span className="w-full pr-2 text-right text-[11px] font-semibold leading-none text-[#525252]">
-                  {`${pad(hour)}:00`}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {/* Colonne */}
-          {days.map((day) =>
-            columns.map((column, index) => {
-              const dayKey = formatYmd(day);
-              const busy = (data?.busy ?? []).filter(
-                (slot) =>
-                  formatYmd(new Date(slot.startsAt)) === dayKey &&
-                  (columns.length === 1 || (slot.instructorId ?? "__none__") === column.id),
-              );
-              const requests = (data?.requests ?? []).filter((request) => {
-                if (formatYmd(new Date(request.startsAt)) !== dayKey) return false;
-                if (columns.length === 1) return true;
-                // Una richiesta ancora in attesa non ha istruttore: si appoggia
-                // alla prima colonna, che è dove la scuola la va a cercare.
-                return request.instructorId
-                  ? request.instructorId === column.id
-                  : index === 0;
-              });
-
-              return (
-                <div
-                  key={`col-${day.toISOString()}-${column.id}`}
-                  className={cn(
-                    "relative overflow-hidden border-l",
-                    index === 0 ? "border-[#dddddd]" : "border-[#f0f0f0]",
-                  )}
-                  style={{ height: GRID_HEIGHT }}
-                >
-                  {hourMarks.map((hour) => (
-                    <div
-                      key={hour}
-                      className="absolute left-0 right-0 h-px bg-[#f1f1f1]"
-                      style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}
-                    />
-                  ))}
-
-                  {busy.map((slot) => {
-                    const start = offsetMinutes(slot.startsAt);
-                    const minutes = Math.max(
-                      20,
-                      (new Date(slot.endsAt).getTime() - new Date(slot.startsAt).getTime()) / 60000,
-                    );
-                    if (start + minutes <= 0 || start >= TOTAL_MINUTES) return null;
-                    return (
-                      <div
-                        key={`${slot.startsAt}-${slot.instructorId ?? "x"}`}
-                        className="absolute inset-x-1 rounded-[10px] bg-[#ececec] px-2 py-1.5"
-                        style={{
-                          top: Math.max(0, start) * PIXELS_PER_MINUTE,
-                          height: minutes * PIXELS_PER_MINUTE - 2,
-                        }}
-                        title="Slot occupato dal consorzio"
-                      >
-                        <span className="text-[9.5px] font-bold uppercase tracking-[0.4px] text-[#9a9a9a]">
-                          Occupato
-                        </span>
-                      </div>
-                    );
-                  })}
-
-                  {requests.map((request) => (
-                    <RequestBlock
-                      key={request.id}
-                      request={request}
-                      onCancelled={onCancel}
-                      onProposal={onProposal}
-                    />
-                  ))}
-                </div>
-              );
-            }),
-          )}
-        </div>
+        {subtitle ? (
+          <p className="mb-5 text-[13px] leading-[1.45] text-muted-foreground">{subtitle}</p>
+        ) : null}
+        {children}
       </div>
     </div>
   );
 }
 
-function RequestBlock({
-  request,
-  onCancelled,
-  onProposal,
-}: {
-  request: AffiliateGuideRequestRow;
-  onCancelled: () => void;
-  onProposal: (request: AffiliateGuideRequestRow) => void;
-}) {
-  const toast = useFeedbackToast();
-  const [busy, setBusy] = React.useState(false);
-  const style = REQUEST_STYLES[request.status];
-  const start = offsetMinutes(request.startsAt);
-  if (start + request.durationMinutes <= 0 || start >= TOTAL_MINUTES) return null;
-
-  const cancel = async () => {
-    setBusy(true);
-    const res = await cancelAffiliateGuideRequest(request.id);
-    setBusy(false);
-    if (!res.success) {
-      toast.error({ description: res.message });
-      return;
-    }
-    toast.success({ description: "Richiesta annullata." });
-    onCancelled();
-  };
-
-  return (
-    <div
-      className={cn("group absolute inset-x-1 rounded-[10px] px-2 py-1.5", style.className)}
-      style={{
-        top: Math.max(0, start) * PIXELS_PER_MINUTE,
-        height: request.durationMinutes * PIXELS_PER_MINUTE - 2,
-      }}
-      title={`${style.label} · ${new Date(request.startsAt).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · ${request.durationMinutes} min${request.vehicleName ? ` · ${request.vehicleName}` : ""}`}
-    >
-      <p className={cn("truncate text-[9.5px] font-bold uppercase tracking-[0.4px]", style.nameClassName)}>
-        {style.label}
-      </p>
-      <p className={cn("truncate text-[12.5px] font-semibold", style.nameClassName)}>
-        {request.studentName}
-      </p>
-      {request.moved && request.status === "accepted" && (
-        <p className="mt-0.5 truncate text-[10px] font-medium text-[#177e45]">Spostata</p>
-      )}
-      {request.proposedStartsAt && request.status === "pending" && (
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onProposal(request);
-          }}
-          className="mt-0.5 block w-full cursor-pointer truncate rounded-md bg-white/70 px-1 py-0.5 text-left text-[10px] font-semibold text-[#8a6d0b] hover:bg-white"
-        >
-          Proposto{" "}
-          {new Date(request.proposedStartsAt).toLocaleString("it-IT", {
-            day: "numeric",
-            month: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-          })}{" "}
-          →
-        </button>
-      )}
-      {request.status === "pending" && (
-        <button
-          type="button"
-          onClick={cancel}
-          disabled={busy}
-          title="Annulla la richiesta"
-          className="absolute right-1 top-1 hidden size-5 cursor-pointer items-center justify-center rounded-full bg-white/80 text-[#8a6d0b] group-hover:flex"
-        >
-          <X className="size-3" strokeWidth={2.4} />
-        </button>
-      )}
-    </div>
-  );
-}
-
-/* ── Dialogo di invio ────────────────────────────────────────────────── */
+/* ── Invio richiesta ─────────────────────────────────────────────────── */
 
 function GuideRequestDialog({
   data,
+  prefill,
   onClose,
   onSent,
 }: {
   data: AffiliateAgendaData;
+  prefill: { ymd: string; time: string } | null;
   onClose: () => void;
   onSent: () => void;
 }) {
   const toast = useFeedbackToast();
-  const [day, setDay] = React.useState(() => formatYmd(new Date()));
-  const [time, setTime] = React.useState("15:00");
+  const [day, setDay] = React.useState(() => prefill?.ymd ?? formatYmd(new Date()));
+  const [time, setTime] = React.useState(prefill?.time ?? "15:00");
   const [duration, setDuration] = React.useState(60);
   const [vehicleId, setVehicleId] = React.useState<string | null>(null);
   const [sending, setSending] = React.useState(false);
@@ -831,217 +459,229 @@ function GuideRequestDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/20 p-6">
-      <div className="w-full max-w-[490px] rounded-[24px] bg-white p-6 shadow-[0_26px_70px_rgba(10,20,30,0.24)]">
-        <div className="mb-1 flex items-start justify-between gap-3">
-          <h2 className="text-[20px] font-bold tracking-[-0.3px] text-foreground">
-            Richiesta di guida
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Chiudi"
-            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#f0f0f0]"
-          >
-            <X className="size-4 text-[#6a6a6a]" />
-          </button>
+    <DialogShell
+      title="Richiesta di guida"
+      subtitle="Gli slot grigi in agenda sono occupati dal consorzio. La richiesta resta in attesa finché il consorzio non risponde."
+      onClose={onClose}
+    >
+      <div className="mb-4 grid grid-cols-2 gap-3">
+        <div>
+          <p className="mb-1.5 text-[12px] font-semibold text-[#555555]">Giorno</p>
+          <DatePickerInput
+            value={day}
+            onChange={(value) => setDay(value || day)}
+            minDate={new Date()}
+          />
         </div>
-        <p className="mb-5 text-[13px] leading-[1.45] text-muted-foreground">
-          Gli slot grigi in agenda sono occupati dal consorzio. La richiesta resta in attesa finché
-          il consorzio non risponde.
-        </p>
-
-        <div className="mb-4 grid grid-cols-2 gap-3">
-          <div>
-            <p className="mb-1.5 text-[12px] font-semibold text-[#555555]">Giorno</p>
-            <DatePickerInput
-              value={day}
-              onChange={(value) => setDay(value || day)}
-              minDate={new Date()}
-            />
-          </div>
-          <div>
-            <p className="mb-1.5 text-[12px] font-semibold text-[#555555]">Orario</p>
-            <TimePickerInput value={time} onChange={(value) => setTime(value || time)} />
-          </div>
-        </div>
-
-        <p className="mb-1.5 text-[12px] font-semibold text-[#555555]">Durata</p>
-        <div className="mb-4 grid grid-cols-5 gap-2">
-          {DURATIONS.map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setDuration(value)}
-              className={cn(
-                "cursor-pointer whitespace-nowrap rounded-full px-2 py-2 text-[13px] transition-colors",
-                value === duration
-                  ? "bg-[#222222] font-semibold text-white"
-                  : "border border-[#dddddd] font-medium text-foreground hover:bg-[#f7f7f7]",
-              )}
-            >
-              {value} min
-            </button>
-          ))}
-        </div>
-
-        <p className="mb-1.5 text-[12px] font-semibold text-[#555555]">Allievo</p>
-        {selected ? (
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-[12px] border border-[#e2e2e2] px-3.5 py-2.5">
-            <span className="truncate text-[14px] font-semibold text-foreground">
-              {selected.firstName} {selected.lastName}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setStudentId(null);
-                setStudentQuery("");
-              }}
-              className="shrink-0 cursor-pointer text-[13px] font-semibold text-[#6a6a6a] underline"
-            >
-              Cambia
-            </button>
-          </div>
-        ) : (
-          <div className="mb-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={studentQuery}
-                onChange={(event) => setStudentQuery(event.target.value)}
-                placeholder="Cerca allievo…"
-                className="pl-9"
-              />
-            </div>
-            <div className="mt-1.5 overflow-hidden rounded-[12px] border border-[#ececec]">
-              {filtered.map((student) => (
-                <button
-                  key={student.id}
-                  type="button"
-                  onClick={() => setStudentId(student.id)}
-                  className="flex w-full cursor-pointer items-center justify-between gap-3 border-b border-[#f4f4f4] px-3.5 py-2.5 text-left text-[13.5px] font-medium text-foreground transition-colors last:border-b-0 hover:bg-[#f7f7f7]"
-                >
-                  <span className="truncate">
-                    {student.firstName} {student.lastName}
-                  </span>
-                  <span className="shrink-0 text-[12px] text-[#929292]">{student.phone ?? ""}</span>
-                </button>
-              ))}
-              {!creatingStudent ? (
-                <button
-                  type="button"
-                  onClick={() => setCreatingStudent(true)}
-                  className="flex w-full cursor-pointer items-center gap-2 px-3.5 py-2.5 text-left text-[13.5px] font-semibold text-foreground transition-colors hover:bg-[#f7f7f7]"
-                >
-                  <Plus className="size-4" />
-                  Nuovo allievo
-                </button>
-              ) : (
-                <div className="space-y-2 bg-[#fafafa] p-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input
-                      autoFocus
-                      placeholder="Nome"
-                      value={newStudent.firstName}
-                      onChange={(event) =>
-                        setNewStudent((prev) => ({ ...prev, firstName: event.target.value }))
-                      }
-                    />
-                    <Input
-                      placeholder="Cognome"
-                      value={newStudent.lastName}
-                      onChange={(event) =>
-                        setNewStudent((prev) => ({ ...prev, lastName: event.target.value }))
-                      }
-                    />
-                  </div>
-                  <Input
-                    placeholder="Telefono"
-                    value={newStudent.phone}
-                    onChange={(event) =>
-                      setNewStudent((prev) => ({ ...prev, phone: event.target.value }))
-                    }
-                  />
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setCreatingStudent(false)}
-                      className="cursor-pointer text-[13px] font-semibold text-[#6a6a6a] underline"
-                    >
-                      Annulla
-                    </button>
-                    <button
-                      type="button"
-                      disabled={
-                        savingStudent ||
-                        !newStudent.firstName.trim() ||
-                        !newStudent.lastName.trim() ||
-                        newStudent.phone.trim().length < 5
-                      }
-                      onClick={() => void submitStudent()}
-                      className="cursor-pointer rounded-full bg-[#222222] px-4 py-2 text-[13px] font-bold text-white disabled:opacity-40"
-                    >
-                      {savingStudent ? <LoadingDots /> : "Aggiungi"}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        <p className="mb-1.5 text-[12px] font-semibold text-[#555555]">Veicolo del consorzio</p>
-        <div className="relative mb-4">
-          <TruckIcon />
-          <select
-            value={vehicleId ?? ""}
-            onChange={(event) => setVehicleId(event.target.value || null)}
-            className="w-full cursor-pointer appearance-none rounded-[12px] border border-[#e2e2e2] bg-white py-2.5 pl-10 pr-9 text-[14px] font-medium text-foreground outline-none"
-          >
-            <option value="">Scegli un veicolo</option>
-            {data.vehicles.map((vehicle) => (
-              <option key={vehicle.id} value={vehicle.id}>
-                {vehicle.name}
-              </option>
-            ))}
-          </select>
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            aria-hidden
-            className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2"
-          >
-            <path d="M6 9l6 6 6-6" stroke="#9a9a9a" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        </div>
-
-        {leadError && (
-          <p className="mb-3 text-[12.5px] font-medium text-[#b3261e]">{leadError}</p>
-        )}
-
-        <div className="mt-2 flex items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="cursor-pointer text-[14px] font-semibold text-foreground underline"
-          >
-            Annulla
-          </button>
-          <button
-            type="button"
-            disabled={!canSend}
-            onClick={() => void send()}
-            className="cursor-pointer rounded-[32px] bg-[#222222] px-[22px] py-[11px] text-[14px] font-bold text-white transition-opacity hover:opacity-90 disabled:cursor-default disabled:bg-[#ededed] disabled:text-[#a5a5a5]"
-          >
-            {sending ? <LoadingDots /> : "Invia richiesta"}
-          </button>
+        <div>
+          <p className="mb-1.5 text-[12px] font-semibold text-[#555555]">Orario</p>
+          <TimePickerInput value={time} onChange={(value) => setTime(value || time)} />
         </div>
       </div>
-    </div>
+
+      <p className="mb-1.5 text-[12px] font-semibold text-[#555555]">Durata</p>
+      <div className="mb-4 grid grid-cols-5 gap-2">
+        {DURATIONS.map((value) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setDuration(value)}
+            className={cn(
+              "cursor-pointer whitespace-nowrap rounded-full px-2 py-2 text-[13px] transition-colors",
+              value === duration
+                ? "bg-[#222222] font-semibold text-white"
+                : "border border-[#dddddd] font-medium text-foreground hover:bg-[#f7f7f7]",
+            )}
+          >
+            {value} min
+          </button>
+        ))}
+      </div>
+
+      <p className="mb-1.5 text-[12px] font-semibold text-[#555555]">Allievo</p>
+      {selected ? (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-[12px] border border-[#e2e2e2] px-3.5 py-2.5">
+          <span className="truncate text-[14px] font-semibold text-foreground">
+            {selected.firstName} {selected.lastName}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setStudentId(null);
+              setStudentQuery("");
+            }}
+            className="shrink-0 cursor-pointer text-[13px] font-semibold text-[#6a6a6a] underline"
+          >
+            Cambia
+          </button>
+        </div>
+      ) : (
+        <div className="mb-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={studentQuery}
+              onChange={(event) => setStudentQuery(event.target.value)}
+              placeholder="Cerca allievo…"
+              className="pl-9"
+            />
+          </div>
+          <div className="mt-1.5 overflow-hidden rounded-[12px] border border-[#ececec]">
+            {filtered.map((student) => (
+              <button
+                key={student.id}
+                type="button"
+                onClick={() => setStudentId(student.id)}
+                className="flex w-full cursor-pointer items-center justify-between gap-3 border-b border-[#f4f4f4] px-3.5 py-2.5 text-left text-[13.5px] font-medium text-foreground transition-colors last:border-b-0 hover:bg-[#f7f7f7]"
+              >
+                <span className="truncate">
+                  {student.firstName} {student.lastName}
+                </span>
+                <span className="shrink-0 text-[12px] text-[#929292]">{student.phone ?? ""}</span>
+              </button>
+            ))}
+            {!creatingStudent ? (
+              <button
+                type="button"
+                onClick={() => setCreatingStudent(true)}
+                className="flex w-full cursor-pointer items-center gap-2 px-3.5 py-2.5 text-left text-[13.5px] font-semibold text-foreground transition-colors hover:bg-[#f7f7f7]"
+              >
+                <Plus className="size-4" />
+                Nuovo allievo
+              </button>
+            ) : (
+              <div className="space-y-2 bg-[#fafafa] p-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    autoFocus
+                    placeholder="Nome"
+                    value={newStudent.firstName}
+                    onChange={(event) =>
+                      setNewStudent((prev) => ({ ...prev, firstName: event.target.value }))
+                    }
+                  />
+                  <Input
+                    placeholder="Cognome"
+                    value={newStudent.lastName}
+                    onChange={(event) =>
+                      setNewStudent((prev) => ({ ...prev, lastName: event.target.value }))
+                    }
+                  />
+                </div>
+                <Input
+                  placeholder="Telefono"
+                  value={newStudent.phone}
+                  onChange={(event) =>
+                    setNewStudent((prev) => ({ ...prev, phone: event.target.value }))
+                  }
+                />
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCreatingStudent(false)}
+                    className="cursor-pointer text-[13px] font-semibold text-[#6a6a6a] underline"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    type="button"
+                    disabled={
+                      savingStudent ||
+                      !newStudent.firstName.trim() ||
+                      !newStudent.lastName.trim() ||
+                      newStudent.phone.trim().length < 5
+                    }
+                    onClick={() => void submitStudent()}
+                    className="cursor-pointer rounded-full bg-[#222222] px-4 py-2 text-[13px] font-bold text-white disabled:opacity-40"
+                  >
+                    {savingStudent ? <LoadingDots /> : "Aggiungi"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <p className="mb-1.5 text-[12px] font-semibold text-[#555555]">Veicolo del consorzio</p>
+      <div className="relative mb-4">
+        <TruckIcon />
+        <select
+          value={vehicleId ?? ""}
+          onChange={(event) => setVehicleId(event.target.value || null)}
+          className="w-full cursor-pointer appearance-none rounded-[12px] border border-[#e2e2e2] bg-white py-2.5 pl-10 pr-9 text-[14px] font-medium text-foreground outline-none"
+        >
+          <option value="">Scegli un veicolo</option>
+          {data.vehicles.map((vehicle) => (
+            <option key={vehicle.id} value={vehicle.id}>
+              {vehicle.name}
+            </option>
+          ))}
+        </select>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden
+          className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2"
+        >
+          <path d="M6 9l6 6 6-6" stroke="#9a9a9a" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      </div>
+
+      {leadError && <p className="mb-3 text-[12.5px] font-medium text-[#b3261e]">{leadError}</p>}
+
+      <div className="mt-2 flex items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4">
+        <button
+          type="button"
+          onClick={onClose}
+          className="cursor-pointer text-[14px] font-semibold text-foreground underline"
+        >
+          Annulla
+        </button>
+        <button
+          type="button"
+          disabled={!canSend}
+          onClick={() => void send()}
+          className="cursor-pointer rounded-[32px] bg-[#222222] px-[22px] py-[11px] text-[14px] font-bold text-white transition-opacity hover:opacity-90 disabled:cursor-default disabled:bg-[#ededed] disabled:text-[#a5a5a5]"
+        >
+          {sending ? <LoadingDots /> : "Invia richiesta"}
+        </button>
+      </div>
+    </DialogShell>
   );
 }
+
+function TruckIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="#6a6a6a"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2"
+    >
+      <path d="M3 7h10v9H3zM13 10h4l3 3v3h-7z" />
+      <circle cx="7" cy="18" r="1.6" />
+      <circle cx="17" cy="18" r="1.6" />
+    </svg>
+  );
+}
+
+const fmtFull = (iso: string) =>
+  new Date(iso).toLocaleString("it-IT", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
 /* ── Controproposta del consorzio (Fase 9) ──────────────────────────── */
 
@@ -1073,73 +713,140 @@ function ProposalDialog({
     onDone();
   };
 
-  const fmt = (iso: string) =>
-    new Date(iso).toLocaleString("it-IT", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  return (
+    <DialogShell
+      title="Il consorzio propone un altro orario"
+      subtitle="Accettando, la richiesta si sposta sull'orario proposto e torna al consorzio per la conferma finale — l'istruttore lo sceglie lui."
+      onClose={onClose}
+      width={440}
+    >
+      <div className="mb-3 rounded-[14px] bg-[#f7f7f7] px-4 py-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.6px] text-[#929292]">
+          Avevi chiesto
+        </p>
+        <p className="mt-0.5 text-[14px] font-medium text-[#6a6a6a]">
+          {fmtFull(request.requestedStartsAt)} · {request.durationMinutes} min
+        </p>
+      </div>
+      <div className="mb-5 rounded-[14px] border-[1.5px] border-[#e0b93a] bg-[#fdf3d4] px-4 py-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.6px] text-[#8a6d0b]">
+          Il consorzio propone
+        </p>
+        <p className="mt-0.5 text-[14px] font-bold text-[#6b5407]">
+          {request.proposedStartsAt ? fmtFull(request.proposedStartsAt) : "—"}
+          {request.proposedDurationMinutes ? ` · ${request.proposedDurationMinutes} min` : ""}
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4">
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={() => void respond(false)}
+          className="cursor-pointer text-[14px] font-semibold text-foreground underline"
+        >
+          {busy === "reject" ? <LoadingDots /> : "Rifiuta"}
+        </button>
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={() => void respond(true)}
+          className="cursor-pointer rounded-[32px] bg-[#222222] px-[22px] py-[11px] text-[14px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {busy === "accept" ? <LoadingDots /> : "Accetta l'orario"}
+        </button>
+      </div>
+    </DialogShell>
+  );
+}
+
+/* ── Annullamento di una richiesta in attesa ─────────────────────────── */
+
+function CancelRequestDialog({
+  request,
+  onClose,
+  onDone,
+}: {
+  request: AffiliateGuideRequestRow;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const toast = useFeedbackToast();
+  const [busy, setBusy] = React.useState(false);
+
+  const cancel = async () => {
+    setBusy(true);
+    const res = await cancelAffiliateGuideRequest(request.id);
+    setBusy(false);
+    if (!res.success) {
+      toast.error({ description: res.message });
+      return;
+    }
+    toast.success({ description: "Richiesta annullata." });
+    onDone();
+  };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/20 p-6">
-      <div className="w-full max-w-[440px] rounded-[24px] bg-white p-6 shadow-[0_26px_70px_rgba(10,20,30,0.24)]">
-        <div className="mb-1 flex items-start justify-between gap-3">
-          <h2 className="text-[20px] font-bold tracking-[-0.3px] text-foreground">
-            Il consorzio propone un altro orario
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Chiudi"
-            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#f0f0f0]"
-          >
-            <X className="size-4 text-[#6a6a6a]" />
-          </button>
-        </div>
-        <p className="mb-5 text-[13px] leading-[1.45] text-muted-foreground">
-          Accettando, la richiesta si sposta sull&apos;orario proposto e torna al consorzio per la
-          conferma finale — l&apos;istruttore lo sceglie lui.
+    <DialogShell title="Richiesta in attesa" onClose={onClose} width={420}>
+      <div className="mb-5 rounded-[14px] bg-[#f7f7f7] px-4 py-3">
+        <p className="text-[14px] font-semibold text-foreground">{request.studentName}</p>
+        <p className="mt-0.5 text-[13px] font-medium text-[#6a6a6a]">
+          {fmtFull(request.startsAt)} · {request.durationMinutes} min
         </p>
-
-        <div className="mb-3 rounded-[14px] bg-[#f7f7f7] px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.6px] text-[#929292]">
-            Avevi chiesto
-          </p>
-          <p className="mt-0.5 text-[14px] font-medium text-[#6a6a6a]">
-            {fmt(request.requestedStartsAt)} · {request.durationMinutes} min
-          </p>
-        </div>
-        <div className="mb-5 rounded-[14px] border-[1.5px] border-[#e0b93a] bg-[#fdf3d4] px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.6px] text-[#8a6d0b]">
-            Il consorzio propone
-          </p>
-          <p className="mt-0.5 text-[14px] font-bold text-[#6b5407]">
-            {request.proposedStartsAt ? fmt(request.proposedStartsAt) : "—"}
-            {request.proposedDurationMinutes ? ` · ${request.proposedDurationMinutes} min` : ""}
-          </p>
-        </div>
-
-        <div className="flex items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4">
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={() => void respond(false)}
-            className="cursor-pointer text-[14px] font-semibold text-foreground underline"
-          >
-            {busy === "reject" ? <LoadingDots /> : "Rifiuta"}
-          </button>
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={() => void respond(true)}
-            className="cursor-pointer rounded-[32px] bg-[#222222] px-[22px] py-[11px] text-[14px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            {busy === "accept" ? <LoadingDots /> : "Accetta l'orario"}
-          </button>
-        </div>
+        {request.vehicleName ? (
+          <p className="mt-0.5 text-[13px] font-medium text-[#6a6a6a]">{request.vehicleName}</p>
+        ) : null}
       </div>
-    </div>
+      <p className="mb-5 text-[13px] leading-[1.45] text-muted-foreground">
+        Il consorzio non ha ancora risposto. Annullandola sparisce anche dalla sua campanella.
+      </p>
+      <div className="flex items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4">
+        <button
+          type="button"
+          onClick={onClose}
+          className="cursor-pointer text-[14px] font-semibold text-foreground underline"
+        >
+          Lasciala lì
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void cancel()}
+          className="cursor-pointer rounded-[32px] bg-[#222222] px-[22px] py-[11px] text-[14px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {busy ? <LoadingDots /> : "Annulla richiesta"}
+        </button>
+      </div>
+    </DialogShell>
+  );
+}
+
+/* ── Scope "Autoscuola" nella vista ridotta ─────────────────────────── */
+
+function AutoscuolaScopeLocked({
+  scope,
+  onScope,
+}: {
+  scope: Scope;
+  onScope: (value: Scope) => void;
+}) {
+  const demoSource = useDemoAgendaSource();
+  return (
+    <LockedBackdrop
+      backdrop={<AutoscuoleAgendaPage tabs={null} source={demoSource} />}
+      header={
+        <SegmentedPill
+          value={scope}
+          onChange={onScope}
+          className="bg-white shadow-[0_10px_30px_rgba(10,20,30,0.12)]"
+          options={[
+            { value: "consorzio", label: "Consorzio" },
+            { value: "autoscuola", label: "Autoscuola" },
+          ]}
+        />
+      }
+    >
+      <LockedCard {...LOCKED_SECTIONS.agenda} />
+    </LockedBackdrop>
   );
 }

@@ -220,7 +220,41 @@ type ExamGroup = {
 const isExamPlaceholder = (a: AppointmentRow) =>
   a.type === "esame" && a.student.id.startsWith("exam-empty");
 
-type AgendaBootstrapPayload = {
+/**
+ * Sorgente alternativa dell'agenda (REG-429).
+ *
+ * L'agenda è **una sola**: griglia, colonne, card, colori, hover, toolbar.
+ * Quello che cambia, per la consorziata o per un'anteprima, è **da dove
+ * arrivano i dati** e **cosa si può fare**. Il primo giro aveva una griglia
+ * riscritta a mano: sembrava un'altra app, ed era giusto bocciarla.
+ */
+export type AgendaSource = {
+  /** Sostituisce il bootstrap HTTP. Stessa forma, origine diversa. */
+  fetchBootstrap: (from: Date, to: Date) => Promise<AgendaBootstrapPayload>;
+  /** Niente pannello d'azione sulle card, niente creazione dagli slot. */
+  readOnly?: boolean;
+  /** Click su una card, al posto del pannello standard. */
+  onCardClick?: (appointmentId: string) => void;
+  /** Voci del menu "+" e del menu-slot. Sostituiscono quelle standard. */
+  menu?: {
+    items: Array<{
+      key: string;
+      label: string;
+      icon: React.ReactNode;
+      onSelect: (slot?: { ymd: string; time: string; instructorId: string | null }) => void;
+    }>;
+    /** Voci presenti ma non comprate: grigie, col lucchetto. */
+    locked?: Array<{
+      key: string;
+      label: string;
+      icon: React.ReactNode;
+      /** Divisore sopra la voce, come nel prototipo. */
+      separatorBefore?: boolean;
+    }>;
+  };
+};
+
+export type AgendaBootstrapPayload = {
   appointments: AppointmentRow[];
   students: Array<{
     id: string;
@@ -784,8 +818,11 @@ function VehicleDetailLines({
 export function AutoscuoleAgendaPage({
   tabs,
   consorzioScope,
+  source,
 }: {
   tabs?: React.ReactNode;
+  /** Sorgente dati alternativa + permessi. Vedi `AgendaSource`. */
+  source?: AgendaSource;
   /**
    * Autoscuola **consorziata con Reglo attivo** (REG-429, Fase 8): accanto alla
    * navigazione data compare il segmented `Consorzio | Autoscuola` del
@@ -1471,15 +1508,22 @@ export function AutoscuoleAgendaPage({
       : ++bootstrapRequestRef.current;
 
     try {
-      const response = await fetch(buildAgendaBootstrapUrl(from, to), {
-        cache: "no-store",
-      });
-      const payload = (await response.json().catch(() => null)) as
-        | { success?: boolean; data?: AgendaBootstrapPayload; message?: string }
-        | null;
-      if (!response.ok || !payload?.success || !payload.data) {
-        throw new Error(payload?.message ?? "Impossibile caricare l'agenda.");
+      let data: AgendaBootstrapPayload;
+      if (source) {
+        data = await source.fetchBootstrap(from, to);
+      } else {
+        const response = await fetch(buildAgendaBootstrapUrl(from, to), {
+          cache: "no-store",
+        });
+        const parsed = (await response.json().catch(() => null)) as
+          | { success?: boolean; data?: AgendaBootstrapPayload; message?: string }
+          | null;
+        if (!response.ok || !parsed?.success || !parsed.data) {
+          throw new Error(parsed?.message ?? "Impossibile caricare l'agenda.");
+        }
+        data = parsed.data;
       }
+      const payload = { data };
 
       if (!prefetch && requestId === bootstrapRequestRef.current) {
         // Empty group lessons (0 participants) arrive as synthetic `gl-empty:`
@@ -1521,7 +1565,7 @@ export function AutoscuoleAgendaPage({
         }
       }
     }
-  }, [buildAgendaBootstrapUrl, rangeEnd, rangeStart, toast]);
+  }, [buildAgendaBootstrapUrl, rangeEnd, rangeStart, source, toast]);
 
   const loadOutOfAvailability = React.useCallback(async () => {
     try {
@@ -1541,9 +1585,11 @@ export function AutoscuoleAgendaPage({
     const silent = hasLoadedOnce.current;
     load({ silent, from: rangeStart, to: rangeEnd }).then(() => {
       hasLoadedOnce.current = true;
-      loadOutOfAvailability();
+      // "Fuori disponibilità" è una lettura della company corrente: con una
+      // sorgente esterna non c'entra (e sarebbe una action chiusa).
+      if (!source) loadOutOfAvailability();
     });
-  }, [load, loadOutOfAvailability, rangeEnd, rangeStart]);
+  }, [load, loadOutOfAvailability, rangeEnd, rangeStart, source]);
 
   React.useEffect(() => {
     const prefetchFrom = viewMode === "week" ? rangeEnd : addDays(rangeStart, 1);
@@ -1565,6 +1611,7 @@ export function AutoscuoleAgendaPage({
 
   // Load company locations once (sede + custom) for the create-appointment Luogo selector
   React.useEffect(() => {
+    if (source) return;
     let cancelled = false;
     (async () => {
       const res = await getAutoscuolaLocations();
@@ -1583,7 +1630,7 @@ export function AutoscuoleAgendaPage({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [source]);
 
   // Pre-populate form.locationId with the default sede whenever the dialog opens
   // (nessun allievo ancora scelto → la sede è il fallback del resolver REG-409).
@@ -3225,6 +3272,47 @@ export function AutoscuoleAgendaPage({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52 rounded-[12px] shadow-dropdown">
+                {source?.menu ? (
+                  <>
+                    {source.menu.items.map((entry) => (
+                      <button
+                        key={entry.key}
+                        type="button"
+                        className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-[#f7f7f7] cursor-pointer"
+                        onClick={() => {
+                          setPlusMenuOpen(false);
+                          entry.onSelect();
+                        }}
+                      >
+                        {entry.icon}
+                        {entry.label}
+                      </button>
+                    ))}
+                    {source.menu.locked?.length ? (
+                      <>
+                        <div className="my-1.5 h-px bg-[#f0f0f0]" />
+                        {source.menu.locked.map((entry) => (
+                          <React.Fragment key={entry.key}>
+                            {entry.separatorBefore ? (
+                              <div className="my-1.5 h-px bg-[#f0f0f0]" />
+                            ) : null}
+                            <div
+                              title="Funzione extra di Reglo"
+                              className="flex w-full cursor-default items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-[#9a9a9a]"
+                            >
+                              {entry.icon}
+                              {entry.label}
+                              <span className="ml-auto flex shrink-0 items-center">
+                                <Lock className="size-[15px] text-[#bdbdbd]" strokeWidth={2.1} />
+                              </span>
+                            </div>
+                          </React.Fragment>
+                        ))}
+                      </>
+                    ) : null}
+                  </>
+                ) : (
+                <>
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
@@ -3286,6 +3374,8 @@ export function AutoscuoleAgendaPage({
                     <Ban className="size-4" strokeWidth={1.7} />
                     Segna festivo
                   </button>
+                )}
+                </>
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -3410,7 +3500,22 @@ export function AutoscuoleAgendaPage({
               setSlotMenu(null);
               fn();
             };
-            const options: Array<{ key: string; label: string; icon: React.ReactNode; onSelect: () => void }> = [
+            const options: Array<{ key: string; label: string; icon: React.ReactNode; onSelect: () => void }> =
+              source?.menu
+              ? source.menu.items.map((entry) => ({
+                  key: entry.key,
+                  label: entry.label,
+                  icon: entry.icon,
+                  onSelect: () =>
+                    closeAnd(() =>
+                      entry.onSelect({
+                        ymd: slotMenu.ymd,
+                        time: slotMenu.time,
+                        instructorId: slotMenu.instructorId ?? null,
+                      }),
+                    ),
+                }))
+              : [
               {
                 key: "appointment",
                 label: "Appuntamento",
@@ -3496,6 +3601,28 @@ export function AutoscuoleAgendaPage({
                       {option.label}
                     </button>
                   ))}
+                  {source?.menu?.locked?.length ? (
+                    <>
+                      <div className="my-1 h-px bg-[#f0f0f0]" />
+                      {source.menu.locked.map((entry) => (
+                        <React.Fragment key={entry.key}>
+                          {entry.separatorBefore ? (
+                            <div className="my-1 h-px bg-[#f0f0f0]" />
+                          ) : null}
+                          <div
+                            title="Funzione extra di Reglo"
+                            className="flex w-full cursor-default items-center gap-2.5 rounded-[8px] px-3 py-2 text-xs font-medium text-[#9a9a9a]"
+                          >
+                            {entry.icon}
+                            {entry.label}
+                            <span className="ml-auto flex shrink-0 items-center">
+                              <Lock className="size-3.5 text-[#bdbdbd]" strokeWidth={2.1} />
+                            </span>
+                          </div>
+                        </React.Fragment>
+                      ))}
+                    </>
+                  ) : null}
                 </motion.div>
               </div>
             );
@@ -3818,8 +3945,7 @@ export function AutoscuoleAgendaPage({
                           const instrColorStyle =
                             !isExamInstr &&
                             !isGroupLessonInstr &&
-                            statusLcInstr !== "no_show" &&
-                            statusLcInstr !== "cancelled"
+                            !usesStatusTint(statusLcInstr)
                               ? guideBlockColorStyle(item, licenseTag)
                               : null;
                           const instrCardClass = isExamInstr
@@ -3832,7 +3958,7 @@ export function AutoscuoleAgendaPage({
                           return (
                             <React.Fragment key={item.id}>
                             <PopoverPrimitive.Root open={hasNotesInstr && hoveredNoteId === item.id} modal={false}>
-                            <DropdownMenu modal={false}>
+                            <DropdownMenu modal={false} {...(source?.readOnly ? { open: false } : {})}>
                               <DropdownMenuTrigger asChild>
                                 <PopoverPrimitive.Anchor asChild>
                                 <button
@@ -3840,7 +3966,10 @@ export function AutoscuoleAgendaPage({
                                   className={cn("agenda-card group absolute left-0.5 right-0.5 z-10 flex flex-col justify-start rounded-[8px] text-[9px] leading-tight text-left hover:z-30", isPendingAction ? "pointer-events-none opacity-75" : "", instrCardClass)}
                                   style={{ top, height, ...(instrColorStyle ?? {}) }}
                                   title={`${isExamInstr ? "🎓 ESAME · " : ""}${formatStudentName(item.student, studentNameOrder)} · ${formatEventType(item.type)} · ${formatTimeRange(start, end)}`}
-                                  onClick={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    source?.onCardClick?.(item.id);
+                                  }}
                                   onMouseEnter={hasNotesInstr ? () => setHoveredNoteId(item.id) : undefined}
                                   onMouseLeave={hasNotesInstr ? () => setHoveredNoteId((c) => (c === item.id ? null : c)) : undefined}
                                 >
@@ -4342,8 +4471,7 @@ export function AutoscuoleAgendaPage({
                       const dayColorStyle =
                         !isExamDay &&
                         !isGroupLessonDay &&
-                        statusLcDay !== "no_show" &&
-                        statusLcDay !== "cancelled"
+                        !usesStatusTint(statusLcDay)
                           ? guideBlockColorStyle(item, licenseTag)
                           : null;
                       const dayCardClass = isExamDay
@@ -4357,7 +4485,7 @@ export function AutoscuoleAgendaPage({
                       return (
                         <React.Fragment key={item.id}>
                         <PopoverPrimitive.Root open={hasNotesDay && hoveredNoteId === item.id} modal={false}>
-                        <DropdownMenu modal={false}>
+                        <DropdownMenu modal={false} {...(source?.readOnly ? { open: false } : {})}>
                           <DropdownMenuTrigger asChild>
                             <PopoverPrimitive.Anchor asChild>
                             <button
@@ -4369,7 +4497,10 @@ export function AutoscuoleAgendaPage({
                                 dayCardClass,
                               )}
                               style={{ top, height, ...(dayColorStyle ?? {}) }}
-                              onClick={(event) => event.stopPropagation()}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                source?.onCardClick?.(item.id);
+                              }}
                               onMouseEnter={hasNotesDay ? () => setHoveredNoteId(item.id) : undefined}
                               onMouseLeave={hasNotesDay ? () => setHoveredNoteId((c) => (c === item.id ? null : c)) : undefined}
                             >
@@ -6429,6 +6560,20 @@ function getScheduledDurationClass(appointment: AppointmentRow): string {
   return "bg-[#FBD9DD] [--agenda-card-shadow:rgba(244,63,94,0.22)]";
 }
 
+/**
+ * Stati la cui tinta viene dallo STATO, non dalla durata: annullata, assente e
+ * le richieste al consorzio (REG-429). Per tutto il resto vince il colore per
+ * durata/patente scelto dal titolare.
+ */
+const usesStatusTint = (status: string) => {
+  const s = status.toLowerCase();
+  return (
+    s === "no_show" ||
+    s === "cancelled" ||
+    s.startsWith("consortium_")
+  );
+};
+
 function getStatusMeta(
   status: string,
   appointment?: AppointmentRow,
@@ -6463,6 +6608,40 @@ function getStatusMeta(
   }
   if (normalized.includes("proposal")) {
     return { label: "Proposta", shortLabel: "Proposta", className: durationClass };
+  }
+  // Richieste di guida al consorzio (REG-429): stessi blocchi dell'agenda, con
+  // la tinta che già si usa per una richiesta in attesa (il ghost ambra
+  // tratteggiato) e per ciò che non si farà (grigio barrato).
+  if (normalized === "consortium_pending") {
+    return {
+      label: "In attesa",
+      shortLabel: "In attesa",
+      className:
+        "border-[1.5px] border-dashed border-amber-500 bg-amber-50/90 text-amber-900 [--agenda-card-shadow:rgba(245,158,11,0.22)]",
+    };
+  }
+  if (normalized === "consortium_rejected") {
+    return {
+      label: "Rifiutata",
+      shortLabel: "Rifiutata",
+      className: "bg-[#FDEAEA] text-[#B3261E] [--agenda-card-shadow:rgba(179,38,30,0.18)]",
+    };
+  }
+  if (normalized === "consortium_cancelled") {
+    return {
+      label: "Annullata",
+      shortLabel: "Annullata",
+      className: "bg-[#F3F4F8] text-[#8A90A6] opacity-70 line-through",
+    };
+  }
+  /** Slot già occupato dal consorzio: c'è, ma non si sa da chi (né si deve). */
+  if (normalized === "consortium_busy") {
+    return {
+      label: "Occupato",
+      shortLabel: "Occupato",
+      className:
+        "bg-[#F5F5F7] bg-[image:repeating-linear-gradient(135deg,rgba(110,117,150,0.10)_0,rgba(110,117,150,0.10)_2px,transparent_2px,transparent_9px)] text-[#6E7596] [--agenda-card-shadow:rgba(110,117,150,0.14)]",
+    };
   }
   if (normalized === "pending_review") {
     return { label: "Da confermare", shortLabel: "Da confermare", className: durationClass };

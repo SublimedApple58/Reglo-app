@@ -233,7 +233,7 @@ export function AutoscuoleTabsPage() {
           affiliateOwner ? (
             <AffiliateAgendaPage />
           ) : (
-            <LockedSection {...LOCKED_SECTIONS.agenda} />
+            <LockedSection {...LOCKED_SECTIONS.agenda} preview="agenda" />
           )
         ) : affiliateWithReglo && agendaScope === "consorzio" ? (
           <AffiliateAgendaPage scope={agendaScope} onScope={setAgendaScope} />

@@ -5,6 +5,7 @@ import { useAtomValue } from "jotai";
 import { companyAtom } from "@/atoms/company.store";
 import { isAffiliateWithoutReglo } from "@/lib/services";
 import { SegretariaLockedCard } from "./locked/SectionLockedCards";
+import { LockedBackdrop } from "./locked/LockedSection";
 
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
@@ -397,7 +398,13 @@ function VoicePageSkeleton() {
 export function AutoscuoleVoicePage() {
   const company = useAtomValue(companyAtom);
   if (isAffiliateWithoutReglo(company?.services ?? null)) {
-    return <SegretariaLockedCard />;
+    // Dietro la card, la sezione piena e sfocata: una pagina bianca non
+    // racconta cosa si sta perdendo (REG-429).
+    return (
+      <LockedBackdrop preview="segretaria">
+        <SegretariaLockedCard />
+      </LockedBackdrop>
+    );
   }
   return <AutoscuoleVoicePageInner />;
 }
