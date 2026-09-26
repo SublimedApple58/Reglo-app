@@ -254,6 +254,56 @@ esplicita — sono mail vere verso clienti veri.
 **Nessuna migrazione**: `linkedCompanyId` e il suo indice esistevano già, il
 resto vive nei `limits` JSON.
 
+### La vista ridotta (REG-429, Fase 6)
+
+Una consorziata **senza** Reglo non vede più il cartello "Servizio non attivo":
+entra nella **stessa shell di sempre** — quattro tab, stesse icone, campanella,
+menu identico — e cambia solo che le funzioni non comprate sono bloccate. È la
+lettura del prototipo di Ruzzu: la vista ridotta **aggiunge lucchetti**, non
+toglie struttura.
+
+| Dove | Bloccato | Aperto |
+|---|---|---|
+| Menu hamburger | Utenti · Ore guida · Invia comunicato · Lascia un feedback · **Chiave di accesso** | Area personale · Impostazioni account · Centro assistenza · Esci |
+| Impostazioni | tutte le pane tranne le due a destra | Informazioni aziendali · **Sede e luoghi** |
+| Sezioni | Agenda (fino alla Fase 7) · Segretaria · Ore guida | **Allievi** (vedi sotto) · Rinnovi (teaser esistente) |
+
+**I dialoghi non sono ricostruzioni.** Ogni voce bloccata, al passaggio del
+mouse, apre il pannello del prototipo con la **sua** anteprima: le tre foto
+degli utenti, le tre dell'ore guida, la foto della notifica push, il collage
+delle recensioni, l'illustrazione della chiave. Sono state estratte dal bundle
+aprendo il prototipo e salvando ciò che disegna davvero
+(`public/images/locked/`); lo stesso vale per i due SVG delle card di sezione,
+copiati carattere per carattere. Se servono ritocchi si riestraggono, non si
+ridisegnano a occhio.
+
+"Chiave di accesso" esiste **solo** in questa vista: la funzione nell'app non
+c'è ancora, nel prototipo è una voce bloccata, e Tiziano ha chiesto di tenerla
+come teaser.
+
+**Allievi è l'eccezione**: non è bloccata. La card mostra il valore della
+sezione completa e il suo CTA **"Prova"** apre le **anagrafiche**, che
+funzionano davvero. È l'unica cosa che una consorziata senza Reglo può fare —
+e serve, perché senza un allievo in elenco non si può chiedere una guida al
+consorzio. Gli allievi **non nascono nella company della scuola**: nascono in
+quella del CONSORZIO, taggati con `consorzioSchoolId`, dove il consorzio li
+vede e dove la richiesta di guida andrà a cercarli.
+
+`lib/actions/affiliate.actions.ts` è la **lista bianca**: tre action
+(`listAffiliateStudents`, `createAffiliateStudent`,
+`updateAffiliateStudentPhone`), tutte dietro `requireAffiliateSchool`, tutte
+filtrate sulla scuola del chiamante. Tutto il resto dell'app resta chiuso da
+`requireServiceAccess`, che su servizio DISABLED rifiuta: le sezioni bloccate
+non montano nemmeno il contenuto, perché mandare in errore delle action per poi
+coprirle con un velo sarebbe solo rumore nei log.
+
+> ⚠️ **Il controllo sta nei wrapper, non dentro i componenti.** In Segretaria e
+> Ore guida il primo tentativo metteva il `return` della card prima delle
+> decine di hook del componente: regola degli hook violata e **build di Vercel
+> in errore** (due deploy falliti, staging rimasto indietro senza accorgersene).
+> `tsc` e `next lint --file` non lo vedono: **`pnpm lint` sull'intero progetto
+> sì**, ed è quello che gira in build.
+
 ### KPI
 
 `companyKindOf` ha un quarto valore, `consorziata`. Le consorziate **senza**
