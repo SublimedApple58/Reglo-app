@@ -854,7 +854,11 @@ function GuideRequestDialog({
         <div className="mb-4 grid grid-cols-2 gap-3">
           <div>
             <p className="mb-1.5 text-[12px] font-semibold text-[#555555]">Giorno</p>
-            <DatePickerInput value={day} onChange={(value) => setDay(value || day)} />
+            <DatePickerInput
+              value={day}
+              onChange={(value) => setDay(value || day)}
+              minDate={new Date()}
+            />
           </div>
           <div>
             <p className="mb-1.5 text-[12px] font-semibold text-[#555555]">Orario</p>

@@ -81,3 +81,33 @@ export async function requireAffiliateSchool() {
     regloActive: isServiceActive(services, "AUTOSCUOLE", true),
   };
 }
+
+/**
+ * Guardia delle funzioni che valgono **sia** per un'autoscuola con Reglo
+ * attivo **sia** per una consorziata senza (REG-429).
+ *
+ * Oggi ce n'è una sola ed è la campanella del titolare: la vista ridotta la
+ * mostra (è nella shell) e dalla Fase 9 ci arrivano le risposte del consorzio.
+ * Con `requireServiceAccess` sarebbe rimasta vuota per sempre — e vuota in
+ * silenzio, che è il modo peggiore.
+ */
+export async function requireAutoscuoleOrAffiliate() {
+  const context = await getActiveCompanyContext();
+  const services = normalizeCompanyServices(context.company.services);
+  if (isServiceActive(services, "AUTOSCUOLE", true)) return context;
+
+  const consorzioCompanyId = affiliateConsorzioId(services);
+  if (consorzioCompanyId) {
+    const school = await prisma.consorzioSchool.findFirst({
+      where: {
+        consorzioCompanyId,
+        linkedCompanyId: context.membership.companyId,
+        status: { not: "removed" },
+      },
+      select: { id: true },
+    });
+    if (school) return context;
+  }
+
+  throw new Error("SERVICE_NOT_ACTIVE");
+}
