@@ -284,9 +284,16 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Hamburger → menu sezioni secondarie */}
+            {/* Hamburger → menu sezioni secondarie.
+
+                `modal={false}` non è un dettaglio: da modale, Radix mette
+                `pointer-events: none` sul body e lascia vivo solo il proprio
+                contenuto. I pannelli delle voci bloccate stanno in un portal
+                FUORI dal menu, quindi non ricevevano né hover né click — il CTA
+                "Attiva Reglo" era irraggiungibile (segnalato da Tiziano,
+                REG-429). */}
             {session ? (
-              <DropdownMenu>
+              <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
