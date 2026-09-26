@@ -21,6 +21,7 @@
  */
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, Plus, Search, X } from "lucide-react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
@@ -38,6 +39,7 @@ import {
   createAffiliateStudent,
   getAffiliateAgenda,
   listAffiliateStudents,
+  respondToAffiliateProposedSlot,
   sendAffiliateGuideRequest,
   type AffiliateAgendaData,
   type AffiliateGuideRequestRow,
@@ -207,9 +209,23 @@ function CalendarPlusIcon() {
 type Scope = "consorzio" | "autoscuola";
 type ViewMode = "week" | "day";
 
-export function AffiliateAgendaPage() {
+/**
+ * `scope`/`onScope` arrivano da fuori quando la pagina è una delle due viste di
+ * un'autoscuola che Reglo **ce l'ha** (Fase 8): lì lo scope va condiviso con
+ * l'agenda vera, che è un componente diverso. Senza props la pagina se lo
+ * gestisce da sé (vista ridotta).
+ */
+export function AffiliateAgendaPage({
+  scope: scopeProp,
+  onScope,
+}: {
+  scope?: Scope;
+  onScope?: (value: Scope) => void;
+} = {}) {
   const toast = useFeedbackToast();
-  const [scope, setScope] = React.useState<Scope>("consorzio");
+  const [scopeState, setScopeState] = React.useState<Scope>("consorzio");
+  const scope = scopeProp ?? scopeState;
+  const setScope = onScope ?? setScopeState;
   const [viewMode, setViewMode] = React.useState<ViewMode>("week");
   const [anchor, setAnchor] = React.useState(() => startOfWeek(new Date()));
   const [dayFocus, setDayFocus] = React.useState(() => {
@@ -236,15 +252,21 @@ export function AffiliateAgendaPage() {
     return { from: from.toISOString(), to: to.toISOString() };
   }, [days]);
 
+  const searchParams = useSearchParams();
+  const deepLinkId = searchParams?.get("guideRequestId") ?? null;
+
   const load = React.useCallback(async () => {
-    const res = await getAffiliateAgenda(range);
+    const res = await getAffiliateAgenda({
+      ...range,
+      ...(deepLinkId ? { focusRequestId: deepLinkId } : {}),
+    });
     if (res.success) setData(res.data);
     else toast.error({ description: res.message });
     setLoading(false);
     // toast è stabile (useMemo su un hook), tenerlo qui rifarebbe il fetch
     // a ogni render del provider
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range]);
+  }, [range, deepLinkId]);
 
   React.useEffect(() => {
     void load();
@@ -252,6 +274,26 @@ export function AffiliateAgendaPage() {
 
   /* ── Dialogo "Richiesta di guida" ── */
   const [dialogOpen, setDialogOpen] = React.useState(false);
+  /* ── Controproposta del consorzio da confermare (Fase 9) ── */
+  const [proposal, setProposal] = React.useState<AffiliateGuideRequestRow | null>(null);
+
+  // Click-through dalla campanella: `?guideRequestId=…` porta l'agenda sulla
+  // settimana della richiesta e, se c'è una controproposta, apre il dialogo.
+  // `handledRequestRef` evita che si riapra a ogni ricarica dopo la chiusura.
+  const handledRequestRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!deepLinkId || !data || handledRequestRef.current === deepLinkId) return;
+    const target =
+      data.requests.find((request) => request.id === deepLinkId) ?? data.focusRequest;
+    if (!target) return;
+    handledRequestRef.current = deepLinkId;
+    // Fuori settimana: ci si sposta sopra, così il blocco si vede davvero.
+    if (!data.requests.some((request) => request.id === deepLinkId)) {
+      setAnchor(startOfWeek(new Date(target.startsAt)));
+      setDayFocus(new Date(new Date(target.startsAt).setHours(0, 0, 0, 0)));
+    }
+    if (target.proposedStartsAt) setProposal(target);
+  }, [deepLinkId, data]);
 
   const todayCount = React.useMemo(() => {
     if (!data) return 0;
@@ -263,7 +305,7 @@ export function AffiliateAgendaPage() {
   }, [data]);
   const pendingCount = data?.requests.filter((r) => r.status === "pending").length ?? 0;
 
-  if (scope === "autoscuola") {
+  if (scope === "autoscuola" && !onScope) {
     return (
       <PageWrapper title="Agenda" subTitle="Agenda guide ed esami." hideHero>
         <div className="mx-auto w-full max-w-7xl space-y-5">
@@ -326,13 +368,30 @@ export function AffiliateAgendaPage() {
           </div>
         )}
 
-        <AgendaGrid days={days} data={data} loading={loading} onCancel={load} />
+        <AgendaGrid
+          days={days}
+          data={data}
+          loading={loading}
+          onCancel={load}
+          onProposal={setProposal}
+        />
 
         <p className="text-[12.5px] leading-relaxed text-[#929292]">
           I blocchi grigi sono slot già occupati dal consorzio: vedi quando è pieno, non chi c&apos;è
           dentro. Il consorzio può accettare la richiesta, rifiutarla o proporti un altro orario.
         </p>
       </div>
+
+      {proposal && (
+        <ProposalDialog
+          request={proposal}
+          onClose={() => setProposal(null)}
+          onDone={() => {
+            setProposal(null);
+            void load();
+          }}
+        />
+      )}
 
       {dialogOpen && data && (
         <GuideRequestDialog
@@ -423,11 +482,13 @@ function AgendaGrid({
   data,
   loading,
   onCancel,
+  onProposal,
 }: {
   days: Date[];
   data: AffiliateAgendaData | null;
   loading: boolean;
   onCancel: () => void;
+  onProposal: (request: AffiliateGuideRequestRow) => void;
 }) {
   const hourMarks = Array.from(
     { length: DAY_END_HOUR - DAY_START_HOUR + 1 },
@@ -577,7 +638,12 @@ function AgendaGrid({
                   })}
 
                   {requests.map((request) => (
-                    <RequestBlock key={request.id} request={request} onCancelled={onCancel} />
+                    <RequestBlock
+                      key={request.id}
+                      request={request}
+                      onCancelled={onCancel}
+                      onProposal={onProposal}
+                    />
                   ))}
                 </div>
               );
@@ -592,9 +658,11 @@ function AgendaGrid({
 function RequestBlock({
   request,
   onCancelled,
+  onProposal,
 }: {
   request: AffiliateGuideRequestRow;
   onCancelled: () => void;
+  onProposal: (request: AffiliateGuideRequestRow) => void;
 }) {
   const toast = useFeedbackToast();
   const [busy, setBusy] = React.useState(false);
@@ -633,15 +701,23 @@ function RequestBlock({
         <p className="mt-0.5 truncate text-[10px] font-medium text-[#177e45]">Spostata</p>
       )}
       {request.proposedStartsAt && request.status === "pending" && (
-        <p className="mt-0.5 truncate text-[10px] font-medium text-[#8a6d0b]">
-          Proposto:{" "}
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onProposal(request);
+          }}
+          className="mt-0.5 block w-full cursor-pointer truncate rounded-md bg-white/70 px-1 py-0.5 text-left text-[10px] font-semibold text-[#8a6d0b] hover:bg-white"
+        >
+          Proposto{" "}
           {new Date(request.proposedStartsAt).toLocaleString("it-IT", {
             day: "numeric",
             month: "short",
             hour: "2-digit",
             minute: "2-digit",
-          })}
-        </p>
+          })}{" "}
+          →
+        </button>
       )}
       {request.status === "pending" && (
         <button
@@ -956,6 +1032,107 @@ function GuideRequestDialog({
             className="cursor-pointer rounded-[32px] bg-[#222222] px-[22px] py-[11px] text-[14px] font-bold text-white transition-opacity hover:opacity-90 disabled:cursor-default disabled:bg-[#ededed] disabled:text-[#a5a5a5]"
           >
             {sending ? <LoadingDots /> : "Invia richiesta"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Controproposta del consorzio (Fase 9) ──────────────────────────── */
+
+function ProposalDialog({
+  request,
+  onClose,
+  onDone,
+}: {
+  request: AffiliateGuideRequestRow;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const toast = useFeedbackToast();
+  const [busy, setBusy] = React.useState<"accept" | "reject" | null>(null);
+
+  const respond = async (accept: boolean) => {
+    setBusy(accept ? "accept" : "reject");
+    const res = await respondToAffiliateProposedSlot({ requestId: request.id, accept });
+    setBusy(null);
+    if (!res.success) {
+      toast.error({ description: res.message });
+      return;
+    }
+    toast.success({
+      description: accept
+        ? "Orario accettato: la richiesta torna al consorzio per la conferma."
+        : "Proposta rifiutata: resta la richiesta originale.",
+    });
+    onDone();
+  };
+
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleString("it-IT", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/20 p-6">
+      <div className="w-full max-w-[440px] rounded-[24px] bg-white p-6 shadow-[0_26px_70px_rgba(10,20,30,0.24)]">
+        <div className="mb-1 flex items-start justify-between gap-3">
+          <h2 className="text-[20px] font-bold tracking-[-0.3px] text-foreground">
+            Il consorzio propone un altro orario
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Chiudi"
+            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#f0f0f0]"
+          >
+            <X className="size-4 text-[#6a6a6a]" />
+          </button>
+        </div>
+        <p className="mb-5 text-[13px] leading-[1.45] text-muted-foreground">
+          Accettando, la richiesta si sposta sull&apos;orario proposto e torna al consorzio per la
+          conferma finale — l&apos;istruttore lo sceglie lui.
+        </p>
+
+        <div className="mb-3 rounded-[14px] bg-[#f7f7f7] px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.6px] text-[#929292]">
+            Avevi chiesto
+          </p>
+          <p className="mt-0.5 text-[14px] font-medium text-[#6a6a6a]">
+            {fmt(request.requestedStartsAt)} · {request.durationMinutes} min
+          </p>
+        </div>
+        <div className="mb-5 rounded-[14px] border-[1.5px] border-[#e0b93a] bg-[#fdf3d4] px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.6px] text-[#8a6d0b]">
+            Il consorzio propone
+          </p>
+          <p className="mt-0.5 text-[14px] font-bold text-[#6b5407]">
+            {request.proposedStartsAt ? fmt(request.proposedStartsAt) : "—"}
+            {request.proposedDurationMinutes ? ` · ${request.proposedDurationMinutes} min` : ""}
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4">
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => void respond(false)}
+            className="cursor-pointer text-[14px] font-semibold text-foreground underline"
+          >
+            {busy === "reject" ? <LoadingDots /> : "Rifiuta"}
+          </button>
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => void respond(true)}
+            className="cursor-pointer rounded-[32px] bg-[#222222] px-[22px] py-[11px] text-[14px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {busy === "accept" ? <LoadingDots /> : "Accetta l'orario"}
           </button>
         </div>
       </div>

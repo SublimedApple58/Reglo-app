@@ -163,3 +163,50 @@ export async function deleteAutoscuolaNotifications(
 ): Promise<void> {
   await prisma.autoscuolaNotification.deleteMany({ where: { companyId } });
 }
+
+/**
+ * Risposta del consorzio → campanella dell'**autoscuola richiedente**
+ * (REG-429, Fase 9).
+ *
+ * Fino alla Fase 8 questo era un no-op dichiarato: la consorziata non aveva un
+ * account, quindi la risposta non aveva dove arrivare. Ora ce l'ha, ed è la
+ * stessa campanella che il titolare guarda già per le cancellazioni.
+ *
+ * Il destinatario è `ConsorzioSchool.linkedCompanyId`: se la scuola non è
+ * collegata a nessuna Company la funzione non fa niente — non è un errore, è
+ * un'anagrafica senza account.
+ */
+export async function notifyAffiliateOfGuideResponse(input: {
+  schoolId: string;
+  requestId: string;
+  outcome: "accepted" | "rejected" | "proposed";
+  studentName: string;
+  consorzioName: string;
+  startsAt: Date | null;
+}): Promise<void> {
+  const school = await prisma.consorzioSchool.findUnique({
+    where: { id: input.schoolId },
+    select: { linkedCompanyId: true },
+  });
+  if (!school?.linkedCompanyId) return;
+
+  await prisma.autoscuolaNotification.create({
+    data: {
+      companyId: school.linkedCompanyId,
+      kind:
+        input.outcome === "accepted"
+          ? "consortium_guide_accepted"
+          : input.outcome === "rejected"
+            ? "consortium_guide_rejected"
+            : "consortium_guide_proposed",
+      studentName: input.studentName,
+      startsAt: input.startsAt,
+      meta: {
+        requestId: input.requestId,
+        // La campanella mostra "chi" accanto all'allievo: per il consorzio è la
+        // scuola, per la scuola è il consorzio. Stesso campo, stesso posto.
+        schoolName: input.consorzioName,
+      },
+    },
+  });
+}

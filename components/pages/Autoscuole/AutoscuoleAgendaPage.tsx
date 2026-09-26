@@ -783,8 +783,16 @@ function VehicleDetailLines({
 
 export function AutoscuoleAgendaPage({
   tabs,
+  consorzioScope,
 }: {
   tabs?: React.ReactNode;
+  /**
+   * Autoscuola **consorziata con Reglo attivo** (REG-429, Fase 8): accanto alla
+   * navigazione data compare il segmented `Consorzio | Autoscuola` del
+   * prototipo. Questa pagina è la vista "Autoscuola"; l'altra la monta il
+   * chiamante, che tiene lo stato — sono due componenti diversi.
+   */
+  consorzioScope?: { value: "consorzio" | "autoscuola"; onChange: (value: "consorzio" | "autoscuola") => void };
 } = {}) {
   const studentNameOrder = useStudentNameOrder();
   const toast = useFeedbackToast();
@@ -2911,6 +2919,18 @@ export function AutoscuoleAgendaPage({
               <ChevronRight className="size-4" />
             </button>
           </div>
+
+          {/* Scope consorzio (REG-429 Fase 8) — prima del periodo, come nel proto */}
+          {consorzioScope && (
+            <SegmentedPill
+              value={consorzioScope.value}
+              onChange={consorzioScope.onChange}
+              options={[
+                { value: "consorzio", label: "Consorzio" },
+                { value: "autoscuola", label: "Autoscuola" },
+              ]}
+            />
+          )}
 
           {/* Period toggle */}
           <SegmentedPill

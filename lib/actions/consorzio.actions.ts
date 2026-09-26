@@ -24,7 +24,10 @@ import {
   type ConsorzioBillingMode,
   type ConsorzioPricing,
 } from "@/lib/consorzio/pricing";
-import { resolveConsortiumGuideRequestNotification } from "@/lib/autoscuole/notifications";
+import {
+  notifyAffiliateOfGuideResponse,
+  resolveConsortiumGuideRequestNotification,
+} from "@/lib/autoscuole/notifications";
 import { requireConsortium } from "@/lib/service-access";
 import {
   diffConsorzioPricing,
@@ -582,20 +585,25 @@ const proposeGuideRequestSlotSchema = z.object({
  * "Proponi un altro orario" (prototipo): il consorzio invia all'autoscuola una
  * controproposta di slot/durata/mezzo. La richiesta resta `pending` (il
  * consorzio può comunque accettare/rifiutare); la conferma dell'autoscuola
- * arriverà con la fase affiliate — oggi la notifica alla scuola è un no-op
- * (nessun destinatario). Il ghost tratteggiato in agenda segue la proposta.
+ * arriva in campanella all'autoscuola (Fase 9), che può accettarla o
+ * rifiutarla. Il ghost tratteggiato in agenda segue la proposta.
  */
 export async function proposeConsorzioGuideRequestSlot(
   input: z.infer<typeof proposeGuideRequestSlotSchema>,
 ) {
   try {
-    const { membership } = await requireConsortium();
+    const { membership, company } = await requireConsortium();
     const companyId = membership.companyId;
     const payload = proposeGuideRequestSlotSchema.parse(input);
 
     const request = await prisma.consorzioGuideRequest.findFirst({
       where: { id: payload.requestId, consorzioCompanyId: companyId },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        schoolId: true,
+        student: { select: { name: true } },
+      },
     });
     if (!request) {
       return { success: false as const, message: "Richiesta non trovata." };
@@ -632,7 +640,14 @@ export async function proposeConsorzioGuideRequestSlot(
         proposedByUserId: membership.userId,
       },
     });
-    // Hook notifica all'autoscuola richiedente: no-op fino alla fase affiliate.
+    await notifyAffiliateOfGuideResponse({
+      schoolId: request.schoolId,
+      requestId: request.id,
+      outcome: "proposed",
+      studentName: request.student.name ?? "—",
+      consorzioName: company.name,
+      startsAt: new Date(payload.startsAt),
+    });
 
     return { success: true as const };
   } catch (error) {
@@ -652,7 +667,7 @@ export async function acceptConsorzioGuideRequest(
   input: z.infer<typeof acceptGuideRequestSchema>,
 ) {
   try {
-    const { membership } = await requireConsortium();
+    const { membership, company } = await requireConsortium();
     const companyId = membership.companyId;
     const payload = acceptGuideRequestSchema.parse(input);
 
@@ -766,6 +781,20 @@ export async function acceptConsorzioGuideRequest(
       outcome: "accepted",
       startsAt,
     });
+    // E la stessa risposta arriva alla campanella dell'autoscuola (Fase 9).
+    await notifyAffiliateOfGuideResponse({
+      schoolId: request.schoolId,
+      requestId: request.id,
+      outcome: "accepted",
+      studentName: (
+        await prisma.user.findUnique({
+          where: { id: request.studentUserId },
+          select: { name: true },
+        })
+      )?.name ?? "—",
+      consorzioName: company.name,
+      startsAt,
+    });
 
     await invalidateAutoscuoleCache({
       companyId,
@@ -780,10 +809,16 @@ export async function acceptConsorzioGuideRequest(
 
 export async function rejectConsorzioGuideRequest(requestId: string) {
   try {
-    const { membership } = await requireConsortium();
+    const { membership, company } = await requireConsortium();
     const request = await prisma.consorzioGuideRequest.findFirst({
       where: { id: requestId, consorzioCompanyId: membership.companyId },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        schoolId: true,
+        requestedStartsAt: true,
+        student: { select: { name: true } },
+      },
     });
     if (!request) {
       return { success: false as const, message: "Richiesta non trovata." };
@@ -804,6 +839,14 @@ export async function rejectConsorzioGuideRequest(requestId: string) {
       companyId: membership.companyId,
       requestId: request.id,
       outcome: "rejected",
+    });
+    await notifyAffiliateOfGuideResponse({
+      schoolId: request.schoolId,
+      requestId: request.id,
+      outcome: "rejected",
+      studentName: request.student.name ?? "—",
+      consorzioName: company.name,
+      startsAt: request.requestedStartsAt,
     });
     return { success: true as const };
   } catch (error) {

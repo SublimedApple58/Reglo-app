@@ -326,11 +326,19 @@ export type AffiliateAgendaData = {
   /** Impegni del consorzio nella finestra: **solo orari**, nessun nome. */
   busy: AffiliateAgendaSlot[];
   requests: AffiliateGuideRequestRow[];
+  /** La richiesta di `focusRequestId`, anche se fuori finestra. */
+  focusRequest: AffiliateGuideRequestRow | null;
 };
 
 const agendaRangeSchema = z.object({
   from: z.string().datetime(),
   to: z.string().datetime(),
+  /**
+   * Click-through dalla campanella: questa richiesta torna indietro anche se
+   * cade fuori dalla settimana mostrata, così l'agenda può saltarci sopra
+   * invece di aprire un dialogo vuoto.
+   */
+  focusRequestId: z.string().uuid().optional(),
 });
 
 const REQUEST_STATUSES = ["pending", "accepted", "rejected", "cancelled"] as const;
@@ -427,7 +435,42 @@ export async function getAffiliateAgenda(input: z.infer<typeof agendaRangeSchema
             row.endsAt ?? new Date(row.startsAt.getTime() + 60 * 60000)
           ).toISOString(),
         })),
-      requests: requests.map((request) => {
+      requests: requests.map(toRequestRow),
+      focusRequest: null,
+    };
+
+    if (payload.focusRequestId && !data.requests.some((r) => r.id === payload.focusRequestId)) {
+      const extra = await prisma.consorzioGuideRequest.findFirst({
+        where: { id: payload.focusRequestId, consorzioCompanyId, schoolId },
+        include: {
+          student: { select: { name: true } },
+          vehicle: { select: { name: true } },
+          appointment: { select: { instructorId: true, startsAt: true, endsAt: true } },
+        },
+      });
+      if (extra) data.focusRequest = toRequestRow(extra);
+    }
+
+    return { success: true as const, data };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+type GuideRequestWithRelations = {
+  id: string;
+  status: string;
+  requestedStartsAt: Date;
+  durationMinutes: number;
+  movedToStartsAt: Date | null;
+  proposedStartsAt: Date | null;
+  proposedDurationMinutes: number | null;
+  student: { name: string | null };
+  vehicle: { name: string } | null;
+  appointment: { instructorId: string | null; startsAt: Date; endsAt: Date | null } | null;
+};
+
+const toRequestRow = (request: GuideRequestWithRelations): AffiliateGuideRequestRow => {
         const effectiveStart = request.appointment?.startsAt ?? request.requestedStartsAt;
         return {
           id: request.id,
@@ -451,14 +494,7 @@ export async function getAffiliateAgenda(input: z.infer<typeof agendaRangeSchema
           proposedStartsAt: request.proposedStartsAt?.toISOString() ?? null,
           proposedDurationMinutes: request.proposedDurationMinutes,
         };
-      }),
-    };
-
-    return { success: true as const, data };
-  } catch (error) {
-    return { success: false as const, message: formatError(error) };
-  }
-}
+};
 
 const sendRequestSchema = z.object({
   studentUserId: z.string().uuid(),
@@ -585,6 +621,92 @@ export async function cancelAffiliateGuideRequest(requestId: string) {
     });
 
     return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const respondProposalSchema = z.object({
+  requestId: z.string().uuid(),
+  accept: z.boolean(),
+});
+
+/**
+ * L'autoscuola risponde alla **controproposta** del consorzio ("Proponi un
+ * altro orario", REG-429 Fase 9).
+ *
+ * Accettando, la richiesta si sposta sullo slot proposto e **resta in attesa**:
+ * l'appuntamento lo crea il consorzio, perché è lui a scegliere l'istruttore —
+ * la proposta non ne contiene uno e inventarlo qui sarebbe peggio che
+ * chiederglielo. Rifiutando, la proposta sparisce e resta la richiesta
+ * originale. In entrambi i casi il consorzio se lo ritrova in campanella.
+ */
+export async function respondToAffiliateProposedSlot(
+  input: z.infer<typeof respondProposalSchema>,
+) {
+  try {
+    const { consorzioCompanyId, schoolId, schoolName } = await requireAffiliateOwner();
+    const payload = respondProposalSchema.parse(input);
+
+    const request = await prisma.consorzioGuideRequest.findFirst({
+      where: { id: payload.requestId, consorzioCompanyId, schoolId },
+      include: {
+        student: { select: { name: true } },
+        proposedVehicle: { select: { name: true } },
+      },
+    });
+    if (!request) throw new Error("Richiesta non trovata.");
+    if (request.status !== "pending") throw new Error("Richiesta già gestita.");
+    if (!request.proposedStartsAt) throw new Error("Nessun orario proposto da confermare.");
+
+    if (!payload.accept) {
+      await prisma.consorzioGuideRequest.update({
+        where: { id: request.id },
+        data: {
+          proposedStartsAt: null,
+          proposedDurationMinutes: null,
+          proposedVehicleId: null,
+          proposedAt: null,
+          proposedByUserId: null,
+        },
+      });
+      return { success: true as const, data: { accepted: false } };
+    }
+
+    const startsAt = request.proposedStartsAt;
+    await prisma.consorzioGuideRequest.update({
+      where: { id: request.id },
+      data: {
+        requestedStartsAt: startsAt,
+        durationMinutes: request.proposedDurationMinutes ?? request.durationMinutes,
+        vehicleId: request.proposedVehicleId ?? request.vehicleId,
+        proposedStartsAt: null,
+        proposedDurationMinutes: null,
+        proposedVehicleId: null,
+        proposedAt: null,
+        proposedByUserId: null,
+      },
+    });
+
+    // Il consorzio deve accorgersene: la richiesta è di nuovo sul suo tavolo,
+    // sullo slot che ha proposto lui.
+    await prisma.autoscuolaNotification.deleteMany({
+      where: {
+        companyId: consorzioCompanyId,
+        kind: "consortium_guide_request",
+        meta: { path: ["requestId"], equals: request.id },
+      },
+    });
+    await createConsortiumGuideRequestNotification({
+      companyId: consorzioCompanyId,
+      requestId: request.id,
+      studentName: request.student.name ?? "—",
+      schoolName,
+      vehicleName: request.proposedVehicle?.name ?? null,
+      startsAt,
+    });
+
+    return { success: true as const, data: { accepted: true } };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }

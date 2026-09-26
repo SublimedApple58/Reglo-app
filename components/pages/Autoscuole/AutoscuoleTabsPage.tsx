@@ -7,7 +7,12 @@ import { useLocale } from "next-intl";
 import { useAtomValue } from "jotai";
 
 import { companyAtom } from "@/atoms/company.store";
-import { isAffiliateWithoutReglo, isConsortium, isSecretaryOnly } from "@/lib/services";
+import {
+  isAffiliateWithoutReglo,
+  isConsortium,
+  isConsorzioAffiliate,
+  isSecretaryOnly,
+} from "@/lib/services";
 import { LockedSection, LOCKED_SECTIONS } from "./locked/LockedSection";
 import { AffiliateAgendaPage } from "./locked/AffiliateAgendaPage";
 import { AllieviLockedCard } from "./locked/SectionLockedCards";
@@ -103,6 +108,17 @@ export function AutoscuoleTabsPage() {
   // (`requireAffiliateOwner`): questo qui è solo l'interfaccia.
   const affiliateReduced = isAffiliateWithoutReglo(company?.services ?? null);
   const affiliateOwner = affiliateReduced && company?.role === "admin";
+  // Consorziata che Reglo **ce l'ha** (Fase 8): l'app è quella di sempre, in
+  // più ha lo scope Consorzio per chiedere guide. Il segmented vive nella
+  // toolbar dell'agenda vera, lo stato qui: le due viste sono componenti
+  // diversi e devono condividerlo.
+  const affiliateWithReglo =
+    !affiliateReduced &&
+    isConsorzioAffiliate(company?.services ?? null) &&
+    company?.role === "admin";
+  const [agendaScope, setAgendaScope] = React.useState<"consorzio" | "autoscuola">(
+    "autoscuola",
+  );
 
   const initialTab = React.useMemo(
     () => normalizeTab(searchParams.get("tab")),
@@ -219,8 +235,17 @@ export function AutoscuoleTabsPage() {
           ) : (
             <LockedSection {...LOCKED_SECTIONS.agenda} />
           )
+        ) : affiliateWithReglo && agendaScope === "consorzio" ? (
+          <AffiliateAgendaPage scope={agendaScope} onScope={setAgendaScope} />
         ) : (
-          <AutoscuoleAgendaPage tabs={null} />
+          <AutoscuoleAgendaPage
+            tabs={null}
+            consorzioScope={
+              affiliateWithReglo
+                ? { value: agendaScope, onChange: setAgendaScope }
+                : undefined
+            }
+          />
         )
       ) : null}
       {activeTab === "settings" ? <AutoscuoleResourcesPage tabs={null} /> : null}

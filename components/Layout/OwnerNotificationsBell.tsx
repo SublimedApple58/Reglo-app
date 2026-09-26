@@ -101,6 +101,23 @@ export function OwnerNotificationsBell() {
               title: "Nuova richiesta guida",
               description: `${String(top.meta?.schoolName ?? "Un'autoscuola")} chiede una guida per ${top.studentName ?? "un allievo"} — ${formatGuida(top.startsAt)}`,
             });
+          } else if (
+            top.kind === "consortium_guide_proposed" ||
+            top.kind === "consortium_guide_accepted" ||
+            top.kind === "consortium_guide_rejected"
+          ) {
+            // Lato autoscuola: la risposta del consorzio (REG-429 Fase 9).
+            // Senza questo ramo uscirebbe "ha annullato una guida".
+            const esito =
+              top.kind === "consortium_guide_proposed"
+                ? "propone un altro orario"
+                : top.kind === "consortium_guide_accepted"
+                  ? "ha accettato la guida"
+                  : "ha rifiutato la guida";
+            toast.info({
+              title: "Risposta del consorzio",
+              description: `${String(top.meta?.schoolName ?? "Il consorzio")} ${esito} di ${top.studentName ?? "un allievo"} — ${formatGuida(top.startsAt)}`,
+            });
           } else {
             toast.info({
               title: "Nuovo annullamento",
@@ -258,6 +275,45 @@ export function OwnerNotificationsBell() {
                         </p>
                         <p className="mt-0.5 truncate text-[13px] font-medium text-[#717171]">
                           {[schoolName, formatGuida(n.startsAt)].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                      {!n.read && (
+                        <span className="h-[9px] w-[9px] shrink-0 rounded-full bg-[#c13515]" />
+                      )}
+                    </button>
+                  );
+                }
+                // Il consorzio ha proposto un altro orario (REG-429 Fase 9):
+                // riga cliccabile come la richiesta, ma dal lato autoscuola →
+                // l'agenda apre il dialogo "accetta / rifiuta l'orario".
+                if (n.kind === "consortium_guide_proposed") {
+                  const requestId =
+                    typeof n.meta?.requestId === "string" ? n.meta.requestId : null;
+                  const consorzioName =
+                    typeof n.meta?.schoolName === "string" ? n.meta.schoolName : null;
+                  return (
+                    <button
+                      key={n.id}
+                      type="button"
+                      onClick={() => {
+                        if (!requestId) return;
+                        setOpen(false);
+                        router.push(
+                          `/${locale}/user/autoscuole?tab=agenda&guideRequestId=${requestId}`,
+                        );
+                      }}
+                      className="relative flex w-full cursor-pointer items-center gap-3.5 px-5 py-3 text-left transition-colors hover:bg-[#f7f7f7]"
+                    >
+                      <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+                        <Clock className="h-[19px] w-[19px]" strokeWidth={2} />
+                      </span>
+                      <div className="min-w-0 flex-1 pr-4">
+                        <p className="text-[14.5px] leading-[1.4] text-foreground">
+                          <span className="font-semibold">Nuovo orario proposto</span>
+                          {n.studentName ? ` · ${n.studentName}` : ""}
+                        </p>
+                        <p className="mt-0.5 truncate text-[13px] font-medium text-[#717171]">
+                          {[consorzioName, formatGuida(n.startsAt)].filter(Boolean).join(" · ")}
                         </p>
                       </div>
                       {!n.read && (
