@@ -112,6 +112,11 @@ import {
   type Transmission,
 } from "@/lib/autoscuole/license";
 import { createCompanyUser } from "@/lib/actions/user.actions";
+import {
+  createAffiliateStudent,
+  listAffiliateStudents,
+  updateAffiliateStudentPhone,
+} from "@/lib/actions/affiliate.actions";
 import { useAtomValue } from "jotai";
 import { companyAtom } from "@/atoms/company.store";
 import { LicenseCategorySelectItems } from "./LicenseCategorySelectItems";
@@ -744,8 +749,20 @@ const PHASE_SUBTITLES: Record<PhaseTab, string> = {
 
 export function AutoscuoleStudentsPage({
   tabs,
+  affiliate = false,
 }: {
   tabs?: React.ReactNode;
+  /**
+   * Vista ridotta di una consorziata **senza Reglo** (REG-429).
+   *
+   * È la STESSA pagina, non una copia: cambia solo da dove arrivano gli allievi
+   * (la company del consorzio, filtrati sulla scuola — `affiliate.actions.ts`)
+   * e quali funzioni sono disponibili. Tutto ciò che il servizio spento non
+   * può alimentare — progressi, pagellini, crediti, quiz, blocchi, istruttori,
+   * luoghi — non si monta e, soprattutto, non chiama action chiuse: sarebbe un
+   * SERVICE_NOT_ACTIVE in faccia al titolare a ogni apertura.
+   */
+  affiliate?: boolean;
 } = {}) {
   const studentNameOrder = useStudentNameOrder();
   const toast = useFeedbackToast();
@@ -791,6 +808,12 @@ export function AutoscuoleStudentsPage({
   // Filtro "solo pronti all'esame" nella lista pratica (chicca titolare).
   const [praticaOnlyReady, setPraticaOnlyReady] = React.useState(false);
   const [students, setStudents] = React.useState<Student[]>([]);
+  // Copia stabile della lista: la scheda della vista ridotta si compone da qui
+  // (vedi loadRegister) senza rendere `loadRegister` dipendente dallo stato.
+  const studentsRef = React.useRef<Student[]>([]);
+  React.useEffect(() => {
+    studentsRef.current = students;
+  }, [students]);
   const [loading, setLoading] = React.useState(true);
   const [searching, setSearching] = React.useState(false);
   const [panelOpen, setPanelOpen] = React.useState(false);
@@ -835,6 +858,7 @@ export function AutoscuoleStudentsPage({
       lastName: "",
       email: "",
       password: "",
+      phone: "",
       licenseCategory: "B",
       transmission: "manual",
       assignedInstructorId: "__none__",
@@ -1207,7 +1231,7 @@ export function AutoscuoleStudentsPage({
     return [];
   }, [phaseTab, praticaSubTab, praticaOnlyReady, studentsByPhase]);
 
-  const selectionEnabled = selectableList.length > 0;
+  const selectionEnabled = !affiliate && selectableList.length > 0;
   const selectedStudents = React.useMemo(
     () => selectableList.filter((student) => selectedIds.has(student.id)),
     [selectableList, selectedIds],
@@ -1300,8 +1324,15 @@ export function AutoscuoleStudentsPage({
   }, [debouncedSearch, phaseTab, praticaSubTab, praticaOnlyReady]);
 
   const load = React.useCallback(async (isSearch = false) => {
+    // Finché non sappiamo di che company si tratta non si chiama niente: il
+    // fallback "servizio attivo" di `isServiceActive` farebbe partire la lista
+    // normale anche a una consorziata senza Reglo, che si prenderebbe un
+    // SERVICE_NOT_ACTIVE (REG-429).
+    if (!company) return;
     if (isSearch) setSearching(true); else setLoading(true);
-    const res = await getAutoscuolaStudentsWithProgress(debouncedSearch);
+    const res = affiliate
+      ? await listAffiliateStudents()
+      : await getAutoscuolaStudentsWithProgress(debouncedSearch);
     if (!res.success || !res.data) {
       toast.error({
         description: res.message ?? "Impossibile caricare gli allievi.",
@@ -1310,10 +1341,25 @@ export function AutoscuoleStudentsPage({
       setSearching(false);
       return;
     }
-    setStudents(res.data as Student[]);
+    let rows = (
+      affiliate
+        ? (res.data as { students: unknown[] }).students
+        : res.data
+    ) as Student[];
+    if (affiliate && debouncedSearch.trim()) {
+      // La lista della vista ridotta arriva intera (sono poche anagrafiche):
+      // la ricerca si fa qui invece di aggiungere un giro al server.
+      const term = debouncedSearch.trim().toLowerCase();
+      rows = rows.filter((student) =>
+        [student.firstName, student.lastName, student.email, student.phone]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(term)),
+      );
+    }
+    setStudents(rows);
     setLoading(false);
     setSearching(false);
-  }, [debouncedSearch, toast]);
+  }, [affiliate, company, debouncedSearch, toast]);
 
   const selectedStudent = React.useMemo(
     () => students.find((student) => student.id === selectedStudentId) ?? null,
@@ -1326,6 +1372,25 @@ export function AutoscuoleStudentsPage({
       registerRequestRef.current = requestId;
       setRegisterLoading(true);
       setRegister(null);
+      // Vista ridotta: il registro guide è del consorzio, non suo. La scheda si
+      // compone dalla riga già in elenco — nessuna action, nessuna attesa.
+      if (affiliate) {
+        const row = studentsRef.current.find((student) => student.id === studentId);
+        if (row) {
+          setRegister({
+            student: row,
+            studentPhase: row.studentPhase,
+            licenseCategory: row.licenseCategory,
+            transmission: row.transmission,
+            activeCase: null,
+            summary: row.summary,
+            byLessonType: [],
+            lessons: [],
+          });
+        }
+        setRegisterLoading(false);
+        return;
+      }
       const res = await getAutoscuolaStudentDrivingRegister(studentId);
       if (requestId !== registerRequestRef.current) return;
       if (!res.success || !res.data) {
@@ -1338,7 +1403,7 @@ export function AutoscuoleStudentsPage({
       setRegister(res.data as StudentRegister);
       setRegisterLoading(false);
     },
-    [toast],
+    [affiliate, toast],
   );
 
   const loadCredits = React.useCallback(
@@ -1390,13 +1455,17 @@ export function AutoscuoleStudentsPage({
   const saveStudentPhone = async () => {
     if (!register || phoneSaving) return;
     setPhoneSaving(true);
-    const res = await updateStudentPhone({ studentId: register.student.id, phone: phoneDraft });
+    const res = affiliate
+      ? await updateAffiliateStudentPhone({ userId: register.student.id, phone: phoneDraft })
+      : await updateStudentPhone({ studentId: register.student.id, phone: phoneDraft });
     setPhoneSaving(false);
     if (!res.success) {
       toast.error({ description: res.message ?? "Impossibile aggiornare il numero." });
       return;
     }
-    const newPhone = res.data?.phone ?? null;
+    const newPhone = affiliate
+      ? phoneDraft.trim()
+      : (("data" in res ? res.data?.phone : null) ?? null);
     setRegister((prev) => (prev ? { ...prev, student: { ...prev.student, phone: newPhone } } : prev));
     setEditingPhone(false);
     toast.success({ description: res.message ?? "Numero aggiornato." });
@@ -1574,6 +1643,9 @@ export function AutoscuoleStudentsPage({
    *   guide e note, quindi convivono.
    */
   const drawerTabs = React.useMemo(() => {
+    // Vista ridotta: Quiz, Guide e Note sono del servizio attivo. Resta il
+    // riepilogo, cioè l'anagrafica — l'unica cosa che questa scuola possiede.
+    if (affiliate) return [{ key: "summary" as DrawerTab, label: "Riepilogo" }];
     const phase = register?.studentPhase ?? "PRATICA";
     const beforeDriving = phase === "AWAITING" || phase === "TEORIA";
     const tabs: Array<{ key: DrawerTab; label: string }> = [
@@ -1588,7 +1660,7 @@ export function AutoscuoleStudentsPage({
       tabs.push({ key: "notes", label: notesCount ? `Note (${notesCount})` : "Note" });
     }
     return tabs;
-  }, [register]);
+  }, [affiliate, register]);
 
   // La fase può cambiare col drawer aperto: se il tab attivo sparisce, torna al
   // riepilogo invece di mostrare un pannello vuoto.
@@ -1867,6 +1939,35 @@ export function AutoscuoleStudentsPage({
       const firstName = createForm.firstName.trim();
       const lastName = createForm.lastName.trim();
       const email = createForm.email.trim();
+      // Vista ridotta: l'anagrafica nasce nel consorzio, senza credenziali —
+      // stesso trattamento degli allievi creati dal consorzio (REG-464).
+      if (affiliate) {
+        if (!firstName || !lastName || createForm.phone.trim().length < 5) {
+          toast.error({ description: "Nome, cognome e telefono sono obbligatori." });
+          return;
+        }
+        setCreateSaving(true);
+        const created = await createAffiliateStudent({
+          firstName,
+          lastName,
+          phone: createForm.phone.trim(),
+          licenseCategory: createForm.licenseCategory,
+          transmission: createForm.transmission,
+        });
+        setCreateSaving(false);
+        if (!created.success) {
+          toast.error({ description: created.message ?? "Creazione non riuscita." });
+          return;
+        }
+        toast.success({
+          title: "Allievo aggiunto",
+          description: `${formatStudentName({ firstName, lastName }, studentNameOrder)} è registrato presso il consorzio con la tua autoscuola.`,
+        });
+        setCreateOpen(false);
+        setCreateForm(emptyCreateForm);
+        void load(true);
+        return;
+      }
       if (!firstName || !lastName || !email || !createForm.password) {
         toast.error({ description: "Compila tutti i campi obbligatori." });
         return;
@@ -1898,7 +1999,7 @@ export function AutoscuoleStudentsPage({
       void load(true);
       if (createForm.studentPhase === "TEORIA") void refreshQuizCtx();
     },
-    [company?.id, createForm, createSaving, emptyCreateForm, load, refreshQuizCtx, toast, studentNameOrder],
+    [affiliate, company?.id, createForm, createSaving, emptyCreateForm, load, refreshQuizCtx, toast, studentNameOrder],
   );
 
   const initialRef = React.useRef(true);
@@ -1912,6 +2013,10 @@ export function AutoscuoleStudentsPage({
   }, [load]);
 
   React.useEffect(() => {
+    // Vista ridotta: chiave d'accesso, luoghi, impostazioni, istruttori e
+    // modalità di pagamento sono tutte dietro `requireServiceAccess`. Chiamarle
+    // a servizio spento vuol dire cinque SERVICE_NOT_ACTIVE a ogni apertura.
+    if (affiliate || !company) return;
     getCompanyInviteCode().then((res) => {
       if (res.success && res.data) setInviteCode(res.data);
     });
@@ -1961,7 +2066,7 @@ export function AutoscuoleStudentsPage({
         });
       }
     });
-  }, []);
+  }, [affiliate, company]);
 
   const phaseTabOptions = React.useMemo(() => {
     const options: Array<{ value: PhaseTab; label: string; count: number }> = [];
@@ -2236,10 +2341,16 @@ export function AutoscuoleStudentsPage({
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">
-                  {student.summary.completedLessons}/{student.summary.requiredLessons}
+                  {affiliate
+                    ? student.summary.completedLessons
+                    : `${student.summary.completedLessons}/${student.summary.requiredLessons}`}
                 </p>
                 <p className="mt-px text-[11px] font-medium text-[#929292]">
-                  {student.summary.isCompleted ? "Obbligo completato" : "Guide"}
+                  {affiliate
+                    ? "Guide col consorzio"
+                    : student.summary.isCompleted
+                      ? "Obbligo completato"
+                      : "Guide"}
                 </p>
               </div>
               <div className="flex justify-end">
@@ -2364,19 +2475,23 @@ export function AutoscuoleStudentsPage({
                       }`
                     : "—"}
                 </p>
-                <button type="button" className={blueLinkClass} onClick={() => setLicenseDialogOpen(true)}>
-                  Modifica
-                </button>
+                {!affiliate && (
+                  <button type="button" className={blueLinkClass} onClick={() => setLicenseDialogOpen(true)}>
+                    Modifica
+                  </button>
+                )}
               </div>
             </div>
             <div>
               <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Fase percorso</p>
               <div className="flex flex-wrap items-center gap-2">
                 <Pill tone={phaseBadge.tone}>{phaseBadge.label}</Pill>
-                <button type="button" className={blueLinkClass} onClick={() => setPhaseDialogOpen(true)}>
-                  Cambia fase
-                </button>
-                {register.studentPhase === "AWAITING" && (
+                {!affiliate && (
+                  <button type="button" className={blueLinkClass} onClick={() => setPhaseDialogOpen(true)}>
+                    Cambia fase
+                  </button>
+                )}
+                {!affiliate && register.studentPhase === "AWAITING" && (
                   <button
                     type="button"
                     className={blueLinkClass}
@@ -2398,7 +2513,7 @@ export function AutoscuoleStudentsPage({
             </div>
           </div>
 
-          {groupLessonsEnabledGlobal && (
+          {!affiliate && groupLessonsEnabledGlobal && (
             <div
               className="mt-5 flex cursor-pointer items-center justify-between gap-3 rounded-[10px] bg-[#f8f8f8] p-4"
               onClick={async () => {
@@ -2438,6 +2553,11 @@ export function AutoscuoleStudentsPage({
           )}
         </section>
 
+        {/* Tutto ciò che segue vive di dati del servizio attivo (foto e firme,
+            blocchi prenotazione, pagellino, crediti): nella vista ridotta la
+            scheda si ferma all'anagrafica. */}
+        {!affiliate && (
+          <>
         <StudentMediaSection
           studentUserId={register.student.id}
           refreshKey={mediaRefreshKey}
@@ -2911,6 +3031,8 @@ export function AutoscuoleStudentsPage({
               </>
             )}
           </section>
+        )}
+          </>
         )}
       </>
     );
@@ -3554,7 +3676,7 @@ export function AutoscuoleStudentsPage({
                 )}
                 <button
                   type="button"
-                  title="Crea account allievo"
+                  title={affiliate ? "Aggiungi allievo" : "Crea account allievo"}
                   onClick={openCreateDialog}
                   className="flex size-9 shrink-0 cursor-pointer items-center justify-center text-[#929292] transition-colors hover:text-foreground"
                 >
@@ -3783,9 +3905,11 @@ export function AutoscuoleStudentsPage({
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Crea account allievo</DialogTitle>
+            <DialogTitle>{affiliate ? "Aggiungi allievo" : "Crea account allievo"}</DialogTitle>
             <DialogDescription>
-              Crea direttamente l&apos;account: l&apos;allievo accede all&apos;app con email e password scelte qui.
+              {affiliate
+                ? "Nome, cognome e telefono. L'allievo viene registrato presso il consorzio con la tua autoscuola e non riceve accesso all'app."
+                : "Crea direttamente l'account: l'allievo accede all'app con email e password scelte qui."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateStudent} className="space-y-4">
@@ -3811,29 +3935,44 @@ export function AutoscuoleStudentsPage({
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="create-email">Email</Label>
-              <Input
-                id="create-email"
-                type="email"
-                placeholder="allievo@esempio.com"
-                value={createForm.email}
-                onChange={(event) => setCreateForm((p) => ({ ...p, email: event.target.value }))}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="create-password">Password</Label>
-              <Input
-                id="create-password"
-                type="password"
-                placeholder="••••••••"
-                value={createForm.password}
-                onChange={(event) => setCreateForm((p) => ({ ...p, password: event.target.value }))}
-                required
-                minLength={6}
-              />
-            </div>
+            {affiliate ? (
+              <div className="space-y-2">
+                <Label htmlFor="create-phone">Telefono</Label>
+                <Input
+                  id="create-phone"
+                  placeholder="340 11 22 33"
+                  value={createForm.phone}
+                  onChange={(event) => setCreateForm((p) => ({ ...p, phone: event.target.value }))}
+                  required
+                />
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="create-email">Email</Label>
+                  <Input
+                    id="create-email"
+                    type="email"
+                    placeholder="allievo@esempio.com"
+                    value={createForm.email}
+                    onChange={(event) => setCreateForm((p) => ({ ...p, email: event.target.value }))}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="create-password">Password</Label>
+                  <Input
+                    id="create-password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={createForm.password}
+                    onChange={(event) => setCreateForm((p) => ({ ...p, password: event.target.value }))}
+                    required
+                    minLength={6}
+                  />
+                </div>
+              </>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Categoria patente</Label>
@@ -3929,7 +4068,7 @@ export function AutoscuoleStudentsPage({
                 ) : (
                   <>
                     <UserPlus className="mr-2 h-4 w-4" />
-                    Crea account
+                    {affiliate ? "Aggiungi allievo" : "Crea account"}
                   </>
                 )}
               </Button>

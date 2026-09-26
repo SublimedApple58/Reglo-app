@@ -10,7 +10,6 @@ import { companyAtom } from "@/atoms/company.store";
 import { isAffiliateWithoutReglo, isConsortium, isSecretaryOnly } from "@/lib/services";
 import { LockedSection, LOCKED_SECTIONS } from "./locked/LockedSection";
 import { AllieviLockedCard } from "./locked/SectionLockedCards";
-import { AffiliateStudentsPage } from "./locked/AffiliateStudentsPage";
 import { AutoscuoleRinnoviTeaser } from "./AutoscuoleRinnoviTeaser";
 
 const AutoscuoleStudentsPage = dynamic(
@@ -189,13 +188,23 @@ export function AutoscuoleTabsPage() {
     <div className="w-full">
       {activeTab === "students" ? (
         affiliateReduced ? (
-          // "Prova" apre le anagrafiche, che nella vista ridotta funzionano
-          // davvero: senza un allievo in elenco non si può chiedere una guida.
-          allieviProvato ? (
-            <AffiliateStudentsPage />
-          ) : (
-            <AllieviLockedCard onProva={() => setAllieviProvato(true)} />
-          )
+          // Come nel prototipo: sotto c'è la pagina Allievi VERA (in modalità
+          // ridotta, allievi del consorzio taggati con questa scuola), sfocata,
+          // e sopra la card. "Prova" toglie la card e la pagina si usa davvero
+          // — senza un allievo in elenco non si può chiedere una guida.
+          <div className="relative">
+            <div
+              className={allieviProvato ? undefined : "pointer-events-none select-none blur-[3px]"}
+              aria-hidden={allieviProvato ? undefined : true}
+            >
+              <AutoscuoleStudentsPage tabs={null} affiliate />
+            </div>
+            {!allieviProvato && (
+              <div className="fixed inset-x-0 bottom-0 top-[84px] z-30 overflow-y-auto px-4 py-6">
+                <AllieviLockedCard onProva={() => setAllieviProvato(true)} />
+              </div>
+            )}
+          </div>
         ) : (
           <AutoscuoleStudentsPage tabs={null} />
         )

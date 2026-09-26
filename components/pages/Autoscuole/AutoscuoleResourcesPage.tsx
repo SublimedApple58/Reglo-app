@@ -11,6 +11,7 @@ import { companyAtom } from "@/atoms/company.store";
 import { LicenseCategorySelectItems } from "./LicenseCategorySelectItems";
 import {
   isAffiliateWithoutReglo, isConsortium, isSecretaryOnly } from "@/lib/services";
+import { LockedSettingsPane } from "@/components/pages/Autoscuole/locked/LockedSettingsPane";
 
 import {
   BellProtoIcon,
@@ -344,7 +345,16 @@ const CONFIG_PANE_GROUPS: Array<
  * e la sede. La sede in particolare è il dato che serve il giorno in cui
  * accende Reglo, ed è l'onboarding che il prototipo lascia attivo.
  */
-const AFFILIATE_OPEN_PANES: ConfigPane[] = ["business", "locations"];
+/**
+ * Le uniche pane che una consorziata senza Reglo usa davvero.
+ *
+ * "Sede e luoghi" è fuori anche se nel prototipo appare aperta: ogni sua
+ * action (`autoscuola-locations.actions`) passa da `requireServiceAccess`, e
+ * lasciarla aperta significherebbe una pagina vuota con dei bottoni che non
+ * fanno niente. Meglio la card, che almeno dice perché. "Informazioni
+ * aziendali" invece legge company e profilo, che non sono gated.
+ */
+const AFFILIATE_OPEN_PANES: ConfigPane[] = ["business"];
 
 const CONSORZIO_BILLING_PANE = {
   key: "consorzioBilling" as ConfigPane,
@@ -696,6 +706,7 @@ export function AutoscuoleResourcesPage({
   const channelReachRequested = React.useRef(false);
 
   React.useEffect(() => {
+    if (affiliateReduced) return;
     if (configTab !== "reminders" || channelReachRequested.current) return;
     channelReachRequested.current = true;
     void getChannelReachAction().then((res) => {
@@ -703,7 +714,7 @@ export function AutoscuoleResourcesPage({
       setChannelReach(res.data.reach);
       setWhatsappAvailable(res.data.whatsappAvailable);
     });
-  }, [configTab]);
+  }, [affiliateReduced, configTab]);
 
   const loadSettings = React.useCallback(async () => {
     const res = await getAutoscuolaSettings();
@@ -826,6 +837,10 @@ export function AutoscuoleResourcesPage({
   }, [loadResources, loadAvailability, date]);
 
   React.useEffect(() => {
+    // Consorziata senza Reglo: impostazioni, istruttori, veicoli e disponibilità
+    // stanno tutte dietro `requireServiceAccess`. Nella vista ridotta non si
+    // chiamano affatto — le pane bloccate mostrano la loro card, non dati.
+    if (!company || affiliateReduced) return;
     const primary: Array<Promise<void>> = [];
     if (PANES_NEEDING_SETTINGS.includes(configTab)) primary.push(ensureSettings());
     if (PANES_NEEDING_RESOURCES.includes(configTab)) primary.push(ensureResources());
@@ -833,14 +848,17 @@ export function AutoscuoleResourcesPage({
       ensureSettings();
       ensureResources();
     });
-    // solo al mount: configTab qui è la pane iniziale
+    // Parte al primo render in cui la company è nota (prima non si sa se è una
+    // consorziata senza Reglo). Ripeterlo è innocuo: ensureSettings/
+    // ensureResources sono memoizzate su una promise-ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [company, affiliateReduced]);
 
   React.useEffect(() => {
+    if (!company || affiliateReduced) return;
     if (PANES_NEEDING_SETTINGS.includes(configTab)) ensureSettings();
     if (PANES_NEEDING_RESOURCES.includes(configTab)) ensureResources();
-  }, [configTab, ensureSettings, ensureResources]);
+  }, [company, affiliateReduced, configTab, ensureSettings, ensureResources]);
 
   // ── Auto-save Impostazioni (pattern unico di tutte le pane) ────────────────
   // Applica subito il cambiamento in UI, persiste il SOLO campo toccato via
@@ -2163,9 +2181,12 @@ export function AutoscuoleResourcesPage({
 
   // Skeleton per-pane: la pane corrente compare appena arrivano i SUOI dati,
   // senza aspettare le altre fetch (che continuano in background come prefetch).
+  // Pane bloccata della vista ridotta: non aspetta nessun dato, mostra la card.
+  const paneLocked = affiliateReduced && !AFFILIATE_OPEN_PANES.includes(configTab);
   const paneReady =
-    (!PANES_NEEDING_SETTINGS.includes(configTab) || settingsLoaded) &&
-    (!PANES_NEEDING_RESOURCES.includes(configTab) || hasLoadedOnce);
+    paneLocked ||
+    ((!PANES_NEEDING_SETTINGS.includes(configTab) || settingsLoaded) &&
+      (!PANES_NEEDING_RESOURCES.includes(configTab) || hasLoadedOnce));
 
   // Le sezioni impostazioni (Promemoria/Policy/Sede) sono rese una alla
   // volta come pannello dell'overlay.
@@ -2248,29 +2269,25 @@ export function AutoscuoleResourcesPage({
                   {groupIndex > 0 && <div className="my-1.5 hidden h-px bg-[#ebebeb] lg:mx-1 lg:block" />}
                   {group.map((pane) => {
                     const active = configTab === pane.key;
-                    // Consorziata senza Reglo: restano aperte solo le pane che
+                    // Consorziata senza Reglo: restano usabili solo le pane che
                     // servono comunque (anagrafica e sede). Le altre portano il
-                    // lucchetto e non si aprono — REG-429.
+                    // lucchetto ma **si aprono lo stesso** e mostrano la loro card
+                    // con l'anteprima, come nel prototipo — REG-429.
                     const locked = affiliateReduced && !AFFILIATE_OPEN_PANES.includes(pane.key);
                     return (
                       <button
                         key={pane.key}
                         type="button"
-                        onClick={() => {
-                          if (locked) return;
-                          goToPane(pane.key);
-                        }}
-                        aria-disabled={locked || undefined}
+                        onClick={() => goToPane(pane.key)}
                         className={cn(
                           "flex shrink-0 select-none items-center gap-3 whitespace-nowrap rounded-[10px] px-4 py-2.5 text-[14px] transition-colors lg:gap-4 lg:px-5 lg:py-4 lg:text-[17px]",
-                          locked
-                            ? "cursor-default font-medium text-[#9d9d9d] [&_svg]:stroke-[#bdbdbd]"
-                            : "cursor-pointer",
-                          !locked && active
+                          "cursor-pointer",
+                          locked ? "[&_svg]:stroke-[#bdbdbd]" : undefined,
+                          active
                             ? "bg-[#f2f2f2] font-semibold text-foreground"
-                            : !locked
-                              ? "font-medium text-[#444444] hover:text-foreground"
-                              : undefined,
+                            : locked
+                              ? "font-medium text-[#9d9d9d] hover:text-[#6a6a6a]"
+                              : "font-medium text-[#444444] hover:text-foreground",
                         )}
                       >
                         <pane.icon className="size-5 shrink-0 lg:size-6" strokeWidth={1.9} />
@@ -2309,6 +2326,9 @@ export function AutoscuoleResourcesPage({
               </h2>
             )}
             {!paneReady && <SettingsPaneSkeleton />}
+            {paneLocked ? (
+              <LockedSettingsPane pane={configTab} />
+            ) : (
             <div className={paneReady ? undefined : "hidden"}>
           <FadeIn>
         <KeepAlivePane active={configTab === "business"} eager={mountAllPanes}>
@@ -2441,6 +2461,7 @@ export function AutoscuoleResourcesPage({
         </KeepAlivePane>
           </FadeIn>
             </div>
+            )}
           </div>
         </div>
       </div>
