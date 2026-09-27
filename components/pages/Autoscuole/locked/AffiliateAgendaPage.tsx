@@ -25,6 +25,22 @@ import { useSearchParams } from "next/navigation";
 import { Ban, CalendarPlus, Car, GraduationCap, Plus, Search, Sun, Users, X } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { CreateEventPopover } from "@/components/pages/Autoscuole/dialogs/CreateEventPopover";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { DatePickerInput } from "@/components/ui/date-picker";
@@ -51,6 +67,8 @@ import {
 import { LockedCard, LOCKED_SECTIONS, useDemoAgendaSource } from "./LockedSection";
 
 const DURATIONS = [30, 45, 60, 90, 120];
+/** Radix Select non accetta il valore vuoto: serve un sentinella per "nessuno". */
+const NO_VEHICLE = "__none__";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const formatYmd = (date: Date) =>
@@ -186,6 +204,17 @@ export function AffiliateAgendaPage({
 
   const [requestOpen, setRequestOpen] = React.useState(false);
   const [prefill, setPrefill] = React.useState<{ ymd: string; time: string } | null>(null);
+  /**
+   * Punto a cui ancorare la card (angolo in alto a destra), come fa l'agenda
+   * vera con `anchorFromPlus`: si apre da dove l'hai chiesta.
+   */
+  const [anchor, setAnchor] = React.useState<{ x: number; y: number } | null>(null);
+  const anchorFromPlus = React.useCallback(() => {
+    const rect = document
+      .querySelector<HTMLElement>('button[title="Inserisci a mano"]')
+      ?.getBoundingClientRect();
+    setAnchor(rect ? { x: rect.right, y: rect.bottom + 10 } : null);
+  }, []);
   const [proposal, setProposal] = React.useState<AffiliateGuideRequestRow | null>(null);
   const [cancelTarget, setCancelTarget] = React.useState<AffiliateGuideRequestRow | null>(null);
 
@@ -269,6 +298,7 @@ export function AffiliateAgendaPage({
             icon: <CalendarPlus className="size-4 text-foreground" strokeWidth={1.7} />,
             onSelect: (slot) => {
               setPrefill(slot ? { ymd: slot.ymd, time: slot.time } : null);
+              anchorFromPlus();
               setRequestOpen(true);
             },
           },
@@ -288,7 +318,7 @@ export function AffiliateAgendaPage({
         ],
       },
     }),
-    [fetchBootstrap, toast],
+    [fetchBootstrap, toast, anchorFromPlus],
   );
 
   const scopeControl = React.useMemo(
@@ -318,6 +348,7 @@ export function AffiliateAgendaPage({
         <GuideRequestDialog
           data={data}
           prefill={prefill}
+          anchor={anchor}
           onClose={() => setRequestOpen(false)}
           onSent={() => {
             setRequestOpen(false);
@@ -351,57 +382,27 @@ export function AffiliateAgendaPage({
   );
 }
 
-/* ── Guscio comune dei dialoghi ──────────────────────────────────────── */
-
-function DialogShell({
-  title,
-  subtitle,
-  onClose,
-  children,
-  width = 490,
-}: {
-  title: string;
-  subtitle?: string;
-  onClose: () => void;
-  children: React.ReactNode;
-  width?: number;
-}) {
-  return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/20 p-6">
-      <div
-        className="w-full rounded-[24px] bg-white p-6 shadow-[0_26px_70px_rgba(10,20,30,0.24)]"
-        style={{ maxWidth: width }}
-      >
-        <div className="mb-1 flex items-start justify-between gap-3">
-          <h2 className="text-[20px] font-bold tracking-[-0.3px] text-foreground">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Chiudi"
-            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#f0f0f0]"
-          >
-            <X className="size-4 text-[#6a6a6a]" />
-          </button>
-        </div>
-        {subtitle ? (
-          <p className="mb-5 text-[13px] leading-[1.45] text-muted-foreground">{subtitle}</p>
-        ) : null}
-        {children}
-      </div>
-    </div>
-  );
-}
-
 /* ── Invio richiesta ─────────────────────────────────────────────────── */
 
+/**
+ * Richiesta di guida al consorzio.
+ *
+ * È una **card di creazione come le altre dell'agenda**: stesso
+ * `CreateEventPopover` del nuovo appuntamento — trascinabile, ridimensionabile,
+ * non modale. Il primo giro aveva un guscio scritto a mano: oltre a essere un
+ * altro componente da mantenere, stava sopra a tutto e ci finiva dietro il
+ * flyout di scelta allievo.
+ */
 function GuideRequestDialog({
   data,
   prefill,
+  anchor,
   onClose,
   onSent,
 }: {
   data: AffiliateAgendaData;
   prefill: { ymd: string; time: string } | null;
+  anchor: { x: number; y: number } | null;
   onClose: () => void;
   onSent: () => void;
 }) {
@@ -491,10 +492,32 @@ function GuideRequestDialog({
   };
 
   return (
-    <DialogShell
+    <CreateEventPopover
+      open
+      onClose={onClose}
       title="Richiesta di guida"
       subtitle="Gli slot grigi in agenda sono occupati dal consorzio. La richiesta resta in attesa finché il consorzio non risponde."
-      onClose={onClose}
+      anchor={anchor}
+      width={520}
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer text-[14px] font-semibold text-foreground underline"
+          >
+            Annulla
+          </button>
+          <button
+            type="button"
+            disabled={!canSend}
+            onClick={() => void send()}
+            className="cursor-pointer rounded-[32px] bg-[#222222] px-[22px] py-[11px] text-[14px] font-bold text-white transition-opacity hover:opacity-90 disabled:cursor-default disabled:bg-[#ededed] disabled:text-[#a5a5a5]"
+          >
+            {sending ? <LoadingDots /> : "Invia richiesta"}
+          </button>
+        </>
+      }
     >
       <div className="mb-4 grid grid-cols-2 gap-3">
         <div>
@@ -605,73 +628,29 @@ function GuideRequestDialog({
       )}
 
       <p className="mb-1.5 text-[12px] font-semibold text-[#555555]">Veicolo del consorzio</p>
-      <div className="relative mb-4">
-        <TruckIcon />
-        <select
-          value={vehicleId ?? ""}
-          onChange={(event) => setVehicleId(event.target.value || null)}
-          className="w-full cursor-pointer appearance-none rounded-[12px] border border-[#e2e2e2] bg-white py-2.5 pl-10 pr-9 text-[14px] font-medium text-foreground outline-none"
+      <div className="mb-4">
+        <Select
+          value={vehicleId ?? NO_VEHICLE}
+          onValueChange={(value) => setVehicleId(value === NO_VEHICLE ? null : value)}
         >
-          <option value="">Scegli un veicolo</option>
-          {data.vehicles.map((vehicle) => (
-            <option key={vehicle.id} value={vehicle.id}>
-              {vehicle.name}
-            </option>
-          ))}
-        </select>
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          aria-hidden
-          className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2"
-        >
-          <path d="M6 9l6 6 6-6" stroke="#9a9a9a" strokeWidth="2" strokeLinecap="round" />
-        </svg>
+          <SelectTrigger className="cursor-pointer">
+            <SelectValue placeholder="Scegli un veicolo" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_VEHICLE} className="cursor-pointer">
+              Nessuno — lo sceglie il consorzio
+            </SelectItem>
+            {data.vehicles.map((vehicle) => (
+              <SelectItem key={vehicle.id} value={vehicle.id} className="cursor-pointer">
+                {vehicle.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {leadError && <p className="mb-3 text-[12.5px] font-medium text-[#b3261e]">{leadError}</p>}
-
-      <div className="mt-2 flex items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4">
-        <button
-          type="button"
-          onClick={onClose}
-          className="cursor-pointer text-[14px] font-semibold text-foreground underline"
-        >
-          Annulla
-        </button>
-        <button
-          type="button"
-          disabled={!canSend}
-          onClick={() => void send()}
-          className="cursor-pointer rounded-[32px] bg-[#222222] px-[22px] py-[11px] text-[14px] font-bold text-white transition-opacity hover:opacity-90 disabled:cursor-default disabled:bg-[#ededed] disabled:text-[#a5a5a5]"
-        >
-          {sending ? <LoadingDots /> : "Invia richiesta"}
-        </button>
-      </div>
-    </DialogShell>
-  );
-}
-
-function TruckIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="#6a6a6a"
-      strokeWidth={1.7}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-      className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2"
-    >
-      <path d="M3 7h10v9H3zM13 10h4l3 3v3h-7z" />
-      <circle cx="7" cy="18" r="1.6" />
-      <circle cx="17" cy="18" r="1.6" />
-    </svg>
+      {leadError && <p className="mb-1 text-[12.5px] font-medium text-[#b3261e]">{leadError}</p>}
+    </CreateEventPopover>
   );
 }
 
@@ -715,13 +694,16 @@ function ProposalDialog({
   };
 
   return (
-    <DialogShell
-      title="Il consorzio propone un altro orario"
-      subtitle="Accettando, la richiesta si sposta sull'orario proposto e torna al consorzio per la conferma finale — l'istruttore lo sceglie lui."
-      onClose={onClose}
-      width={440}
-    >
-      <div className="mb-3 rounded-[14px] bg-[#f7f7f7] px-4 py-3">
+    <Dialog open onOpenChange={(next) => (!next ? onClose() : undefined)}>
+      <DialogContent className="sm:max-w-[440px]">
+        <DialogHeader>
+          <DialogTitle>Il consorzio propone un altro orario</DialogTitle>
+          <DialogDescription>
+            Accettando, la richiesta si sposta sull&apos;orario proposto e torna al consorzio per
+            la conferma finale — l&apos;istruttore lo sceglie lui.
+          </DialogDescription>
+        </DialogHeader>
+      <div className="mb-3 mt-1 rounded-[14px] bg-[#f7f7f7] px-4 py-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.6px] text-[#929292]">
           Avevi chiesto
         </p>
@@ -739,7 +721,7 @@ function ProposalDialog({
         </p>
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4">
+      <DialogFooter className="justify-between sm:justify-between">
         <button
           type="button"
           disabled={busy !== null}
@@ -756,8 +738,9 @@ function ProposalDialog({
         >
           {busy === "accept" ? <LoadingDots /> : "Accetta l'orario"}
         </button>
-      </div>
-    </DialogShell>
+      </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -788,8 +771,15 @@ function CancelRequestDialog({
   };
 
   return (
-    <DialogShell title="Richiesta in attesa" onClose={onClose} width={420}>
-      <div className="mb-5 rounded-[14px] bg-[#f7f7f7] px-4 py-3">
+    <Dialog open onOpenChange={(next) => (!next ? onClose() : undefined)}>
+      <DialogContent className="sm:max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>Richiesta in attesa</DialogTitle>
+          <DialogDescription>
+            Il consorzio non ha ancora risposto. Annullandola sparisce anche dalla sua campanella.
+          </DialogDescription>
+        </DialogHeader>
+      <div className="mb-5 mt-1 rounded-[14px] bg-[#f7f7f7] px-4 py-3">
         <p className="text-[14px] font-semibold text-foreground">{request.studentName}</p>
         <p className="mt-0.5 text-[13px] font-medium text-[#6a6a6a]">
           {fmtFull(request.startsAt)} · {request.durationMinutes} min
@@ -798,10 +788,7 @@ function CancelRequestDialog({
           <p className="mt-0.5 text-[13px] font-medium text-[#6a6a6a]">{request.vehicleName}</p>
         ) : null}
       </div>
-      <p className="mb-5 text-[13px] leading-[1.45] text-muted-foreground">
-        Il consorzio non ha ancora risposto. Annullandola sparisce anche dalla sua campanella.
-      </p>
-      <div className="flex items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4">
+      <DialogFooter className="justify-between sm:justify-between">
         <button
           type="button"
           onClick={onClose}
@@ -817,8 +804,9 @@ function CancelRequestDialog({
         >
           {busy ? <LoadingDots /> : "Annulla richiesta"}
         </button>
-      </div>
-    </DialogShell>
+      </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

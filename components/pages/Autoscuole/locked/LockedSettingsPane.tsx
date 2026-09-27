@@ -22,16 +22,17 @@
 import Image from "next/image";
 
 import { ATTIVA_REGLO_URL } from "./locked-features";
+import { DEMO_SETTINGS_PREVIEWS } from "./demo-settings";
 
 /* ── Primitivi dell'anteprima (stessi stili del prototipo) ───────────── */
 
-const FieldLabel = ({ children }: { children: React.ReactNode }) => (
+export const FieldLabel = ({ children }: { children: React.ReactNode }) => (
   <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.6px] text-[#929292]">
     {children}
   </p>
 );
 
-const FakeSelect = ({ children }: { children: React.ReactNode }) => (
+export const FakeSelect = ({ children }: { children: React.ReactNode }) => (
   <div className="flex items-center justify-between gap-2 rounded-[10px] border border-[#e2e2e2] px-3 py-2.5">
     <span className="truncate text-[13.5px] font-medium text-foreground">{children}</span>
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -40,7 +41,13 @@ const FakeSelect = ({ children }: { children: React.ReactNode }) => (
   </div>
 );
 
-const Chip = ({ checked, children }: { checked?: boolean; children: React.ReactNode }) => (
+export const PreviewChip = ({
+  checked,
+  children,
+}: {
+  checked?: boolean;
+  children: React.ReactNode;
+}) => (
   <span
     className={
       checked
@@ -59,7 +66,7 @@ const Toggle = () => (
   </span>
 );
 
-const ToggleRow = ({ title, note }: { title: string; note: string }) => (
+export const PreviewToggleRow = ({ title, note }: { title: string; note: string }) => (
   <div className="flex items-center justify-between gap-3 py-2.5">
     <div className="min-w-0">
       <p className="text-[13.5px] font-semibold text-foreground">{title}</p>
@@ -113,16 +120,16 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
         </div>
         <FieldLabel>Durata prenotazione allievo</FieldLabel>
         <div className="mb-1 grid grid-cols-4 gap-2">
-          <Chip>30 min</Chip>
-          <Chip>45 min</Chip>
-          <Chip checked>60 min</Chip>
-          <Chip>90 min</Chip>
+          <PreviewChip>30 min</PreviewChip>
+          <PreviewChip>45 min</PreviewChip>
+          <PreviewChip checked>60 min</PreviewChip>
+          <PreviewChip>90 min</PreviewChip>
         </div>
-        <ToggleRow
+        <PreviewToggleRow
           title="Solo orari tondi"
           note="Proponi agli allievi solo orari pieni (16:00, 17:00, ecc.)"
         />
-        <ToggleRow
+        <PreviewToggleRow
           title="Festività non prenotabili"
           note="I giorni festivi restano chiusi alle prenotazioni"
         />
@@ -135,19 +142,19 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
     title: "Policy tipi guida",
     preview: (
       <>
-        <ToggleRow
+        <PreviewToggleRow
           title="Richiedi almeno 1 guida per tipo"
           note="Ogni allievo completa una guida per ogni tipo selezionato"
         />
         <div className="mt-3">
           <FieldLabel>Configura per tipo di guida</FieldLabel>
           <div className="grid grid-cols-3 gap-2">
-            <Chip checked>Manovre</Chip>
-            <Chip checked>Urbano</Chip>
-            <Chip>Extraurbano</Chip>
-            <Chip checked>Notturna</Chip>
-            <Chip>Autostrada</Chip>
-            <Chip>Parcheggio</Chip>
+            <PreviewChip checked>Manovre</PreviewChip>
+            <PreviewChip checked>Urbano</PreviewChip>
+            <PreviewChip>Extraurbano</PreviewChip>
+            <PreviewChip checked>Notturna</PreviewChip>
+            <PreviewChip>Autostrada</PreviewChip>
+            <PreviewChip>Parcheggio</PreviewChip>
           </div>
         </div>
       </>
@@ -169,7 +176,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
             <FakeSelect>30 minuti prima</FakeSelect>
           </div>
         </div>
-        <ToggleRow
+        <PreviewToggleRow
           title="Promemoria mattutino"
           note="La mattina del giorno della guida, alle 07:30"
         />
@@ -177,9 +184,9 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
         <div className="mb-3 flex items-center justify-between gap-2">
           <span className="text-[13.5px] font-semibold text-foreground">Modalità di invio</span>
           <span className="flex gap-1.5">
-            <Chip checked>Notifica</Chip>
-            <Chip checked>WhatsApp</Chip>
-            <Chip>Email</Chip>
+            <PreviewChip checked>Notifica</PreviewChip>
+            <PreviewChip checked>WhatsApp</PreviewChip>
+            <PreviewChip>Email</PreviewChip>
           </span>
         </div>
         {/* Stessa foto + notifica finta del dialogo "Invia comunicato". */}
@@ -252,11 +259,6 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
       "Disponibilità, categoria, cambio e chi può usarli: più dettagli, zero sovrapposizioni.",
   },
   // Senza card nel prototipo: forma generica, nessuna anteprima inventata.
-  locations: {
-    title: "Sede e luoghi",
-    description:
-      "I luoghi di partenza delle guide: l'allievo sceglie dove salire in auto e l'agenda tiene conto degli spostamenti.",
-  },
   evaluation: {
     title: "Pagellino di valutazione",
     description:
@@ -281,30 +283,88 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
 
 /* ── Card + scheletro sfocato ────────────────────────────────────────── */
 
-/** Righe grigie al posto del contenuto vero: sfocate, come nel prototipo. */
-function BlurredPanePlaceholder() {
+/**
+ * Sotto il cartello ci vanno i **campi veri** della sezione, sfocati: barre
+ * grigie dicevano che manca qualcosa, non cosa. I contenuti sono finti e
+ * locali (`demo-settings.tsx`) — la pane vera non si monta, chiamerebbe action
+ * chiuse.
+ */
+function BlurredPanePlaceholder({ pane }: { pane: string }) {
+  const preview = DEMO_SETTINGS_PREVIEWS[pane];
   return (
     <div className="pointer-events-none select-none blur-[3px]" aria-hidden>
-      <div className="space-y-6">
-        {[0, 1, 2].map((block) => (
-          <div key={block} className="space-y-3">
-            <div className="h-3.5 w-[150px] rounded-full bg-[#ededed]" />
-            <div className="h-11 w-full rounded-[10px] bg-[#f4f4f4]" />
-            <div className="h-11 w-[72%] rounded-[10px] bg-[#f4f4f4]" />
-          </div>
-        ))}
+      {preview ?? (
+        <div className="space-y-6">
+          {[0, 1, 2].map((block) => (
+            <div key={block} className="space-y-3">
+              <div className="h-3.5 w-[150px] rounded-full bg-[#ededed]" />
+              <div className="h-11 w-full rounded-[10px] bg-[#f4f4f4]" />
+              <div className="h-11 w-[72%] rounded-[10px] bg-[#f4f4f4]" />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * "Sede e luoghi" nel prototipo **non è un cartello di blocco**: è lo stato
+ * vuoto della sezione — due illustrazioni, l'invito a impostare la sede e i
+ * due CTA, senza lucchetto e senza sfocatura. Lo riproduciamo così com'è
+ * invece di forzarlo nella forma delle altre.
+ */
+function LocationsEmptyState() {
+  return (
+    <div className="flex min-h-[420px] flex-col items-center justify-center px-6 text-center">
+      <div className="mb-6 flex items-end justify-center gap-1">
+        <Image src="/images/locked/sede-0.png" alt="" width={210} height={210} className="h-[150px] w-[150px] object-contain" />
+        <Image src="/images/locked/sede-1.png" alt="" width={210} height={210} className="h-[150px] w-[150px] object-contain" />
       </div>
+      <h3 className="mb-2 text-[19px] font-bold tracking-[-0.2px] text-foreground">
+        Imposta la sede della tua autoscuola
+      </h3>
+      <p className="mb-6 max-w-[430px] text-[14.5px] leading-[1.55] text-muted-foreground">
+        La sede è il luogo di partenza predefinito di ogni guida. Aggiungila ora per iniziare a
+        creare le prenotazioni, poi potrai gestire eventuali <b className="font-semibold text-foreground">luoghi extra</b>.
+      </p>
+      <CtaRow />
+    </div>
+  );
+}
+
+/** I due pulsanti, identici in ogni cartello. */
+function CtaRow() {
+  return (
+    <div className="flex items-center justify-center gap-2.5">
+      <a
+        href="https://reglo.it"
+        target="_blank"
+        rel="noreferrer"
+        className="rounded-[32px] border-[1.5px] border-[#dddddd] bg-white px-5 py-2.5 text-[14px] font-semibold text-foreground transition-colors hover:border-[#b5b5b5]"
+      >
+        Scopri di più
+      </a>
+      <a
+        href={ATTIVA_REGLO_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="rounded-[32px] bg-[#222222] px-[22px] py-[11px] text-[14px] font-bold text-white transition-opacity hover:opacity-90"
+      >
+        Attiva Reglo
+      </a>
     </div>
   );
 }
 
 export function LockedSettingsPane({ pane }: { pane: string }) {
+  if (pane === "locations") return <LocationsEmptyState />;
   const card = LOCKED_PANE_CARDS[pane];
   if (!card) return null;
 
   return (
     <div className="relative min-h-[520px]">
-      <BlurredPanePlaceholder />
+      <BlurredPanePlaceholder pane={pane} />
       <div className="absolute inset-0 flex items-start justify-center pt-4">
         <div className="w-full max-w-[420px] rounded-[24px] bg-white p-6 shadow-[0_26px_70px_rgba(10,20,30,0.16)]">
           {card.preview ? (
@@ -331,24 +391,7 @@ export function LockedSettingsPane({ pane }: { pane: string }) {
           <p className="mb-4 text-center text-[13.5px] font-medium leading-[1.5] text-muted-foreground">
             {card.description}
           </p>
-          <div className="flex items-center justify-center gap-2.5">
-            <a
-              href="https://reglo.it"
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-[32px] border-[1.5px] border-[#dddddd] bg-white px-5 py-2.5 text-[14px] font-semibold text-foreground transition-colors hover:border-[#b5b5b5]"
-            >
-              Scopri di più
-            </a>
-            <a
-              href={ATTIVA_REGLO_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-[32px] bg-[#222222] px-[22px] py-[11px] text-[14px] font-bold text-white transition-opacity hover:opacity-90"
-            >
-              Attiva Reglo
-            </a>
-          </div>
+          <CtaRow />
         </div>
       </div>
     </div>
