@@ -13,7 +13,8 @@
  *
  * Due dettagli che valgono la pena di sapere, perché non sono miei capricci:
  * - **"Gestione autonoma" non ha i CTA**: finisce col riquadro video. Le altre
- *   tre hanno "Scopri di più" + "Attiva Reglo".
+ *   tre hanno "Scopri di più" + "Attiva Reglo". Il riquadro, a differenza del
+ *   prototipo, è un link al video vero sul sito (`VIDEO_ISTRUTTORI_URL`).
  * - "Ferie" e "Malattia" hanno il cartello largo **400px**, non 420.
  *
  * Come ovunque qui dentro, il contenuto vero della pane non si monta:
@@ -24,7 +25,7 @@ import * as React from "react";
 import Image from "next/image";
 
 import { cn } from "@/lib/utils";
-import { ATTIVA_REGLO_URL } from "./locked-features";
+import { ATTIVA_REGLO_URL, VIDEO_ISTRUTTORI_URL } from "./locked-features";
 
 const NAVY = "#1a1a2e";
 
@@ -279,7 +280,18 @@ const AutonomaCard = () => (
     <h3 className="mb-3.5 text-[16.5px] font-bold leading-[1.3] tracking-[-0.2px] text-[#1a1a2e]">
       Come funziona la modalità autonoma per gli istruttori?
     </h3>
-    <div className="relative flex aspect-[16/9] items-center justify-center rounded-[12px] bg-[#ececef] transition-colors hover:bg-[#e4e4e9]">
+    {/*
+      Il riquadro del prototipo era muto: il play non portava a niente. Ora
+      apre il video vero sul sito, già scrollato (vedi VIDEO_ISTRUTTORI_URL).
+      Resta identico a vedersi — cambia solo che è un link.
+    */}
+    <a
+      href={VIDEO_ISTRUTTORI_URL}
+      target="_blank"
+      rel="noreferrer"
+      aria-label="Guarda il video: come funziona la modalità autonoma per gli istruttori"
+      className="relative flex aspect-[16/9] items-center justify-center rounded-[12px] bg-[#ececef] transition-colors hover:bg-[#e4e4e9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a1a2e] focus-visible:ring-offset-2"
+    >
       <span className="flex size-12 items-center justify-center rounded-full bg-[#2f2f38] shadow-[0_6px_18px_rgba(0,0,0,0.25)]">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
           <path d="M5 3.5v9l7.5-4.5L5 3.5z" fill="#ffffff" />
@@ -288,7 +300,7 @@ const AutonomaCard = () => (
       <span className="absolute bottom-3 left-3.5 text-[12.5px] font-semibold text-[#8a8a94]">
         Guarda il video
       </span>
-    </div>
+    </a>
   </Card>
 );
 

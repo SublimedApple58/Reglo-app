@@ -16,6 +16,8 @@ import {
   CircleCheck,
   CircleX,
   Layers,
+  Building2,
+  ChevronRight,
 } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
@@ -70,6 +72,7 @@ import { BackofficeCompanyDocumentsDialog } from "@/components/pages/Backoffice/
 import { BackofficeCompanyPlanDialog } from "@/components/pages/Backoffice/BackofficeCompanyPlanDialog";
 import {
   DEFAULT_SERVICE_LIMITS,
+  affiliateConsorzioId,
   isConsortium,
   type CompanyServiceInfo,
   type ServiceLimits,
@@ -914,15 +917,58 @@ export default function BackofficeCompaniesPage({
     setLocalCompanies((prev) => prev.filter((c) => c.id !== company.id));
   };
 
+  /**
+   * Le autoscuole **consorziate** stanno fuori dalla lista per default.
+   *
+   * In produzione un solo consorzio ne porta decine: mescolate alle
+   * autoscuole clienti inondano la lista e la rendono inservibile. La via
+   * normale per vederle è entrare nel consorzio (drill-down), dove c'è la
+   * loro tabella con lo stato di Reglo, l'accesso del titolare e gli inviti.
+   *
+   * Restano però raggiungibili con l'interruttore qui sotto, e non è un
+   * vezzo: cinque cose si fanno **solo** da questa lista — linea vocale,
+   * Piano, Documenti, "accedi come titolare" ed elimina. Nasconderle e basta
+   * avrebbe tolto quelle cinque possibilità su una consorziata con Reglo.
+   */
+  const [showAffiliates, setShowAffiliates] = useState(false);
+
+  /** Id consorzio → nome, per l'etichetta "Consorziata di …" sulle righe. */
+  const consorzioNameById = useMemo(
+    () =>
+      new Map(
+        localCompanies
+          .filter((company) => isConsortium(company.services))
+          .map((company) => [company.id, company.name] as const),
+      ),
+    [localCompanies],
+  );
+
+  const affiliatesCount = useMemo(
+    () => localCompanies.filter((company) => affiliateConsorzioId(company.services)).length,
+    [localCompanies],
+  );
+
+  /**
+   * Le righe su cui vive la pagina: anche i contatori in cima guardano
+   * queste, così i numeri e la tabella raccontano sempre la stessa cosa.
+   */
+  const visible = useMemo(
+    () =>
+      showAffiliates
+        ? localCompanies
+        : localCompanies.filter((company) => !affiliateConsorzioId(company.services)),
+    [localCompanies, showAffiliates],
+  );
+
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
-    if (!term) return localCompanies;
-    return localCompanies.filter((company) =>
+    if (!term) return visible;
+    return visible.filter((company) =>
       company.name.toLowerCase().includes(term),
     );
-  }, [localCompanies, query]);
+  }, [visible, query]);
 
-  const totalStudents = localCompanies.reduce((sum, c) => sum + c.androidStudents + c.iosStudents, 0);
+  const totalStudents = visible.reduce((sum, c) => sum + c.androidStudents + c.iosStudents, 0);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 pb-10 pt-8 lg:px-6">
@@ -932,8 +978,13 @@ export default function BackofficeCompaniesPage({
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-semibold text-foreground">Autoscuole</h1>
             <span className="rounded-full bg-[#f2f2f2] px-2.5 py-0.5 text-xs font-semibold text-[#222222]">
-              {localCompanies.length}
+              {visible.length}
             </span>
+            {!showAffiliates && affiliatesCount > 0 && (
+              <span className="text-xs font-medium text-muted-foreground">
+                + {affiliatesCount} consorziate
+              </span>
+            )}
           </div>
           <p className="text-sm text-muted-foreground">
             Gestisci le autoscuole registrate su Reglo, i servizi attivi e le linee vocali.
@@ -949,7 +1000,7 @@ export default function BackofficeCompaniesPage({
               <GraduationCap className="h-5 w-5 text-[#222222]" />
             </div>
             <div>
-              <p className="text-2xl font-semibold text-foreground">{localCompanies.length}</p>
+              <p className="text-2xl font-semibold text-foreground">{visible.length}</p>
               <p className="text-xs text-muted-foreground">Autoscuole</p>
             </div>
           </div>
@@ -972,7 +1023,7 @@ export default function BackofficeCompaniesPage({
             </div>
             <div>
               <p className="text-2xl font-semibold text-foreground">
-                {localCompanies.filter((c) =>
+                {visible.filter((c) =>
                   c.services.some((s) => s.limits?.voiceProvisioningStatus === "ready")
                 ).length}
               </p>
@@ -993,6 +1044,20 @@ export default function BackofficeCompaniesPage({
             className="pl-9"
           />
         </div>
+        {affiliatesCount > 0 && (
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-white px-3 py-2 hover:bg-gray-50/60">
+            <Checkbox
+              checked={showAffiliates}
+              onCheckedChange={(checked) => setShowAffiliates(checked === true)}
+            />
+            <span className="text-sm font-medium text-foreground">
+              Mostra anche le consorziate
+            </span>
+            <span className="rounded-full bg-[#f2f2f2] px-2 py-0.5 text-[11px] font-semibold text-[#222222]">
+              {affiliatesCount}
+            </span>
+          </label>
+        )}
       </div>
 
       {/* ── Table ── */}
@@ -1015,17 +1080,27 @@ export default function BackofficeCompaniesPage({
                 const isActive = autoscuoleService?.status === "active";
                 const hasVoice = autoscuoleService?.limits?.voiceProvisioningStatus === "ready";
                 const studentCount = company.androidStudents + company.iosStudents;
+                const consorzio = isConsortium(company.services);
+                const consorzioDiId = affiliateConsorzioId(company.services);
+                const consorzioDi = consorzioDiId ? consorzioNameById.get(consorzioDiId) : null;
+                const openConsorzio = () => router.push(`/it/backoffice/consorzi/${company.id}`);
 
                 return (
                   <TableRow
                     key={company.id}
-                    className="cursor-pointer hover:bg-gray-50/50"
+                    // La riga di un consorzio porta altrove, quindi lo dice:
+                    // sfondo appena diverso e freccia in fondo. Prima era
+                    // identica alle altre e nessuno immaginava di cliccarla.
+                    className={cn(
+                      "group cursor-pointer",
+                      consorzio ? "bg-[#fbfbfd] hover:bg-[#f4f4f8]" : "hover:bg-gray-50/50",
+                    )}
                     onClick={() => {
                       // Un CONSORZIO ha una pagina sua: il drawer del servizio
                       // non basta più, servono le sue autoscuole consorziate
                       // (REG-454). Le altre company restano col drawer.
-                      if (isConsortium(company.services)) {
-                        router.push(`/it/backoffice/consorzi/${company.id}`);
+                      if (consorzio) {
+                        openConsorzio();
                         return;
                       }
                       setSelected(company);
@@ -1037,7 +1112,23 @@ export default function BackofficeCompaniesPage({
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#f2f2f2] text-xs font-bold text-[#222222]">
                           {company.name.charAt(0).toUpperCase()}
                         </div>
-                        <span className="font-medium text-foreground">{company.name}</span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-foreground">{company.name}</span>
+                            {consorzio && (
+                              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#ecebff] px-2 py-0.5 text-[10px] font-semibold text-[#3b35a8]">
+                                <Layers className="h-3 w-3" />
+                                Consorzio
+                              </span>
+                            )}
+                          </div>
+                          {consorzioDiId && (
+                            <span className="mt-px flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                              <Building2 className="h-3 w-3 shrink-0" />
+                              Consorziata di {consorzioDi ?? "un consorzio"}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
@@ -1090,6 +1181,12 @@ export default function BackofficeCompaniesPage({
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                        {consorzio && (
+                          <Button size="sm" variant="outline" onClick={openConsorzio}>
+                            Apri scheda
+                            <ChevronRight className="ml-1 h-3.5 w-3.5" />
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
@@ -1151,6 +1248,13 @@ export default function BackofficeCompaniesPage({
               <TableRow>
                 <TableCell colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
                   Nessuna autoscuola trovata.
+                  {!showAffiliates && affiliatesCount > 0 && (
+                    <>
+                      {" "}
+                      Le {affiliatesCount} consorziate sono nascoste: accendi
+                      &quot;Mostra anche le consorziate&quot; o aprile dal loro consorzio.
+                    </>
+                  )}
                 </TableCell>
               </TableRow>
             )}

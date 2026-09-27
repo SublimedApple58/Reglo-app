@@ -16,6 +16,24 @@ import Image from "next/image";
 
 export const ATTIVA_REGLO_URL = "https://cal.com/reglo/attivazione-reglo";
 
+/**
+ * Dove porta un riquadro "Guarda il video" di un cartello bloccato.
+ *
+ * Il prototipo disegna il riquadro col play ma non linka niente: il video
+ * vero sta sul sito, nella pagina Istruttori, sotto il titolo "Come funziona
+ * la modalità autonoma per gli istruttori?" — lo stesso titolo della card.
+ *
+ * L'ancora `#video-autonoma` **non è un id della pagina**: la landing è una
+ * SPA senza id sulle sezioni, e l'hash viene risolto da `RoutedSite.tsx`
+ * (repo `reglo-landing`) su `[data-screen-label="Video autonoma"]`. Se un
+ * giorno quel gestore sparisse, il link non si rompe: atterra in cima alla
+ * pagina giusta.
+ *
+ * Sta qui e non nel componente perché il prossimo riquadro video di un
+ * cartello deve nascere già linkato, senza ricordarselo.
+ */
+export const VIDEO_ISTRUTTORI_URL = "https://www.reglo.it/istruttori#video-autonoma";
+
 export type LockedFeatureKey =
   | "utenti"
   | "oreGuida"

@@ -50,9 +50,34 @@ const initialsOf = (name: string): string =>
     .map((word) => word[0]?.toUpperCase() ?? "")
     .join("");
 
-const STATUS_BADGE: Record<string, { label: string; className: string }> = {
-  active: { label: "Attiva", className: "bg-[#e4f4e7] text-[#1f6b2a]" },
-  suspended: { label: "Sospesa", className: "bg-amber-50 text-amber-700" },
+/**
+ * Cosa dice la colonna "Stato" di un'autoscuola consorziata.
+ *
+ * Prima mostrava `ConsorzioSchool.status`, che è `active` per tutte: segnava
+ * "Attiva" anche a chi Reglo non ce l'ha, quindi non diceva niente. Ora dice
+ * la cosa che al consorzio interessa davvero — **se quella scuola ha Reglo
+ * acceso** — e tiene la sospensione, che è l'unico stato dell'anagrafica che
+ * qualcuno imposta sul serio (dal dettaglio scuola) e che altrimenti
+ * sparirebbe dalla lista.
+ *
+ * "Reglo attivo" ≠ "Accede" della colonna accanto: quella dice se il titolare
+ * riesce a entrare, questa se il servizio è comprato. Si può essere l'uno
+ * senza l'altro, ed è il motivo per cui restano due colonne.
+ */
+const schoolStateBadge = (
+  status: string,
+  regloActive: boolean | undefined,
+): { label: string; className: string } => {
+  if (status === "suspended") {
+    return { label: "Sospesa", className: "bg-amber-50 text-amber-700" };
+  }
+  if (regloActive === undefined) {
+    // Lo stato di accesso non è ancora arrivato: meglio niente che una bugia.
+    return { label: "—", className: "bg-transparent text-[#b0b0b0]" };
+  }
+  return regloActive
+    ? { label: "Reglo attivo", className: "bg-[#e4f4e7] text-[#1f6b2a]" }
+    : { label: "Reglo non attivo", className: "bg-[#f2f2f2] text-[#6a6a6a]" };
 };
 
 const emptySchoolForm = {
@@ -71,7 +96,7 @@ const emptySchoolForm = {
 function SchoolListSkeleton() {
   return (
     <div>
-      <div className="grid grid-cols-[1.6fr_1fr_96px_118px_70px_120px_1fr_92px] gap-x-4 border-b border-[#ebebeb] px-4 pb-2.5">
+      <div className="grid grid-cols-[1.6fr_1fr_96px_118px_70px_120px_1fr_128px] gap-x-4 border-b border-[#ebebeb] px-4 pb-2.5">
         {Array.from({ length: 6 }).map((_, i) => (
           <Skeleton key={i} className="h-3 w-16 max-w-full rounded" />
         ))}
@@ -79,7 +104,7 @@ function SchoolListSkeleton() {
       {Array.from({ length: 4 }).map((_, i) => (
         <div
           key={i}
-          className="grid grid-cols-[1.6fr_1fr_96px_118px_70px_120px_1fr_92px] items-center gap-x-4 border-b border-[#f2f2f2] px-4 py-3.5"
+          className="grid grid-cols-[1.6fr_1fr_96px_118px_70px_120px_1fr_128px] items-center gap-x-4 border-b border-[#f2f2f2] px-4 py-3.5"
         >
           <div className="flex min-w-0 items-center gap-3">
             <Skeleton className="size-9 shrink-0 rounded-full" />
@@ -266,7 +291,7 @@ export function ConsorzioSchoolsPage() {
           <FadeIn>
           <div>
             {/* Griglia del prototipo: 1.6fr 1fr 70px 140px 1fr 92px, gap 28 */}
-            <div className="grid grid-cols-[1.6fr_1fr_96px_118px_70px_120px_1fr_92px] gap-x-4 border-b border-[#ebebeb] px-4 pb-2.5">
+            <div className="grid grid-cols-[1.6fr_1fr_96px_118px_70px_120px_1fr_128px] gap-x-4 border-b border-[#ebebeb] px-4 pb-2.5">
               {["Autoscuola", "Titolare", "Codice", "Accesso", "Allievi", "Ultima guida", "Mezzo più usato", "Stato"].map(
                 (header, index) => (
                   <div
@@ -279,12 +304,12 @@ export function ConsorzioSchoolsPage() {
               )}
             </div>
             {visible.map((school) => {
-              const badge = STATUS_BADGE[school.status] ?? STATUS_BADGE.active;
+              const badge = schoolStateBadge(school.status, access.get(school.id)?.regloActive);
               return (
                 <div
                   key={school.id}
                   onClick={() => router.push(`/${locale}/user/autoscuole/scuole/${school.id}`)}
-                  className="grid cursor-pointer grid-cols-[1.6fr_1fr_96px_118px_70px_120px_1fr_92px] items-center gap-x-4 rounded-[10px] border-b border-[#f2f2f2] px-4 py-3.5 transition-colors hover:bg-[#fafafa]"
+                  className="grid cursor-pointer grid-cols-[1.6fr_1fr_96px_118px_70px_120px_1fr_128px] items-center gap-x-4 rounded-[10px] border-b border-[#f2f2f2] px-4 py-3.5 transition-colors hover:bg-[#fafafa]"
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#e6e6e6] bg-white text-[12px] font-bold text-[#444444]">
@@ -328,7 +353,7 @@ export function ConsorzioSchoolsPage() {
                   </div>
                   <div>
                     <span
-                      className={`inline-flex rounded-[999px] px-2.5 py-1 text-[11.5px] font-bold ${badge.className}`}
+                      className={`inline-flex whitespace-nowrap rounded-[999px] px-2.5 py-1 text-[11.5px] font-bold ${badge.className}`}
                     >
                       {badge.label}
                     </span>

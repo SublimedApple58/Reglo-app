@@ -247,12 +247,65 @@ esplicita — sono mail vere verso clienti veri.
 | Helper + guardia | `lib/services.ts` (`affiliateConsorzioId`, `isConsorzioAffiliate`, `isAffiliateWithoutReglo`), `lib/service-access.ts` (`requireAffiliateSchool`) |
 | Azioni | `lib/actions/consorzio-affiliate.actions.ts` (collega/crea/scollega/inviti/bulk), `lib/consorzio/affiliate-invites.ts` |
 | Nome Company | `lib/consorzio/affiliate-name.ts` — Title Case dall'anagrafica in MAIUSCOLO (`ODOS S.CROCE` → `Odos S.Croce`); un nome già curato non si tocca |
-| Backoffice | `app/[locale]/backoffice/consorzi/[companyId]/page.tsx`, `BackofficeConsorzioDetailPage.tsx`, `AffiliateLinkDialog.tsx`, `AffiliateBulkInviteDialog.tsx`; la riga di un consorzio in `BackofficeCompaniesPage` ora **naviga** invece di aprire il drawer |
-| Account consorzio | `ConsorzioSchoolsPage` (colonna Accesso + filtro + invito massivo), `SchoolAccessCard.tsx`, `school-access.tsx` (badge e filtro condivisi) |
+| Backoffice | `app/[locale]/backoffice/consorzi/[companyId]/page.tsx`, `BackofficeConsorzioDetailPage.tsx`, `AffiliateLinkDialog.tsx`, `AffiliateBulkInviteDialog.tsx`; la riga di un consorzio in `BackofficeCompaniesPage` ora **naviga** invece di aprire il drawer (vedi sotto) |
+| Account consorzio | `ConsorzioSchoolsPage` (colonne Accesso e Stato + filtro + invito massivo), `SchoolAccessCard.tsx`, `school-access.tsx` (badge e filtro condivisi) |
 | Backfill | `scripts/backfill-consorzio-affiliates.ts` (`--dry-run`, idempotente, **mai** su prod senza ok) |
 
 **Nessuna migrazione**: `linkedCompanyId` e il suo indice esistevano già, il
 resto vive nei `limits` JSON.
+
+### Le due colonne di stato, che non dicono la stessa cosa
+
+Nella sezione **Autoscuole** dell'account consorzio ogni scuola ha due
+colonne, e vanno tenute distinte:
+
+| Colonna | Risponde a | Valori |
+|---|---|---|
+| **Accesso** | il titolare riesce a entrare? | Non collegata · Da invitare · Invitata · Invito scaduto · Accede |
+| **Stato** | la scuola ha Reglo acceso? | Sospesa · Reglo attivo · Reglo non attivo |
+
+Si può essere l'una senza l'altra (un titolare che accede a una vista ridotta
+"Accede" + "Reglo non attivo"), ed è il motivo per cui restano due colonne.
+
+"Stato" mostrava `ConsorzioSchool.status`, che è `active` per tutte: segnava
+**"Attiva" anche a chi Reglo non ce l'ha**, quindi non diceva niente. Ora usa
+`regloActive`, che `readAffiliateSchoolRows` calcolava già e la pagina
+caricava già nella mappa `access` — nessuna query nuova, solo la verità al
+posto di un'etichetta vuota.
+
+> ⚠️ **"Sospesa" va tenuta.** È l'unico stato dell'anagrafica che qualcuno
+> imposta davvero (dal dettaglio scuola, `ConsorzioSchoolDetailPage`), e ha la
+> precedenza sul resto: se sparisse da qui non si vedrebbe più in lista.
+
+### La lista del backoffice non si fa inondare
+
+`BackofficeCompaniesPage` **nasconde le consorziate** dalla lista generale: un
+solo consorzio ne porta decine, e mescolate alle autoscuole clienti rendono la
+lista inservibile. La via normale per vederle è entrare nel consorzio.
+
+Il filtro è **solo di presentazione**: `getBackofficeCompanies` continua a
+leggere tutte le company, e la riga si riconosce client-side con
+`affiliateConsorzioId(company.services)` — i `limits` arrivano già al client
+(è lo stesso meccanismo con cui la pagina riconosce un consorzio). Nessuna
+query è stata toccata.
+
+> ⚠️ **Perché c'è l'interruttore "Mostra anche le consorziate" e non basta
+> nasconderle.** Cinque azioni si fanno **solo** da questa lista — linea
+> vocale, Piano, Documenti, "accedi come titolare", elimina — e il dettaglio
+> consorzio non le ha (lì si accende/spegne Reglo, si scollega e si invita).
+> Nasconderle e basta avrebbe tolto quelle cinque possibilità su una
+> consorziata con Reglo attivo. Se un giorno quelle azioni finiranno nel
+> dettaglio consorzio, l'interruttore potrà sparire.
+
+I contatori in cima (Autoscuole, Allievi su app, Linee vocali) seguono le
+**righe visibili**, così i numeri e la tabella dicono la stessa cosa; accanto
+al titolo un "+N consorziate" in grigio ricorda cosa resta fuori.
+
+**La riga di un consorzio dice che si apre**: badge `Consorzio`, sfondo appena
+diverso, bottone "Apri scheda ›". Prima era identica a tutte le altre — era
+cliccabile, ma nessuno lo immaginava. Il drawer resta raggiungibile con
+"Gestisci": è lì che vive la checkbox **Consorzio** di Modalità app, e
+toglierla dalla portata sarebbe stato un danno.
 
 ### La vista ridotta (REG-429, Fase 6)
 
@@ -381,6 +434,25 @@ ognuna col **suo** cartello
 | Malattia | centrato, illustrazione 96px, "Malattie gestite in un click!", ombra più bassa (`0 8px 32px`) |
 | Ferie | "Ferie di agosto" a **400px**, badge calendario, tre righe "Approva" col puntatore del mouse sulla seconda |
 | Gestione autonoma | badge "In 1 minuto" + riquadro video. **Nessun CTA**: nel prototipo questa scheda finisce col video |
+
+**Il play porta al video vero.** Nel prototipo il riquadro era muto: cliccarlo
+non faceva niente. Ora è un link a `VIDEO_ISTRUTTORI_URL`
+(`locked/locked-features.tsx`) = `https://www.reglo.it/istruttori#video-autonoma`,
+cioè la sezione del sito col video di presentazione — stesso titolo della card,
+"Come funziona la modalità autonoma per gli istruttori?".
+
+> ⚠️ **L'ancora vive in un altro repo.** `#video-autonoma` **non è un id**
+> della pagina: la landing (`~/Developer/reglo-landing`) è una SPA senza id
+> sulle sezioni, che sono marcate con `data-screen-label`. L'hash lo risolve
+> `src/site/deepLink.ts`, agganciato in `RoutedSite.tsx` — il livello scritto
+> a mano, perché `src/site/generated/` viene rigenerato da
+> `tools/port-logic.mjs` e non si tocca. Se quel gestore sparisse il link non
+> si rompe: atterra in cima alla pagina giusta. Per aggiungere un'altra
+> ancora si aggiunge una riga a `HASH_TARGETS`, non un id.
+
+La costante sta in `locked-features.tsx` e non nel componente perché oggi il
+riquadro video è **uno solo** in tutte le viste bloccate: il prossimo deve
+nascere già linkato senza doverselo ricordare.
 
 Aprendo il dettaglio il **titolo della pane sparisce** (il nome dell'istruttore
 fa già da titolo): `LockedSettingsPane` accetta `onDetailOpenChange` e la shell
