@@ -91,14 +91,20 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
 /** Pillola selezionabile: 7px 13px, 12.5px, spunta quando scelta. */
 export const PreviewChip = ({
   checked,
+  compact,
   children,
 }: {
   checked?: boolean;
+  /** Misure ridotte del prototipo per le righe strette ("Modalità di invio"). */
+  compact?: boolean;
   children: React.ReactNode;
 }) => (
   <span
     className={cn(
-      "flex items-center justify-center rounded-[20px] border-[1.5px] px-[13px] py-[7px] text-[12.5px]",
+      // `whitespace-nowrap`: senza, a 420px la spunta finisce sopra la parola
+      // e il chip diventa alto il doppio. Nel prototipo sta su una riga.
+      "flex items-center justify-center whitespace-nowrap rounded-[20px] border-[1.5px]",
+      compact ? "px-[11px] py-1.5 text-[12px]" : "px-[13px] py-[7px] text-[12.5px]",
       checked
         ? "border-[#1a1a2e] bg-[#f6f6f8] font-semibold text-[#1a1a2e]"
         : "border-[#e4e4ea] font-medium text-[#6a6a6a]",
@@ -203,6 +209,40 @@ const Avatar = ({ src, size }: { src: string; size: number }) => (
   <span className="shrink-0 overflow-hidden rounded-full" style={{ width: size, height: size }}>
     <Image src={src} alt="" width={size * 2} height={size * 2} className="h-full w-full object-cover" />
   </span>
+);
+
+
+/** Etichetta dei blocchi in Segretaria: 10.5px/700, molto spaziata. */
+const SectionLabel = ({ children, className }: { children: React.ReactNode; className?: string }) => (
+  <p className={cn("mb-2 text-[10.5px] font-bold uppercase tracking-[0.9px] text-[#8a8a94]", className)}>
+    {children}
+  </p>
+);
+
+/**
+ * L'onda sonora del player: le 40 barre del prototipo, coi loro valori.
+ * `preserveAspectRatio="none"` le fa stirare sulla larghezza disponibile,
+ * esattamente come là.
+ */
+const WAVEFORM_BARS: Array<[number, number]> = [
+  [10, 4], [8, 8], [5, 14], [7, 10], [3, 18], [6, 12], [9, 6], [4, 16], [2, 20], [7.5, 9],
+  [5.5, 13], [9.5, 5], [3.5, 17], [6.5, 11], [8.5, 7], [4.5, 15], [2.5, 19], [8, 8], [6, 12], [4, 16],
+  [9, 6], [5, 14], [7, 10], [3, 18], [8.5, 7], [5.5, 13], [7.5, 9], [4.5, 15], [9.5, 5], [6.5, 11],
+  [3.5, 17], [8, 8], [5, 14], [9, 6], [6, 12], [4, 16], [7, 10], [9, 6], [8, 8], [10, 4],
+];
+
+const Waveform = () => (
+  <svg
+    viewBox="0 0 160 24"
+    preserveAspectRatio="none"
+    fill="#c1c1cc"
+    className="block h-[22px] flex-1"
+    aria-hidden
+  >
+    {WAVEFORM_BARS.map(([y, h], index) => (
+      <rect key={index} x={index * 4} y={y} width="2.2" height={h} rx="1.1" />
+    ))}
+  </svg>
 );
 
 /** Riga allievo dello scambio: avatar, nome, orario, stato. */
@@ -499,11 +539,17 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
           note="La mattina del giorno della guida, alle 07:30"
         />
         <div className="flex items-center justify-between gap-3 py-[13px]">
-          <span className="text-[14px] font-semibold text-[#1a1a2e]">Modalità di invio</span>
-          <span className="inline-flex gap-1.5">
-            <PreviewChip checked>Notifica</PreviewChip>
-            <PreviewChip checked>WhatsApp</PreviewChip>
-            <PreviewChip>Email</PreviewChip>
+          <span className="whitespace-nowrap text-[14px] font-semibold text-[#1a1a2e]">
+            Modalità di invio
+          </span>
+          <span className="inline-flex shrink-0 gap-1.5">
+            <PreviewChip checked compact>
+              Notifica
+            </PreviewChip>
+            <PreviewChip checked compact>
+              WhatsApp
+            </PreviewChip>
+            <PreviewChip compact>Email</PreviewChip>
           </span>
         </div>
         {/* Mockup della notifica push: immagini e misure del prototipo. */}
@@ -583,94 +629,99 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
       "Disponibilità, categoria, cambio e chi può usarli: più dettagli, zero sovrapposizioni.",
   },
 
-  /* ── Segretaria ───────────────────────────────────────────────────── */
+  /* ── Segretaria › Linea ───────────────────────────────────────────── */
   "voice:linea": {
     title: "Linea telefonica",
     subtitle:
       "Un numero dedicato a cui la segretaria AI risponde 24/7, mentre tu resti sulle guide.",
     preview: (
-      <div className="rounded-[14px] bg-[#f5f5f7] px-4 py-4">
-        <div className="flex items-center gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#e9f7ef]">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path
-                d="M5 4h3l2 5-2 1a11 11 0 0 0 5 5l1-2 5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2Z"
-                stroke="#1a8a5a"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+      // Una riga sola: cerchio scuro, chi chiama, e a destra chi risponde.
+      <div className="flex items-center gap-3 rounded-[14px] bg-[#f5f5f7] px-3.5 py-[13px]">
+        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[#1a1a2e]">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+          </svg>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-bold tracking-[-0.3px] text-[#1a1a2e]">
+            Chiamata in arrivo
           </span>
-          <div className="min-w-0">
-            <MiniLabel>Chiamata in arrivo</MiniLabel>
-            <p className="mt-0.5 text-[15px] font-bold text-[#1a1a2e]">+39 340 776 2201</p>
-          </div>
-        </div>
-        <p className="mt-3 flex items-center gap-2 text-[12.5px] font-bold text-[#1a8a5a]">
-          <span className="block size-[7px] rounded-full bg-[#1a8a5a]" />
+          <span className="mt-px block text-[12.5px] font-medium text-[#8a8a94]">
+            +39 340 776 2201
+          </span>
+        </span>
+        <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[20px] bg-[#e9f7ef] px-[11px] py-1.5 text-[11.5px] font-bold text-[#1a8a5a]">
+          <span className="size-1.5 rounded-full bg-[#1a8a5a]" />
           Risponde l&apos;AI
-        </p>
+        </span>
       </div>
     ),
   },
+
+  /* ── Segretaria › Comportamento ed azioni ─────────────────────────── */
   "voice:comportamento": {
     title: "Comportamento ed azioni",
     subtitle:
       "Decidi cosa può fare e come si presenta: saluto personalizzato, FAQ e prenotazioni vocali.",
     preview: (
-      <>
-        <div className="rounded-[14px] bg-[#f5f5f7] px-4 py-3.5 text-[13px] font-medium leading-[1.5] text-[#444444]">
+      // Citazione e chip stanno **dentro lo stesso** riquadro grigio.
+      <div className="rounded-[14px] bg-[#f5f5f7] px-4 py-3.5">
+        <p className="text-[13px] font-medium italic leading-[1.55] text-[#444444]">
           &ldquo;Scuola Guida Montreal, buongiorno! Sono l&apos;assistente virtuale
           dell&apos;autoscuola, come posso aiutarti?&rdquo;
+        </p>
+        <div className="mt-[11px] flex flex-wrap gap-1.5">
+          {["FAQ autoscuola", "Info lezioni", "Prenota guida"].map((label) => (
+            <span
+              key={label}
+              className="rounded-[20px] border border-[#e4e4ea] bg-white px-[11px] py-[5px] text-[11.5px] font-bold text-[#1a1a2e]"
+            >
+              {label}
+            </span>
+          ))}
         </div>
-        <div className="mt-2.5 flex flex-wrap gap-1.5">
-          <Tag>FAQ autoscuola</Tag>
-          <Tag>Info lezioni</Tag>
-          <Tag>Prenota guida</Tag>
-        </div>
-      </>
+      </div>
     ),
   },
+
+  /* ── Segretaria › Orari e registrazioni ───────────────────────────── */
   "voice:orari": {
     title: "Orari e registrazioni",
     subtitle: "Scegli giorni e fasce orarie in cui risponde, e cosa registrare delle chiamate.",
     preview: (
-      <>
-        <div className="rounded-[14px] bg-[#f5f5f7] px-4 py-3.5">
-          <MiniLabel>Registrazione</MiniLabel>
-          <div className="mt-2.5 flex items-center gap-3">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#1a1a2e]">
-              <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden>
-                <path d="M8 5l11 7-11 7V5Z" fill="#ffffff" />
-              </svg>
-            </span>
-            <span className="h-[3px] flex-1 rounded-full bg-[#dcdcdc]">
-              <span className="block h-full w-[38%] rounded-full bg-[#1a1a2e]" />
-            </span>
-            <span className="shrink-0 text-[12.5px] font-bold text-[#6a6a72]">0:42</span>
-          </div>
+      <div>
+        <SectionLabel>Registrazione</SectionLabel>
+        {/* Player a pillola: tondo play, onda sonora, durata. */}
+        <div className="flex items-center gap-3 rounded-[40px] bg-[#f5f5f7] py-[9px] pl-[9px] pr-4">
+          <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-[#1a1a2e]">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="#ffffff" aria-hidden>
+              <path d="M3 1.5v9l7.5-4.5z" />
+            </svg>
+          </span>
+          <Waveform />
+          <span className="shrink-0 text-[12px] font-semibold text-[#8a8a94]">0:42</span>
         </div>
-        <div className="mt-2.5 rounded-[14px] bg-[#f5f5f7] px-4 py-3.5">
-          <MiniLabel>Trascrizione</MiniLabel>
-          <p className="mt-2.5 text-[12.5px] font-medium leading-[1.45] text-[#444444]">
-            Buongiorno, sono Marco Rossi. Volevo sapere se avete disponibilità questa settimana per
-            una guida, preferibilmente il pomeriggio…
-          </p>
-        </div>
-      </>
+        <SectionLabel className="mb-[7px] mt-4">Trascrizione</SectionLabel>
+        {/* Nel prototipo la trascrizione è testo nudo, senza riquadro. */}
+        <p className="text-[13px] font-medium leading-[1.6] text-[#444444]">
+          Buongiorno, sono Marco Rossi. Volevo sapere se avete disponibilità questa settimana per
+          una guida, preferibilmente il pomeriggio…
+        </p>
+      </div>
     ),
   },
+
+  /* ── Segretaria › Istruzioni ──────────────────────────────────────── */
   "voice:istruzioni": {
     title: "Istruzioni",
     subtitle:
       "Dai alla segretaria le informazioni della tua autoscuola: risponde seguendo le tue regole.",
     preview: (
       <div className="rounded-[14px] bg-[#f5f5f7] px-4 py-3.5">
-        <MiniLabel className="!text-[11px] !tracking-[0.8px] !text-[#8a8a94]">
+        <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.8px] text-[#8a8a94]">
           Cosa sa la segretaria
-        </MiniLabel>
-        <div className="mt-2.5 flex flex-col gap-2">
+        </p>
+        <div className="flex flex-col gap-2">
           {[
             "Rinnovo patente: documenti, costi e tempi",
             "Prezzi patente nuova → rimanda alla mail",

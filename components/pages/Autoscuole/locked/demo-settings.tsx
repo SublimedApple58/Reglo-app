@@ -302,15 +302,23 @@ const VoiceComportamento = () => (
         Clicca per scegliere cosa può fare l&apos;assistente
       </p>
       <div className="grid grid-cols-3 gap-2.5">
-        <PreviewChip checked>FAQ autoscuola</PreviewChip>
-        <PreviewChip checked>Info lezioni</PreviewChip>
-        <PreviewChip>Prenota guida</PreviewChip>
+        {[
+          ["FAQ autoscuola", "Risponde a domande frequenti"],
+          ["Info lezioni", "Dettagli su corsi e lezioni"],
+          ["Prenota guida", "Prenotazione diretta sull'agenda"],
+        ].map(([label, note]) => (
+          <div key={label} className="rounded-[12px] border-[1.5px] border-[#e4e4ea] px-3 py-2.5">
+            <p className="text-[13px] font-semibold text-foreground">{label}</p>
+            <p className="mt-0.5 text-[11.5px] leading-snug text-[#929292]">{note}</p>
+          </div>
+        ))}
       </div>
     </Section>
     <Card
-      title="Avviso legale"
-      note="Avvisa il chiamante che la chiamata è gestita da un AI."
+      title="Prenotazioni voce"
+      note="L'assistente può prenotare guide sull'agenda."
     />
+    <Card title="Avviso legale" note="Avvisa il chiamante che la chiamata è gestita da un AI." />
     <Card
       title="Saluto personalizzato"
       note="Messaggio iniziale personalizzato prima della conversazione."
