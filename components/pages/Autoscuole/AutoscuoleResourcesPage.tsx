@@ -2307,7 +2307,7 @@ export function AutoscuoleResourcesPage({
             )}
             {!paneReady && <SettingsPaneSkeleton />}
             {paneLocked ? (
-              <LockedSettingsPane pane={configTab} />
+              <LockedSettingsPane pane={configTab} onDetailOpenChange={setInstructorsDetailOpen} />
             ) : (
             <div className={paneReady ? undefined : "hidden"}>
           <FadeIn>

@@ -32,6 +32,7 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { ATTIVA_REGLO_URL } from "./locked-features";
 import { DEMO_SETTINGS_PREVIEWS } from "./demo-settings";
+import { LockedInstructors } from "./LockedInstructors";
 
 /* ── Primitivi, coi valori esatti del prototipo ──────────────────────
  *
@@ -743,11 +744,6 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
     description:
       "Alla fine di ogni guida l'istruttore dà un voto sulle voci che decidi tu: l'allievo vede i suoi progressi e tu sai chi è pronto per l'esame.",
   },
-  instructors: {
-    title: "Istruttori",
-    description:
-      "Istruttori, disponibilità settimanali e colori in agenda: con Reglo attivo l'agenda si costruisce sulle loro ore.",
-  },
   aspetto: {
     title: "Aspetto",
     description:
@@ -901,8 +897,21 @@ function LockedCardBody({ card }: { card: LockedPaneCard }) {
   );
 }
 
-export function LockedSettingsPane({ pane }: { pane: string }) {
+export function LockedSettingsPane({
+  pane,
+  onDetailOpenChange,
+}: {
+  pane: string;
+  /**
+   * Istruttori: aprendo il dettaglio il titolo della pane sparisce, come nel
+   * prototipo e come fa già la sezione vera. La shell stampa quel titolo,
+   * quindi deve saperlo.
+   */
+  onDetailOpenChange?: (open: boolean) => void;
+}) {
   // Sede: stato vuoto, non cartello (vedi LocationsEmptyState).
+  // Istruttori: lista aperta + dettaglio con quattro sotto-tab, come il
+  // prototipo (vedi LockedInstructors).
   const tabs = SUB_TABS[pane];
   const [subTab, setSubTab] = React.useState(() => tabs?.[0]?.key ?? "");
 
@@ -912,6 +921,7 @@ export function LockedSettingsPane({ pane }: { pane: string }) {
   }, [pane]);
 
   if (pane === "locations") return <LocationsEmptyState />;
+  if (pane === "instructors") return <LockedInstructors onDetailOpenChange={onDetailOpenChange} />;
 
   const contentKey = tabs ? `${pane}:${subTab}` : pane;
   const card = LOCKED_PANE_CARDS[contentKey];
