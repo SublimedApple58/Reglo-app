@@ -265,7 +265,7 @@ toglie struttura.
 | Dove | Bloccato | Aperto |
 |---|---|---|
 | Menu hamburger | Utenti · Ore guida · Invia comunicato · Lascia un feedback · **Chiave di accesso** | Area personale · Impostazioni account · Centro assistenza · Esci |
-| Impostazioni | tutte le pane tranne una: si **aprono** e mostrano la loro card | Informazioni aziendali |
+| Impostazioni | tutte le pane tranne due: si **aprono** e mostrano il loro cartello | Informazioni aziendali · **Istruttori** (lista navigabile, vedi sotto) |
 | Sezioni | Segretaria · Ore guida | **Agenda** in scope Consorzio (Fase 7) · **Allievi** (vedi sotto) · Rinnovi (teaser esistente) |
 
 **I dialoghi non sono ricostruzioni.** Ogni voce bloccata, al passaggio del
@@ -292,14 +292,44 @@ quella vista non si tornerebbe più indietro. Rinnovi resta il teaser esistente,
 che è già pieno.
 
 **Le sezioni bloccate delle Impostazioni si aprono.** Come nel prototipo: il
-titolo resta nitido, sotto c'è uno scheletro sfocato e sopra la card della
-funzione con la sua anteprima e i due CTA
-(`components/pages/Autoscuole/locked/LockedSettingsPane.tsx`). Quattro card
-sono copiate dal prototipo parola per parola — Prenotazioni e allievi
-("Prenotazioni in autonomia"), Policy tipi guida, Promemoria e notifiche,
-Veicoli; per le altre, che nel prototipo non ce l'hanno, si usa la forma
-generica col lucchetto. Nessuna action server viene chiamata: il contenuto vero
-non si monta.
+titolo e la barra delle sotto-tab restano **nitidi**, il contenuto vero della
+sezione sta sotto a `blur(3px) / opacity .55 / altezza tagliata a 620px`, e
+sopra — `position:absolute inset-0` — c'è il cartello della funzione
+(`components/pages/Autoscuole/locked/LockedSettingsPane.tsx`). Nessuna action
+server viene chiamata: il contenuto vero non si monta, al suo posto c'è il
+fondale finto di `locked/demo-settings.tsx`, che riproduce **i campi veri di
+quella scheda** — mai barre grigie.
+
+I cartelli sono **dodici**, non uno ripetuto: ognuno ha il suo contenuto e la
+sua mini-anteprima dentro il cartello.
+
+| Sezione | Cartelli |
+|---|---|
+| Prenotazioni e allievi | 5 sotto-tab: Generali ("Prenotazioni in autonomia") · Limiti ("Limiti di prenotazione") · Guide ("Scambi tra allievi") · App allievi · Crediti e prezzi |
+| Segretaria | 4 sotto-tab: Linea ("Linea telefonica") · Comportamento ed azioni · Orari e registrazioni · Istruzioni |
+| Policy tipi guida | uno (cartello a **400px**, non 420) |
+| Promemoria e notifiche | uno, col mockup della notifica push |
+| Veicoli | "I tuoi veicoli" |
+| Sede e luoghi | **nessuno**: è lo stato vuoto con le due illustrazioni |
+| Istruttori | vedi sotto: lista aperta + dettaglio a quattro schede |
+| Pagellino · Aspetto | fuori dal prototipo: stessa forma, senza anteprima |
+
+⚠️ **Nessun cartello delle Impostazioni ha lucchetto o badge "Funzione extra di
+Reglo".** Nel prototipo quella stringa compare **solo** nei popup
+dell'hamburger. Vale anche per le sezioni che il prototipo non copre: lì manca
+l'anteprima, non la forma.
+
+⚠️ **Il primario dei CTA è `#1a1a2e`** (hover `#2a2a44`), non il nero della
+palette dell'app: nel prototipo è così in 34 occorrenze su 35. È
+un'**eccezione voluta** dentro le viste bloccate, decisa da Tiziano: la
+costante `NAVY` in `LockedSettingsPane.tsx` è il punto unico da cui cambiarla.
+I pulsanti funzionali (il dialog "Richiesta di guida") restano sulla palette
+dell'app.
+
+⚠️ **I pannelli portano `line-height: normal`.** L'app eredita 1.5 sul
+contenitore; il prototipo non impone interlinea. Senza quella riga i cartelli
+crescono di ~11px e gli a-capo cadono altrove. Il font invece è già lo stesso
+(Figtree, stessa catena di fallback).
 
 **Allievi non è una pagina a parte: è `AutoscuoleStudentsPage`** con il flag
 `affiliate`. Stesso layout, stessi filtri, stessa tabella, stesso drawer, stesso
@@ -337,6 +367,69 @@ resto dell'app resta chiuso da `requireServiceAccess`.
 > in errore** (due deploy falliti, staging rimasto indietro senza accorgersene).
 > `tsc` e `next lint --file` non lo vedono: **`pnpm lint` sull'intero progetto
 > sì**, ed è quello che gira in build.
+
+### Istruttori: lista aperta, dettaglio a quattro schede (REG-429)
+
+Istruttori **non è un cartello secco**. Nel prototipo la lista resta aperta e
+cliccabile, e dentro il dettaglio dell'istruttore ci sono quattro sotto-tab,
+ognuna col **suo** cartello
+(`components/pages/Autoscuole/locked/LockedInstructors.tsx`):
+
+| Scheda | Cartello |
+|---|---|
+| Disponibilità | "Disponibilità di \<nome\>" — chip GIORNI (Lun–Ven accesi) e FASCE ORARIE 08:00→13:00 / 14:30→19:00 |
+| Malattia | centrato, illustrazione 96px, "Malattie gestite in un click!", ombra più bassa (`0 8px 32px`) |
+| Ferie | "Ferie di agosto" a **400px**, badge calendario, tre righe "Approva" col puntatore del mouse sulla seconda |
+| Gestione autonoma | badge "In 1 minuto" + riquadro video. **Nessun CTA**: nel prototipo questa scheda finisce col video |
+
+Aprendo il dettaglio il **titolo della pane sparisce** (il nome dell'istruttore
+fa già da titolo): `LockedSettingsPane` accetta `onDetailOpenChange` e la shell
+riusa lo stesso `instructorsDetailOpen` della sezione vera.
+
+> ⚠️ **Perché me l'ero persa al primo giro.** Nel sorgente del prototipo
+> `#istr-detail-view` è un **div vuoto**: lo riempie a runtime
+> `_paintInstrManage`. Leggendo l'HTML sembra che il dettaglio non esista.
+> È la ragione per cui il prototipo va **aperto**, non letto.
+
+### Toolbar dell'agenda bloccata (REG-429)
+
+Nello scope Autoscuola gli strumenti della toolbar restano al loro posto,
+grigi, e **ognuno apre il suo pannello**
+(`components/pages/Autoscuole/locked/LockedToolbarTip.tsx`, acceso da
+`AgendaSource.toolbarLocked`): titolo, spiegazione, una mini-illustrazione
+diversa per ognuno e in fondo lucchetto + "Funzione extra di Reglo" +
+"Attiva Reglo" (qui il lucchetto **c'è**, a differenza delle Impostazioni).
+
+Il prototipo ne ha cinque — `legenda`, `viz`, `full`, `stampa`, `filtri`
+(struttura `agTipKey` nel bundle). **Zoom e ricerca non esistono là**: lo zoom
+non c'è e la ricerca funziona davvero. Le due voci in più sono scritte da noi
+sullo stesso stampo, marcate `fuoriPrototipo`, e si tolgono cancellando due
+chiavi.
+
+⚠️ **L'agenda in scope Consorzio non è toccata**: `toolbarLocked` è acceso solo
+sulla sorgente demo. Lì la toolbar serve davvero e resta viva — verificato a
+ogni giro.
+
+### Il metodo, dopo tre giri bocciati
+
+Il prototipo standalone **si apre in un browser e si ispeziona schermata per
+schermata**, non si legge nel sorgente. Le pagine sono `div` con stile inline e
+molte nascono `display:none` (`#section-*`, `#config-tab-*`, `#pa-group-*`,
+`#seg-group-*`): si forzano a `block` una alla volta con
+`setProperty(...,"important")` e si fotografano. Poi stessa inquadratura sulla
+nostra app e **montaggio affiancato prototipo | nostro** per ogni vista, prima
+di dire che è finito.
+
+Leggendo solo il sorgente sono passate due volte cose sbagliate pur avendo i
+testi giusti: avatar e icone mancanti, interruttori disegnati come pallini,
+sotto-tab non viste. Il confronto affiancato rende impossibile autoingannarsi —
+e a volte dimostra che il difetto è **nostro** e non del prototipo: i chip
+"Modalità di invio" andavano a capo da noi, non là.
+
+Due asset del prototipo **non sono dentro il file standalone** e lì si vedono
+rotti: `img3/malattia-icon.png` (ritrovata nel bundle e riestratta) e le tre
+foto delle ferie `sa3/1|2|3.png` (sostituite con tre volti dello stesso
+bundle — quella di "Martina Giorgi" è maschile, Tiziano la lascia così).
 
 ### Richieste di guida al consorzio (REG-429, Fase 7)
 
