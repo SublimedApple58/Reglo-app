@@ -15,6 +15,7 @@
  */
 
 import * as React from "react";
+import { Ban, BookOpen, Car, GraduationCap, Users } from "lucide-react";
 
 import { ATTIVA_REGLO_URL } from "./locked-features";
 import { AutoscuoleAgendaPage } from "@/components/pages/Autoscuole/AutoscuoleAgendaPage";
@@ -38,12 +39,37 @@ function Padlock({ size = 20, stroke = "#6a6a6a" }: { size?: number; stroke?: st
   );
 }
 
+/**
+ * Voci del menu "+" nell'anteprima: **tutte col lucchetto**.
+ *
+ * Sono quelle vere dell'agenda, con le loro icone — l'anteprima mostra cosa si
+ * comprerebbe. Nitide e cliccabili sarebbero una bugia: quell'agenda non c'è.
+ * Nello scope Consorzio la lista è diversa (lì "Richieste" si usa davvero) e
+ * la detta il prototipo: vedi `AffiliateAgendaPage`.
+ */
+const DEMO_LOCKED_MENU = [
+  { key: "appuntamento", label: "Appuntamento", icon: <Car className="size-4" strokeWidth={1.7} /> },
+  { key: "esame", label: "Esame", icon: <GraduationCap className="size-4" strokeWidth={1.7} /> },
+  { key: "blocco", label: "Evento bloccante", icon: <Ban className="size-4" strokeWidth={1.7} /> },
+  { key: "teoria", label: "Lezione teorica", icon: <BookOpen className="size-4" strokeWidth={1.7} /> },
+  { key: "gruppo", label: "Guida di gruppo", icon: <Users className="size-4" strokeWidth={1.7} /> },
+  {
+    key: "festivo",
+    label: "Segna festivo",
+    icon: <Ban className="size-4" strokeWidth={1.7} />,
+    separatorBefore: true,
+  },
+];
+
 /** Sorgente statica dell'anteprima: nessuna chiamata, dati inventati. */
 export const useDemoAgendaSource = () =>
   React.useMemo(
     () => ({
       fetchBootstrap: async (from: Date, to: Date) => demoAgendaBootstrap(from, to),
       readOnly: true,
+      // Il "+" resta premibile (la toolbar è viva), quindi quello che offre
+      // deve dire la verità: niente di creabile, tutto col lucchetto.
+      menu: { items: [], locked: DEMO_LOCKED_MENU },
     }),
     [],
   );

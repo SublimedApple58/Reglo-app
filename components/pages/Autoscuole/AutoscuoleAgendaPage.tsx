@@ -3349,7 +3349,9 @@ export function AutoscuoleAgendaPage({
                     ))}
                     {source.menu.locked?.length ? (
                       <>
-                        <div className="my-1.5 h-px bg-[#f0f0f0]" />
+                        {source.menu.items.length ? (
+                          <div className="my-1.5 h-px bg-[#f0f0f0]" />
+                        ) : null}
                         {source.menu.locked.map((entry) => (
                           <React.Fragment key={entry.key}>
                             {entry.separatorBefore ? (
@@ -3377,7 +3379,9 @@ export function AutoscuoleAgendaPage({
                   className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
                   onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setForm((prev) => ({ ...prev, day: prev.day || formatYmd(normalizeDay(dayFocus)) })); setCreateOpen(true); }}
                 >
-                  <Plus className="size-4 text-foreground" strokeWidth={1.7} />
+                  {/* L'appuntamento ha la sua icona (il veicolo), non il "+"
+                      generico del bottone che apre questo menu. */}
+                  <Car className="size-4 text-foreground" strokeWidth={1.7} />
                   Appuntamento
                 </button>
                 <button
@@ -3578,7 +3582,7 @@ export function AutoscuoleAgendaPage({
               {
                 key: "appointment",
                 label: "Appuntamento",
-                icon: <Plus className="size-4 text-foreground" strokeWidth={1.7} />,
+                icon: <Car className="size-4 text-foreground" strokeWidth={1.7} />,
                 onSelect: () => closeAnd(() => {
                   setForm((prev) => ({ ...prev, day: slotMenu.ymd, time: slotMenu.time, instructorId: slotMenu.instructorId ?? prev.instructorId }));
                   setCreateOpen(true);
