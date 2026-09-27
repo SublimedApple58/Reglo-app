@@ -33,23 +33,62 @@ import { cn } from "@/lib/utils";
 import { ATTIVA_REGLO_URL } from "./locked-features";
 import { DEMO_SETTINGS_PREVIEWS } from "./demo-settings";
 
-/* ── Primitivi dell'anteprima (stessi stili del prototipo) ───────────── */
+/* ── Primitivi, coi valori esatti del prototipo ──────────────────────
+ *
+ * Numeri e hex letti nel sorgente del bundle, non a occhio. In
+ * particolare il primario dei CTA è **#1a1a2e** (navy scurissimo), non il
+ * nero della nostra palette: qui vince il prototipo, per decisione di
+ * Tiziano. Se un giorno si riallinea alla palette, si cambia solo `NAVY`.
+ */
 
+/** Primario del prototipo. Hover: #2a2a44. */
+const NAVY = "#1a1a2e";
+
+/** Etichetta di campo: 11px/700, maiuscoletto spaziato. */
 export const FieldLabel = ({ children }: { children: React.ReactNode }) => (
-  <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.6px] text-[#929292]">
+  <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.4px] text-[#929292]">
     {children}
   </p>
 );
 
+/** Etichetta di gruppo dentro il cartello: 10.5px/700, più spaziata. */
+const MiniLabel = ({ children, className }: { children: React.ReactNode; className?: string }) => (
+  <p className={cn("text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#929292]", className)}>
+    {children}
+  </p>
+);
+
+const Chevron = () => (
+  <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden>
+    <path d="M3 5l4 4 4-4" stroke="#929292" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+/** Campo a tendina finto: bordo 1.5px #e4e4ea, valore 13px. */
 export const FakeSelect = ({ children }: { children: React.ReactNode }) => (
-  <div className="flex items-center justify-between gap-2 rounded-[10px] border border-[#e2e2e2] px-3 py-2.5">
-    <span className="truncate text-[13.5px] font-medium text-foreground">{children}</span>
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M6 9l6 6 6-6" stroke="#9a9a9a" strokeWidth="2" strokeLinecap="round" />
-    </svg>
+  <div className="flex items-center justify-between gap-2 rounded-[10px] border-[1.5px] border-[#e4e4ea] px-3 py-[9px]">
+    <span className="truncate text-[13px] font-medium text-[#1a1a2e]">{children}</span>
+    <Chevron />
   </div>
 );
 
+/** Come FakeSelect ma con l'unità a destra invece della freccia (prezzi). */
+const PriceField = ({ value, unit = "€" }: { value: string; unit?: string }) => (
+  <div className="flex items-center justify-between gap-2 rounded-[10px] border-[1.5px] border-[#e4e4ea] px-3 py-[9px]">
+    <span className="text-[13px] font-medium text-[#1a1a2e]">{value}</span>
+    <span className="text-[13px] font-medium text-[#929292]">{unit}</span>
+  </div>
+);
+
+/** Campo etichettato, la coppia che il prototipo ripete ovunque. */
+const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div>
+    <FieldLabel>{label}</FieldLabel>
+    {children}
+  </div>
+);
+
+/** Pillola selezionabile: 7px 13px, 12.5px, spunta quando scelta. */
 export const PreviewChip = ({
   checked,
   children,
@@ -58,28 +97,82 @@ export const PreviewChip = ({
   children: React.ReactNode;
 }) => (
   <span
-    className={
+    className={cn(
+      "flex items-center justify-center rounded-[20px] border-[1.5px] px-[13px] py-[7px] text-[12.5px]",
       checked
-        ? "flex items-center justify-center gap-1 rounded-full border-[1.5px] border-[#222222] bg-[#f6f6f6] px-[11px] py-1.5 text-[12px] font-semibold text-foreground"
-        : "flex items-center justify-center rounded-full border-[1.5px] border-[#e4e4ea] px-[11px] py-1.5 text-[12px] font-medium text-[#6a6a6a]"
-    }
+        ? "border-[#1a1a2e] bg-[#f6f6f8] font-semibold text-[#1a1a2e]"
+        : "border-[#e4e4ea] font-medium text-[#6a6a6a]",
+    )}
   >
     {checked ? "✓ " : ""}
     {children}
   </span>
 );
 
-const Toggle = ({ on = true }: { on?: boolean }) => (
-  <span
-    className={cn(
-      "flex h-6 w-11 shrink-0 items-center rounded-full px-0.5",
-      on ? "justify-end bg-[#222222]" : "justify-start bg-[#dcdcdc]",
-    )}
-  >
-    <span className="block size-5 rounded-full bg-white shadow-[0_1px_4px_rgba(0,0,0,0.2)]" />
+/** Pillola **non** selezionabile: elenca funzioni, senza spunta ("E c'è tanto altro"). */
+const Tag = ({ children }: { children: React.ReactNode }) => (
+  <span className="rounded-[20px] border-[1.5px] border-[#e4e4ea] px-[11px] py-1.5 text-[12px] font-medium text-[#444444]">
+    {children}
   </span>
 );
 
+/** Riquadro selezionabile (Policy): squadrato, non a pillola. */
+const BoxChoice = ({
+  checked,
+  cursor,
+  children,
+}: {
+  checked?: boolean;
+  /** Il puntatore del mouse disegnato in basso a destra, come nel prototipo. */
+  cursor?: boolean;
+  children: React.ReactNode;
+}) => (
+  <span
+    className={cn(
+      "relative flex items-center justify-center gap-[5px] rounded-[10px] border-[1.5px] px-1.5 py-2.5 text-[13px]",
+      checked
+        ? "border-[#1a1a2e] font-semibold text-[#1a1a2e]"
+        : "border-[#e4e4ea] font-medium text-[#6a6a6a]",
+      checked && (cursor ? "bg-white shadow-[0_4px_12px_rgba(26,26,46,0.12)]" : "bg-[#f6f6f8]"),
+    )}
+  >
+    {checked ? "✓ " : ""}
+    {children}
+    {cursor ? (
+      <svg width="17" height="20" viewBox="0 0 17 20" fill="none" className="absolute -bottom-3 -right-1.5" aria-hidden>
+        <path
+          d="M1.5 1.2v14.4l3.9-3.9 2.5 5.7 2.6-1.2-2.5-5.6h5.4L1.5 1.2z"
+          fill="#111118"
+          stroke="#ffffff"
+          strokeWidth="1.2"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ) : null}
+  </span>
+);
+
+/** Interruttore 44×24 col pomello da 20. Spento: #e0e0e0. */
+const Toggle = ({ on = true }: { on?: boolean }) => (
+  <span
+    className={cn(
+      "relative inline-block h-6 w-11 shrink-0 rounded-[12px]",
+      on ? "bg-[#1a1a2e]" : "bg-[#e0e0e0]",
+    )}
+  >
+    <span
+      className={cn(
+        "absolute top-0.5 size-5 rounded-full bg-white shadow-[0_1px_4px_rgba(0,0,0,0.2)]",
+        on ? "left-[22px]" : "left-0.5",
+      )}
+    />
+  </span>
+);
+
+/**
+ * Riga con interruttore: il mattone più usato dei cartelli.
+ * 14px/600 sopra, 12.5px/500 #8a8a94 sotto, 13px di respiro.
+ */
 export const PreviewToggleRow = ({
   title,
   note,
@@ -89,201 +182,266 @@ export const PreviewToggleRow = ({
   note: string;
   on?: boolean;
 }) => (
-  <div className="flex items-center justify-between gap-3 py-2.5">
-    <div className="min-w-0">
-      <p className="text-[13.5px] font-semibold text-foreground">{title}</p>
-      <p className="mt-0.5 text-[12px] font-medium leading-snug text-[#929292]">{note}</p>
-    </div>
+  <div className="flex items-center justify-between gap-3 py-[13px]">
+    <span className="min-w-0 flex-1">
+      <span className="block text-[14px] font-semibold text-[#1a1a2e]">{title}</span>
+      <span className="mt-0.5 block text-[12.5px] font-medium leading-snug text-[#8a8a94]">
+        {note}
+      </span>
+    </span>
     <Toggle on={on} />
   </div>
 );
 
-/* ── Primitivi usati dentro i cartelli ──────────────────────────────── */
-
-/** Riga titolo + nota, senza toggle: le "tante impostazioni" elencate. */
-const CardRow = ({ title, note }: { title: string; note: string }) => (
-  <div className="flex items-start gap-2.5 border-b border-[#f2f2f2] py-2.5 last:border-b-0">
-    <span className="mt-[5px] block size-[7px] shrink-0 rounded-full bg-[#cfcfcf]" />
-    <div className="min-w-0">
-      <p className="text-[13.5px] font-semibold text-foreground">{title}</p>
-      <p className="mt-0.5 text-[12px] font-medium leading-snug text-[#929292]">{note}</p>
-    </div>
-  </div>
+/** Più righe-interruttore: il filo separatore sta fra, non sotto l'ultima. */
+const ToggleList = ({ children }: { children: React.ReactNode }) => (
+  <div className="flex flex-col divide-y divide-[#efeff2]">{children}</div>
 );
 
-/** Riga etichetta → valore (prezzi, cutoff, penale). */
-const CardValueRow = ({ label, value }: { label: string; value: string }) => (
-  <div className="flex items-center justify-between gap-3 border-b border-[#f2f2f2] py-2.5 last:border-b-0">
-    <span className="text-[13px] font-medium text-[#6a6a6a]">{label}</span>
-    <span className="text-[13.5px] font-bold text-foreground">{value}</span>
-  </div>
+/** Avatar tondo dalle foto del prototipo. */
+const Avatar = ({ src, size }: { src: string; size: number }) => (
+  <span className="shrink-0 overflow-hidden rounded-full" style={{ width: size, height: size }}>
+    <Image src={src} alt="" width={size * 2} height={size * 2} className="h-full w-full object-cover" />
+  </span>
 );
 
-/** Riga della lista mezzi/allievi dentro il cartello (fondo grigio, badge). */
-const CardTile = ({
-  title,
-  meta,
+/** Riga allievo dello scambio: avatar, nome, orario, stato. */
+const SwapRow = ({
+  avatar,
+  name,
+  when,
   badge,
-  tone = "plain",
+  accepted,
 }: {
-  title: string;
-  meta: string;
-  badge?: string;
-  tone?: "plain" | "ok";
+  avatar: string;
+  name: string;
+  when: string;
+  badge: string;
+  accepted?: boolean;
 }) => (
-  <div className="mb-2 flex items-center justify-between gap-3 rounded-[14px] bg-[#f5f5f5] px-3.5 py-3 last:mb-0">
-    <div className="min-w-0">
-      <p className="text-[13.5px] font-bold text-foreground">{title}</p>
-      <p className="mt-0.5 text-[12.5px] font-medium text-[#929292]">{meta}</p>
-    </div>
-    {badge ? (
-      <span
-        className={cn(
-          "shrink-0 rounded-full px-3 py-1.5 text-[12px] font-semibold",
-          tone === "ok"
-            ? "bg-[#e6f6ec] text-[#177e45]"
-            : "border border-[#e4e4ea] bg-white text-foreground",
-        )}
-      >
-        {badge}
-      </span>
-    ) : null}
+  <div className="flex items-center gap-3 rounded-[14px] bg-[#f5f5f7] px-3.5 py-[13px]">
+    <Avatar src={avatar} size={40} />
+    <span className="min-w-0 flex-1">
+      <span className="block text-[15px] font-bold tracking-[-0.3px] text-[#1a1a2e]">{name}</span>
+      <span className="mt-px block text-[12.5px] font-medium text-[#8a8a94]">{when}</span>
+    </span>
+    <span
+      className={cn(
+        "shrink-0 whitespace-nowrap rounded-[20px] px-[11px] py-1.5 text-[11.5px] font-bold",
+        accepted ? "bg-[#e9f7ef] text-[#1a8a5a]" : "border border-[#e4e4ea] bg-white text-[#1a1a2e]",
+      )}
+    >
+      {badge}
+    </span>
   </div>
 );
 
-const CardMiniLabel = ({ children }: { children: React.ReactNode }) => (
-  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.7px] text-[#929292]">{children}</p>
+/** Il tondo con le frecce che si incrociano, a cavallo fra le due righe. */
+const SwapBadge = () => (
+  <div className="relative z-[2] -my-2 flex items-center justify-center">
+    <span className="inline-flex size-[34px] items-center justify-center rounded-full border-[3px] border-white bg-[#1a1a2e] shadow-[0_4px_12px_rgba(26,26,46,0.28)]">
+      <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M4 7h11M12 4l3 3-3 3M16 13H5M8 10l-3 3 3 3" />
+      </svg>
+    </span>
+  </div>
 );
 
-/* ── Contenuto dei cartelli, 1:1 dal prototipo ──────────────────────── */
+/* ── Contenuto dei cartelli, 1:1 dal prototipo ──────────────────────
+ *
+ * Ogni sotto-tab ha il **suo** cartello, con il suo contenuto: qui non si
+ * ripete niente. Testi, valori, stati degli interruttori e perfino quale
+ * chip è selezionato vengono dal sorgente del prototipo.
+ */
 
 type LockedPaneCard = {
   title: string;
   /** Riga sotto il titolo, dove il prototipo la ha. */
   subtitle?: string;
-  /** Mini-anteprima dentro il cartello. Assente = cartello generico. */
+  /** Mini-anteprima dentro il cartello. Assente = solo titolo e paragrafo. */
   preview?: React.ReactNode;
-  /** Paragrafo di beneficio sopra i CTA. Il prototipo a volte non lo ha. */
+  /** Paragrafo di beneficio sopra i CTA. */
   description?: string;
+  /** Larghezza del cartello: 420px salvo dove il prototipo dice altro. */
+  width?: number;
+  /** Respiro sopra il filo che precede il paragrafo (il prototipo varia). */
+  ruleTight?: boolean;
 };
 
 export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
-  /* ── Prenotazioni e allievi ───────────────────────────────────────── */
+  /* ── Prenotazioni e allievi › Generali ────────────────────────────── */
   "bookings:generali": {
     title: "Prenotazioni in autonomia",
+    ruleTight: true,
     preview: (
       <>
-        <div className="mb-3 grid grid-cols-2 gap-3">
-          <div>
-            <FieldLabel>Chi può prenotare</FieldLabel>
+        <div className="grid grid-cols-2 gap-2.5">
+          <Field label="Chi può prenotare">
             <FakeSelect>Allievi e istruttori</FakeSelect>
-          </div>
-          <div>
-            <FieldLabel>Settimane visibili</FieldLabel>
+          </Field>
+          <Field label="Settimane visibili">
             <FakeSelect>4 settimane</FakeSelect>
+          </Field>
+        </div>
+        <div className="mt-3.5">
+          <MiniLabel className="mb-2 !text-[11px] !tracking-[0.4px]">
+            Durata prenotazione allievo
+          </MiniLabel>
+          <div className="flex flex-wrap gap-1.5">
+            <PreviewChip>30 min</PreviewChip>
+            <PreviewChip>45 min</PreviewChip>
+            <PreviewChip checked>60 min</PreviewChip>
+            <PreviewChip>90 min</PreviewChip>
           </div>
         </div>
-        <FieldLabel>Durata prenotazione allievo</FieldLabel>
-        <div className="mb-1 grid grid-cols-4 gap-2">
-          <PreviewChip>30 min</PreviewChip>
-          <PreviewChip>45 min</PreviewChip>
-          <PreviewChip checked>60 min</PreviewChip>
-          <PreviewChip>90 min</PreviewChip>
+        <div className="mt-1.5">
+          <ToggleList>
+            <PreviewToggleRow
+              title="Solo orari tondi"
+              note="Proponi agli allievi solo orari pieni (16:00, 17:00, ecc.)"
+            />
+            <PreviewToggleRow
+              title="Festività non prenotabili"
+              note="I giorni festivi restano chiusi alle prenotazioni"
+            />
+          </ToggleList>
         </div>
-        <PreviewToggleRow
-          title="Solo orari tondi"
-          note="Proponi agli allievi solo orari pieni (16:00, 17:00, ecc.)"
-        />
-        <PreviewToggleRow
-          title="Festività non prenotabili"
-          note="I giorni festivi restano chiusi alle prenotazioni"
-        />
       </>
     ),
     description:
       "Gli allievi prenotano da soli dall'app, dentro le regole che imposti tu: l'agenda si riempie senza telefonate.",
   },
+
+  /* ── Prenotazioni e allievi › Limiti ──────────────────────────────── */
   "bookings:limiti": {
     title: "Limiti di prenotazione",
+    ruleTight: true,
     preview: (
-      <>
-        <CardRow
-          title="Stop alle prenotazioni last-minute"
-          note="Oltre le 19:30 non si prenota più per il giorno dopo"
-        />
-        <CardRow
-          title="Massimo di guide a settimana"
-          note="3 guide per allievo, superabili con conferma"
-        />
-        <CardRow
-          title="Riempi le fasce più vuote"
-          note="Chi è libero in una fascia poco richiesta prenota lì"
-        />
-        <CardRow
-          title="Blocca chi ha troppe guide da pagare"
-          note="Prenotazioni sospese finché non salda"
-        />
-      </>
+      // Quattro interruttori, e il terzo nel prototipo è **spento**.
+      <div className="-mt-2.5">
+        <ToggleList>
+          <PreviewToggleRow
+            title="Stop alle prenotazioni last-minute"
+            note="Oltre le 19:30 non si prenota più per il giorno dopo"
+          />
+          <PreviewToggleRow
+            title="Massimo di guide a settimana"
+            note="3 guide per allievo, superabili con conferma"
+          />
+          <PreviewToggleRow
+            title="Riempi le fasce più vuote"
+            note="Chi è libero in una fascia poco richiesta prenota lì"
+            on={false}
+          />
+          <PreviewToggleRow
+            title="Blocca chi ha troppe guide da pagare"
+            note="Prenotazioni sospese finché non salda"
+          />
+        </ToggleList>
+      </div>
     ),
     description:
       "Tante impostazioni per gestire tutto in tranquillità. E se non ti servono, puoi sempre far prenotare solo gli istruttori.",
   },
+
+  /* ── Prenotazioni e allievi › Guide ───────────────────────────────── */
   "bookings:guide": {
     title: "Scambi tra allievi",
     subtitle:
       "Un imprevisto? Gli allievi si scambiano le guide da soli, senza passare dalla segreteria.",
     preview: (
       <>
-        <CardTile title="Allievo 1" meta="Guida · mar 14:00 → 15:00" badge="Propone lo scambio" />
-        <CardTile title="Allievo 2" meta="Guida · mar 14:00 → 15:00" badge="✓ Accetta" tone="ok" />
-        <div className="mt-4">
-          <CardMiniLabel>E c&apos;è tanto altro</CardMiniLabel>
-          <div className="flex flex-wrap gap-2">
-            <PreviewChip checked>Presenza automatica</PreviewChip>
-            <PreviewChip checked>Guide di gruppo</PreviewChip>
-            <PreviewChip checked>Gruppi visibili agli allievi</PreviewChip>
+        <div className="relative">
+          <SwapRow
+            avatar="/images/locked/allievo-1.png"
+            name="Allievo 1"
+            when="Guida · mar 14:00 → 15:00"
+            badge="Propone lo scambio"
+          />
+          <SwapBadge />
+          <SwapRow
+            avatar="/images/locked/allievo-2.png"
+            name="Allievo 2"
+            when="Guida · mar 14:00 → 15:00"
+            badge="✓ Accetta"
+            accepted
+          />
+        </div>
+        <div className="mt-[18px]">
+          <MiniLabel className="mb-2 !text-[11px] !tracking-[0.4px]">E c&apos;è tanto altro</MiniLabel>
+          <div className="flex flex-wrap gap-1.5">
+            <Tag>Presenza automatica</Tag>
+            <Tag>Guide di gruppo</Tag>
+            <Tag>Gruppi visibili agli allievi</Tag>
           </div>
         </div>
       </>
     ),
   },
+
+  /* ── Prenotazioni e allievi › App allievi ─────────────────────────── */
   "bookings:app": {
     title: "App allievi",
     preview: (
       <>
-        <PreviewToggleRow
-          title="Mostra note nell'app allievi"
-          note="Le note degli istruttori dopo ogni guida, direttamente in app"
-        />
-        <PreviewToggleRow
-          title="Consenti scelta istruttore"
-          note="L'allievo sceglie con chi fare la guida quando prenota"
-        />
-        <div className="mt-3.5 rounded-[14px] bg-[#f5f5f5] px-4 py-3.5">
-          <CardMiniLabel>Anteprima · Nota nell&apos;app</CardMiniLabel>
-          <p className="text-[12.5px] font-bold text-foreground">Nota di Valerio · guida di oggi</p>
-          <p className="mt-1 text-[13px] leading-[1.45] text-[#5a5a66]">
-            Ottimi progressi in parcheggio, la prossima volta rivediamo le rotonde.
-          </p>
+        <div className="-mt-2.5">
+          <ToggleList>
+            <PreviewToggleRow
+              title="Mostra note nell'app allievi"
+              note="Le note degli istruttori dopo ogni guida, direttamente in app"
+            />
+            <PreviewToggleRow
+              title="Consenti scelta istruttore"
+              note="L'allievo sceglie con chi fare la guida quando prenota"
+            />
+          </ToggleList>
+        </div>
+        <div className="mt-2 rounded-[14px] bg-[#f5f5f7] p-3.5">
+          <MiniLabel>Anteprima · Nota nell&apos;app</MiniLabel>
+          <div className="mt-2.5 flex items-start gap-2.5 rounded-[12px] border border-[#e8e8ee] bg-white px-[13px] py-[11px]">
+            <Avatar src="/images/locked/nota-valerio.png" size={32} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[12.5px] font-bold text-[#1a1a2e]">
+                Nota di Valerio · guida di oggi
+              </span>
+              <span className="mt-0.5 block text-[12px] font-medium leading-[1.45] text-[#6a6a72]">
+                Ottimi progressi in parcheggio, la prossima volta rivediamo le rotonde.
+              </span>
+            </span>
+          </div>
         </div>
       </>
     ),
     description:
       "Decidi tu cosa vedono gli allievi in app: note delle guide e scelta dell'istruttore.",
   },
+
+  /* ── Prenotazioni e allievi › Crediti e prezzi ────────────────────── */
   "bookings:crediti": {
     title: "Crediti e prezzi",
     preview: (
       <>
-        <PreviewToggleRow
-          title="Crediti guida"
-          note="Le guide si pagano con crediti caricati dall'autoscuola"
-        />
-        <div className="mt-2.5">
-          <CardValueRow label="Guida da 30 minuti" value="25 €" />
-          <CardValueRow label="Guida da 60 minuti" value="50 €" />
-          <CardValueRow label="Cutoff annullamento" value="48 ore prima" />
-          <CardValueRow label="Penale" value="100% del prezzo" />
+        <div className="-mt-1.5 border-b border-[#efeff2]">
+          <PreviewToggleRow
+            title="Crediti guida"
+            note="Le guide si pagano con crediti caricati dall'autoscuola"
+          />
+        </div>
+        <div className="mt-3.5 grid grid-cols-2 gap-2.5">
+          <Field label="Guida da 30 minuti">
+            <PriceField value="25" />
+          </Field>
+          <Field label="Guida da 60 minuti">
+            <PriceField value="50" />
+          </Field>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2.5">
+          <Field label="Cutoff annullamento">
+            <FakeSelect>48 ore prima</FakeSelect>
+          </Field>
+          <Field label="Penale">
+            <FakeSelect>100% del prezzo</FakeSelect>
+          </Field>
         </div>
       </>
     ),
@@ -294,22 +452,28 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
   /* ── Policy tipi guida ────────────────────────────────────────────── */
   policy: {
     title: "Policy tipi guida",
+    // Il prototipo qui stringe il cartello a 400px.
+    width: 400,
     preview: (
       <>
-        <PreviewToggleRow
-          title="Richiedi almeno 1 guida per tipo"
-          note="Ogni allievo completa una guida per ogni tipo selezionato"
-        />
-        <div className="mt-3">
-          <CardMiniLabel>Configura per tipo di guida</CardMiniLabel>
-          <div className="grid grid-cols-3 gap-2">
-            <PreviewChip checked>Manovre</PreviewChip>
-            <PreviewChip checked>Urbano</PreviewChip>
-            <PreviewChip>Extraurbano</PreviewChip>
-            <PreviewChip checked>Notturna</PreviewChip>
-            <PreviewChip>Autostrada</PreviewChip>
-            <PreviewChip>Parcheggio</PreviewChip>
-          </div>
+        <div className="-mt-2.5">
+          <PreviewToggleRow
+            title="Richiedi almeno 1 guida per tipo"
+            note="Ogni allievo completa una guida per ogni tipo selezionato"
+          />
+        </div>
+        <MiniLabel className="mb-2.5 mt-2">Configura per tipo di guida</MiniLabel>
+        <div className="grid grid-cols-3 gap-2">
+          <BoxChoice checked>Manovre</BoxChoice>
+          <BoxChoice checked>Urbano</BoxChoice>
+          <BoxChoice>Extraurbano</BoxChoice>
+          {/* Nel prototipo "Notturna" è appena stata cliccata: sfondo bianco,
+              ombra e il puntatore del mouse disegnato sull'angolo. */}
+          <BoxChoice checked cursor>
+            Notturna
+          </BoxChoice>
+          <BoxChoice>Autostrada</BoxChoice>
+          <BoxChoice>Parcheggio</BoxChoice>
         </div>
       </>
     ),
@@ -322,24 +486,21 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
     title: "Promemoria e notifiche",
     preview: (
       <>
-        <div className="mb-1 grid grid-cols-2 gap-3">
-          <div>
-            <FieldLabel>Promemoria allievo</FieldLabel>
+        <div className="grid grid-cols-2 gap-2.5">
+          <Field label="Promemoria allievo">
             <FakeSelect>60 minuti prima</FakeSelect>
-          </div>
-          <div>
-            <FieldLabel>Promemoria istruttore</FieldLabel>
+          </Field>
+          <Field label="Promemoria istruttore">
             <FakeSelect>30 minuti prima</FakeSelect>
-          </div>
+          </Field>
         </div>
         <PreviewToggleRow
           title="Promemoria mattutino"
           note="La mattina del giorno della guida, alle 07:30"
         />
-        <div className="my-2.5 h-px bg-[#f0f0f0]" />
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <span className="text-[13.5px] font-semibold text-foreground">Modalità di invio</span>
-          <span className="flex gap-1.5">
+        <div className="flex items-center justify-between gap-3 py-[13px]">
+          <span className="text-[14px] font-semibold text-[#1a1a2e]">Modalità di invio</span>
+          <span className="inline-flex gap-1.5">
             <PreviewChip checked>Notifica</PreviewChip>
             <PreviewChip checked>WhatsApp</PreviewChip>
             <PreviewChip>Email</PreviewChip>
@@ -389,10 +550,34 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
     subtitle:
       "Aggiungi i veicoli alle guide per avere più dettagli: ogni guida ha il suo mezzo, sempre.",
     preview: (
-      <>
-        <CardTile title="Veicolo 1" meta="HA996EF · B · Manuale" badge="Disponibile" tone="ok" />
-        <CardTile title="Veicolo 2" meta="GY355GJ · B · Automatico" badge="In guida · 16:00" />
-      </>
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-3 rounded-[14px] bg-[#f5f5f7] px-3 py-[11px]">
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-bold tracking-[-0.3px] text-[#1a1a2e]">
+              Veicolo 1
+            </span>
+            <span className="mt-px block text-[12.5px] font-medium text-[#8a8a94]">
+              HA996EF · B · Manuale
+            </span>
+          </span>
+          <span className="shrink-0 whitespace-nowrap rounded-[20px] bg-[#e9f7ef] px-[11px] py-1.5 text-[11.5px] font-bold text-[#1a8a5a]">
+            Disponibile
+          </span>
+        </div>
+        <div className="flex items-center gap-3 rounded-[14px] bg-[#f5f5f7] px-3 py-[11px]">
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-bold tracking-[-0.3px] text-[#1a1a2e]">
+              Veicolo 2
+            </span>
+            <span className="mt-px block text-[12.5px] font-medium text-[#8a8a94]">
+              GY355GJ · B · Automatico
+            </span>
+          </span>
+          <span className="shrink-0 whitespace-nowrap rounded-[20px] border border-[#e4e4ea] bg-white px-[11px] py-1.5 text-[11.5px] font-bold text-[#1a1a2e]">
+            In guida · 16:00
+          </span>
+        </div>
+      </div>
     ),
     description:
       "Disponibilità, categoria, cambio e chi può usarli: più dettagli, zero sovrapposizioni.",
@@ -404,13 +589,13 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
     subtitle:
       "Un numero dedicato a cui la segretaria AI risponde 24/7, mentre tu resti sulle guide.",
     preview: (
-      <div className="rounded-[16px] bg-[#f5f5f5] px-4 py-4">
+      <div className="rounded-[14px] bg-[#f5f5f7] px-4 py-4">
         <div className="flex items-center gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#e6f6ec]">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#e9f7ef]">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
               <path
                 d="M5 4h3l2 5-2 1a11 11 0 0 0 5 5l1-2 5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2Z"
-                stroke="#177e45"
+                stroke="#1a8a5a"
                 strokeWidth="1.8"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -418,14 +603,12 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
             </svg>
           </span>
           <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-[0.7px] text-[#929292]">
-              Chiamata in arrivo
-            </p>
-            <p className="mt-0.5 text-[15px] font-bold text-foreground">+39 340 776 2201</p>
+            <MiniLabel>Chiamata in arrivo</MiniLabel>
+            <p className="mt-0.5 text-[15px] font-bold text-[#1a1a2e]">+39 340 776 2201</p>
           </div>
         </div>
-        <p className="mt-3 flex items-center gap-2 text-[12.5px] font-semibold text-[#177e45]">
-          <span className="block size-[7px] rounded-full bg-[#177e45]" />
+        <p className="mt-3 flex items-center gap-2 text-[12.5px] font-bold text-[#1a8a5a]">
+          <span className="block size-[7px] rounded-full bg-[#1a8a5a]" />
           Risponde l&apos;AI
         </p>
       </div>
@@ -437,14 +620,14 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
       "Decidi cosa può fare e come si presenta: saluto personalizzato, FAQ e prenotazioni vocali.",
     preview: (
       <>
-        <div className="rounded-[16px] bg-[#f5f5f5] px-4 py-3.5 text-[13px] leading-[1.5] text-[#5a5a66]">
+        <div className="rounded-[14px] bg-[#f5f5f7] px-4 py-3.5 text-[13px] font-medium leading-[1.5] text-[#444444]">
           &ldquo;Scuola Guida Montreal, buongiorno! Sono l&apos;assistente virtuale
           dell&apos;autoscuola, come posso aiutarti?&rdquo;
         </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <PreviewChip checked>FAQ autoscuola</PreviewChip>
-          <PreviewChip checked>Info lezioni</PreviewChip>
-          <PreviewChip checked>Prenota guida</PreviewChip>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          <Tag>FAQ autoscuola</Tag>
+          <Tag>Info lezioni</Tag>
+          <Tag>Prenota guida</Tag>
         </div>
       </>
     ),
@@ -454,23 +637,23 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
     subtitle: "Scegli giorni e fasce orarie in cui risponde, e cosa registrare delle chiamate.",
     preview: (
       <>
-        <div className="rounded-[16px] bg-[#f5f5f5] px-4 py-3.5">
-          <CardMiniLabel>Registrazione</CardMiniLabel>
-          <div className="flex items-center gap-3">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#222222]">
+        <div className="rounded-[14px] bg-[#f5f5f7] px-4 py-3.5">
+          <MiniLabel>Registrazione</MiniLabel>
+          <div className="mt-2.5 flex items-center gap-3">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#1a1a2e]">
               <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden>
                 <path d="M8 5l11 7-11 7V5Z" fill="#ffffff" />
               </svg>
             </span>
             <span className="h-[3px] flex-1 rounded-full bg-[#dcdcdc]">
-              <span className="block h-full w-[38%] rounded-full bg-[#222222]" />
+              <span className="block h-full w-[38%] rounded-full bg-[#1a1a2e]" />
             </span>
-            <span className="shrink-0 text-[12.5px] font-semibold text-[#6a6a6a]">0:42</span>
+            <span className="shrink-0 text-[12.5px] font-bold text-[#6a6a72]">0:42</span>
           </div>
         </div>
-        <div className="mt-3 rounded-[16px] bg-[#f5f5f5] px-4 py-3.5">
-          <CardMiniLabel>Trascrizione</CardMiniLabel>
-          <p className="text-[13px] leading-[1.5] text-[#5a5a66]">
+        <div className="mt-2.5 rounded-[14px] bg-[#f5f5f7] px-4 py-3.5">
+          <MiniLabel>Trascrizione</MiniLabel>
+          <p className="mt-2.5 text-[12.5px] font-medium leading-[1.45] text-[#444444]">
             Buongiorno, sono Marco Rossi. Volevo sapere se avete disponibilità questa settimana per
             una guida, preferibilmente il pomeriggio…
           </p>
@@ -483,20 +666,22 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
     subtitle:
       "Dai alla segretaria le informazioni della tua autoscuola: risponde seguendo le tue regole.",
     preview: (
-      <div className="rounded-[16px] bg-[#f5f5f5] px-4 py-3.5">
-        <CardMiniLabel>Cosa sa la segretaria</CardMiniLabel>
-        <ul className="space-y-1.5">
+      <div className="rounded-[14px] bg-[#f5f5f7] px-4 py-3.5">
+        <MiniLabel className="!text-[11px] !tracking-[0.8px] !text-[#8a8a94]">
+          Cosa sa la segretaria
+        </MiniLabel>
+        <div className="mt-2.5 flex flex-col gap-2">
           {[
             "Rinnovo patente: documenti, costi e tempi",
             "Prezzi patente nuova → rimanda alla mail",
             "Orari segreteria: 9:00–12:00 e 15:30–18:30",
           ].map((line) => (
-            <li key={line} className="flex items-start gap-2 text-[13px] leading-[1.45] text-[#5a5a66]">
-              <span className="mt-[2px] shrink-0 font-bold text-[#177e45]">✓</span>
+            <div key={line} className="flex items-center gap-[9px] text-[12.5px] font-medium text-[#444444]">
+              <span className="size-1.5 shrink-0 rounded-full bg-[#1a1a2e]" />
               {line}
-            </li>
+            </div>
           ))}
-        </ul>
+        </div>
       </div>
     ),
   },
@@ -612,7 +797,7 @@ function LocationsEmptyState() {
   );
 }
 
-/** I due pulsanti, identici in ogni cartello. */
+/** I due pulsanti, identici in ogni cartello. Primario navy, non nero. */
 function CtaRow() {
   return (
     <div className="flex items-center justify-center gap-2.5">
@@ -620,7 +805,7 @@ function CtaRow() {
         href="https://reglo.it"
         target="_blank"
         rel="noreferrer"
-        className="rounded-[32px] border-[1.5px] border-[#dddddd] bg-white px-5 py-2.5 text-[14px] font-semibold text-foreground transition-colors hover:border-[#b5b5b5]"
+        className="rounded-[32px] border-[1.5px] border-[#dddddd] px-5 py-2.5 text-[14px] font-semibold text-[#222222] transition-colors hover:border-[#b5b5b5]"
       >
         Scopri di più
       </a>
@@ -628,7 +813,8 @@ function CtaRow() {
         href={ATTIVA_REGLO_URL}
         target="_blank"
         rel="noreferrer"
-        className="rounded-[32px] bg-[#222222] px-[22px] py-[11px] text-[14px] font-bold text-white transition-opacity hover:opacity-90"
+        style={{ backgroundColor: NAVY }}
+        className="rounded-[32px] px-[22px] py-[11px] text-[14px] font-bold text-white transition-colors hover:!bg-[#2a2a44]"
       >
         Attiva Reglo
       </a>
@@ -644,15 +830,15 @@ function LockedCardBody({ card }: { card: LockedPaneCard }) {
   const lead = card.subtitle ?? (card.preview ? undefined : card.description);
   return (
     <>
-      <h3 className="text-[21px] font-bold tracking-[-0.7px] text-foreground">{card.title}</h3>
+      <h3 className="text-[21px] font-bold tracking-[-0.7px] text-[#1a1a2e]">{card.title}</h3>
       {lead ? (
         <p className="mt-2 text-[14px] font-medium leading-[1.45] text-[#5a5a66]">{lead}</p>
       ) : null}
       {card.preview ? <div className="mt-[18px]">{card.preview}</div> : null}
       {card.preview && card.description ? (
         <>
-          <div className="my-[18px] h-px bg-[#efeff2]" />
-          <p className="mb-4 text-center text-[13.5px] font-medium leading-[1.5] text-muted-foreground">
+          <div className={cn("h-px bg-[#efeff2]", card.ruleTight ? "mb-[18px] mt-3.5" : "my-[18px]")} />
+          <p className="mb-4 text-center text-[13.5px] font-medium leading-[1.5] text-[#6a6a6a]">
             {card.description}
           </p>
         </>
@@ -706,7 +892,11 @@ export function LockedSettingsPane({ pane }: { pane: string }) {
       <div className="relative min-h-[520px]">
         <BlurredBackdrop contentKey={contentKey} />
         <div className="absolute inset-0 flex items-start justify-center px-6 pt-9">
-          <div className="w-full max-w-[420px] rounded-[22px] bg-white p-[26px_24px_24px] shadow-[0_26px_70px_rgba(10,20,30,0.32)]">
+          <div
+            data-testid="locked-pane-card"
+            style={{ maxWidth: card.width ?? 420 }}
+            className="w-full rounded-[22px] bg-white p-[26px_24px_24px] shadow-[0_26px_70px_rgba(10,20,30,0.32)]"
+          >
             <LockedCardBody card={card} />
           </div>
         </div>
