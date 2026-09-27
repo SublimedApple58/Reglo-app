@@ -17,9 +17,10 @@
  *   CTA.
  *
  * ⚠️ I cartelli del prototipo **non hanno lucchetto né badge "Funzione extra di
- * Reglo"**: quella stringa compare solo nei popup dell'hamburger. Il lucchetto
- * e il badge restano quindi alle sole sezioni che il prototipo non copre
- * (Pagellino, Aspetto, Istruttori), dove non c'è un cartello da imitare.
+ * Reglo"**: quella stringa compare solo nei popup dell'hamburger. Vale per
+ * tutti, anche per le sezioni che il prototipo non copre (Pagellino, Aspetto,
+ * Istruttori): lì manca l'anteprima, non la forma — titolo, paragrafo e CTA
+ * sono gli stessi.
  *
  * Nessuna action server viene chiamata: la pane vera non si monta, al suo posto
  * c'è il fondale finto di `demo-settings.tsx`.
@@ -96,24 +97,6 @@ export const PreviewToggleRow = ({
     <Toggle on={on} />
   </div>
 );
-
-function Padlock({ size = 20, stroke = "#6a6a6a" }: { size?: number; stroke?: string }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke={stroke}
-      strokeWidth={2}
-      strokeLinecap="round"
-      aria-hidden
-    >
-      <rect x="4" y="11" width="16" height="10" rx="2" />
-      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-    </svg>
-  );
-}
 
 /* ── Primitivi usati dentro i cartelli ──────────────────────────────── */
 
@@ -518,7 +501,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
     ),
   },
 
-  /* ── Sezioni che il prototipo non ha: forma generica col lucchetto ─── */
+  /* ── Sezioni che il prototipo non ha: stessa forma, senza anteprima ── */
   evaluation: {
     title: "Pagellino di valutazione",
     description:
@@ -655,42 +638,18 @@ function CtaRow() {
 
 /** Il cartello: 420px, ombra alta, contenuto secondo il prototipo. */
 function LockedCardBody({ card }: { card: LockedPaneCard }) {
-  if (!card.preview) {
-    // Sezione che il prototipo non copre: forma generica già approvata.
-    return (
-      <>
-        <div className="text-center">
-          <div className="mx-auto mb-3.5 flex h-[46px] w-[46px] items-center justify-center rounded-[14px] bg-[#f2f2f2]">
-            <Padlock />
-          </div>
-          <span className="mb-3 inline-flex items-center rounded-full bg-[#f2f2f2] px-2.5 py-1 text-[11.5px] font-bold text-muted-foreground">
-            Funzione extra di Reglo
-          </span>
-          <h3 className="mb-2 text-[17px] font-bold tracking-[-0.2px] text-foreground">
-            {card.title}
-          </h3>
-        </div>
-        <div className="my-4 h-px bg-[#f0f0f0]" />
-        {card.description ? (
-          <p className="mb-4 text-center text-[13.5px] font-medium leading-[1.5] text-muted-foreground">
-            {card.description}
-          </p>
-        ) : null}
-        <CtaRow />
-      </>
-    );
-  }
-
+  // Il testo che accompagna il titolo: `subtitle` dove il prototipo ce l'ha,
+  // altrimenti il paragrafo di beneficio — le sezioni senza anteprima (quelle
+  // che il prototipo non copre) hanno solo quello.
+  const lead = card.subtitle ?? (card.preview ? undefined : card.description);
   return (
     <>
       <h3 className="text-[21px] font-bold tracking-[-0.7px] text-foreground">{card.title}</h3>
-      {card.subtitle ? (
-        <p className="mt-2 text-[14px] font-medium leading-[1.45] text-[#5a5a66]">
-          {card.subtitle}
-        </p>
+      {lead ? (
+        <p className="mt-2 text-[14px] font-medium leading-[1.45] text-[#5a5a66]">{lead}</p>
       ) : null}
-      <div className="mt-[18px]">{card.preview}</div>
-      {card.description ? (
+      {card.preview ? <div className="mt-[18px]">{card.preview}</div> : null}
+      {card.preview && card.description ? (
         <>
           <div className="my-[18px] h-px bg-[#efeff2]" />
           <p className="mb-4 text-center text-[13.5px] font-medium leading-[1.5] text-muted-foreground">
