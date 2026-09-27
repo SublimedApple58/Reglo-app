@@ -67,6 +67,9 @@ export const useDemoAgendaSource = () =>
     () => ({
       fetchBootstrap: async (from: Date, to: Date) => demoAgendaBootstrap(from, to),
       readOnly: true,
+      // Gli strumenti della toolbar restano al loro posto ma non agiscono:
+      // ognuno apre il pannello che spiega cosa farebbe, come nel prototipo.
+      toolbarLocked: true,
       // Il "+" resta premibile (la toolbar è viva), quindi quello che offre
       // deve dire la verità: niente di creabile, tutto col lucchetto.
       menu: { items: [], locked: DEMO_LOCKED_MENU },

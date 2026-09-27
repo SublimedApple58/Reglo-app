@@ -116,6 +116,7 @@ import {
 } from "@/lib/autoscuole/agenda-color-criterion";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { ExpandingSearch } from "@/components/ui/expanding-search";
+import { LockedToolbarTip } from "@/components/pages/Autoscuole/locked/LockedToolbarTip";
 import { ToolbarFilters } from "./filters/ToolbarFilters";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import {
@@ -249,6 +250,13 @@ export type AgendaSource = {
     run: (appointmentId: string) => Promise<boolean>;
     title?: string;
   };
+  /**
+   * Strumenti della toolbar (legenda, visualizzazione, zoom, schermo intero,
+   * stampa, filtri, ricerca) **bloccati**: restano al loro posto, grigi, e
+   * aprono il pannello che spiega cosa fanno — come nel prototipo, dove ogni
+   * icona ha il suo. Vedi `LockedToolbarTip`.
+   */
+  toolbarLocked?: boolean;
   /** Voci del menu "+" e del menu-slot. Sostituiscono quelle standard. */
   menu?: {
     items: Array<{
@@ -3051,56 +3059,100 @@ export function AutoscuoleAgendaPage({
           <div className="min-w-2 flex-1" />
 
           {/* Legenda (icona info, proto) */}
-          <button
-            type="button"
-            title="Legenda"
-            onClick={() => setLegendOpen(true)}
-            className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
-          >
-            <Info className="size-4" strokeWidth={1.6} />
-          </button>
+          {source?.toolbarLocked ? (
+            <LockedToolbarTip tip="legenda">
+              <Info className="size-4" strokeWidth={1.6} />
+            </LockedToolbarTip>
+          ) : (
+            <button
+              type="button"
+              title="Legenda"
+              onClick={() => setLegendOpen(true)}
+              className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+            >
+              <Info className="size-4" strokeWidth={1.6} />
+            </button>
+          )}
 
           {/* Visualizzazione (giorni + fascia oraria) — Popover non-modale, così il
               popover del TimePicker annidato scrolla (niente scroll-lock da Dialog). */}
-          <PopoverPrimitive.Root open={viewPrefsOpen} onOpenChange={setViewPrefsOpen} modal={false}>
-            <PopoverPrimitive.Trigger asChild>
-              <button
-                type="button"
-                title="Visualizzazione"
-                className="relative flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
-              >
-                <LayoutGrid className="size-4" strokeWidth={1.6} />
-                {(viewPrefs.days.length < 7 || viewPrefs.startHour !== 0 || viewPrefs.endHour !== 24 || viewPrefs.weekMode !== "classic" || columnsByVehicle) && (
-                  <span className="absolute right-1 top-1 size-[7px] rounded-full bg-[#111111]" />
-                )}
-              </button>
-            </PopoverPrimitive.Trigger>
-            <PopoverPrimitive.Portal>
-              <PopoverPrimitive.Content
-                align="end"
-                sideOffset={8}
-                collisionPadding={8}
-                className="z-[60] w-[320px] rounded-xl border border-[#ebebeb] bg-white p-4 shadow-dropdown outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
-              >
-                <div className="space-y-4">
-                  <div className="text-[15px] font-semibold text-foreground">Visualizzazione</div>
-                  {/* Visualizza per: Istruttori / Veicoli — SOLO consorzio
-                      (prototipo: "Le colonne dell'agenda diventano i mezzi del
-                      consorzio"). Stesso pattern pill della sezione Settimana. */}
-                  {consortium && (
+          {source?.toolbarLocked ? (
+            <LockedToolbarTip tip="viz">
+              <LayoutGrid className="size-4" strokeWidth={1.6} />
+            </LockedToolbarTip>
+          ) : (
+            <PopoverPrimitive.Root open={viewPrefsOpen} onOpenChange={setViewPrefsOpen} modal={false}>
+              <PopoverPrimitive.Trigger asChild>
+                <button
+                  type="button"
+                  title="Visualizzazione"
+                  className="relative flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+                >
+                  <LayoutGrid className="size-4" strokeWidth={1.6} />
+                  {(viewPrefs.days.length < 7 || viewPrefs.startHour !== 0 || viewPrefs.endHour !== 24 || viewPrefs.weekMode !== "classic" || columnsByVehicle) && (
+                    <span className="absolute right-1 top-1 size-[7px] rounded-full bg-[#111111]" />
+                  )}
+                </button>
+              </PopoverPrimitive.Trigger>
+              <PopoverPrimitive.Portal>
+                <PopoverPrimitive.Content
+                  align="end"
+                  sideOffset={8}
+                  collisionPadding={8}
+                  className="z-[60] w-[320px] rounded-xl border border-[#ebebeb] bg-white p-4 shadow-dropdown outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+                >
+                  <div className="space-y-4">
+                    <div className="text-[15px] font-semibold text-foreground">Visualizzazione</div>
+                    {/* Visualizza per: Istruttori / Veicoli — SOLO consorzio
+                        (prototipo: "Le colonne dell'agenda diventano i mezzi del
+                        consorzio"). Stesso pattern pill della sezione Settimana. */}
+                    {consortium && (
+                      <div className="space-y-2">
+                        <div className="text-[12.5px] font-semibold text-foreground">Visualizza per</div>
+                        <div className="flex gap-1.5">
+                          {([
+                            { key: "instructor", label: "Istruttori" },
+                            { key: "vehicle", label: "Veicoli" },
+                          ] as const).map((opt) => {
+                            const on = viewPrefs.columnsBy === opt.key;
+                            return (
+                              <button
+                                key={opt.key}
+                                type="button"
+                                onClick={() => setViewPrefs((p) => ({ ...p, columnsBy: opt.key }))}
+                                className={cn(
+                                  "h-8 flex-1 cursor-pointer rounded-lg px-2 text-[12px] font-semibold transition-colors",
+                                  on ? "bg-[#111111] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
+                                )}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="text-[11.5px] text-muted-foreground">
+                          {viewPrefs.columnsBy === "vehicle"
+                            ? "Le colonne dell'agenda diventano i mezzi del consorzio."
+                            : "Le colonne dell'agenda diventano gli istruttori del consorzio."}
+                        </p>
+                      </div>
+                    )}
                     <div className="space-y-2">
-                      <div className="text-[12.5px] font-semibold text-foreground">Visualizza per</div>
+                      <div className="text-[12.5px] font-semibold text-foreground">Settimana</div>
                       <div className="flex gap-1.5">
                         {([
-                          { key: "instructor", label: "Istruttori" },
-                          { key: "vehicle", label: "Veicoli" },
+                          { key: "classic", label: "Classica (lun–dom)" },
+                          { key: "rolling", label: "7 giorni da oggi" },
                         ] as const).map((opt) => {
-                          const on = viewPrefs.columnsBy === opt.key;
+                          const on = viewPrefs.weekMode === opt.key;
                           return (
                             <button
                               key={opt.key}
                               type="button"
-                              onClick={() => setViewPrefs((p) => ({ ...p, columnsBy: opt.key }))}
+                              onClick={() => {
+                                setViewPrefs((p) => ({ ...p, weekMode: opt.key }));
+                                setWeekStart(weekAnchor(new Date(), opt.key));
+                              }}
                               className={cn(
                                 "h-8 flex-1 cursor-pointer rounded-lg px-2 text-[12px] font-semibold transition-colors",
                                 on ? "bg-[#111111] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
@@ -3112,110 +3164,85 @@ export function AutoscuoleAgendaPage({
                         })}
                       </div>
                       <p className="text-[11.5px] text-muted-foreground">
-                        {viewPrefs.columnsBy === "vehicle"
-                          ? "Le colonne dell'agenda diventano i mezzi del consorzio."
-                          : "Le colonne dell'agenda diventano gli istruttori del consorzio."}
+                        &quot;7 giorni da oggi&quot; parte dal giorno corrente invece che da lunedì.
                       </p>
                     </div>
-                  )}
-                  <div className="space-y-2">
-                    <div className="text-[12.5px] font-semibold text-foreground">Settimana</div>
-                    <div className="flex gap-1.5">
-                      {([
-                        { key: "classic", label: "Classica (lun–dom)" },
-                        { key: "rolling", label: "7 giorni da oggi" },
-                      ] as const).map((opt) => {
-                        const on = viewPrefs.weekMode === opt.key;
-                        return (
-                          <button
-                            key={opt.key}
-                            type="button"
-                            onClick={() => {
-                              setViewPrefs((p) => ({ ...p, weekMode: opt.key }));
-                              setWeekStart(weekAnchor(new Date(), opt.key));
-                            }}
-                            className={cn(
-                              "h-8 flex-1 cursor-pointer rounded-lg px-2 text-[12px] font-semibold transition-colors",
-                              on ? "bg-[#111111] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
-                            )}
-                          >
-                            {opt.label}
-                          </button>
-                        );
-                      })}
+                    <div className="space-y-2">
+                      <div className="text-[12.5px] font-semibold text-foreground">Giorni visibili</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {WEEKDAY_CHIPS.map(({ dow, label }) => {
+                          const on = viewPrefs.days.includes(dow);
+                          return (
+                            <button
+                              key={dow}
+                              type="button"
+                              onClick={() =>
+                                setViewPrefs((p) => {
+                                  const next = p.days.includes(dow)
+                                    ? p.days.filter((d) => d !== dow)
+                                    : [...p.days, dow];
+                                  return next.length ? { ...p, days: next } : p;
+                                })
+                              }
+                              className={cn(
+                                "h-8 min-w-[44px] cursor-pointer rounded-lg px-2.5 text-[12.5px] font-semibold transition-colors",
+                                on ? "bg-[#111111] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
+                              )}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[11.5px] text-muted-foreground">Nascondi i giorni in cui l&apos;autoscuola è chiusa.</p>
                     </div>
-                    <p className="text-[11.5px] text-muted-foreground">
-                      &quot;7 giorni da oggi&quot; parte dal giorno corrente invece che da lunedì.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-[12.5px] font-semibold text-foreground">Giorni visibili</div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {WEEKDAY_CHIPS.map(({ dow, label }) => {
-                        const on = viewPrefs.days.includes(dow);
-                        return (
-                          <button
-                            key={dow}
-                            type="button"
-                            onClick={() =>
-                              setViewPrefs((p) => {
-                                const next = p.days.includes(dow)
-                                  ? p.days.filter((d) => d !== dow)
-                                  : [...p.days, dow];
-                                return next.length ? { ...p, days: next } : p;
-                              })
-                            }
-                            className={cn(
-                              "h-8 min-w-[44px] cursor-pointer rounded-lg px-2.5 text-[12.5px] font-semibold transition-colors",
-                              on ? "bg-[#111111] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
-                            )}
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
+                    <div className="space-y-2">
+                      <div className="text-[12.5px] font-semibold text-foreground">Orario visibile</div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[13px] text-muted-foreground">Dalle</span>
+                        <TimePickerInput
+                          value={hourToTime(viewPrefs.startHour)}
+                          minuteStep={60}
+                          minTime="00:00"
+                          maxTime={hourToTime(viewPrefs.endHour - 1)}
+                          onChange={(v) => setViewPrefs((p) => ({ ...p, startHour: timeToHour(v) }))}
+                        />
+                        <span className="text-[13px] text-muted-foreground">alle</span>
+                        <TimePickerInput
+                          value={hourToTime(viewPrefs.endHour)}
+                          minuteStep={60}
+                          minTime={hourToTime(viewPrefs.startHour + 1)}
+                          maxTime="24:00"
+                          onChange={(v) => setViewPrefs((p) => ({ ...p, endHour: timeToHour(v) }))}
+                        />
+                      </div>
                     </div>
-                    <p className="text-[11.5px] text-muted-foreground">Nascondi i giorni in cui l&apos;autoscuola è chiusa.</p>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-[12.5px] font-semibold text-foreground">Orario visibile</div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[13px] text-muted-foreground">Dalle</span>
-                      <TimePickerInput
-                        value={hourToTime(viewPrefs.startHour)}
-                        minuteStep={60}
-                        minTime="00:00"
-                        maxTime={hourToTime(viewPrefs.endHour - 1)}
-                        onChange={(v) => setViewPrefs((p) => ({ ...p, startHour: timeToHour(v) }))}
-                      />
-                      <span className="text-[13px] text-muted-foreground">alle</span>
-                      <TimePickerInput
-                        value={hourToTime(viewPrefs.endHour)}
-                        minuteStep={60}
-                        minTime={hourToTime(viewPrefs.startHour + 1)}
-                        maxTime="24:00"
-                        onChange={(v) => setViewPrefs((p) => ({ ...p, endHour: timeToHour(v) }))}
-                      />
+                    <div className="flex items-center justify-end border-t border-[#f0f0f0] pt-3">
+                      <button
+                        type="button"
+                        className="cursor-pointer text-[13px] font-semibold text-[#111111] underline underline-offset-2 hover:opacity-70"
+                        onClick={() => {
+                          setViewPrefs(DEFAULT_VIEW_PREFS);
+                          setWeekStart(weekAnchor(new Date(), DEFAULT_VIEW_PREFS.weekMode));
+                        }}
+                      >
+                        Ripristina
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center justify-end border-t border-[#f0f0f0] pt-3">
-                    <button
-                      type="button"
-                      className="cursor-pointer text-[13px] font-semibold text-[#111111] underline underline-offset-2 hover:opacity-70"
-                      onClick={() => {
-                        setViewPrefs(DEFAULT_VIEW_PREFS);
-                        setWeekStart(weekAnchor(new Date(), DEFAULT_VIEW_PREFS.weekMode));
-                      }}
-                    >
-                      Ripristina
-                    </button>
-                  </div>
-                </div>
-              </PopoverPrimitive.Content>
-            </PopoverPrimitive.Portal>
-          </PopoverPrimitive.Root>
+                </PopoverPrimitive.Content>
+              </PopoverPrimitive.Portal>
+            </PopoverPrimitive.Root>
+          )}
 
           {/* Zoom verticale: altezza righe orarie, persistito (vista normale + fullscreen) */}
+          {source?.toolbarLocked ? (
+            <LockedToolbarTip tip="zoom" className="gap-1 rounded-lg border border-[#eeeeee] px-2">
+              <ZoomOut className="size-4" strokeWidth={1.7} />
+              <span className="select-none text-[12px] font-semibold tabular-nums">100%</span>
+              <ZoomIn className="size-4" strokeWidth={1.7} />
+            </LockedToolbarTip>
+          ) : (
           <div className="flex h-[34px] shrink-0 items-center gap-0.5 rounded-lg border border-[#eeeeee] px-1">
             <button
               type="button"
@@ -3239,83 +3266,109 @@ export function AutoscuoleAgendaPage({
               <ZoomIn className="size-4" strokeWidth={1.7} />
             </button>
           </div>
+          )}
 
           {/* Schermo intero */}
-          <button
-            type="button"
-            title={isAgendaFullscreen ? "Esci da schermo intero" : "Schermo intero"}
-            onClick={toggleAgendaFullscreen}
-            className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
-          >
-            {isAgendaFullscreen ? <Minimize2 className="size-4" strokeWidth={1.6} /> : <Maximize2 className="size-4" strokeWidth={1.6} />}
-          </button>
+          {source?.toolbarLocked ? (
+            <LockedToolbarTip tip="full">
+              <Maximize2 className="size-4" strokeWidth={1.6} />
+            </LockedToolbarTip>
+          ) : (
+            <button
+              type="button"
+              title={isAgendaFullscreen ? "Esci da schermo intero" : "Schermo intero"}
+              onClick={toggleAgendaFullscreen}
+              className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+            >
+              {isAgendaFullscreen ? <Minimize2 className="size-4" strokeWidth={1.6} /> : <Maximize2 className="size-4" strokeWidth={1.6} />}
+            </button>
+          )}
 
           {/* Stampa agenda — anteprima PDF della vista corrente */}
-          <button
-            type="button"
-            title="Stampa agenda"
-            onClick={() => setPrintOpen(true)}
-            className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
-          >
-            <Printer className="size-4" strokeWidth={1.6} />
-          </button>
+          {source?.toolbarLocked ? (
+            <LockedToolbarTip tip="stampa">
+              <Printer className="size-4" strokeWidth={1.6} />
+            </LockedToolbarTip>
+          ) : (
+            <button
+              type="button"
+              title="Stampa agenda"
+              onClick={() => setPrintOpen(true)}
+              className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+            >
+              <Printer className="size-4" strokeWidth={1.6} />
+            </button>
+          )}
 
           {/* Filtri (menu unico, proto) */}
-          <ToolbarFilters
-            groups={[
-              {
-                kind: "instructor",
-                label: "Istruttore",
-                title: "Filtra per istruttore",
-                options: instructors.map((item) => ({ value: item.id, label: item.name })),
-                value: instructorFilter,
-              },
-              ...(vehiclesEnabled
-                ? [
-                    {
-                      kind: "vehicle",
-                      label: "Veicolo",
-                      title: "Filtra per veicolo",
-                      options: vehicles.map((item) => ({ value: item.id, label: item.name })),
-                      value: vehicleFilter,
-                    },
-                  ]
-                : []),
-              {
-                kind: "type",
-                label: "Tipo",
-                title: "Filtra per tipo",
-                options: LESSON_TYPE_OPTIONS.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                })),
-                value: typeFilter,
-              },
-              {
-                kind: "status",
-                label: "Stato",
-                title: "Filtra per stato",
-                options: AGENDA_STATUS_OPTIONS,
-                value: statusFilter,
-              },
-            ]}
-            onApply={(kind, value) => applyFilter(kind as FilterKind, value)}
-            onClearAll={() => {
-              setInstructorFilter([]);
-              setVehicleFilter([]);
-              setTypeFilter([]);
-              setStatusFilter([]);
-            }}
-          />
+          {source?.toolbarLocked ? (
+            <LockedToolbarTip tip="filtri" className="gap-1.5 px-2">
+              <SlidersHorizontal className="size-4" strokeWidth={1.7} />
+              <span className="select-none text-[13px] font-medium">Filtri</span>
+            </LockedToolbarTip>
+          ) : (
+            <ToolbarFilters
+              groups={[
+                {
+                  kind: "instructor",
+                  label: "Istruttore",
+                  title: "Filtra per istruttore",
+                  options: instructors.map((item) => ({ value: item.id, label: item.name })),
+                  value: instructorFilter,
+                },
+                ...(vehiclesEnabled
+                  ? [
+                      {
+                        kind: "vehicle",
+                        label: "Veicolo",
+                        title: "Filtra per veicolo",
+                        options: vehicles.map((item) => ({ value: item.id, label: item.name })),
+                        value: vehicleFilter,
+                      },
+                    ]
+                  : []),
+                {
+                  kind: "type",
+                  label: "Tipo",
+                  title: "Filtra per tipo",
+                  options: LESSON_TYPE_OPTIONS.map((option) => ({
+                    value: option.value,
+                    label: option.label,
+                  })),
+                  value: typeFilter,
+                },
+                {
+                  kind: "status",
+                  label: "Stato",
+                  title: "Filtra per stato",
+                  options: AGENDA_STATUS_OPTIONS,
+                  value: statusFilter,
+                },
+              ]}
+              onApply={(kind, value) => applyFilter(kind as FilterKind, value)}
+              onClearAll={() => {
+                setInstructorFilter([]);
+                setVehicleFilter([]);
+                setTypeFilter([]);
+                setStatusFilter([]);
+              }}
+            />
+          )}
 
           {/* Cerca (espandibile, proto) */}
-          <ExpandingSearch
-            open={searchOpen}
-            onOpenChange={setSearchOpen}
-            value={search}
-            onChange={setSearch}
-            placeholder="Cerca in agenda…"
-          />
+          {source?.toolbarLocked ? (
+            <LockedToolbarTip tip="cerca">
+              <Search className="size-4" strokeWidth={1.7} />
+            </LockedToolbarTip>
+          ) : (
+            <ExpandingSearch
+              open={searchOpen}
+              onOpenChange={setSearchOpen}
+              value={search}
+              onChange={setSearch}
+              placeholder="Cerca in agenda…"
+            />
+          )}
 
           {/* CTA */}
           <div>
