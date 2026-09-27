@@ -299,7 +299,11 @@ query è stata toccata.
 
 I contatori in cima (Autoscuole, Allievi su app, Linee vocali) seguono le
 **righe visibili**, così i numeri e la tabella dicono la stessa cosa; accanto
-al titolo un "+N consorziate" in grigio ricorda cosa resta fuori.
+al titolo un "+N consorziate" in grigio ricorda cosa resta fuori. Non sono
+quindi totali di piattaforma: col filtro acceso dicono tutto, col filtro
+spento dicono quello che si sta guardando — **scelta approvata da Tiziano il
+2026-09-28**, sapendo che l'alternativa era tenerli fissi sul totale. Chi li
+cambia cambia una decisione presa, non un dettaglio.
 
 **La riga di un consorzio dice che si apre**: badge `Consorzio`, sfondo appena
 diverso, bottone "Apri scheda ›". Prima era identica a tutte le altre — era
@@ -502,6 +506,27 @@ Due asset del prototipo **non sono dentro il file standalone** e lì si vedono
 rotti: `img3/malattia-icon.png` (ritrovata nel bundle e riestratta) e le tre
 foto delle ferie `sa3/1|2|3.png` (sostituite con tre volti dello stesso
 bundle — quella di "Martina Giorgi" è maschile, Tiziano la lascia così).
+
+### Dove sta REG-429 oggi
+
+**Chiuso su staging, mai andato in produzione.** Otto giri di fedeltà al
+prototipo (Impostazioni, Segretaria, toolbar dell'agenda, Istruttori) più i
+quattro fix nati dal QA di Tiziano del 2026-09-28: il play del video che non
+portava a niente, le consorziate che inondavano la lista del backoffice, la
+riga del consorzio che non sembrava cliccabile e la colonna "Stato" che diceva
+"Attiva" a tutte. Tutti approvati.
+
+Il rilascio in produzione è una decisione a parte e **non ancora presa**. Due
+cose da sapere quando si prenderà:
+
+- fra `origin/main` e `origin/staging` non ci sono solo questi commit — su
+  staging si è accumulato lavoro di altri, quindi non è un rilascio di REG-429
+  da solo: va deciso cosa entra (`git log origin/main..origin/staging`);
+- l'ancora `#video-autonoma` del sito **è già in produzione** (repo
+  `reglo-landing`, deploy del 2026-09-27): il link dell'app la troverà pronta,
+  non c'è un ordine da rispettare fra i due rilasci.
+
+Nessuna migrazione in tutto REG-429.
 
 ### Richieste di guida al consorzio (REG-429, Fase 7)
 
