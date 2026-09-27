@@ -425,7 +425,13 @@ export function LockedToolbarTip({
               onMouseEnter={cancelClose}
               onMouseLeave={scheduleClose}
               style={{ top: pos.top, left: pos.left, width: TIP_WIDTH }}
-              className="fixed z-[520] rounded-[16px] border border-[#ececec] bg-white p-[18px] shadow-[0_14px_40px_rgba(0,0,0,0.18)]"
+              // `leading-[normal] tracking-normal`: il prototipo non impone
+              // interlinea, la nostra app sì (1.5 ereditata). Senza questo il
+              // titolo cresce di 3.8px, la didascalia di 3.5 e il piede di 4:
+              // il pannello finisce 11px più alto del prototipo. L'unica
+              // interlinea esplicita resta quella della descrizione (1.5),
+              // che nel prototipo è dichiarata.
+              className="fixed z-[520] rounded-[16px] border border-[#ececec] bg-white p-[18px] leading-[normal] tracking-normal shadow-[0_14px_40px_rgba(0,0,0,0.18)]"
             >
               {/* Ponte invisibile sullo stacco: il cursore non passa dal vuoto. */}
               <span
