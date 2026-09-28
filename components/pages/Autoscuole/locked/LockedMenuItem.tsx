@@ -26,12 +26,23 @@
  *   esiste;
  * - da tastiera il focus apre e il pannello resta finché il focus non lascia
  *   sia la voce sia il pannello.
+ *
+ * ⚠️ **Da dove arriva `DropdownMenuItem` conta.** La shell usa il dropdown di
+ * `animate-ui`, dove lo sfondo dell'hover non lo dipinge la voce: lo dipinge un
+ * **evidenziatore condiviso** (`MotionHighlight`, `rounded-sm` = 10px) che
+ * scivola da una voce all'altra. Questa voce importava invece il dropdown base,
+ * restava fuori da quel gruppo e si disegnava lo sfondo da sola con il proprio
+ * `rounded-xl` (18px): su una riga alta 41px veniva **una pastiglia**, mentre le
+ * voci cliccabili avevano un rettangolo smussato (segnalato da Tiziano). Ora
+ * importa lo stesso dropdown e lascia fare all'evidenziatore — identico per
+ * costruzione, non per un numero copiato a mano.
  */
 
 import * as React from "react";
 import { createPortal } from "react-dom";
 
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+// Lo stesso dropdown della shell, non quello base: vedi il commento sotto.
+import { DropdownMenuItem } from "@/components/animate-ui/radix/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
   ATTIVA_REGLO_URL,
@@ -182,7 +193,7 @@ export function LockedMenuItem({
           setPinned(true);
           open();
         }}
-        className="cursor-default gap-3 rounded-xl px-3 py-2.5 text-[#9a9a9a] focus:bg-[#f4f4f4] focus:text-[#9a9a9a] [&_svg]:stroke-[#bdbdbd]"
+        className="cursor-default gap-3 rounded-xl px-3 py-2.5 text-[#9a9a9a] focus:text-[#9a9a9a] [&_svg]:stroke-[#bdbdbd]"
       >
         {icon}
         <span className="text-[15px] font-medium">{label ?? data.title}</span>
