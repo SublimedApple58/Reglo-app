@@ -8,11 +8,19 @@
  * una mini-illustrazione e in fondo lucchetto + "Attiva Reglo" — come già
  * fanno gli strumenti della toolbar.
  *
- * ⚠️ **Questi testi non vengono dal prototipo.** Il prototipo disegna le voci
- * col lucchetto ma non dà loro nessun cartello: titoli, descrizioni e
- * illustrazioni sono scritti qui (richiesta di Tiziano, 2026-09-28). Stessa
- * scelta già fatta per zoom e ricerca della toolbar. Chi in futuro trovasse
- * quei contenuti nel prototipo deve **sostituirli**, non affiancarli.
+ * **Vengono dal prototipo**, dove si aprono **al passaggio del mouse** — ed è
+ * il motivo per cui al primo giro non li avevo trovati: cercandoli nel
+ * sorgente come testo non compaiono, sono in `sc-if nuovoTipIs*` dentro un
+ * pannello costruito a runtime. Il prototipo va aperto, non letto: è la stessa
+ * lezione di `#istr-detail-view`.
+ *
+ * Guscio identico al prototipo: 300px, bordo `#ececec`, raggio 16, padding 18,
+ * ombra `0 14px 40px`, titolo 14.5/700, testo 12.5/500 interlinea 1.5, e si
+ * apre a sinistra con 10px di stacco (`right: 100%; padding-right: 10px`).
+ *
+ * ⚠️ Fanno eccezione **Appuntamento** e **Lezione teorica**: di quei due non
+ * ho gli screenshot del prototipo, i testi sono ancora scritti da noi. Chi li
+ * trova nel prototipo li **sostituisca**.
  *
  * Il guscio è identico a `LockedToolbarTip` di proposito: due pannelli diversi
  * nella stessa agenda si noterebbero.
@@ -20,6 +28,7 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
+import Image from "next/image";
 
 import { cn } from "@/lib/utils";
 import { ATTIVA_REGLO_URL } from "./locked-features";
@@ -27,7 +36,7 @@ import { ATTIVA_REGLO_URL } from "./locked-features";
 const NAVY = "#1a1a2e";
 const TIP_WIDTH = 300;
 /** Stacco fra voce e pannello: è anche il vuoto che il cursore attraversa. */
-const TIP_GAP = 12;
+const TIP_GAP = 10;
 const CLOSE_DELAY_MS = 220;
 
 /** Un pannello alla volta: voci sorelle senza stato condiviso. */
@@ -55,30 +64,179 @@ function Padlock() {
 
 /* ── Mini-illustrazioni ─────────────────────────────────────────────── */
 
-const Slot = ({
-  color,
-  label,
-  w = "100%",
-  faded,
-}: {
-  color: string;
-  label: string;
-  w?: string;
-  faded?: boolean;
-}) => (
-  <div
-    style={{ background: color, width: w }}
-    className={cn(
-      "flex h-[26px] items-center rounded-[7px] px-2 text-[10.5px] font-semibold text-white",
-      faded && "opacity-40",
-    )}
-  >
-    {label}
+/** Il riquadro del prototipo: bordo #f0f0f0, raggio 12, padding 12/14. */
+const Frame = ({ children, className }: { children: React.ReactNode; className?: string }) => (
+  <div className={cn("mt-3 rounded-[12px] border border-[#f0f0f0] p-[12px_14px]", className)}>
+    {children}
   </div>
 );
 
-const Frame = ({ children }: { children: React.ReactNode }) => (
-  <div className="mt-3 rounded-[11px] border border-[#f0f0f0] bg-[#fafafa] p-2.5">{children}</div>
+/** Pastiglia durata: selezionata navy, le altre grigie. */
+const Durata = ({ children, on }: { children: React.ReactNode; on?: boolean }) => (
+  <span
+    className={cn(
+      "rounded-[16px] px-2.5 py-1.5 text-[10.5px] font-semibold",
+      on ? "bg-[#1a1a2e] text-white" : "bg-[#f2f2f2] text-[#6a6a6a]",
+    )}
+  >
+    {children}
+  </span>
+);
+
+/** Interruttore acceso del prototipo: 30×17, pallino 13. */
+const Acceso = () => (
+  <span className="relative h-[17px] w-[30px] shrink-0 rounded-[9px] bg-[#1a1a2e]">
+    <span className="absolute right-[2px] top-[2px] size-[13px] rounded-full bg-white" />
+  </span>
+);
+
+/** "Una volta finito l'esame? Scopri" — lo Scopri è sottolineato. */
+const Domanda = ({ children, link }: { children: React.ReactNode; link: string }) => (
+  <p className="mt-2.5 text-[11.5px] font-medium leading-[1.5] text-[#6a6a6a]">
+    {children}{" "}
+    <span className="font-bold text-[#222222] underline underline-offset-2">{link}</span>
+  </p>
+);
+
+const CalendarIcon = () => (
+  <svg width="11" height="11" viewBox="0 0 13 13" fill="none" className="shrink-0" aria-hidden>
+    <rect x="1" y="2" width="11" height="10" rx="1.5" stroke="#929292" strokeWidth="1.3" />
+    <path d="M4 1v2.5M9 1v2.5M1 6h11" stroke="#929292" strokeWidth="1.3" strokeLinecap="round" />
+  </svg>
+);
+
+const EsameArt = () => (
+  <Frame>
+    <div className="flex gap-1.5">
+      <div className="flex flex-1 items-center gap-1.5 rounded-[9px] border border-[#e6e6e6] px-2.5 py-[7px] text-[11.5px] font-semibold text-[#222222]">
+        <CalendarIcon />
+        20 giu 2026
+      </div>
+      <div className="rounded-[9px] border border-[#e6e6e6] px-2.5 py-[7px] text-[11.5px] font-semibold text-[#222222]">
+        09:00
+      </div>
+    </div>
+    <div className="mt-[9px] flex gap-1">
+      <Durata>45m</Durata>
+      <Durata on>1h</Durata>
+      <Durata>1h30</Durata>
+      <Durata>2h</Durata>
+    </div>
+    <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-[20px] border border-[#e6e6e6] px-[13px] py-[7px] text-[11.5px] font-semibold text-[#222222]">
+      + Sfoglia allievi · 260
+    </div>
+  </Frame>
+);
+
+const BloccoArt = () => (
+  <Frame>
+    <div className="flex gap-1">
+      <Durata>1h</Durata>
+      <Durata>1h30</Durata>
+      <Durata on>2h</Durata>
+    </div>
+    <div className="mt-2.5 rounded-[10px] border-[1.5px] border-dashed border-[#b9b9c4] bg-[#f6f6f9] p-[10px_12px]">
+      <div className="flex items-center gap-1.5 text-[11.5px] font-bold text-[#222222]">
+        <span className="size-[7px] rounded-full bg-[#b0b0bc]" />
+        08:00 – 10:00
+      </div>
+      <div className="mt-0.5 text-[11px] font-medium text-[#6a6a6a]">Riunione in Motorizzazione</div>
+    </div>
+    <div className="mt-2.5 flex items-center gap-2 rounded-[10px] border border-[#f0f0f0] p-[8px_10px]">
+      <span className="flex-1 text-[10.5px] font-semibold leading-[1.4] text-[#222222]">
+        Evento ricorrente
+      </span>
+      <Acceso />
+    </div>
+  </Frame>
+);
+
+const GruppoArt = () => (
+  <>
+    <Frame>
+      <div className="flex gap-[7px]">
+        <div className="flex-1 rounded-[10px] border-[1.5px] border-[#7fd3c3] bg-[#f3fbf9] p-[8px_10px]">
+          <div className="text-[11.5px] font-bold text-[#222222]">Standard</div>
+          <div className="text-[10px] font-medium text-[#929292]">1 veicolo</div>
+        </div>
+        <div className="flex-1 rounded-[10px] border border-[#e6e6e6] p-[8px_10px]">
+          <div className="text-[11.5px] font-bold text-[#222222]">Moto</div>
+          <div className="text-[10px] font-medium text-[#929292]">flotta + auto</div>
+        </div>
+      </div>
+      <div className="mt-2.5 flex items-center gap-2 rounded-[10px] border border-[#d9f0ea] bg-[#f6fcfa] p-[8px_10px]">
+        <span className="flex-1 text-[10.5px] font-semibold leading-[1.4] text-[#222222]">
+          Apri i posti rimanenti agli inviti
+        </span>
+        <Acceso />
+      </div>
+      <div className="mt-2 text-[10.5px] font-medium text-[#929292]">
+        1 istruttore · 1 veicolo · fino a 3 allievi
+      </div>
+    </Frame>
+    {/* Il cartellino "novità" del prototipo, con la sua illustrazione. */}
+    <div className="relative mt-3 overflow-hidden rounded-[12px] bg-[#101018]">
+      <span className="absolute right-2 top-2 z-[2] flex size-[22px] items-center justify-center rounded-full bg-white/[0.18]">
+        <svg width="9" height="9" viewBox="0 0 12 12" fill="none" aria-hidden>
+          <path d="M2 2l8 8M10 2l-8 8" stroke="#ffffff" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      </span>
+      <Image
+        src="/images/locked/gruppo-news.png"
+        alt=""
+        width={512}
+        height={288}
+        className="block h-[92px] w-full object-cover object-[center_0%]"
+      />
+      <div className="p-[12px_14px_13px]">
+        <div className="text-[9.5px] font-bold uppercase tracking-[0.8px] text-[#8a8a98]">
+          Anteprima · Novità
+        </div>
+        <div className="mt-[3px] text-[13px] font-bold text-white">Guide di gruppo</div>
+        <div className="mt-0.5 text-[11px] font-medium leading-[1.4] text-[#9a9aa8]">
+          Più allievi, una sola uscita: guarda la news
+        </div>
+      </div>
+    </div>
+  </>
+);
+
+const FestivoArt = () => (
+  <Frame>
+    <div className="flex items-center gap-[7px] rounded-[9px] border border-[#fde9b8] bg-[#fffbeb] p-[7px_10px]">
+      <span className="text-[12px]">✈️</span>
+      <span className="text-[10.5px] font-bold text-[#b45309]">
+        Giorno festivo · FERIE AZIENDALI
+      </span>
+    </div>
+    <div className="mt-2.5 grid grid-cols-7 gap-[3px] text-center">
+      {["L", "M", "M", "G", "V", "S", "D"].map((g, i) => (
+        <span key={i} className="text-[9px] font-bold text-[#b0b0b0]">
+          {g}
+        </span>
+      ))}
+      <span className="py-1 text-[10.5px] font-semibold text-[#444444]">10</span>
+      <span className="py-1 text-[10.5px]">🌴</span>
+      <span className="py-1 text-[10.5px]">🌴</span>
+      <span className="py-1 text-[10.5px]">🌴</span>
+      <span className="py-1 text-[10.5px] font-semibold text-[#444444]">14</span>
+      <span className="py-1 text-[10.5px] font-semibold text-[#c8c8c8]">15</span>
+      <span className="py-1 text-[10.5px] font-semibold text-[#c8c8c8]">16</span>
+    </div>
+    <p className="mt-2 text-[10.5px] font-medium leading-[1.4] text-[#929292]">
+      Le prenotazioni si chiudono da sole nei giorni segnati.
+    </p>
+  </Frame>
+);
+
+/** Appuntamento e Lezione teorica: scritti da noi, vedi l'avviso in testa. */
+const Slot = ({ color, label, w = "100%" }: { color: string; label: string; w?: string }) => (
+  <div
+    style={{ background: color, width: w }}
+    className="flex h-[24px] items-center rounded-[7px] px-2 text-[10px] font-semibold text-white"
+  >
+    {label}
+  </div>
 );
 
 const AppuntamentoArt = () => (
@@ -86,35 +244,6 @@ const AppuntamentoArt = () => (
     <div className="flex flex-col gap-1.5">
       <Slot color="#5b8def" label="09:00 · Marta" />
       <Slot color="#7bc47f" label="10:30 · Luca" w="82%" />
-      <Slot color="#e0e0e6" label="" w="58%" faded />
-    </div>
-  </Frame>
-);
-
-const EsameArt = () => (
-  <Frame>
-    <div className="flex items-center gap-2.5">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-[9px] bg-[#1a1a2e] text-[15px]">
-        🎓
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="h-[9px] w-[72%] rounded-full bg-[#dcdce4]" />
-        <div className="mt-1.5 h-[7px] w-[46%] rounded-full bg-[#ececf1]" />
-      </div>
-      <span className="shrink-0 rounded-full bg-[#e4f4e7] px-2 py-[3px] text-[9.5px] font-bold text-[#1f6b2a]">
-        Idoneo
-      </span>
-    </div>
-  </Frame>
-);
-
-const BloccoArt = () => (
-  <Frame>
-    <div className="flex flex-col gap-1.5">
-      <Slot color="#5b8def" label="09:00 · Marta" w="70%" />
-      <div className="flex h-[26px] items-center justify-center rounded-[7px] bg-[repeating-linear-gradient(45deg,#e8e8ee_0_6px,#f4f4f8_6px_12px)] text-[10.5px] font-semibold text-[#8a8a94]">
-        Non prenotabile
-      </div>
     </div>
   </Frame>
 );
@@ -127,45 +256,12 @@ const TeoriaArt = () => (
       </span>
       <div className="flex -space-x-1.5">
         {["#c7d2fe", "#bfdbfe", "#bbf7d0", "#fde68a"].map((c) => (
-          <span
-            key={c}
-            style={{ background: c }}
-            className="size-[22px] rounded-full ring-2 ring-white"
-          />
+          <span key={c} style={{ background: c }} className="size-[22px] rounded-full ring-2 ring-white" />
         ))}
         <span className="flex size-[22px] items-center justify-center rounded-full bg-[#eeeef3] text-[9px] font-bold text-[#6a6a6a] ring-2 ring-white">
           +9
         </span>
       </div>
-    </div>
-  </Frame>
-);
-
-const GruppoArt = () => (
-  <Frame>
-    <div className="flex flex-col gap-1.5">
-      <Slot color="#f0a35e" label="Guida di gruppo · 4 posti" />
-      <div className="flex gap-1">
-        {["#bbf7d0", "#bfdbfe", "#fecaca", "#e5e7eb"].map((c) => (
-          <span key={c} style={{ background: c }} className="h-[18px] flex-1 rounded-[5px]" />
-        ))}
-      </div>
-    </div>
-  </Frame>
-);
-
-const FestivoArt = () => (
-  <Frame>
-    <div className="grid grid-cols-7 gap-[3px]">
-      {Array.from({ length: 14 }).map((_, i) => (
-        <span
-          key={i}
-          className={cn(
-            "h-[15px] rounded-[4px]",
-            i === 4 || i === 11 ? "bg-[#f2c94c]" : "bg-[#e8e8ee]",
-          )}
-        />
-      ))}
     </div>
   </Frame>
 );
@@ -184,40 +280,50 @@ type PlusTipSpec = { title: string; description: string; illustration: React.Rea
 
 export const PLUS_TIPS: Record<PlusTipKey, PlusTipSpec> = {
   appuntamento: {
-    title: "Le guide, senza telefonate",
+    title: "Nuovo appuntamento",
     description:
-      "L'allievo prenota dall'app sugli orari che hai deciso tu: la guida compare in agenda già con istruttore e mezzo.",
+      "Metti una guida in agenda scegliendo allievo, istruttore e mezzo: l'allievo la vede subito in app.",
     illustration: <AppuntamentoArt />,
   },
   esame: {
-    title: "Esami con l'esito in un tap",
+    title: "Nuovo esame",
     description:
-      "Metti l'esame in agenda e, appena finito, segni idoneo o respinto: il percorso dell'allievo si aggiorna da solo.",
-    illustration: <EsameArt />,
+      "Pianifichi un esame per uno o più allievi: data, orario, durata e istruttore accompagnatore. Gli iscritti lo vedono subito in app.",
+    illustration: (
+      <>
+        <EsameArt />
+        <Domanda link="Scopri">Una volta finito l&apos;esame?</Domanda>
+      </>
+    ),
   },
   blocco: {
-    title: "Blocca uno slot, e nessuno lo prende",
+    title: "Evento bloccante",
     description:
-      "Riunioni, manutenzione, un'ora che non vuoi dare: lo slot diventa non prenotabile senza spiegazioni a nessuno.",
+      "Blocchi l'agenda di uno o tutti gli istruttori per un impegno: riunione, visita medica, commissione. Anche ricorrente.",
     illustration: <BloccoArt />,
   },
   teoria: {
-    title: "Lezioni di teoria con le presenze",
+    title: "Lezione teorica",
     description:
       "Metti la lezione in aula, gli allievi la vedono nell'app e tu segni chi c'era: le presenze restano nel registro.",
     illustration: <TeoriaArt />,
   },
   gruppo: {
-    title: "Una guida, più allievi",
+    title: "Guida di gruppo",
     description:
-      "Apri i posti e gli allievi si iscrivono da soli. Il mezzo viene assegnato in automatico a chi può guidarlo.",
+      "Una sola uscita, più allievi: scegli capienza e veicolo, pre-inserisci gli allievi o apri i posti agli inviti.",
     illustration: <GruppoArt />,
   },
   festivo: {
-    title: "I giorni di chiusura, una volta sola",
+    title: "Segna festivo",
     description:
-      "Segni il giorno come festivo e sparisce dalle disponibilità di tutti: nessuno può più prenotarci sopra.",
-    illustration: <FestivoArt />,
+      "Chiudi un giorno o un periodo: niente prenotazioni e agenda pulita, con ferie ed eventi ben visibili.",
+    illustration: (
+      <>
+        <FestivoArt />
+        <Domanda link="Scopri">Come segno e gestisco le ferie?</Domanda>
+      </>
+    ),
   },
 };
 
