@@ -695,7 +695,7 @@ export function StudentSearchSelect({
     <div className="relative">
       <input
         ref={inputRef}
-        className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none transition focus:border-primary"
+        className="h-11 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none transition focus:border-primary"
         placeholder={placeholder}
         value={open ? query : selected ? formatStudentName(selected, nameOrder) : query}
         onChange={(e) => {
@@ -5699,7 +5699,7 @@ export function AutoscuoleAgendaPage({
                         value={examDraftInstructorId ?? "__none__"}
                         onValueChange={(v) => setExamDraftInstructorId(v === "__none__" ? null : v)}
                       >
-                        <SelectTrigger className="h-auto w-full rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 py-[11px]" disabled={examPanelPending}>
+                        <SelectTrigger className="h-auto w-full rounded-lg border-[1.5px] border-[#dddddd] px-3.5 py-[11px]" disabled={examPanelPending}>
                           <SelectValue placeholder="Nessuno" />
                         </SelectTrigger>
                         <SelectContent>
@@ -5893,7 +5893,7 @@ export function AutoscuoleAgendaPage({
                           />
                         </div>
                       )}
-                      <div className="mt-3 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+                      <div className="mt-3 flex items-center gap-2.5 rounded-lg border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
                         <Search className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
                         <input
                           value={examPanelStudentSearch}
@@ -6008,7 +6008,7 @@ export function AutoscuoleAgendaPage({
                   />
                 </div>
               )}
-              <div className="mt-3 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+              <div className="mt-3 flex items-center gap-2.5 rounded-lg border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
                 <Search className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
                 <input
                   value={examStudentSearch}

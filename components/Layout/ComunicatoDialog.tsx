@@ -24,7 +24,7 @@ const DEST_OPTIONS = [
 ] as const;
 
 const fieldClass =
-  "w-full rounded-[12px] border border-[#e5e5e5] bg-[#f7f7f7] px-4 py-3 text-[15px] text-foreground outline-none transition focus:border-navy-900 focus:bg-white";
+  "w-full rounded-lg border border-[#e5e5e5] bg-[#f7f7f7] px-4 py-3 text-[15px] text-foreground outline-none transition focus:border-navy-900 focus:bg-white";
 
 /**
  * "Invia comunicato" dal menu hamburger (stile proto): notifica push broadcast
@@ -106,7 +106,7 @@ export function ComunicatoDialog({
               <div>
                 <div className="mb-2 text-[13px] font-semibold text-[#444444]">Destinatari</div>
                 <Select value={dest} onValueChange={setDest}>
-                  <SelectTrigger className="h-auto w-full rounded-[12px] border-[#e5e5e5] bg-[#f7f7f7] px-4 py-3 text-[15px] font-medium">
+                  <SelectTrigger className="h-auto w-full rounded-lg border-[#e5e5e5] bg-[#f7f7f7] px-4 py-3 text-[15px] font-medium">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

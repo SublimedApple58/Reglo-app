@@ -491,7 +491,7 @@ export function GroupLessonCreateDialog({
       <p className="mt-0.5 text-[12.5px] font-medium text-[#929292]">
         {selectedIds.length}/{CAPACITY} pre-inseriti · {addableCount} da aggiungere
       </p>
-      <div className="mt-3 flex items-center gap-2.5 rounded-sm border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+      <div className="mt-3 flex items-center gap-2.5 rounded-lg border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
         <Search className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
         <input
           value={studentQuery}

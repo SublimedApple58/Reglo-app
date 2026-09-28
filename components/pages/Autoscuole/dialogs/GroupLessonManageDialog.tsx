@@ -1018,7 +1018,7 @@ export function GroupLessonManageDialog({
                 Idonei per questa guida · {lesson.openSeats}{" "}
                 {lesson.openSeats === 1 ? "posto libero" : "posti liberi"}
               </p>
-              <div className="mt-3 flex items-center gap-2.5 rounded-sm border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+              <div className="mt-3 flex items-center gap-2.5 rounded-lg border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
                 <SearchIcon className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
                 <input
                   value={addSearch}
@@ -1098,7 +1098,7 @@ export function GroupLessonManageDialog({
                 Le modifiche si salvano subito · {(lesson.fleet ?? []).length} moto in guida
               </p>
               {fleetOptions.length > 5 && (
-                <div className="mt-3 flex items-center gap-2.5 rounded-sm border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+                <div className="mt-3 flex items-center gap-2.5 rounded-lg border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
                   <SearchIcon className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
                   <input
                     value={fleetSearch}

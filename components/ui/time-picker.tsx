@@ -203,7 +203,7 @@ export function TimePickerInput({
         <button
           type="button"
           className={cn(
-            "flex cursor-pointer select-none items-center gap-2 rounded-[10px] border-[1.5px] bg-white px-3 py-2 text-sm font-medium text-[#222222] transition-colors",
+            "flex h-11 cursor-pointer select-none items-center gap-2 rounded-lg border-[1.5px] bg-white px-3 text-sm font-medium text-[#222222] transition-colors",
             open ? "border-[#222222]" : "border-[#dddddd] hover:border-[#929292]",
             className,
           )}

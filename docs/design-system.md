@@ -125,6 +125,30 @@ Definiti via `--radius: 0.875rem` (**14px**) in `:root`:
 > perché è una superficie che galleggia, non un controllo. Dentro si usano solo
 > i token (`rounded-lg` campi, `rounded-md` riquadri, `rounded-full` pastiglie):
 > prima convivevano 8, 9, 10, 12, 14, 18, 20 e 22px.
+
+### Campi di form: una forma sola
+
+Ogni campo in cui si **scrive o si sceglie un valore** ha la stessa forma:
+`rounded-lg` (**14px**) e altezza **`h-11` (44px)**. Vale per `Input`,
+`Textarea`, `SelectTrigger`, `DatePickerInput`, `TimePickerInput`,
+`StudentSearchSelect` e per i campi di ricerca rettangolari dentro i pannelli.
+
+Non è solo il raggio: **conta anche l'altezza**. Lo stesso raggio su una scatola
+più bassa sembra più rotondo, ed è esattamente da lì che nasceva la
+segnalazione del 28/09/2026 — nel dialogo "Richiesta di guida" tre campi su
+quattro erano già a 14px, ma alti 40, 40 e 44, e il time picker stava a 10px su
+38. Sembravano quattro forme diverse.
+
+Restano diversi **di proposito**:
+
+| Elemento | Forma | Perché |
+|---|---|---|
+| Chip durata, toggle-chip, segmented pill | `rounded-full` | sono scelte, non campi: la forma li distingue |
+| Barre di ricerca a pillola (Consorzio, Backoffice, Studenti) | `rounded-full` / `[50px]` | pattern riconoscibile di filtro, non un campo di form |
+| Bottoni CTA | `rounded-[32px]` | sono azioni |
+| Checkbox | `rounded-[4px]` | convenzione di piattaforma |
+| Pannelli dropdown, popover, calendario | `rounded-xl` (18px) | superfici, non controlli |
+| Cartelli e pannelli delle **Impostazioni** | 9 / 10 / 12px | linguaggio visivo proprio, lasciato intatto per decisione di Tiziano |
 | `9999px` | pill | `rounded-pill` | Badge, chip |
 | `35px` | card primary | `rounded-card-primary` | Card principali grandi |
 

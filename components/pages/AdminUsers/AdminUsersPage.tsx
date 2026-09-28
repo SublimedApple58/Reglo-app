@@ -872,7 +872,7 @@ function UserDetailPanelContent({
                     onValueChange={(v) => setRole(v as AutoscuolaRole)}
                     disabled={!isAdmin}
                   >
-                    <SelectTrigger className="h-10 w-full rounded-[10px] border-[1.5px] border-[#dddddd] text-sm font-medium">
+                    <SelectTrigger className="h-11 w-full rounded-lg border-[1.5px] border-[#dddddd] text-sm font-medium">
                       <SelectValue />
                     </SelectTrigger>
                     {/* Il DetailPanel è z-[200]: col default z-50 il menu si apre

@@ -183,7 +183,7 @@ export function DatePickerInput({
         <button
           type="button"
           className={cn(
-            "flex h-10 w-full cursor-pointer items-center gap-2 rounded-lg border bg-white px-3 text-sm transition-colors",
+            "flex h-11 w-full cursor-pointer items-center gap-2 rounded-lg border bg-white px-3 text-sm transition-colors",
             open ? "border-[#222222]" : "border-border hover:border-[#929292]",
             value ? "text-foreground" : "text-muted-foreground",
             className,

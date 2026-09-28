@@ -167,7 +167,7 @@ export function ProposeSlotDialog({
               value={vehicleId ?? "none"}
               onValueChange={(v) => onChange({ vehicleId: v === "none" ? null : v })}
             >
-              <SelectTrigger className="h-[43px] w-full cursor-pointer rounded-[12px] border-[#e2e2e2] px-3.5 text-[14px] font-semibold text-[#222222] shadow-none focus:ring-0">
+              <SelectTrigger className="h-[43px] w-full cursor-pointer rounded-lg border-[#e2e2e2] px-3.5 text-[14px] font-semibold text-[#222222] shadow-none focus:ring-0">
                 <SelectValue placeholder="Da assegnare" />
               </SelectTrigger>
               <SelectContent className="z-[70]">

@@ -227,7 +227,7 @@ export function ExamOutcomePanel({
           </p>
 
           {showSearch && (
-            <div className="mt-3 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+            <div className="mt-3 flex items-center gap-2.5 rounded-lg border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
               <Search className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
               <input
                 value={query}
