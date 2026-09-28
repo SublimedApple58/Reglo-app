@@ -28,7 +28,7 @@ import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { ATTIVA_REGLO_URL, VIDEO_ISTRUTTORI_URL } from "./locked-features";
 
-const NAVY = "#1a1a2e";
+const NERO = "#222222";
 
 /* ── Dati finti, gli stessi del prototipo ───────────────────────────── */
 
@@ -62,7 +62,7 @@ const DayChip = ({ label, on }: { label: string; on?: boolean }) => (
     className={cn(
       "flex items-center justify-center rounded-[10px] border-[1.5px] py-[9px] text-[12.5px]",
       on
-        ? "border-[#1a1a2e] bg-[#f6f6f8] font-semibold text-[#1a1a2e]"
+        ? "border-[#222222] bg-[#f6f6f8] font-semibold text-[#222222]"
         : "border-[#e4e4ea] font-medium text-[#6a6a6a]",
     )}
   >
@@ -80,7 +80,7 @@ const ClockIcon = () => (
 /** Campo orario del prototipo. */
 const TimeField = ({ time }: { time: string }) => (
   <div className="flex flex-1 items-center justify-between gap-2 rounded-[10px] border-[1.5px] border-[#e4e4ea] px-3 py-[9px]">
-    <span className="text-[13px] font-medium text-[#1a1a2e]">{time}</span>
+    <span className="text-[13px] font-medium text-[#222222]">{time}</span>
     <ClockIcon />
   </div>
 );
@@ -109,8 +109,8 @@ const CtaRow = () => (
       href={ATTIVA_REGLO_URL}
       target="_blank"
       rel="noreferrer"
-      style={{ backgroundColor: NAVY }}
-      className="rounded-[32px] px-[22px] py-[11px] text-[14px] font-bold text-white transition-colors hover:!bg-[#2a2a44]"
+      style={{ backgroundColor: NERO }}
+      className="rounded-[32px] px-[22px] py-[11px] text-[14px] font-bold text-white transition-colors hover:!bg-[#3a3a3a]"
     >
       Attiva Reglo
     </a>
@@ -143,7 +143,7 @@ const Card = ({
 
 const DisponibilitaCard = ({ firstName }: { firstName: string }) => (
   <Card>
-    <h3 className="text-[21px] font-bold tracking-[-0.7px] text-[#1a1a2e]">
+    <h3 className="text-[21px] font-bold tracking-[-0.7px] text-[#222222]">
       Disponibilità di {firstName}
     </h3>
     <p className="mt-2 text-[14px] font-medium leading-[1.45] text-[#5a5a66]">
@@ -215,13 +215,13 @@ const FerieRow = ({
       <Image src={avatar} alt="" width={84} height={84} className="h-full w-full object-cover" />
     </span>
     <span className="min-w-0 flex-1">
-      <span className="block text-[15.5px] font-bold tracking-[-0.3px] text-[#1a1a2e]">{name}</span>
+      <span className="block text-[15.5px] font-bold tracking-[-0.3px] text-[#222222]">{name}</span>
       <span className="mt-0.5 block text-[13px] font-medium text-[#8a8a94]">{dates}</span>
     </span>
     <span
       className={cn(
-        "relative shrink-0 whitespace-nowrap rounded-[10px] border border-[#e4e4ea] px-3.5 py-2 text-[13.5px] font-semibold text-[#1a1a2e]",
-        highlight && "bg-white shadow-[0_4px_12px_rgba(26,26,46,0.1)]",
+        "relative shrink-0 whitespace-nowrap rounded-[10px] border border-[#e4e4ea] px-3.5 py-2 text-[13.5px] font-semibold text-[#222222]",
+        highlight && "bg-white shadow-[0_4px_12px_rgba(0,0,0,0.1)]",
       )}
     >
       Approva
@@ -243,7 +243,7 @@ const FerieRow = ({
 
 const FerieCard = () => (
   <Card width={400}>
-    <h3 className="text-[21px] font-bold tracking-[-0.7px] text-[#1a1a2e]">Ferie di agosto</h3>
+    <h3 className="text-[21px] font-bold tracking-[-0.7px] text-[#222222]">Ferie di agosto</h3>
     <div className="mt-2.5 flex items-center gap-[9px]">
       <span className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-lg bg-[#f3f3f6]">
         <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="#5a5a66" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -273,12 +273,12 @@ const AutonomaCard = () => (
   // Nel prototipo questa finisce col video: niente "Scopri di più"/"Attiva Reglo".
   <Card>
     <span
-      style={{ backgroundColor: NAVY }}
+      style={{ backgroundColor: NERO }}
       className="mb-3 inline-flex rounded-[20px] px-3.5 py-1.5 text-[12px] font-bold text-white"
     >
       In 1 minuto
     </span>
-    <h3 className="mb-3.5 text-[16.5px] font-bold leading-[1.3] tracking-[-0.2px] text-[#1a1a2e]">
+    <h3 className="mb-3.5 text-[16.5px] font-bold leading-[1.3] tracking-[-0.2px] text-[#222222]">
       Come funziona la modalità autonoma per gli istruttori?
     </h3>
     {/*
@@ -291,7 +291,7 @@ const AutonomaCard = () => (
       target="_blank"
       rel="noreferrer"
       aria-label="Guarda il video: come funziona la modalità autonoma per gli istruttori"
-      className="group relative flex aspect-[16/9] items-center justify-center overflow-hidden rounded-[12px] bg-[#ececef] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a1a2e] focus-visible:ring-offset-2"
+      className="group relative flex aspect-[16/9] items-center justify-center overflow-hidden rounded-[12px] bg-[#ececef] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#222222] focus-visible:ring-offset-2"
     >
       {/*
         Un fotogramma vero del video, non un rettangolo grigio: si vede subito
@@ -459,7 +459,7 @@ const FieldRow = ({ label, value }: { label: string; value: string }) => (
   <div>
     <MiniLabel className="mb-1.5">{label}</MiniLabel>
     <div className="flex items-center justify-between gap-2 rounded-[10px] border-[1.5px] border-[#e4e4ea] px-3 py-[9px]">
-      <span className="text-[13px] font-medium text-[#1a1a2e]">{value}</span>
+      <span className="text-[13px] font-medium text-[#222222]">{value}</span>
       <ClockIcon />
     </div>
   </div>
@@ -546,7 +546,7 @@ const BACKDROPS: Record<TabKey, React.ReactNode> = {
               className={cn(
                 "rounded-[20px] border-[1.5px] px-[13px] py-[7px] text-[12.5px]",
                 i % 2 === 0
-                  ? "border-[#1a1a2e] bg-[#f6f6f8] font-semibold text-[#1a1a2e]"
+                  ? "border-[#222222] bg-[#f6f6f8] font-semibold text-[#222222]"
                   : "border-[#e4e4ea] font-medium text-[#6a6a6a]",
               )}
             >

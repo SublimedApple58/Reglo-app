@@ -30,7 +30,7 @@ import { createPortal } from "react-dom";
 import { ATTIVA_REGLO_URL } from "./locked-features";
 import { cn } from "@/lib/utils";
 
-const NAVY = "#1a1a2e";
+const NERO = "#222222";
 const TIP_WIDTH = 300;
 /** Stacco fra icona e pannello: è anche il vuoto che il cursore attraversa. */
 const TIP_GAP = 10;
@@ -61,7 +61,7 @@ const DayChip = ({ label, on }: { label: string; on?: boolean }) => (
   <span
     className={cn(
       "inline-flex h-6 w-[30px] items-center justify-center rounded-[12px] text-[10px] font-semibold",
-      on ? "bg-[#1a1a2e] text-white" : "bg-[#f2f2f2] text-[#b0b0b0]",
+      on ? "bg-[#222222] text-white" : "bg-[#f2f2f2] text-[#b0b0b0]",
     )}
   >
     {label}
@@ -95,7 +95,7 @@ const LegendaTip = () => (
 const VizTip = () => (
   <Frame>
     <div className="flex gap-1.5">
-      <span className="rounded-[20px] bg-[#1a1a2e] px-[13px] py-[7px] text-[11.5px] font-semibold text-white">
+      <span className="rounded-[20px] bg-[#222222] px-[13px] py-[7px] text-[11.5px] font-semibold text-white">
         Classica (lun–dom)
       </span>
       <span className="rounded-[20px] bg-[#f2f2f2] px-[13px] py-[7px] text-[11.5px] font-semibold text-[#6a6a6a]">
@@ -152,9 +152,9 @@ const FiltriTip = () => (
   <>
     <div className="mt-3 flex gap-2.5">
       <div className="w-[116px] shrink-0 rounded-[12px] border border-[#f0f0f0] p-2">
-        <div className="flex items-center justify-between rounded-lg bg-[#eeeef4] px-2.5 py-[7px] text-[11.5px] font-semibold text-[#1a1a2e]">
+        <div className="flex items-center justify-between rounded-lg bg-[#eeeef4] px-2.5 py-[7px] text-[11.5px] font-semibold text-[#222222]">
           Istruttore
-          <span className="size-1.5 rounded-full bg-[#1a1a2e]" />
+          <span className="size-1.5 rounded-full bg-[#222222]" />
         </div>
         {["Veicolo", "Tipo", "Stato"].map((label) => (
           <div key={label} className="px-2.5 py-[7px] text-[11.5px] font-medium text-[#444444]">
@@ -189,7 +189,7 @@ const ZoomTip = () => (
     <span className="inline-flex h-7 w-9 items-center justify-center rounded-md bg-[#f2f2f2] text-[11px] font-semibold text-[#6a6a6a]">
       80%
     </span>
-    <span className="inline-flex h-7 w-9 items-center justify-center rounded-md bg-[#1a1a2e] text-[11px] font-semibold text-white">
+    <span className="inline-flex h-7 w-9 items-center justify-center rounded-md bg-[#222222] text-[11px] font-semibold text-white">
       100%
     </span>
     <span className="inline-flex h-7 w-9 items-center justify-center rounded-md bg-[#f2f2f2] text-[11px] font-semibold text-[#6a6a6a]">
@@ -201,8 +201,8 @@ const ZoomTip = () => (
 const CercaTip = () => (
   <Frame className="flex items-center gap-2">
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden>
-      <circle cx="7" cy="7" r="4.5" stroke="#1a1a2e" strokeWidth="1.7" />
-      <path d="M10.5 10.5l3 3" stroke="#1a1a2e" strokeWidth="1.7" strokeLinecap="round" />
+      <circle cx="7" cy="7" r="4.5" stroke="#222222" strokeWidth="1.7" />
+      <path d="M10.5 10.5l3 3" stroke="#222222" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
     <span className="text-[12px] font-medium text-[#929292]">Cerca in agenda…</span>
   </Frame>
@@ -454,8 +454,8 @@ export function LockedToolbarTip({
                   href={ATTIVA_REGLO_URL}
                   target="_blank"
                   rel="noreferrer"
-                  style={{ backgroundColor: NAVY }}
-                  className="rounded-[32px] px-4 py-2 text-[12px] font-bold text-white transition-colors hover:!bg-[#2a2a44]"
+                  style={{ backgroundColor: NERO }}
+                  className="rounded-[32px] px-4 py-2 text-[12px] font-bold text-white transition-colors hover:!bg-[#3a3a3a]"
                 >
                   Attiva Reglo
                 </a>

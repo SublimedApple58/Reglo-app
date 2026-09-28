@@ -376,12 +376,16 @@ Reglo".** Nel prototipo quella stringa compare **solo** nei popup
 dell'hamburger. Vale anche per le sezioni che il prototipo non copre: lì manca
 l'anteprima, non la forma.
 
-⚠️ **Il primario dei CTA è `#1a1a2e`** (hover `#2a2a44`), non il nero della
-palette dell'app: nel prototipo è così in 34 occorrenze su 35. È
-un'**eccezione voluta** dentro le viste bloccate, decisa da Tiziano: la
-costante `NAVY` in `LockedSettingsPane.tsx` è il punto unico da cui cambiarla.
-I pulsanti funzionali (il dialog "Richiesta di guida") restano sulla palette
-dell'app.
+⚠️ **Il primario dei CTA è il nero `#222222`** della palette (hover `#3a3a3a`),
+**non** il navy `#1a1a2e` del prototipo. Il prototipo di Ruzzu usa il navy in 34
+occorrenze su 35, ma è di prima del passaggio della web app a bianco/nero: è un
+residuo, non una scelta. Un primo giro l'aveva riprodotto fedelmente; il
+**28/09/2026 Tiziano ha deciso il nero**, perché nella stessa schermata i
+pulsanti funzionali (il dialog "Richiesta di guida") sono già `#222222` e due
+neri diversi si vedono. La costante `NERO` in `LockedSettingsPane.tsx`,
+`LockedToolbarTip.tsx`, `LockedPlusTip.tsx` e `LockedInstructors.tsx` è il punto
+da cui cambiarla. **Il colore è l'unica deroga al prototipo**: geometrie, testi
+e immagini restano 1:1.
 
 ⚠️ **I pannelli portano `line-height: normal`.** L'app eredita 1.5 sul
 contenitore; il prototipo non impone interlinea. Senza quella riga i cartelli

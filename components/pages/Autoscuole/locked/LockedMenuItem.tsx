@@ -240,8 +240,8 @@ export function LockedMenuItem({
                 target="_blank"
                 rel="noreferrer"
                 className={cn(
-                  "block rounded-[32px] bg-[#1a1a2e] py-3 text-center text-[14px] font-bold text-white",
-                  "transition-colors hover:bg-[#2a2a44]",
+                  "block rounded-[32px] bg-[#222222] py-3 text-center text-[14px] font-bold text-white",
+                  "transition-colors hover:bg-[#3a3a3a]",
                 )}
               >
                 Attiva Reglo

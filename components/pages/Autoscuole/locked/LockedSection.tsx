@@ -190,7 +190,7 @@ export function LockedCard({ title, description }: { title: string; description:
           href={ATTIVA_REGLO_URL}
           target="_blank"
           rel="noreferrer"
-          className="rounded-[32px] bg-[#1a1a2e] px-[22px] py-[11px] text-[14px] font-bold text-white transition-colors hover:bg-[#2a2a44]"
+          className="rounded-[32px] bg-[#222222] px-[22px] py-[11px] text-[14px] font-bold text-white transition-colors hover:bg-[#3a3a3a]"
         >
           Attiva Reglo
         </a>

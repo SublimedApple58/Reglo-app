@@ -36,14 +36,20 @@ import { LockedInstructors } from "./LockedInstructors";
 
 /* ── Primitivi, coi valori esatti del prototipo ──────────────────────
  *
- * Numeri e hex letti nel sorgente del bundle, non a occhio. In
- * particolare il primario dei CTA è **#1a1a2e** (navy scurissimo), non il
- * nero della nostra palette: qui vince il prototipo, per decisione di
- * Tiziano. Se un giorno si riallinea alla palette, si cambia solo `NAVY`.
+ * Numeri e hex letti nel sorgente del bundle, non a occhio — con
+ * un'eccezione voluta: il **colore**. Il prototipo di Ruzzu è di prima del
+ * passaggio della web app a bianco/nero e disegna i CTA in navy #1a1a2e;
+ * noi usiamo il nero `#222222` della palette (`--foreground`), lo stesso
+ * dei bottoni del dialogo Richiesta di guida qui accanto, così nella
+ * stessa schermata non convivono due neri diversi. Deciso da Tiziano il
+ * 28/09, dopo un primo giro in navy: il navy era un residuo del prototipo,
+ * non una scelta. Geometrie e testi restano 1:1 col prototipo.
+ *
+ * Se un giorno la palette cambia, si cambia solo `NERO`.
  */
 
-/** Primario del prototipo. Hover: #2a2a44. */
-const NAVY = "#1a1a2e";
+/** Primario della palette (`--foreground`). Hover: #3a3a3a. */
+const NERO = "#222222";
 
 /** Etichetta di campo: 11px/700, maiuscoletto spaziato. */
 export const FieldLabel = ({ children }: { children: React.ReactNode }) => (
@@ -68,7 +74,7 @@ const Chevron = () => (
 /** Campo a tendina finto: bordo 1.5px #e4e4ea, valore 13px. */
 export const FakeSelect = ({ children }: { children: React.ReactNode }) => (
   <div className="flex items-center justify-between gap-2 rounded-[10px] border-[1.5px] border-[#e4e4ea] px-3 py-[9px]">
-    <span className="truncate text-[13px] font-medium text-[#1a1a2e]">{children}</span>
+    <span className="truncate text-[13px] font-medium text-[#222222]">{children}</span>
     <Chevron />
   </div>
 );
@@ -76,7 +82,7 @@ export const FakeSelect = ({ children }: { children: React.ReactNode }) => (
 /** Come FakeSelect ma con l'unità a destra invece della freccia (prezzi). */
 const PriceField = ({ value, unit = "€" }: { value: string; unit?: string }) => (
   <div className="flex items-center justify-between gap-2 rounded-[10px] border-[1.5px] border-[#e4e4ea] px-3 py-[9px]">
-    <span className="text-[13px] font-medium text-[#1a1a2e]">{value}</span>
+    <span className="text-[13px] font-medium text-[#222222]">{value}</span>
     <span className="text-[13px] font-medium text-[#929292]">{unit}</span>
   </div>
 );
@@ -107,7 +113,7 @@ export const PreviewChip = ({
       "flex items-center justify-center whitespace-nowrap rounded-[20px] border-[1.5px]",
       compact ? "px-[11px] py-1.5 text-[12px]" : "px-[13px] py-[7px] text-[12.5px]",
       checked
-        ? "border-[#1a1a2e] bg-[#f6f6f8] font-semibold text-[#1a1a2e]"
+        ? "border-[#222222] bg-[#f6f6f8] font-semibold text-[#222222]"
         : "border-[#e4e4ea] font-medium text-[#6a6a6a]",
     )}
   >
@@ -138,9 +144,9 @@ const BoxChoice = ({
     className={cn(
       "relative flex items-center justify-center gap-[5px] rounded-[10px] border-[1.5px] px-1.5 py-2.5 text-[13px]",
       checked
-        ? "border-[#1a1a2e] font-semibold text-[#1a1a2e]"
+        ? "border-[#222222] font-semibold text-[#222222]"
         : "border-[#e4e4ea] font-medium text-[#6a6a6a]",
-      checked && (cursor ? "bg-white shadow-[0_4px_12px_rgba(26,26,46,0.12)]" : "bg-[#f6f6f8]"),
+      checked && (cursor ? "bg-white shadow-[0_4px_12px_rgba(0,0,0,0.12)]" : "bg-[#f6f6f8]"),
     )}
   >
     {checked ? "✓ " : ""}
@@ -164,7 +170,7 @@ const Toggle = ({ on = true }: { on?: boolean }) => (
   <span
     className={cn(
       "relative inline-block h-6 w-11 shrink-0 rounded-[12px]",
-      on ? "bg-[#1a1a2e]" : "bg-[#e0e0e0]",
+      on ? "bg-[#222222]" : "bg-[#e0e0e0]",
     )}
   >
     <span
@@ -191,7 +197,7 @@ export const PreviewToggleRow = ({
 }) => (
   <div className="flex items-center justify-between gap-3 py-[13px]">
     <span className="min-w-0 flex-1">
-      <span className="block text-[14px] font-semibold text-[#1a1a2e]">{title}</span>
+      <span className="block text-[14px] font-semibold text-[#222222]">{title}</span>
       <span className="mt-0.5 block text-[12.5px] font-medium leading-snug text-[#8a8a94]">
         {note}
       </span>
@@ -263,13 +269,13 @@ const SwapRow = ({
   <div className="flex items-center gap-3 rounded-[14px] bg-[#f5f5f7] px-3.5 py-[13px]">
     <Avatar src={avatar} size={40} />
     <span className="min-w-0 flex-1">
-      <span className="block text-[15px] font-bold tracking-[-0.3px] text-[#1a1a2e]">{name}</span>
+      <span className="block text-[15px] font-bold tracking-[-0.3px] text-[#222222]">{name}</span>
       <span className="mt-px block text-[12.5px] font-medium text-[#8a8a94]">{when}</span>
     </span>
     <span
       className={cn(
         "shrink-0 whitespace-nowrap rounded-[20px] px-[11px] py-1.5 text-[11.5px] font-bold",
-        accepted ? "bg-[#e9f7ef] text-[#1a8a5a]" : "border border-[#e4e4ea] bg-white text-[#1a1a2e]",
+        accepted ? "bg-[#e9f7ef] text-[#1a8a5a]" : "border border-[#e4e4ea] bg-white text-[#222222]",
       )}
     >
       {badge}
@@ -280,7 +286,7 @@ const SwapRow = ({
 /** Il tondo con le frecce che si incrociano, a cavallo fra le due righe. */
 const SwapBadge = () => (
   <div className="relative z-[2] -my-2 flex items-center justify-center">
-    <span className="inline-flex size-[34px] items-center justify-center rounded-full border-[3px] border-white bg-[#1a1a2e] shadow-[0_4px_12px_rgba(26,26,46,0.28)]">
+    <span className="inline-flex size-[34px] items-center justify-center rounded-full border-[3px] border-white bg-[#222222] shadow-[0_4px_12px_rgba(0,0,0,0.28)]">
       <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M4 7h11M12 4l3 3-3 3M16 13H5M8 10l-3 3 3 3" />
       </svg>
@@ -442,7 +448,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
           <div className="mt-2.5 flex items-start gap-2.5 rounded-[12px] border border-[#e8e8ee] bg-white px-[13px] py-[11px]">
             <Avatar src="/images/locked/nota-valerio.png" size={32} />
             <span className="min-w-0 flex-1">
-              <span className="block text-[12.5px] font-bold text-[#1a1a2e]">
+              <span className="block text-[12.5px] font-bold text-[#222222]">
                 Nota di Valerio · guida di oggi
               </span>
               <span className="mt-0.5 block text-[12px] font-medium leading-[1.45] text-[#6a6a72]">
@@ -540,7 +546,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
           note="La mattina del giorno della guida, alle 07:30"
         />
         <div className="flex items-center justify-between gap-3 py-[13px]">
-          <span className="whitespace-nowrap text-[14px] font-semibold text-[#1a1a2e]">
+          <span className="whitespace-nowrap text-[14px] font-semibold text-[#222222]">
             Modalità di invio
           </span>
           <span className="inline-flex shrink-0 gap-1.5">
@@ -600,7 +606,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-3 rounded-[14px] bg-[#f5f5f7] px-3 py-[11px]">
           <span className="min-w-0 flex-1">
-            <span className="block text-[15px] font-bold tracking-[-0.3px] text-[#1a1a2e]">
+            <span className="block text-[15px] font-bold tracking-[-0.3px] text-[#222222]">
               Veicolo 1
             </span>
             <span className="mt-px block text-[12.5px] font-medium text-[#8a8a94]">
@@ -613,14 +619,14 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
         </div>
         <div className="flex items-center gap-3 rounded-[14px] bg-[#f5f5f7] px-3 py-[11px]">
           <span className="min-w-0 flex-1">
-            <span className="block text-[15px] font-bold tracking-[-0.3px] text-[#1a1a2e]">
+            <span className="block text-[15px] font-bold tracking-[-0.3px] text-[#222222]">
               Veicolo 2
             </span>
             <span className="mt-px block text-[12.5px] font-medium text-[#8a8a94]">
               GY355GJ · B · Automatico
             </span>
           </span>
-          <span className="shrink-0 whitespace-nowrap rounded-[20px] border border-[#e4e4ea] bg-white px-[11px] py-1.5 text-[11.5px] font-bold text-[#1a1a2e]">
+          <span className="shrink-0 whitespace-nowrap rounded-[20px] border border-[#e4e4ea] bg-white px-[11px] py-1.5 text-[11.5px] font-bold text-[#222222]">
             In guida · 16:00
           </span>
         </div>
@@ -638,13 +644,13 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
     preview: (
       // Una riga sola: cerchio scuro, chi chiama, e a destra chi risponde.
       <div className="flex items-center gap-3 rounded-[14px] bg-[#f5f5f7] px-3.5 py-[13px]">
-        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[#1a1a2e]">
+        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[#222222]">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
           </svg>
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[15px] font-bold tracking-[-0.3px] text-[#1a1a2e]">
+          <span className="block text-[15px] font-bold tracking-[-0.3px] text-[#222222]">
             Chiamata in arrivo
           </span>
           <span className="mt-px block text-[12.5px] font-medium text-[#8a8a94]">
@@ -675,7 +681,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
           {["FAQ autoscuola", "Info lezioni", "Prenota guida"].map((label) => (
             <span
               key={label}
-              className="rounded-[20px] border border-[#e4e4ea] bg-white px-[11px] py-[5px] text-[11.5px] font-bold text-[#1a1a2e]"
+              className="rounded-[20px] border border-[#e4e4ea] bg-white px-[11px] py-[5px] text-[11.5px] font-bold text-[#222222]"
             >
               {label}
             </span>
@@ -694,7 +700,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
         <SectionLabel>Registrazione</SectionLabel>
         {/* Player a pillola: tondo play, onda sonora, durata. */}
         <div className="flex items-center gap-3 rounded-[40px] bg-[#f5f5f7] py-[9px] pl-[9px] pr-4">
-          <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-[#1a1a2e]">
+          <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-[#222222]">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="#ffffff" aria-hidden>
               <path d="M3 1.5v9l7.5-4.5z" />
             </svg>
@@ -729,7 +735,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
             "Orari segreteria: 9:00–12:00 e 15:30–18:30",
           ].map((line) => (
             <div key={line} className="flex items-center gap-[9px] text-[12.5px] font-medium text-[#444444]">
-              <span className="size-1.5 shrink-0 rounded-full bg-[#1a1a2e]" />
+              <span className="size-1.5 shrink-0 rounded-full bg-[#222222]" />
               {line}
             </div>
           ))}
@@ -861,7 +867,7 @@ function LocationsEmptyState() {
   );
 }
 
-/** I due pulsanti, identici in ogni cartello. Primario navy, non nero. */
+/** I due pulsanti, identici in ogni cartello. Primario nero. */
 function CtaRow() {
   return (
     <div className="flex items-center justify-center gap-2.5">
@@ -877,8 +883,8 @@ function CtaRow() {
         href={ATTIVA_REGLO_URL}
         target="_blank"
         rel="noreferrer"
-        style={{ backgroundColor: NAVY }}
-        className="rounded-[32px] px-[22px] py-[11px] text-[14px] font-bold text-white transition-colors hover:!bg-[#2a2a44]"
+        style={{ backgroundColor: NERO }}
+        className="rounded-[32px] px-[22px] py-[11px] text-[14px] font-bold text-white transition-colors hover:!bg-[#3a3a3a]"
       >
         Attiva Reglo
       </a>
@@ -894,7 +900,7 @@ function LockedCardBody({ card }: { card: LockedPaneCard }) {
   const lead = card.subtitle ?? (card.preview ? undefined : card.description);
   return (
     <>
-      <h3 className="text-[21px] font-bold tracking-[-0.7px] text-[#1a1a2e]">{card.title}</h3>
+      <h3 className="text-[21px] font-bold tracking-[-0.7px] text-[#222222]">{card.title}</h3>
       {lead ? (
         <p className="mt-2 text-[14px] font-medium leading-[1.45] text-[#5a5a66]">{lead}</p>
       ) : null}
