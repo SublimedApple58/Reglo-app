@@ -23,6 +23,7 @@
 
 import * as React from "react";
 import Image from "next/image";
+import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
 import { ATTIVA_REGLO_URL, VIDEO_ISTRUTTORI_URL } from "./locked-features";
@@ -290,19 +291,167 @@ const AutonomaCard = () => (
       target="_blank"
       rel="noreferrer"
       aria-label="Guarda il video: come funziona la modalità autonoma per gli istruttori"
-      className="relative flex aspect-[16/9] items-center justify-center rounded-[12px] bg-[#ececef] transition-colors hover:bg-[#e4e4e9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a1a2e] focus-visible:ring-offset-2"
+      className="group relative flex aspect-[16/9] items-center justify-center overflow-hidden rounded-[12px] bg-[#ececef] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a1a2e] focus-visible:ring-offset-2"
     >
-      <span className="flex size-12 items-center justify-center rounded-full bg-[#2f2f38] shadow-[0_6px_18px_rgba(0,0,0,0.25)]">
+      {/*
+        Un fotogramma vero del video, non un rettangolo grigio: si vede subito
+        di che cosa parla. È lo stesso frame del video sul sito, quindi
+        l'anteprima e la pagina di destinazione combaciano.
+      */}
+      <Image
+        src="/images/locked/video-istruttori.jpg"
+        alt=""
+        width={1600}
+        height={878}
+        className="absolute inset-0 h-full w-full object-cover object-left-top"
+      />
+      {/* Velo scuro: il play e la scritta devono restare leggibili sul frame. */}
+      <span className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/10 to-transparent transition-colors group-hover:from-black/55" />
+      <span className="relative flex size-12 items-center justify-center rounded-full bg-[#2f2f38] shadow-[0_6px_18px_rgba(0,0,0,0.25)] transition-transform group-hover:scale-105">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
           <path d="M5 3.5v9l7.5-4.5L5 3.5z" fill="#ffffff" />
         </svg>
       </span>
-      <span className="absolute bottom-3 left-3.5 text-[12.5px] font-semibold text-[#8a8a94]">
+      <span className="absolute bottom-3 left-3.5 text-[12.5px] font-semibold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.5)]">
         Guarda il video
       </span>
     </a>
   </Card>
 );
+
+
+/* ── Popover dei colori istruttore ──────────────────────────────────── */
+
+/**
+ * I sedici colori del prototipo, nel suo ordine. Sei per riga, come là.
+ */
+const INSTRUCTOR_PALETTE = [
+  "#ec4899", "#0ea5e9", "#eab308", "#10b981", "#6366f1", "#d946ef",
+  "#ef4444", "#f97316", "#84cc16", "#14b8a6", "#3b82f6", "#8b5cf6",
+  "#dc2626", "#f59e0b", "#0369a1", "#64748b",
+];
+
+const POP_WIDTH = 236;
+
+/**
+ * Il pallino colore apre la griglia, **spenta**, col suo cartello sotto.
+ *
+ * Nel prototipo il popover è lo stesso di quando Reglo è attivo: cambia che la
+ * griglia va a `opacity 0.35` e non si può cliccare, e in fondo compare il
+ * piede col lucchetto. Si vede cosa si potrebbe scegliere — che è il punto di
+ * tutta la vista ridotta — senza far finta che si possa.
+ *
+ * Posizione calcolata dal rettangolo del pallino (sotto a destra, come là) e
+ * ribaltata sopra se sborda. Si chiude con Esc o cliccando fuori.
+ */
+function ColorDotWithPopover({ color }: { color: string }) {
+  const ref = React.useRef<HTMLButtonElement | null>(null);
+  const popRef = React.useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = React.useState<{ top: number; left: number } | null>(null);
+
+  const toggle = () => {
+    if (pos) return setPos(null);
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    let left = r.right - POP_WIDTH;
+    if (left < 12) left = 12;
+    if (left + POP_WIDTH > window.innerWidth - 12) left = window.innerWidth - POP_WIDTH - 12;
+    let top = r.bottom + 8;
+    if (top + 210 > window.innerHeight) top = Math.max(12, r.top - 218);
+    setPos({ top, left });
+  };
+
+  React.useEffect(() => {
+    if (!pos) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPos(null);
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (popRef.current?.contains(t) || ref.current?.contains(t)) return;
+      setPos(null);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDown, true);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onDown, true);
+    };
+  }, [pos]);
+
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        onClick={toggle}
+        aria-label="Colore dell'istruttore"
+        style={{ background: color }}
+        className="size-8 shrink-0 cursor-pointer rounded-lg shadow-[0_0_0_1px_rgba(0,0,0,0.1)] transition-transform hover:scale-105"
+      />
+      {pos
+        ? createPortal(
+            <div
+              ref={popRef}
+              style={{ top: pos.top, left: pos.left, width: POP_WIDTH }}
+              className="fixed z-[520] rounded-[16px] border border-[#ececec] bg-white p-[14px] leading-[normal] shadow-[0_12px_40px_rgba(0,0,0,0.18)]"
+            >
+              {/* La griglia si vede ma non si tocca: è la funzione non comprata. */}
+              <div
+                aria-hidden
+                className="pointer-events-none grid grid-cols-6 gap-[9px] opacity-[0.35]"
+              >
+                {INSTRUCTOR_PALETTE.map((hex) => (
+                  <span
+                    key={hex}
+                    style={{
+                      background: hex,
+                      boxShadow: hex === color ? `0 0 0 2px #fff, 0 0 0 4px ${hex}` : undefined,
+                    }}
+                    className="flex aspect-square w-full items-center justify-center rounded-[8px]"
+                  >
+                    {hex === color ? (
+                      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                        <path
+                          d="M3.5 8.5l3 3 6-6.5"
+                          stroke="#fff"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    ) : null}
+                  </span>
+                ))}
+              </div>
+              <div className="mt-3 border-t border-[#efefef] pt-3">
+                <div className="flex items-center gap-[7px] text-[12.5px] font-bold text-[#222222]">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#222"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    className="shrink-0"
+                    aria-hidden
+                  >
+                    <rect x="4" y="11" width="16" height="10" rx="2" />
+                    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                  </svg>
+                  Un colore per ogni istruttore
+                </div>
+                <div className="mt-1 text-[11.5px] font-medium leading-[1.45] text-[#6a6a6a]">
+                  Con Reglo attivo riconosci le sue guide in agenda a colpo d&apos;occhio.
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
 
 /* ── Fondali sfocati: i campi veri di ogni scheda ───────────────────── */
 
@@ -470,10 +619,7 @@ function InstructorDetail({
             Disponibilità, assenze e autonomia: con Reglo attivo li gestisci da qui
           </p>
         </div>
-        <span
-          style={{ background: instructor.color }}
-          className="size-8 shrink-0 rounded-lg shadow-[0_0_0_1px_rgba(0,0,0,0.1)]"
-        />
+        <ColorDotWithPopover color={instructor.color} />
       </div>
 
       <div className="my-5 mb-6 flex flex-wrap items-center gap-[26px] border-b border-[#e8e8e8]">

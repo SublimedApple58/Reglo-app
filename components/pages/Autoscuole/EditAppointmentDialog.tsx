@@ -898,7 +898,7 @@ export function EditAppointmentDialog({
             type="button"
             disabled={!canSubmit}
             onClick={handleSubmit}
-            className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
+            className="flex cursor-pointer items-center gap-2 rounded-sm bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
           >
             {pending ? <LoadingDots className="min-h-5" /> : "Salva modifiche"}
           </button>
@@ -1135,7 +1135,7 @@ export function EditAppointmentDialog({
                       disabled={pending}
                       onClick={() => setMotoLessonType(active ? null : value)}
                       className={cn(
-                        "flex cursor-pointer items-center gap-2 rounded-[10px] border-[1.5px] px-3 py-2 text-left transition-colors disabled:opacity-50",
+                        "flex cursor-pointer items-center gap-2 rounded-sm border-[1.5px] px-3 py-2 text-left transition-colors disabled:opacity-50",
                         active
                           ? "border-[#111111] bg-[#f2f2f2]"
                           : "border-slate-200 bg-white hover:border-slate-300",
@@ -1226,7 +1226,7 @@ export function EditAppointmentDialog({
               </div>
 
               {evalRows.length > 0 && (
-                <div className="rounded-[10px] border border-[#ececec] bg-white px-3">
+                <div className="rounded-sm border border-[#ececec] bg-white px-3">
                   {evalRows.map((item, i) => {
                     const value = evalScores[item.id] ?? 0;
                     const legacyNa = evalLegacyNa[item.id] === true;
@@ -1310,7 +1310,7 @@ export function EditAppointmentDialog({
                       type="button"
                       disabled={pending}
                       className={cn(
-                        "flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-[10px] border text-[12.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                        "flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-sm border text-[12.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                         evalMenuOpen
                           ? "border-solid border-[#222222] text-foreground"
                           : "border-dashed border-[#dcdce2] text-[#6a6a6a] hover:border-[#c9c9d2] hover:text-foreground",
@@ -1376,7 +1376,7 @@ export function EditAppointmentDialog({
                       )
                     }
                     className={cn(
-                      "cursor-pointer rounded-[10px] border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50",
+                      "cursor-pointer rounded-sm border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50",
                       on
                         ? "border-[#111111] bg-[#111111] text-white"
                         : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",

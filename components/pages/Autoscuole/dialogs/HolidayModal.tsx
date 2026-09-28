@@ -452,7 +452,7 @@ export function HolidayModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="cursor-pointer rounded-[18px] border border-[#ddd] px-4 py-2 text-[13px] font-medium text-[#444]"
+                  className="cursor-pointer rounded-[20px] border border-[#ddd] px-4 py-2 text-[13px] font-medium text-[#444]"
                 >
                   Annulla
                 </button>
@@ -461,7 +461,7 @@ export function HolidayModal({
                   disabled={!canConfirm}
                   onClick={() => setStep("confirm")}
                   className={cn(
-                    "rounded-[18px] px-4 py-2 text-[13px] font-semibold transition-colors",
+                    "rounded-[20px] px-4 py-2 text-[13px] font-semibold transition-colors",
                     canConfirm
                       ? "cursor-pointer bg-[#f59e0b] text-white"
                       : "cursor-default bg-[#e0e0e0] text-[#aaa]",

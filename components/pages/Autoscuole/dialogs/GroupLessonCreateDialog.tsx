@@ -491,7 +491,7 @@ export function GroupLessonCreateDialog({
       <p className="mt-0.5 text-[12.5px] font-medium text-[#929292]">
         {selectedIds.length}/{CAPACITY} pre-inseriti · {addableCount} da aggiungere
       </p>
-      <div className="mt-3 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+      <div className="mt-3 flex items-center gap-2.5 rounded-sm border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
         <Search className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
         <input
           value={studentQuery}
@@ -501,7 +501,7 @@ export function GroupLessonCreateDialog({
           className="min-w-0 flex-1 bg-transparent py-[9px] text-sm font-medium text-foreground outline-none placeholder:text-[#c1c1c1]"
         />
       </div>
-      <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto rounded-[12px] border-[1.5px] border-[#ededed]">
+      <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto rounded-md border-[1.5px] border-[#ededed]">
         {browseList.length === 0 ? (
           <p className="px-4 py-3.5 text-[12.5px] font-medium text-[#929292]">
             {studentQuery.trim()
@@ -577,7 +577,7 @@ export function GroupLessonCreateDialog({
                         if (opt.value !== "moto") setMotoLessonType(null);
                       }}
                       className={cn(
-                        "flex items-center gap-2 rounded-2xl border px-3 py-2.5 text-left transition-colors cursor-pointer",
+                        "flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors cursor-pointer",
                         active
                           ? opt.value === "moto"
                             ? "border-orange-300 bg-orange-50/70"
@@ -676,7 +676,7 @@ export function GroupLessonCreateDialog({
 
             {/* Moto group: choose the fleet + the shared follow car */}
             {isMoto ? (
-              <div className="space-y-3 rounded-2xl border border-border/60 bg-gray-50/50 p-3">
+              <div className="space-y-3 rounded-xl border border-border/60 bg-gray-50/50 p-3">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label className="flex items-center gap-1.5">
@@ -884,7 +884,7 @@ export function GroupLessonCreateDialog({
             </div>
 
             {/* Open remaining seats to invites */}
-            <div className={cn("flex items-center gap-3 rounded-2xl border px-3 py-2.5", tint.inviteBox)}>
+            <div className={cn("flex items-center gap-3 rounded-xl border px-3 py-2.5", tint.inviteBox)}>
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white">
                 <Megaphone className={cn("h-4 w-4", tint.icon)} />
               </div>
@@ -927,7 +927,7 @@ export function GroupLessonCreateDialog({
     <AlertDialog open={pastConfirmOpen} onOpenChange={setPastConfirmOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <div className="mb-1 flex size-11 items-center justify-center rounded-[14px] border border-[#f3e2c0] bg-[#fff8ec]">
+          <div className="mb-1 flex size-11 items-center justify-center rounded-lg border border-[#f3e2c0] bg-[#fff8ec]">
             <History className="size-[22px] text-[#e8a020]" strokeWidth={2} />
           </div>
           <AlertDialogTitle>Stai creando una guida nel passato</AlertDialogTitle>

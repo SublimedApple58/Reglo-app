@@ -44,6 +44,7 @@ import { AgendaPauseNewsDialog } from "@/components/Layout/news/AgendaPauseNewsD
 import { OwnerNotificationsBell } from "@/components/Layout/OwnerNotificationsBell";
 import { FeedbackDialog } from "@/components/Layout/FeedbackDialog";
 import { isAffiliateWithoutReglo, isSecretaryOnly, isServiceActive } from "@/lib/services";
+import { ATTIVA_REGLO_URL } from "@/components/pages/Autoscuole/locked/locked-features";
 import { LockedMenuItem } from "@/components/pages/Autoscuole/locked/LockedMenuItem";
 import { cn } from "@/lib/utils";
 import { StudentNameOrderProvider } from "@/components/pages/Autoscuole/student-name-order-context";
@@ -405,24 +406,59 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator className="my-2 bg-[#ededed]" />
-                  {/* Teaser referral (statico, come il proto) */}
-                  <div className="flex cursor-default items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left">
-                    <div className="min-w-0 flex-1 text-left">
-                      <div className="mb-0.5 text-[15px] font-bold text-foreground">
-                        Inizia a guadagnare
+                  {/*
+                    Teaser di chiusura del menu. **Sono due, e si scambiano.**
+
+                    Nel prototipo il referral sta in `sc-if oreUnlocked` e il
+                    boost in `sc-if menuLocked`: chi Reglo non ce l'ha non vede
+                    "guadagna il 10%" — che presuppone di essere già cliente —
+                    ma l'invito a scoprire cosa si sta perdendo. Sostituirlo per
+                    tutti toglierebbe il referral alle autoscuole clienti, che
+                    nel prototipo lo tengono.
+                  */}
+                  {affiliateReduced ? (
+                    <a
+                      href={ATTIVA_REGLO_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex cursor-pointer items-center justify-between gap-3.5 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-[#f7f7f7]"
+                    >
+                      <div className="min-w-0 flex-1 text-left">
+                        <div className="mb-1 whitespace-nowrap text-[15px] font-bold text-foreground">
+                          Dai un boost all&apos;autoscuola!
+                        </div>
+                        <div className="text-[12.5px] font-medium leading-[1.45] text-[#6a6a6a]">
+                          Agenda che si riempie da sola, zero telefonate. Guarda cosa ti stai
+                          perdendo.
+                        </div>
                       </div>
-                      <div className="text-[12.5px] font-medium leading-snug text-[#6a6a6a]">
-                        Fai conoscere Reglo ad un&apos;altra autoscuola e ricevi il 10%.
+                      <Image
+                        src="/images/menu/dai-un-boost.png"
+                        alt=""
+                        width={72}
+                        height={72}
+                        className="h-[72px] w-[72px] shrink-0 self-center object-contain"
+                      />
+                    </a>
+                  ) : (
+                    <div className="flex cursor-default items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left">
+                      <div className="min-w-0 flex-1 text-left">
+                        <div className="mb-0.5 text-[15px] font-bold text-foreground">
+                          Inizia a guadagnare
+                        </div>
+                        <div className="text-[12.5px] font-medium leading-snug text-[#6a6a6a]">
+                          Fai conoscere Reglo ad un&apos;altra autoscuola e ricevi il 10%.
+                        </div>
                       </div>
+                      <Image
+                        src="/images/menu/inizia-guadagnare.png"
+                        alt=""
+                        width={64}
+                        height={64}
+                        className="h-16 w-16 shrink-0 object-contain"
+                      />
                     </div>
-                    <Image
-                      src="/images/menu/inizia-guadagnare.png"
-                      alt=""
-                      width={64}
-                      height={64}
-                      className="h-16 w-16 shrink-0 object-contain"
-                    />
-                  </div>
+                  )}
                   {/* Novità: timeline changelog — nascosta temporaneamente (2026-07-12,
                       richiesta utente); per riattivarla rimetti SHOW_NOVITA a true. */}
                   {SHOW_NOVITA && (

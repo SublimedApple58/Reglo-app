@@ -521,7 +521,7 @@ function GuideRequestDialog({
           <button
             type="button"
             onClick={onClose}
-            className="cursor-pointer text-[14px] font-semibold text-foreground underline"
+            className="cursor-pointer text-[14px] font-semibold text-foreground underline underline-offset-2 decoration-1 transition-colors hover:text-black hover:decoration-2"
           >
             Annulla
           </button>
@@ -601,7 +601,7 @@ function GuideRequestDialog({
             <button
               type="button"
               onClick={() => setCreatingStudent(false)}
-              className="cursor-pointer text-[13px] font-semibold text-[#6a6a6a] underline"
+              className="cursor-pointer text-[13px] font-semibold text-[#6a6a6a] underline underline-offset-2 decoration-1 transition-colors hover:text-foreground hover:decoration-2"
             >
               Annulla
             </button>
@@ -743,7 +743,7 @@ function ProposalDialog({
           type="button"
           disabled={busy !== null}
           onClick={() => void respond(false)}
-          className="cursor-pointer text-[14px] font-semibold text-foreground underline"
+          className="cursor-pointer text-[14px] font-semibold text-foreground underline underline-offset-2 decoration-1 transition-colors hover:text-black hover:decoration-2"
         >
           {busy === "reject" ? <LoadingDots /> : "Rifiuta"}
         </button>
@@ -809,7 +809,7 @@ function CancelRequestDialog({
         <button
           type="button"
           onClick={onClose}
-          className="cursor-pointer text-[14px] font-semibold text-foreground underline"
+          className="cursor-pointer text-[14px] font-semibold text-foreground underline underline-offset-2 decoration-1 transition-colors hover:text-black hover:decoration-2"
         >
           Lasciala lì
         </button>

@@ -158,7 +158,7 @@ export function CreateEventPopover({
           aria-label={title}
         >
           <div
-            className="flex flex-col overflow-hidden rounded-[22px] border border-[#dddddd] bg-white shadow-[0_24px_64px_rgba(0,0,0,0.18)]"
+            className="flex flex-col overflow-hidden rounded-[20px] border border-[#dddddd] bg-white shadow-[0_24px_64px_rgba(0,0,0,0.18)]"
             style={{
               width: size.w,
               // finché l'utente non ridimensiona, l'altezza è naturale (capped)

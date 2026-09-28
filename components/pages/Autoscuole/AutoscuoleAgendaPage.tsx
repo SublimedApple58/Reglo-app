@@ -117,6 +117,7 @@ import {
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { ExpandingSearch } from "@/components/ui/expanding-search";
 import { LockedToolbarTip } from "@/components/pages/Autoscuole/locked/LockedToolbarTip";
+import { LockedPlusItem, type PlusTipKey } from "@/components/pages/Autoscuole/locked/LockedPlusTip";
 import { ToolbarFilters } from "./filters/ToolbarFilters";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import {
@@ -3410,16 +3411,12 @@ export function AutoscuoleAgendaPage({
                             {entry.separatorBefore ? (
                               <div className="my-1.5 h-px bg-[#f0f0f0]" />
                             ) : null}
-                            <div
-                              title="Funzione extra di Reglo"
-                              className="flex w-full cursor-default items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-[#9a9a9a]"
-                            >
-                              {entry.icon}
-                              {entry.label}
-                              <span className="ml-auto flex shrink-0 items-center">
-                                <Lock className="size-[15px] text-[#bdbdbd]" strokeWidth={2.1} />
-                              </span>
-                            </div>
+                            {/* Ogni voce bloccata ha il suo cartello: vedi LockedPlusTip. */}
+                            <LockedPlusItem
+                              tip={entry.key as PlusTipKey}
+                              icon={entry.icon}
+                              label={entry.label}
+                            />
                           </React.Fragment>
                         ))}
                       </>
@@ -3725,16 +3722,12 @@ export function AutoscuoleAgendaPage({
                           {entry.separatorBefore ? (
                             <div className="my-1 h-px bg-[#f0f0f0]" />
                           ) : null}
-                          <div
-                            title="Funzione extra di Reglo"
-                            className="flex w-full cursor-default items-center gap-2.5 rounded-[8px] px-3 py-2 text-xs font-medium text-[#9a9a9a]"
-                          >
-                            {entry.icon}
-                            {entry.label}
-                            <span className="ml-auto flex shrink-0 items-center">
-                              <Lock className="size-3.5 text-[#bdbdbd]" strokeWidth={2.1} />
-                            </span>
-                          </div>
+                          <LockedPlusItem
+                            tip={entry.key as PlusTipKey}
+                            icon={entry.icon}
+                            label={entry.label}
+                            compact
+                          />
                         </React.Fragment>
                       ))}
                     </>

@@ -183,7 +183,7 @@ function EditFooter({
         type="button"
         disabled={busy}
         onClick={onSave}
-        className="flex min-h-[40px] min-w-[78px] cursor-pointer items-center justify-center rounded-[8px] bg-[#222222] px-[18px] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-60"
+        className="flex min-h-[40px] min-w-[78px] cursor-pointer items-center justify-center rounded-sm bg-[#222222] px-[18px] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-60"
       >
         {busy ? <LoadingDots /> : "Salva"}
       </button>
@@ -191,7 +191,7 @@ function EditFooter({
         type="button"
         disabled={busy}
         onClick={onCancel}
-        className="cursor-pointer rounded-[8px] px-[18px] py-2.5 text-sm font-semibold text-foreground hover:text-navy-900"
+        className="cursor-pointer rounded-sm px-[18px] py-2.5 text-sm font-semibold text-foreground hover:text-navy-900"
       >
         Annulla
       </button>
@@ -581,7 +581,7 @@ export function GroupLessonManageDialog({
                   <DatePickerInput
                     value={startLocal.slice(0, 10)}
                     onChange={(d) => setStartLocal(`${d}T${startLocal.slice(11, 16) || "09:00"}`)}
-                    className="h-auto rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 py-[11px]"
+                    className="h-auto rounded-sm border-[1.5px] border-[#dddddd] px-3.5 py-[11px]"
                   />
                 </div>
                 <div>
@@ -778,7 +778,7 @@ export function GroupLessonManageDialog({
                 Nessun iscritto. Aggiungi un allievo o invia gli inviti.
               </p>
             ) : (
-              <div className="rounded-[12px] border-[1.5px] border-[#ededed]">
+              <div className="rounded-md border-[1.5px] border-[#ededed]">
                 {lesson.participants.map((p, idx) => (
                   <div key={p.appointmentId} className={cn("px-4 py-3", idx > 0 && "border-t border-[#f0f0f0]")}>
                     <div className="flex items-center justify-between gap-2">
@@ -865,7 +865,7 @@ export function GroupLessonManageDialog({
                           rows={3}
                           maxLength={2000}
                           placeholder="Nota per questo allievo (la vedrà nella sua app)"
-                          className="w-full resize-y rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222]"
+                          className="w-full resize-y rounded-sm border-[1.5px] border-[#dddddd] px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222]"
                         />
                         <div className="mt-1.5 flex items-center justify-end gap-3">
                           <button
@@ -928,7 +928,7 @@ export function GroupLessonManageDialog({
                 )}
 
                 {/* Invito in app agli idonei non ancora iscritti */}
-                <div className="mt-3 flex items-center justify-between gap-3 rounded-[12px] bg-[#f7f8fa] px-4 py-3">
+                <div className="mt-3 flex items-center justify-between gap-3 rounded-md bg-[#f7f8fa] px-4 py-3">
                   <div className="flex min-w-0 items-center gap-3">
                     <Send className="size-4 shrink-0 text-[#6a6a6a]" strokeWidth={1.8} />
                     <div className="min-w-0">
@@ -953,7 +953,7 @@ export function GroupLessonManageDialog({
 
             {/* ── Annulla guida (conferma inline) ── */}
             {confirmCancel ? (
-              <div className="mt-4 flex items-center justify-between gap-3 rounded-[12px] bg-[#fdf3f1] px-4 py-3">
+              <div className="mt-4 flex items-center justify-between gap-3 rounded-md bg-[#fdf3f1] px-4 py-3">
                 <span className="text-[13px] font-medium leading-snug text-[#7a2e1d]">
                   Annullare la guida? Tutti i partecipanti verranno avvisati.
                 </span>
@@ -1018,7 +1018,7 @@ export function GroupLessonManageDialog({
                 Idonei per questa guida · {lesson.openSeats}{" "}
                 {lesson.openSeats === 1 ? "posto libero" : "posti liberi"}
               </p>
-              <div className="mt-3 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+              <div className="mt-3 flex items-center gap-2.5 rounded-sm border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
                 <SearchIcon className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
                 <input
                   value={addSearch}
@@ -1028,7 +1028,7 @@ export function GroupLessonManageDialog({
                   className="min-w-0 flex-1 bg-transparent py-[9px] text-sm font-medium text-foreground outline-none placeholder:text-[#c1c1c1]"
                 />
               </div>
-              <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto rounded-[12px] border-[1.5px] border-[#ededed]">
+              <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto rounded-md border-[1.5px] border-[#ededed]">
                 {filteredEligible.length === 0 ? (
                   <p className="px-4 py-3.5 text-[12.5px] font-medium text-[#929292]">
                     Nessun allievo trovato per &laquo;{addSearch}&raquo;.
@@ -1098,7 +1098,7 @@ export function GroupLessonManageDialog({
                 Le modifiche si salvano subito · {(lesson.fleet ?? []).length} moto in guida
               </p>
               {fleetOptions.length > 5 && (
-                <div className="mt-3 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+                <div className="mt-3 flex items-center gap-2.5 rounded-sm border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
                   <SearchIcon className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
                   <input
                     value={fleetSearch}
@@ -1108,7 +1108,7 @@ export function GroupLessonManageDialog({
                   />
                 </div>
               )}
-              <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto rounded-[12px] border-[1.5px] border-[#ededed]">
+              <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto rounded-md border-[1.5px] border-[#ededed]">
                 {fleetPanelRows.length === 0 ? (
                   <p className="px-4 py-3.5 text-[12.5px] font-medium text-[#929292]">
                     {fleetSearch

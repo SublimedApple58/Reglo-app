@@ -105,13 +105,26 @@ CSS utility classes definite in `globals.css`:
 
 ## 4. Border Radius
 
-Definiti via `--radius: 1.25rem` (20px) in `:root`:
+Definiti via `--radius: 0.875rem` (**14px**) in `:root`:
 
 | Token | Valore | Tailwind class | Uso |
 |-------|--------|---------------|-----|
-| `--radius` | 20px | `rounded-lg` | Controlli standard |
-| `calc(--radius - 2px)` | 18px | `rounded-md` | Elementi medi |
-| `calc(--radius - 4px)` | 16px | `rounded-sm` | Elementi piccoli |
+| `--radius` | 14px | `rounded-lg` | Controlli standard |
+| `calc(--radius - 2px)` | 12px | `rounded-md` | Elementi medi |
+| `calc(--radius - 4px)` | 10px | `rounded-sm` | Elementi piccoli |
+| `calc(--radius + 4px)` | 18px | `rounded-xl` | Contenitori |
+| `9999px` | — | `rounded-full` | Pastiglie e chip |
+
+> ⚠️ **Questa tabella diceva 20/18/16 e era sbagliata** (corretta il
+> 2026-09-28): chi la leggeva per "allinearsi allo standard" prendeva il
+> bersaglio sbagliato di 6px. I valori veri stanno in `assets/styles/globals.css`
+> (`--radius` e i `--radius-*` del blocco `@theme`), non in `tailwind.config.ts`,
+> che su Tailwind 4 è ormai vestigiale.
+>
+> **Dialog dell'agenda**: il guscio è `rounded-[20px]` — più largo della scala
+> perché è una superficie che galleggia, non un controllo. Dentro si usano solo
+> i token (`rounded-lg` campi, `rounded-md` riquadri, `rounded-full` pastiglie):
+> prima convivevano 8, 9, 10, 12, 14, 18, 20 e 22px.
 | `9999px` | pill | `rounded-pill` | Badge, chip |
 | `35px` | card primary | `rounded-card-primary` | Card principali grandi |
 
