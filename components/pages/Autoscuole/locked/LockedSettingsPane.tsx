@@ -741,6 +741,23 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
   /* ── Sezioni che il prototipo non ha: stessa forma, senza anteprima ── */
   evaluation: {
     title: "Pagellino di valutazione",
+    /*
+      A differenza degli altri mockup, che sono disegnati in markup, questo è
+      l'immagine che ha scelto Tiziano: il modello base con le cinque voci a
+      cinque stelline. Se un giorno si vorrà uniformarlo agli altri, la card
+      bianca dentro la foto è ricostruibile in markup senza perdere niente.
+    */
+    preview: (
+      <div className="mt-1.5 overflow-hidden rounded-[12px]">
+        <Image
+          src="/images/locked/pagellino-teaser.jpg"
+          alt=""
+          width={1600}
+          height={900}
+          className="block h-full w-full object-cover"
+        />
+      </div>
+    ),
     description:
       "Alla fine di ogni guida l'istruttore dà un voto sulle voci che decidi tu: l'allievo vede i suoi progressi e tu sai chi è pronto per l'esame.",
   },
