@@ -267,6 +267,23 @@ export function AffiliateAgendaPage({
     () => ({
       fetchBootstrap,
       readOnly: true,
+      /**
+       * Gli strumenti della toolbar sono bloccati anche **qui**, non solo
+       * nello scope Autoscuola: legenda, visualizzazione, zoom, schermo
+       * intero, stampa, filtri e ricerca sono funzioni di Reglo, e su questa
+       * agenda funzionavano liberamente a chi Reglo non l'ha comprato.
+       *
+       * `!onScope` = vista ridotta. Con Reglo attivo (Fase 8) la pagina la
+       * monta il chiamante passando `scope`/`onScope`, e lì la toolbar resta
+       * **intatta**: è la stessa condizione già usata poco sotto per lo scope
+       * Autoscuola, così i due rami non possono divergere.
+       *
+       * Il **"+" resta fuori**: `toolbarLocked` non lo tocca, ed è voluto —
+       * in questo scope porta "Richieste", cioè l'unica cosa operativa della
+       * vista ridotta (Fase 7). Bloccarlo spegnerebbe le richieste di guida.
+       * Le altre cinque voci del menu sono già col lucchetto qui sotto.
+       */
+      toolbarLocked: !onScope,
       dismissCard: {
         title: "Togli dall'agenda",
         can: (id) => requestsRef.current.get(id)?.dismissable ?? false,
@@ -318,7 +335,7 @@ export function AffiliateAgendaPage({
         ],
       },
     }),
-    [fetchBootstrap, toast, anchorFromPlus],
+    [fetchBootstrap, toast, anchorFromPlus, onScope],
   );
 
   const scopeControl = React.useMemo(
