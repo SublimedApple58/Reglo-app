@@ -294,6 +294,7 @@ const TeoriaArt = () => (
 /* ── I contenuti ────────────────────────────────────────────────────── */
 
 export type PlusTipKey =
+  | "richiesta"
   | "appuntamento"
   | "esame"
   | "blocco"
@@ -301,9 +302,26 @@ export type PlusTipKey =
   | "gruppo"
   | "festivo";
 
-type PlusTipSpec = { title: string; description: string; illustration: React.ReactNode };
+type PlusTipSpec = {
+  title: string;
+  description: string;
+  illustration: React.ReactNode;
+  /**
+   * Niente "Attiva Reglo" in fondo. Nel prototipo è escluso per la sola
+   * "Richiesta di guida" (`nuovoTipShowCta: key !== 'richiesta'`), ed è giusto:
+   * quella funzione ce l'hanno già, invitarli ad attivarla sarebbe assurdo.
+   */
+  noCta?: boolean;
+};
 
 export const PLUS_TIPS: Record<PlusTipKey, PlusTipSpec> = {
+  richiesta: {
+    title: "Richiesta di guida",
+    description:
+      "Le guide le possiede il consorzio: scegli uno slot libero, il veicolo e l\u2019allievo. La richiesta resta in attesa finché il consorzio risponde.",
+    illustration: null,
+    noCta: true,
+  },
   appuntamento: {
     title: "Appuntamento",
     description:
@@ -367,12 +385,21 @@ export function LockedPlusItem({
   icon,
   label,
   compact,
+  locked = true,
+  onSelect,
 }: {
   tip: PlusTipKey;
   icon: React.ReactNode;
   label: string;
   /** Il menu del click su slot è più stretto: testo e spaziature calano. */
   compact?: boolean;
+  /**
+   * `false` per una voce **vera**: resta cliccabile e senza lucchetto, ma al
+   * passaggio del mouse spiega comunque cosa fa. Nel prototipo ce l'ha
+   * "Richiesta di guida", l'unica voce non bloccata dello scope Consorzio.
+   */
+  locked?: boolean;
+  onSelect?: () => void;
 }) {
   const spec = PLUS_TIPS[tip];
   const ref = React.useRef<HTMLDivElement | null>(null);
@@ -461,6 +488,12 @@ export function LockedPlusItem({
         onMouseEnter={open}
         onMouseLeave={scheduleClose}
         onClick={(e) => {
+          if (!locked) {
+            // Voce vera: fa il suo mestiere, il pannello era solo una spiegazione.
+            close();
+            onSelect?.();
+            return;
+          }
           // Il menu non deve chiudersi: si porterebbe via il pannello.
           e.preventDefault();
           e.stopPropagation();
@@ -468,13 +501,14 @@ export function LockedPlusItem({
           open();
         }}
         className={cn(
-          "flex w-full cursor-pointer items-center gap-2.5 font-medium text-[#9a9a9a] transition-colors hover:bg-[#f7f7f7]",
+          "flex w-full cursor-pointer items-center gap-2.5 font-medium transition-colors hover:bg-[#f7f7f7]",
+          locked ? "text-[#9a9a9a]" : "text-foreground",
           compact ? "rounded-[8px] px-3 py-2 text-xs" : "rounded-[8px] px-3.5 py-2.5 text-sm",
         )}
       >
         {icon}
         {label}
-        <span className="ml-auto flex shrink-0 items-center">
+        <span className={cn("ml-auto flex shrink-0 items-center", !locked && "hidden")}>
           <svg
             width={compact ? 14 : 15}
             height={compact ? 14 : 15}
@@ -511,6 +545,8 @@ export function LockedPlusItem({
                 {spec.description}
               </p>
               {spec.illustration}
+              {spec.noCta ? null : (
+                <>
               <div className="mb-3 mt-3.5 h-px bg-[#f0f0f0]" />
               <div className="flex items-center gap-2">
                 <Padlock />
@@ -527,6 +563,8 @@ export function LockedPlusItem({
                   Attiva Reglo
                 </a>
               </div>
+                </>
+              )}
             </div>,
             document.body,
           )

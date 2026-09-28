@@ -265,6 +265,11 @@ export type AgendaSource = {
       label: string;
       icon: React.ReactNode;
       onSelect: (slot?: { ymd: string; time: string; instructorId: string | null }) => void;
+      /**
+       * Cartello esplicativo al passaggio del mouse, come nel prototipo.
+       * La voce resta cliccabile: spiega, non blocca.
+       */
+      tip?: PlusTipKey;
     }>;
     /** Voci presenti ma non comprate: grigie, col lucchetto. */
     locked?: Array<{
@@ -3387,7 +3392,20 @@ export function AutoscuoleAgendaPage({
               <DropdownMenuContent align="end" className="w-52 rounded-[12px] shadow-dropdown">
                 {source?.menu ? (
                   <>
-                    {source.menu.items.map((entry) => (
+                    {source.menu.items.map((entry) =>
+                      entry.tip ? (
+                        <LockedPlusItem
+                          key={entry.key}
+                          tip={entry.tip}
+                          icon={entry.icon}
+                          label={entry.label}
+                          locked={false}
+                          onSelect={() => {
+                            setPlusMenuOpen(false);
+                            entry.onSelect();
+                          }}
+                        />
+                      ) : (
                       <button
                         key={entry.key}
                         type="button"
@@ -3400,7 +3418,8 @@ export function AutoscuoleAgendaPage({
                         {entry.icon}
                         {entry.label}
                       </button>
-                    ))}
+                      ),
+                    )}
                     {source.menu.locked?.length ? (
                       <>
                         {source.menu.items.length ? (

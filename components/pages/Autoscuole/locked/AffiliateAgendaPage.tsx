@@ -311,6 +311,8 @@ export function AffiliateAgendaPage({
         items: [
           {
             key: "richiesta",
+            // Anche la voce vera ha il suo cartello nel prototipo, senza CTA.
+            tip: "richiesta" as const,
             label: "Richieste",
             icon: <CalendarPlus className="size-4 text-foreground" strokeWidth={1.7} />,
             onSelect: (slot) => {
