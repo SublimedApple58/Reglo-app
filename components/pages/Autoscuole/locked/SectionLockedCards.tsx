@@ -75,7 +75,7 @@ function Foot({
 const ghostClass =
   "rounded-[32px] border-[1.5px] border-[#e2e2e2] bg-white px-[26px] py-[13px] text-[15px] font-semibold text-foreground transition-colors hover:border-[#b5b5b5]";
 const ctaClass =
-  "rounded-[32px] bg-[#222222] px-[34px] py-3.5 text-[15px] font-bold text-white transition-colors hover:bg-[#3a3a3a]";
+  "rounded-[32px] bg-[#111111] px-[34px] py-3.5 text-[15px] font-bold text-white transition-colors hover:bg-[#2b2b2b]";
 
 /**
  * Allievi — l'unica card con un CTA che **non** porta al calendario: "Prova"

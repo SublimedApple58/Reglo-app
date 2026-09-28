@@ -10,8 +10,9 @@ import Image from "next/image";
  * locked/`). Non sono ricostruzioni: chi tocca questo file deve prendere i
  * contenuti da lì, non inventarli.
  *
- * Il CTA è nero `#222222` e non il navy del prototipo: quel prototipo è di
- * prima del passaggio della web app a bianco/nero (decisione di Tiziano).
+ * Il CTA è il nero standard dell'app `#111111` (`--primary`, hover
+ * `#2b2b2b`) e non il navy del prototipo: quel prototipo è di prima del
+ * passaggio della web app a bianco/nero (decisione di Tiziano).
  */
 
 export const ATTIVA_REGLO_URL = "https://cal.com/reglo/attivazione-reglo";

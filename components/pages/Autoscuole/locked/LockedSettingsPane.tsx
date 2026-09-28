@@ -38,18 +38,24 @@ import { LockedInstructors } from "./LockedInstructors";
  *
  * Numeri e hex letti nel sorgente del bundle, non a occhio — con
  * un'eccezione voluta: il **colore**. Il prototipo di Ruzzu è di prima del
- * passaggio della web app a bianco/nero e disegna i CTA in navy #1a1a2e;
- * noi usiamo il nero `#222222` della palette (`--foreground`), lo stesso
- * dei bottoni del dialogo Richiesta di guida qui accanto, così nella
- * stessa schermata non convivono due neri diversi. Deciso da Tiziano il
- * 28/09, dopo un primo giro in navy: il navy era un residuo del prototipo,
- * non una scelta. Geometrie e testi restano 1:1 col prototipo.
+ * passaggio della web app a bianco/nero e disegna i CTA in navy #1a1a2e:
+ * un residuo, non una scelta. Qui si usa il nero standard dell'app,
+ * `--primary` **#111111** con hover `--navy-800` **#2b2b2b** — gli stessi
+ * valori del `Button` di `components/ui/button.tsx`, e quindi gli stessi
+ * dei pulsanti del dialogo Richiesta di guida qui accanto. Deciso da
+ * Tiziano il 28/09/2026, dopo due giri (navy, poi #222222): un nero solo
+ * in tutta la vista.
+ *
+ * La regola, se si aggiunge roba: **superfici** (sfondi, bordi, fill,
+ * stroke, ring) = #111111; **testo** = #222222, che è `--foreground`, cioè
+ * il nero con cui l'app scrive ovunque. Geometrie e testi restano 1:1 col
+ * prototipo.
  *
  * Se un giorno la palette cambia, si cambia solo `NERO`.
  */
 
-/** Primario della palette (`--foreground`). Hover: #3a3a3a. */
-const NERO = "#222222";
+/** Primario dell'app (`--primary`). Hover: #2b2b2b (`--navy-800`). */
+const NERO = "#111111";
 
 /** Etichetta di campo: 11px/700, maiuscoletto spaziato. */
 export const FieldLabel = ({ children }: { children: React.ReactNode }) => (
@@ -113,7 +119,7 @@ export const PreviewChip = ({
       "flex items-center justify-center whitespace-nowrap rounded-[20px] border-[1.5px]",
       compact ? "px-[11px] py-1.5 text-[12px]" : "px-[13px] py-[7px] text-[12.5px]",
       checked
-        ? "border-[#222222] bg-[#f6f6f8] font-semibold text-[#222222]"
+        ? "border-[#111111] bg-[#f6f6f8] font-semibold text-[#222222]"
         : "border-[#e4e4ea] font-medium text-[#6a6a6a]",
     )}
   >
@@ -144,7 +150,7 @@ const BoxChoice = ({
     className={cn(
       "relative flex items-center justify-center gap-[5px] rounded-[10px] border-[1.5px] px-1.5 py-2.5 text-[13px]",
       checked
-        ? "border-[#222222] font-semibold text-[#222222]"
+        ? "border-[#111111] font-semibold text-[#222222]"
         : "border-[#e4e4ea] font-medium text-[#6a6a6a]",
       checked && (cursor ? "bg-white shadow-[0_4px_12px_rgba(0,0,0,0.12)]" : "bg-[#f6f6f8]"),
     )}
@@ -170,7 +176,7 @@ const Toggle = ({ on = true }: { on?: boolean }) => (
   <span
     className={cn(
       "relative inline-block h-6 w-11 shrink-0 rounded-[12px]",
-      on ? "bg-[#222222]" : "bg-[#e0e0e0]",
+      on ? "bg-[#111111]" : "bg-[#e0e0e0]",
     )}
   >
     <span
@@ -286,7 +292,7 @@ const SwapRow = ({
 /** Il tondo con le frecce che si incrociano, a cavallo fra le due righe. */
 const SwapBadge = () => (
   <div className="relative z-[2] -my-2 flex items-center justify-center">
-    <span className="inline-flex size-[34px] items-center justify-center rounded-full border-[3px] border-white bg-[#222222] shadow-[0_4px_12px_rgba(0,0,0,0.28)]">
+    <span className="inline-flex size-[34px] items-center justify-center rounded-full border-[3px] border-white bg-[#111111] shadow-[0_4px_12px_rgba(0,0,0,0.28)]">
       <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M4 7h11M12 4l3 3-3 3M16 13H5M8 10l-3 3 3 3" />
       </svg>
@@ -644,7 +650,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
     preview: (
       // Una riga sola: cerchio scuro, chi chiama, e a destra chi risponde.
       <div className="flex items-center gap-3 rounded-[14px] bg-[#f5f5f7] px-3.5 py-[13px]">
-        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[#222222]">
+        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-[#111111]">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
           </svg>
@@ -700,7 +706,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
         <SectionLabel>Registrazione</SectionLabel>
         {/* Player a pillola: tondo play, onda sonora, durata. */}
         <div className="flex items-center gap-3 rounded-[40px] bg-[#f5f5f7] py-[9px] pl-[9px] pr-4">
-          <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-[#222222]">
+          <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-[#111111]">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="#ffffff" aria-hidden>
               <path d="M3 1.5v9l7.5-4.5z" />
             </svg>
@@ -735,7 +741,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
             "Orari segreteria: 9:00–12:00 e 15:30–18:30",
           ].map((line) => (
             <div key={line} className="flex items-center gap-[9px] text-[12.5px] font-medium text-[#444444]">
-              <span className="size-1.5 shrink-0 rounded-full bg-[#222222]" />
+              <span className="size-1.5 shrink-0 rounded-full bg-[#111111]" />
               {line}
             </div>
           ))}
@@ -884,7 +890,7 @@ function CtaRow() {
         target="_blank"
         rel="noreferrer"
         style={{ backgroundColor: NERO }}
-        className="rounded-[32px] px-[22px] py-[11px] text-[14px] font-bold text-white transition-colors hover:!bg-[#3a3a3a]"
+        className="rounded-[32px] px-[22px] py-[11px] text-[14px] font-bold text-white transition-colors hover:!bg-[#2b2b2b]"
       >
         Attiva Reglo
       </a>
@@ -963,7 +969,7 @@ export function LockedSettingsPane({
               className={cn(
                 "-mb-px cursor-pointer select-none whitespace-nowrap border-b-[2.5px] px-px pb-3 text-[15px] transition-colors",
                 subTab === tab.key
-                  ? "border-[#222222] font-semibold text-foreground"
+                  ? "border-[#111111] font-semibold text-foreground"
                   : "border-transparent font-medium text-[#6a6a6a] hover:text-foreground",
               )}
             >

@@ -229,7 +229,7 @@ export function LockedMenuItem({
               {data.preview}
               <div className="my-3.5 h-px bg-[#f0f0f0]" />
               <p className="mb-1.5 flex items-center gap-2 text-[14px] font-bold text-foreground">
-                <Padlock size={16} stroke="#222222" />
+                <Padlock size={16} stroke="#111111" />
                 Funzione extra di Reglo
               </p>
               <p className="mb-3.5 text-[13px] leading-[1.45] text-muted-foreground">
@@ -240,8 +240,8 @@ export function LockedMenuItem({
                 target="_blank"
                 rel="noreferrer"
                 className={cn(
-                  "block rounded-[32px] bg-[#222222] py-3 text-center text-[14px] font-bold text-white",
-                  "transition-colors hover:bg-[#3a3a3a]",
+                  "block rounded-[32px] bg-[#111111] py-3 text-center text-[14px] font-bold text-white",
+                  "transition-colors hover:bg-[#2b2b2b]",
                 )}
               >
                 Attiva Reglo

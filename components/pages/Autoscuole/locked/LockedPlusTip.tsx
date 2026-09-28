@@ -34,7 +34,7 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { ATTIVA_REGLO_URL } from "./locked-features";
 
-const NERO = "#222222";
+const NERO = "#111111";
 const TIP_WIDTH = 300;
 /** Stacco fra voce e pannello: è anche il vuoto che il cursore attraversa. */
 const TIP_GAP = 10;
@@ -51,7 +51,7 @@ function Padlock() {
       height="13"
       viewBox="0 0 24 24"
       fill="none"
-      stroke="#222222"
+      stroke="#111111"
       strokeWidth={2.2}
       strokeLinecap="round"
       className="shrink-0"
@@ -77,7 +77,7 @@ const Durata = ({ children, on }: { children: React.ReactNode; on?: boolean }) =
   <span
     className={cn(
       "rounded-[16px] px-2.5 py-1.5 text-[10.5px] font-semibold",
-      on ? "bg-[#222222] text-white" : "bg-[#f2f2f2] text-[#6a6a6a]",
+      on ? "bg-[#111111] text-white" : "bg-[#f2f2f2] text-[#6a6a6a]",
     )}
   >
     {children}
@@ -86,7 +86,7 @@ const Durata = ({ children, on }: { children: React.ReactNode; on?: boolean }) =
 
 /** Interruttore acceso del prototipo: 30×17, pallino 13. */
 const Acceso = () => (
-  <span className="relative h-[17px] w-[30px] shrink-0 rounded-[9px] bg-[#222222]">
+  <span className="relative h-[17px] w-[30px] shrink-0 rounded-[9px] bg-[#111111]">
     <span className="absolute right-[2px] top-[2px] size-[13px] rounded-full bg-white" />
   </span>
 );
@@ -252,10 +252,10 @@ const AppuntamentoArt = () => (
           <div className="text-[10px] font-semibold text-[#333333]">Allievo 12</div>
           <div className="text-[8.5px] text-[#999999]">15:00-16:00</div>
         </div>
-        <div className="absolute left-[6px] right-[10px] top-[46px] h-[31px] rounded-[6px] border-[1.5px] border-dashed border-[#222222] bg-white p-[3px_8px] shadow-[0_4px_10px_rgba(0,0,0,0.12)]">
+        <div className="absolute left-[6px] right-[10px] top-[46px] h-[31px] rounded-[6px] border-[1.5px] border-dashed border-[#111111] bg-white p-[3px_8px] shadow-[0_4px_10px_rgba(0,0,0,0.12)]">
           <div className="flex items-center gap-1">
             <span className="text-[10px] font-bold text-[#222222]">Allievo 27</span>
-            <span className="rounded-[6px] bg-[#222222] px-[5px] py-px text-[8px] font-bold text-white">
+            <span className="rounded-[6px] bg-[#111111] px-[5px] py-px text-[8px] font-bold text-white">
               NUOVA
             </span>
           </div>
@@ -558,7 +558,7 @@ export function LockedPlusItem({
                   target="_blank"
                   rel="noreferrer"
                   style={{ backgroundColor: NERO }}
-                  className="rounded-[32px] px-4 py-2 text-[12px] font-bold text-white transition-colors hover:!bg-[#3a3a3a]"
+                  className="rounded-[32px] px-4 py-2 text-[12px] font-bold text-white transition-colors hover:!bg-[#2b2b2b]"
                 >
                   Attiva Reglo
                 </a>

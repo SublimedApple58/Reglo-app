@@ -531,7 +531,7 @@ function GuideRequestDialog({
             type="button"
             disabled={!canSend}
             onClick={() => void send()}
-            className="cursor-pointer rounded-[32px] bg-[#222222] px-[22px] py-[11px] text-[14px] font-bold text-white transition-opacity hover:opacity-90 disabled:cursor-default disabled:bg-[#ededed] disabled:text-[#a5a5a5]"
+            className="cursor-pointer rounded-[32px] bg-[#111111] px-[22px] py-[11px] text-[14px] font-bold text-white transition-colors hover:bg-[#2b2b2b] disabled:cursor-default disabled:bg-[#ededed] disabled:text-[#a5a5a5]"
           >
             {sending ? <LoadingDots /> : "Invia richiesta"}
           </button>
@@ -563,7 +563,7 @@ function GuideRequestDialog({
             className={cn(
               "cursor-pointer whitespace-nowrap rounded-full px-2 py-2 text-[13px] transition-colors",
               value === duration
-                ? "bg-[#222222] font-semibold text-white"
+                ? "bg-[#111111] font-semibold text-white"
                 : "border border-[#dddddd] font-medium text-foreground hover:bg-[#f7f7f7]",
             )}
           >
@@ -616,7 +616,7 @@ function GuideRequestDialog({
                 newStudent.phone.trim().length < 5
               }
               onClick={() => void submitStudent()}
-              className="cursor-pointer rounded-full bg-[#222222] px-4 py-2 text-[13px] font-bold text-white disabled:opacity-40"
+              className="cursor-pointer rounded-full bg-[#111111] px-4 py-2 text-[13px] font-bold text-white disabled:opacity-40"
             >
               {savingStudent ? <LoadingDots /> : "Aggiungi"}
             </button>
@@ -753,7 +753,7 @@ function ProposalDialog({
           type="button"
           disabled={busy !== null}
           onClick={() => void respond(true)}
-          className="cursor-pointer rounded-[32px] bg-[#222222] px-[22px] py-[11px] text-[14px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="cursor-pointer rounded-[32px] bg-[#111111] px-[22px] py-[11px] text-[14px] font-bold text-white transition-colors hover:bg-[#2b2b2b] disabled:opacity-50"
         >
           {busy === "accept" ? <LoadingDots /> : "Accetta l'orario"}
         </button>
@@ -819,7 +819,7 @@ function CancelRequestDialog({
           type="button"
           disabled={busy}
           onClick={() => void cancel()}
-          className="cursor-pointer rounded-[32px] bg-[#222222] px-[22px] py-[11px] text-[14px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="cursor-pointer rounded-[32px] bg-[#111111] px-[22px] py-[11px] text-[14px] font-bold text-white transition-colors hover:bg-[#2b2b2b] disabled:opacity-50"
         >
           {busy ? <LoadingDots /> : "Annulla richiesta"}
         </button>

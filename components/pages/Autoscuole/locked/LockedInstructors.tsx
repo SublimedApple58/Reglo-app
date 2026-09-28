@@ -28,7 +28,7 @@ import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { ATTIVA_REGLO_URL, VIDEO_ISTRUTTORI_URL } from "./locked-features";
 
-const NERO = "#222222";
+const NERO = "#111111";
 
 /* ── Dati finti, gli stessi del prototipo ───────────────────────────── */
 
@@ -62,7 +62,7 @@ const DayChip = ({ label, on }: { label: string; on?: boolean }) => (
     className={cn(
       "flex items-center justify-center rounded-[10px] border-[1.5px] py-[9px] text-[12.5px]",
       on
-        ? "border-[#222222] bg-[#f6f6f8] font-semibold text-[#222222]"
+        ? "border-[#111111] bg-[#f6f6f8] font-semibold text-[#222222]"
         : "border-[#e4e4ea] font-medium text-[#6a6a6a]",
     )}
   >
@@ -110,7 +110,7 @@ const CtaRow = () => (
       target="_blank"
       rel="noreferrer"
       style={{ backgroundColor: NERO }}
-      className="rounded-[32px] px-[22px] py-[11px] text-[14px] font-bold text-white transition-colors hover:!bg-[#3a3a3a]"
+      className="rounded-[32px] px-[22px] py-[11px] text-[14px] font-bold text-white transition-colors hover:!bg-[#2b2b2b]"
     >
       Attiva Reglo
     </a>
@@ -291,7 +291,7 @@ const AutonomaCard = () => (
       target="_blank"
       rel="noreferrer"
       aria-label="Guarda il video: come funziona la modalità autonoma per gli istruttori"
-      className="group relative flex aspect-[16/9] items-center justify-center overflow-hidden rounded-[12px] bg-[#ececef] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#222222] focus-visible:ring-offset-2"
+      className="group relative flex aspect-[16/9] items-center justify-center overflow-hidden rounded-[12px] bg-[#ececef] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#111111] focus-visible:ring-offset-2"
     >
       {/*
         Un fotogramma vero del video, non un rettangolo grigio: si vede subito
@@ -546,7 +546,7 @@ const BACKDROPS: Record<TabKey, React.ReactNode> = {
               className={cn(
                 "rounded-[20px] border-[1.5px] px-[13px] py-[7px] text-[12.5px]",
                 i % 2 === 0
-                  ? "border-[#222222] bg-[#f6f6f8] font-semibold text-[#222222]"
+                  ? "border-[#111111] bg-[#f6f6f8] font-semibold text-[#222222]"
                   : "border-[#e4e4ea] font-medium text-[#6a6a6a]",
               )}
             >
@@ -631,7 +631,7 @@ function InstructorDetail({
             className={cn(
               "-mb-px cursor-pointer select-none whitespace-nowrap border-b-[2.5px] px-px pb-3 text-[15px] transition-colors",
               tab === item.key
-                ? "border-[#222222] font-semibold text-[#222222]"
+                ? "border-[#111111] font-semibold text-[#222222]"
                 : "border-transparent font-medium text-[#6a6a6a] hover:text-foreground",
             )}
           >

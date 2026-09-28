@@ -376,16 +376,27 @@ Reglo".** Nel prototipo quella stringa compare **solo** nei popup
 dell'hamburger. Vale anche per le sezioni che il prototipo non copre: lì manca
 l'anteprima, non la forma.
 
-⚠️ **Il primario dei CTA è il nero `#222222`** della palette (hover `#3a3a3a`),
-**non** il navy `#1a1a2e` del prototipo. Il prototipo di Ruzzu usa il navy in 34
-occorrenze su 35, ma è di prima del passaggio della web app a bianco/nero: è un
-residuo, non una scelta. Un primo giro l'aveva riprodotto fedelmente; il
-**28/09/2026 Tiziano ha deciso il nero**, perché nella stessa schermata i
-pulsanti funzionali (il dialog "Richiesta di guida") sono già `#222222` e due
-neri diversi si vedono. La costante `NERO` in `LockedSettingsPane.tsx`,
+⚠️ **Il colore è l'unica deroga al prototipo** — geometrie, testi e immagini
+restano 1:1. Il prototipo di Ruzzu disegna i CTA in navy `#1a1a2e` (34
+occorrenze su 35), ma è di prima del passaggio della web app a bianco/nero: è
+un residuo, non una scelta.
+
+La regola in vigore dal **28/09/2026** (decisione di Tiziano, dopo due giri —
+prima il navy riprodotto fedelmente, poi `#222222`) è **un nero solo in tutta la
+vista**, quello standard dell'app:
+
+| Cosa | Valore | Token |
+|---|---|---|
+| Superfici: sfondi, bordi, `fill`, `stroke`, `ring` | `#111111` | `--primary` / `--navy-900` |
+| Hover delle superfici | `#2b2b2b` | `--navy-800` |
+| Testo | `#222222` | `--foreground` |
+
+Sono gli stessi valori del `Button` in `components/ui/button.tsx`, quindi i
+pulsanti del dialogo **"Richiesta di guida"** (`AffiliateAgendaPage`) e i CTA
+"Attiva Reglo" dei cartelli bloccati ora coincidono: prima erano due neri
+diversi affiancati. La costante `NERO` in `LockedSettingsPane.tsx`,
 `LockedToolbarTip.tsx`, `LockedPlusTip.tsx` e `LockedInstructors.tsx` è il punto
-da cui cambiarla. **Il colore è l'unica deroga al prototipo**: geometrie, testi
-e immagini restano 1:1.
+da cui cambiare il primario.
 
 ⚠️ **I pannelli portano `line-height: normal`.** L'app eredita 1.5 sul
 contenitore; il prototipo non impone interlinea. Senza quella riga i cartelli
