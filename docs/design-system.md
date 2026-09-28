@@ -149,6 +149,12 @@ Restano diversi **di proposito**:
 | Checkbox | `rounded-[4px]` | convenzione di piattaforma |
 | Pannelli dropdown, popover, calendario | `rounded-xl` (18px) | superfici, non controlli |
 | Cartelli e pannelli delle **Impostazioni** | 9 / 10 / 12px | linguaggio visivo proprio, lasciato intatto per decisione di Tiziano |
+
+> Le Impostazioni includono anche **Prezzi consorzio** (`ConsorzioPrezziPane`,
+> montato da `BookingsTab` sotto "Prenotazioni e allievi"): i suoi campi
+> restano a 12px. Un giro li aveva portati a 14 e sono stati ripristinati il
+> 28/09/2026. `ProposeSlotDialog` invece **non** è Impostazioni — si apre
+> dall'agenda — e segue la regola dei campi.
 | `9999px` | pill | `rounded-pill` | Badge, chip |
 | `35px` | card primary | `rounded-card-primary` | Card principali grandi |
 
