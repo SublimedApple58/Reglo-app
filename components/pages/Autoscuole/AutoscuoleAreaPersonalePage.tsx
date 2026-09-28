@@ -42,7 +42,7 @@ const PANES: Array<{ key: PaneKey; label: string; icon: React.ReactNode }> = [
 ];
 
 const RESET_INPUT_CLASS =
-  "h-11 w-full rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] hover:border-[#929292] focus:border-[#222222]";
+  "h-11 w-full rounded-lg border-[1.5px] border-[#dddddd] bg-white px-3.5 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] hover:border-[#929292] focus:border-[#222222]";
 
 /** Pane unica "Il tuo profilo": foto personale (cerchio 132px con badge
  * Modifica, stesso pattern della foto autoscuola) + sezione Credenziali:

@@ -451,7 +451,7 @@ export function AutoscuoleAssistenzaPage() {
           )}
           {/* Box messaggio dal proto (aiBoxStyle): bordo 2px, radius 16, min-h 92, freccia in basso a dx */}
           <div className="mx-auto w-full max-w-[860px] shrink-0 px-6 pb-5 pt-3.5">
-            <div className="relative min-h-[92px] rounded-[16px] border-2 border-[#dddddd] bg-white px-[17px] pb-[15px] pt-4 transition-colors focus-within:border-[#222222]">
+            <div className="relative min-h-[92px] rounded-lg border-2 border-[#dddddd] bg-white px-[17px] pb-[15px] pt-4 transition-colors focus-within:border-[#222222]">
               <textarea
                 ref={inputRef}
                 value={input}

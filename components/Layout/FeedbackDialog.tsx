@@ -172,7 +172,7 @@ export function FeedbackDialog({
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder={RATING_PLACEHOLDERS[rating]}
-                className="min-h-[100px] w-full resize-none rounded-[12px] border border-[#e5e5e5] bg-[#f7f7f7] px-4 py-3 text-[15px] font-medium leading-normal text-foreground outline-none transition focus:border-navy-900 focus:bg-white"
+                className="min-h-[100px] w-full resize-none rounded-lg border border-[#e5e5e5] bg-[#f7f7f7] px-4 py-3 text-[15px] font-medium leading-normal text-foreground outline-none transition focus:border-navy-900 focus:bg-white"
               />
             </div>
             <button

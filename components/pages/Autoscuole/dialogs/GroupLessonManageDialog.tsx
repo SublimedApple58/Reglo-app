@@ -581,7 +581,7 @@ export function GroupLessonManageDialog({
                   <DatePickerInput
                     value={startLocal.slice(0, 10)}
                     onChange={(d) => setStartLocal(`${d}T${startLocal.slice(11, 16) || "09:00"}`)}
-                    className="h-auto rounded-sm border-[1.5px] border-[#dddddd] px-3.5 py-[11px]"
+                    className="h-auto rounded-lg border-[1.5px] border-[#dddddd] px-3.5 py-[11px]"
                   />
                 </div>
                 <div>
@@ -865,7 +865,7 @@ export function GroupLessonManageDialog({
                           rows={3}
                           maxLength={2000}
                           placeholder="Nota per questo allievo (la vedrà nella sua app)"
-                          className="w-full resize-y rounded-sm border-[1.5px] border-[#dddddd] px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222]"
+                          className="w-full resize-y rounded-lg border-[1.5px] border-[#dddddd] px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222]"
                         />
                         <div className="mt-1.5 flex items-center justify-end gap-3">
                           <button

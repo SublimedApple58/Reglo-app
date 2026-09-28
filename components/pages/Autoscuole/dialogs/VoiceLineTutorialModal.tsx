@@ -332,7 +332,7 @@ export function VoiceLineTutorialModal({
                     value={handoff}
                     onChange={(e) => setHandoff(e.target.value)}
                     placeholder="+39..."
-                    className="min-w-0 flex-1 rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 py-2.5 text-sm font-semibold text-[#222222] outline-none transition focus:border-navy-900"
+                    className="min-w-0 flex-1 rounded-lg border-[1.5px] border-[#dddddd] bg-white px-3.5 py-2.5 text-sm font-semibold text-[#222222] outline-none transition focus:border-navy-900"
                   />
                   <button
                     type="button"

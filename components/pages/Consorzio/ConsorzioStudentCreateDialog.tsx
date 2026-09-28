@@ -38,7 +38,7 @@ import { useAtomValue } from "jotai";
  */
 
 const FIELD_CLASS =
-  "w-full rounded-[12px] border-[1.5px] border-[#ededed] bg-[#f7f8fa] px-[15px] py-[13px] text-[15px] font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222] focus:bg-white";
+  "w-full rounded-lg border-[1.5px] border-[#ededed] bg-[#f7f8fa] px-[15px] py-[13px] text-[15px] font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222] focus:bg-white";
 
 const SELECT_TRIGGER_CLASS =
   "h-auto cursor-pointer rounded-[12px] border-[1.5px] border-[#ededed] bg-[#f7f8fa] px-[15px] py-[13px] text-[15px] font-medium data-[state=open]:border-[#222222] data-[state=open]:bg-white";

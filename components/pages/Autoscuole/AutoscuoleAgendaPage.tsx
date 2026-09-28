@@ -5824,7 +5824,7 @@ export function AutoscuoleAgendaPage({
                       maxLength={2000}
                       disabled={examPanelPending}
                       placeholder="Es: Esame pratico patente B, sede Motorizzazione…"
-                      className="w-full resize-y rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222] disabled:opacity-60"
+                      className="w-full resize-y rounded-lg border-[1.5px] border-[#dddddd] px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222] disabled:opacity-60"
                     />
                   </div>
                 </div>

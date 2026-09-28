@@ -156,7 +156,7 @@ function StatusPill({ status }: { status: "active" | "invited" }) {
 }
 
 const panelInputClass =
-  "w-full rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition focus:border-[#222222]";
+  "w-full rounded-lg border-[1.5px] border-[#dddddd] bg-white px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition focus:border-[#222222]";
 
 // ─── Main component ──────────────────────────────────────────────────────────
 

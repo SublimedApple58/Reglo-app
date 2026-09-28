@@ -136,7 +136,7 @@ export function SchoolAccessCard({
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     autoFocus
-                    className="w-[260px] rounded-[8px] border border-[#dddddd] px-2.5 py-1.5 text-right text-[14px] font-semibold text-[#222222] outline-none focus:border-[#222222]"
+                    className="w-[260px] rounded-lg border border-[#dddddd] px-2.5 py-1.5 text-right text-[14px] font-semibold text-[#222222] outline-none focus:border-[#222222]"
                   />
                 ) : (
                   <span>
