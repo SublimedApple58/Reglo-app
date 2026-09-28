@@ -30,6 +30,18 @@ const prismaGenerateExtension = {
 export default defineConfig({
   project: process.env.TRIGGER_PROJECT_REF ?? "",
   dirs: ["trigger"],
+  /**
+   * Node 22 (LTS). Il progetto girava sul default dell'SDK, che risolveva a
+   * Node 21.7.3: runtime deprecato da Trigger.dev, che dal 5 ottobre rifiuta i
+   * deploy. Dal 26/09 sera le code erano ferme in "Queued — No machine yet",
+   * cioe' nessuna macchina veniva assegnata: il runtime non piu' servito e'
+   * la causa piu' probabile.
+   *
+   * `node-24` non e' selezionabile con @trigger.dev/sdk 4.4.0: l'enum del core
+   * e' ["node", "node-22", "bun"]. Per averlo servirebbe alzare l'SDK, cosa da
+   * non fare mentre la produzione e' ferma.
+   */
+  runtime: "node-22",
   tsconfig: "./tsconfig.json",
   build: {
     // Keep Prisma external so the engine binary is shipped alongside node_modules.
