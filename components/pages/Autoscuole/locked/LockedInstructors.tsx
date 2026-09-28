@@ -33,10 +33,10 @@ const NAVY = "#1a1a2e";
 /* ── Dati finti, gli stessi del prototipo ───────────────────────────── */
 
 const INSTRUCTORS = [
-  { key: "i1", name: "Istruttore 1", meta: "17:00–20:00 · Lun, Mar, Mer, Gio", color: "#e1348b" },
-  { key: "i2", name: "Istruttore 2", meta: "07:00–17:00 · Lun, Mar, Mer, Gio, Ven, Sab", color: "#374151" },
-  { key: "i3", name: "Istruttore 3", meta: "Nessuna disponibilità settimanale", color: "#16a34a" },
-  { key: "i4", name: "Istruttore 4", meta: "11:00–13:00, 15:00–17:00 · Lun–Ven", color: "#a8842c" },
+  { key: "i1", name: "Istruttore 1", meta: "17:00–20:00 · Lun, Mar, Mer, Gio", color: "#ec4899" },
+  { key: "i2", name: "Istruttore 2", meta: "07:00–17:00 · Lun, Mar, Mer, Gio, Ven, Sab", color: "#64748b" },
+  { key: "i3", name: "Istruttore 3", meta: "Nessuna disponibilità settimanale", color: "#10b981" },
+  { key: "i4", name: "Istruttore 4", meta: "11:00–13:00, 15:00–17:00 · Lun–Ven", color: "#eab308" },
 ];
 
 type TabKey = "disp" | "malattia" | "ferie" | "autonoma";

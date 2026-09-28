@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 import { ATTIVA_REGLO_URL } from "./locked-features";
 
 const NAVY = "#1a1a2e";
-const TIP_WIDTH = 288;
+const TIP_WIDTH = 300;
 /** Stacco fra voce e pannello: è anche il vuoto che il cursore attraversa. */
 const TIP_GAP = 12;
 const CLOSE_DELAY_MS = 220;
@@ -383,7 +383,7 @@ export function LockedPlusItem({
               <div className="mb-3 mt-3.5 h-px bg-[#f0f0f0]" />
               <div className="flex items-center gap-2">
                 <Padlock />
-                <span className="flex-1 text-[12px] font-bold text-[#222222]">
+                <span className="flex-1 whitespace-nowrap text-[12px] font-bold text-[#222222]">
                   Funzione extra di Reglo
                 </span>
                 <a
