@@ -449,7 +449,9 @@ export function AutoscuoleAssistenzaPage() {
               ))}
             </div>
           )}
-          {/* Box messaggio dal proto (aiBoxStyle): bordo 2px, radius 16, min-h 92, freccia in basso a dx */}
+          {/* Box messaggio dal proto (aiBoxStyle): bordo 2px, min-h 92, freccia in basso
+              a dx. Il radius era 16 nel proto: dal 28/09/2026 segue la regola dei
+              campi (rounded-lg, 14px) — vedi docs/design-system.md. */}
           <div className="mx-auto w-full max-w-[860px] shrink-0 px-6 pb-5 pt-3.5">
             <div className="relative min-h-[92px] rounded-lg border-2 border-[#dddddd] bg-white px-[17px] pb-[15px] pt-4 transition-colors focus-within:border-[#222222]">
               <textarea
