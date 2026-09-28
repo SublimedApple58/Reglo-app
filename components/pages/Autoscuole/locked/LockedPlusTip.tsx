@@ -18,9 +18,10 @@
  * ombra `0 14px 40px`, titolo 14.5/700, testo 12.5/500 interlinea 1.5, e si
  * apre a sinistra con 10px di stacco (`right: 100%; padding-right: 10px`).
  *
- * ⚠️ Fanno eccezione **Appuntamento** e **Lezione teorica**: di quei due non
- * ho gli screenshot del prototipo, i testi sono ancora scritti da noi. Chi li
- * trova nel prototipo li **sostituisca**.
+ * ⚠️ Fa eccezione **Lezione teorica**: il menu bloccato del prototipo ha
+ * cinque voci e quella non c'è: esiste solo nell'agenda vera, quindi il suo
+ * testo è scritto da noi. Se il prototipo un giorno la prevedesse, va
+ * **sostituito**.
  *
  * Il guscio è identico a `LockedToolbarTip` di proposito: due pannelli diversi
  * nella stessa agenda si noterebbero.
@@ -229,25 +230,49 @@ const FestivoArt = () => (
   </Frame>
 );
 
-/** Appuntamento e Lezione teorica: scritti da noi, vedi l'avviso in testa. */
-const Slot = ({ color, label, w = "100%" }: { color: string; label: string; w?: string }) => (
-  <div
-    style={{ background: color, width: w }}
-    className="flex h-[24px] items-center rounded-[7px] px-2 text-[10px] font-semibold text-white"
-  >
-    {label}
+/**
+ * Appuntamento: la mini-agenda del prototipo — colonna delle ore, tre righe,
+ * una guida già in agenda e quella che stai creando, tratteggiata e "NUOVA".
+ */
+const AppuntamentoArt = () => (
+  <div className="mt-3 overflow-hidden rounded-[12px] border border-[#f0f0f0] p-[12px_0_12px_8px]">
+    <div className="flex gap-2">
+      <div className="flex w-[34px] shrink-0 flex-col gap-[26px] pt-0.5 text-right">
+        {["15:00", "16:00", "17:00"].map((h) => (
+          <span key={h} className="text-[9.5px] font-medium text-[#b0b0b0]">
+            {h}
+          </span>
+        ))}
+      </div>
+      <div className="relative h-[104px] flex-1 border-l border-[#f0f0f0]">
+        {[7, 44, 81].map((t) => (
+          <span key={t} style={{ top: t }} className="absolute inset-x-0 border-t border-[#f3f3f3]" />
+        ))}
+        <div className="absolute left-[6px] right-[10px] top-[9px] h-[31px] rounded-[6px] bg-[#FCEFC7] p-[4px_8px]">
+          <div className="text-[10px] font-semibold text-[#333333]">Allievo 12</div>
+          <div className="text-[8.5px] text-[#999999]">15:00-16:00</div>
+        </div>
+        <div className="absolute left-[6px] right-[10px] top-[46px] h-[31px] rounded-[6px] border-[1.5px] border-dashed border-[#1a1a2e] bg-white p-[3px_8px] shadow-[0_4px_10px_rgba(26,26,46,0.12)]">
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] font-bold text-[#1a1a2e]">Allievo 27</span>
+            <span className="rounded-[6px] bg-[#1a1a2e] px-[5px] py-px text-[8px] font-bold text-white">
+              NUOVA
+            </span>
+          </div>
+          <div className="text-[8.5px] text-[#888888]">16:00-17:00 · Istruttore 4</div>
+        </div>
+      </div>
+    </div>
   </div>
 );
 
-const AppuntamentoArt = () => (
-  <Frame>
-    <div className="flex flex-col gap-1.5">
-      <Slot color="#5b8def" label="09:00 · Marta" />
-      <Slot color="#7bc47f" label="10:30 · Luca" w="82%" />
-    </div>
-  </Frame>
-);
-
+/**
+ * Lezione teorica: **l'unica scritta da noi.** Non è una voce del prototipo —
+ * il suo menu bloccato ne ha cinque, questa no — ma esiste nell'agenda vera
+ * (`AutoscuoleAgendaPage`, crea un blocco `kind: "theory"`) e quindi compare
+ * nel menu finto dello scope Autoscuola. Se il prototipo un giorno la
+ * prevedesse, questo testo va **sostituito**.
+ */
 const TeoriaArt = () => (
   <Frame>
     <div className="flex items-center gap-2.5">
@@ -280,9 +305,9 @@ type PlusTipSpec = { title: string; description: string; illustration: React.Rea
 
 export const PLUS_TIPS: Record<PlusTipKey, PlusTipSpec> = {
   appuntamento: {
-    title: "Nuovo appuntamento",
+    title: "Appuntamento",
     description:
-      "Metti una guida in agenda scegliendo allievo, istruttore e mezzo: l'allievo la vede subito in app.",
+      "Inserisci guide e appuntamenti a mano direttamente in agenda: allievo, istruttore, veicolo e orario in pochi tap.",
     illustration: <AppuntamentoArt />,
   },
   esame: {
