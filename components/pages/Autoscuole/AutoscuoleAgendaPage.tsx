@@ -139,7 +139,7 @@ import {
 import { NeverAccessedNudge } from "@/components/pages/Autoscuole/NeverAccessedNudge";
 import { UserPhotoCircle } from "@/components/ui/user-photo";
 
-type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; neverAccessed?: boolean; studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO"; examReady?: boolean; examReadyAt?: string | null; licenseNumber?: string | null; defaultLocationId?: string | null; consorzioSchoolId?: string | null; consorzioSchoolName?: string | null };
+type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; lastVehicleId?: string | null; neverAccessed?: boolean; studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO"; examReady?: boolean; examReadyAt?: string | null; licenseNumber?: string | null; defaultLocationId?: string | null; consorzioSchoolId?: string | null; consorzioSchoolName?: string | null };
 type ResourceOption = {
   id: string;
   name: string;
@@ -293,6 +293,9 @@ export type AgendaBootstrapPayload = {
     transmission?: string | null;
     assignedInstructorId?: string | null;
     lastInstructorId?: string | null;
+    // Ultimo veicolo con cui l'allievo ha guidato (REG-586): precompila il
+    // campo Veicolo nel form di creazione guida.
+    lastVehicleId?: string | null;
     // True quando l'allievo non ha mai fatto accesso in app (account creato dal
     // titolare, mai usato → non riceve i promemoria). Guida il badge megafono.
     neverAccessed?: boolean;
@@ -302,6 +305,8 @@ export type AgendaBootstrapPayload = {
   }>;
   instructors: ResourceOption[];
   vehicles: ResourceOption[];
+  /** REG-586: ultimo veicolo usato da ciascun istruttore. */
+  lastVehicleByInstructor?: Array<{ instructorId: string; vehicleId: string }>;
   vehiclesEnabled?: boolean;
   followCarRules?: Record<string, { enabled: boolean }>;
   groupLessonsEnabled?: boolean;
@@ -314,6 +319,59 @@ export type AgendaBootstrapPayload = {
     count: number;
     cache?: boolean;
   };
+};
+
+/**
+ * I veicoli che il picker "Veicolo" del form Nuova guida offre davvero: quelli
+ * della modalità scelta (auto o moto) che servono la patente dell'allievo.
+ * Usato sia per disegnare le opzioni sia per precompilare il campo, così le
+ * due cose non possono divergere.
+ */
+const vehicleOfferedInCreate = (
+  vehicle: ResourceOption,
+  student: StudentOption | null,
+  bookingMode: "auto" | "moto",
+) =>
+  (bookingMode === "moto"
+    ? isMotoLicenseCategory(vehicle.licenseCategory)
+    : !isMotoLicenseCategory(vehicle.licenseCategory)) &&
+  (student ? vehicleServesLicense(vehicle, student) : true);
+
+/**
+ * REG-586 — veicolo precompilato nel form "Nuova guida", stessa idea del mobile
+ * (`BookingForm.presetVehiclesForStudent`). Tra i veicoli che il picker offre
+ * davvero si sceglie, in ordine:
+ *   1. un veicolo ESCLUSIVO dell'istruttore: a quello il backend lo obbliga
+ *      comunque (`lib/autoscuole/vehicle-resolution.ts`), suggerirgliene un
+ *      altro sarebbe fuorviante;
+ *   2. l'ultimo veicolo usato da quell'istruttore;
+ *   3. l'ultimo veicolo usato dall'allievo;
+ *   4. l'unico candidato rimasto, se ne resta uno solo.
+ * Se i candidati sono molti e non c'è storico utile il campo resta vuoto:
+ * meglio farlo scegliere che indovinare.
+ */
+const resolveCreateVehicleId = (args: {
+  vehicles: ResourceOption[];
+  student: StudentOption | null;
+  instructorId: string;
+  bookingMode: "auto" | "moto";
+  lastVehicleByInstructor: Record<string, string>;
+}): string => {
+  const candidates = args.vehicles.filter((vehicle) =>
+    vehicleOfferedInCreate(vehicle, args.student, args.bookingMode),
+  );
+  if (!candidates.length) return "";
+  const exclusive = args.instructorId
+    ? candidates.filter((vehicle) => vehicle.assignedInstructorId === args.instructorId)
+    : [];
+  const pool = exclusive.length ? exclusive : candidates;
+  const pick = (id: string | null | undefined) =>
+    id ? pool.find((vehicle) => vehicle.id === id)?.id : undefined;
+  return (
+    pick(args.instructorId ? args.lastVehicleByInstructor[args.instructorId] : null) ??
+    pick(args.student?.lastVehicleId) ??
+    (exclusive.length ? exclusive[0].id : pool.length === 1 ? pool[0].id : "")
+  );
 };
 
 const DAY_START_HOUR = 0;
@@ -911,6 +969,10 @@ export function AutoscuoleAgendaPage({
       );
   }, [agendaInstructorOrder]);
   const [vehicles, setVehicles] = React.useState<ResourceOption[]>([]);
+  /** REG-586: istruttore → ultimo veicolo che ha usato (dal bootstrap). */
+  const [lastVehicleByInstructor, setLastVehicleByInstructor] = React.useState<
+    Record<string, string>
+  >({});
   const [vehiclesEnabled, setVehiclesEnabled] = React.useState(true);
   const [followCarRules, setFollowCarRules] = React.useState<
     Record<string, { enabled: boolean }>
@@ -1589,6 +1651,13 @@ export function AutoscuoleAgendaPage({
         setStudents(payload.data.students ?? []);
         setInstructors(payload.data.instructors ?? []);
         setVehicles(payload.data.vehicles ?? []);
+        setLastVehicleByInstructor(
+          Object.fromEntries(
+            (payload.data.lastVehicleByInstructor ?? []).map(
+              (row: { instructorId: string; vehicleId: string }) => [row.instructorId, row.vehicleId],
+            ),
+          ),
+        );
         setVehiclesEnabled(payload.data.vehiclesEnabled !== false);
         setFollowCarRules(
           (payload.data.followCarRules as Record<string, { enabled: boolean }>) ?? {},
@@ -2287,6 +2356,51 @@ export function AutoscuoleAgendaPage({
     },
     [agendaLocations, students, vehicles],
   );
+  // REG-586: precompila il Veicolo quando il campo è vuoto o quando la scelta
+  // corrente non è più tra quelle offerte (cambio allievo, istruttore o
+  // modalità auto/moto). Non tocca mai una scelta ancora valida. Vive qui, e
+  // non nei singoli handler, perché il form si apre da più strade (bottone,
+  // click su uno slot, drag del ghost) e devono comportarsi tutte allo stesso
+  // modo.
+  React.useEffect(() => {
+    if (!createOpen || !vehiclesEnabled) return;
+    setForm((prev) => {
+      const student = students.find((s) => s.id === prev.studentId) ?? null;
+      const current = prev.vehicleId
+        ? vehicles.find((v) => v.id === prev.vehicleId) ?? null
+        : null;
+      if (current && vehicleOfferedInCreate(current, student, prev.bookingMode)) return prev;
+      const nextVehicleId = resolveCreateVehicleId({
+        vehicles,
+        student,
+        instructorId: prev.instructorId,
+        bookingMode: prev.bookingMode,
+        lastVehicleByInstructor,
+      });
+      if (nextVehicleId === prev.vehicleId) return prev;
+      return {
+        ...prev,
+        vehicleId: nextVehicleId,
+        // Il veicolo determina la patente della guida e quindi il luogo
+        // (REG-409), esattamente come quando lo si sceglie a mano.
+        locationId: createLocationTouchedRef.current
+          ? prev.locationId
+          : prefillLocationId({ studentId: prev.studentId, vehicleId: nextVehicleId }),
+      };
+    });
+  }, [
+    createOpen,
+    vehiclesEnabled,
+    form.studentId,
+    form.instructorId,
+    form.bookingMode,
+    form.vehicleId,
+    vehicles,
+    students,
+    lastVehicleByInstructor,
+    prefillLocationId,
+  ]);
+
   const advanceCreateFocus = (patch: { studentId?: string; instructorId?: string; vehicleId?: string }) => {
     const next = {
       studentId: form.studentId,
@@ -2294,11 +2408,23 @@ export function AutoscuoleAgendaPage({
       vehicleId: form.vehicleId,
       ...patch,
     };
+    // Il veicolo può essere riempito dal prefill (REG-586) subito dopo questo
+    // giro di render: in quel caso non ha senso fermare il focus lì.
+    const vehicleWillBePrefilled =
+      vehiclesEnabled &&
+      !next.vehicleId &&
+      !!resolveCreateVehicleId({
+        vehicles,
+        student: students.find((s) => s.id === next.studentId) ?? null,
+        instructorId: next.instructorId,
+        bookingMode: form.bookingMode,
+        lastVehicleByInstructor,
+      });
     const target = !next.studentId
       ? createStudentRef.current
       : !next.instructorId
         ? createInstructorRef.current
-        : vehiclesEnabled && !next.vehicleId
+        : vehiclesEnabled && !next.vehicleId && !vehicleWillBePrefilled
           ? createVehicleRef.current
           : null;
     if (!target) return;
@@ -5202,14 +5328,12 @@ export function AutoscuoleAgendaPage({
                   <SelectContent>
                     {vehicles
                       .filter((vehicle) =>
-                        form.bookingMode === "moto"
-                          ? isMotoLicenseCategory(vehicle.licenseCategory)
-                          : !isMotoLicenseCategory(vehicle.licenseCategory),
+                        vehicleOfferedInCreate(
+                          vehicle,
+                          students.find((s) => s.id === form.studentId) ?? null,
+                          form.bookingMode,
+                        ),
                       )
-                      .filter((vehicle) => {
-                        const st = students.find((s) => s.id === form.studentId);
-                        return st ? vehicleServesLicense(vehicle, st) : true;
-                      })
                       .map((vehicle) => {
                         const assignedTo = vehicle.assignedInstructorId
                           ? instructors.find((i) => i.id === vehicle.assignedInstructorId)?.name

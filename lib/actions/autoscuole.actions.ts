@@ -1090,7 +1090,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           ? { ...baseWhere, instructorId: input.instructorId }
           : baseWhere;
 
-    const [appointments, students, instructors, vehicles, instructorBlocks, holidays, agendaLimits, lastInstructorRows] = await Promise.all([
+    const [appointments, students, instructors, vehicles, instructorBlocks, holidays, agendaLimits, lastInstructorRows, lastVehicleByStudentRows, lastVehicleByInstructorRows] = await Promise.all([
       prisma.autoscuolaAppointment.findMany({
         where: appointmentsWhere,
         select: {
@@ -1232,6 +1232,32 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           AND "status" <> 'cancelled'
           AND "startsAt" <= NOW()
         ORDER BY "studentId", "startsAt" DESC
+      `,
+      // REG-586: ultimo veicolo DAVVERO usato, per allievo e per istruttore →
+      // precompila il campo Veicolo nel form di creazione guida. Query separate
+      // da quella qui sopra perché filtrano `vehicleId IS NOT NULL`: l'ultima
+      // guida di un allievo può essere senza veicolo (scuola con i veicoli
+      // spenti, esame), e in quel caso vogliamo comunque il veicolo precedente.
+      // Entrambe coperte dagli indici [companyId, studentId, startsAt] e
+      // [companyId, instructorId, startsAt].
+      prisma.$queryRaw<Array<{ studentId: string; vehicleId: string }>>`
+        SELECT DISTINCT ON ("studentId") "studentId", "vehicleId"
+        FROM "AutoscuolaAppointment"
+        WHERE "companyId" = ${companyId}::uuid
+          AND "vehicleId" IS NOT NULL
+          AND "status" <> 'cancelled'
+          AND "startsAt" <= NOW()
+        ORDER BY "studentId", "startsAt" DESC
+      `,
+      prisma.$queryRaw<Array<{ instructorId: string; vehicleId: string }>>`
+        SELECT DISTINCT ON ("instructorId") "instructorId", "vehicleId"
+        FROM "AutoscuolaAppointment"
+        WHERE "companyId" = ${companyId}::uuid
+          AND "instructorId" IS NOT NULL
+          AND "vehicleId" IS NOT NULL
+          AND "status" <> 'cancelled'
+          AND "startsAt" <= NOW()
+        ORDER BY "instructorId", "startsAt" DESC
       `,
     ]);
     const agendaVehiclesEnabled =
@@ -1406,6 +1432,9 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
     const lastInstructorByStudent = new Map(
       lastInstructorRows.map((row) => [row.studentId, row.instructorId]),
     );
+    const lastVehicleByStudent = new Map(
+      lastVehicleByStudentRows.map((row) => [row.studentId, row.vehicleId]),
+    );
 
     return {
       success: true,
@@ -1414,6 +1443,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         students: students.map((student) => ({
           ...student,
           lastInstructorId: lastInstructorByStudent.get(student.id) ?? null,
+          lastVehicleId: lastVehicleByStudent.get(student.id) ?? null,
         })),
         instructors,
         // Surface poolInstructorIds (from the poolMembers relation) so the web
@@ -1422,6 +1452,11 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         vehicles: vehicles.map(({ poolMembers, ...v }) => ({
           ...v,
           poolInstructorIds: poolMembers.map((m) => m.instructorId),
+        })),
+        // REG-586: ultimo veicolo usato da ciascun istruttore (vedi sopra).
+        lastVehicleByInstructor: lastVehicleByInstructorRows.map((row) => ({
+          instructorId: row.instructorId,
+          vehicleId: row.vehicleId,
         })),
         vehiclesEnabled: agendaVehiclesEnabled,
         groupLessonsEnabled: agendaGroupLessonsEnabled,
