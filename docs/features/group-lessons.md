@@ -32,6 +32,35 @@ Participant appointments are written **directly** (NOT via `prepareAppointmentPa
 - Helpers: `validateGroupLessonStudents`, `findGroupLessonOverlap`, `GROUP_LESSON_ACTIVE_STATUSES`, `GROUP_LESSON_ENROLLED_STATUSES`.
 - **Creazione nel passato** (2026-07-15): `createGroupLesson` non ha mai avuto un blocco `startsAt < now` → già consentita. Dal 2026-07-15 il web `GroupLessonCreateDialog` chiede conferma con un `AlertDialog` (icona ambra, "Crea comunque"/"Annulla") quando lo start è passato; è **solo client**, nessun flag BE. Vedi `appointments.md` → "Prenotazione nel passato" per il flusso gemello delle guide autonome (che invece usa il flag BE `allowPast`).
 
+## Più istruttori sulla stessa guida (REG-585, 2026-10-01)
+
+Vale per le **guide di gruppo** e per gli **esami**; le guide individuali restano a un istruttore solo (perimetro deciso con Tiziano).
+
+**Impianto.** `instructorId` **resta dov'è** e continua a significare *istruttore principale*: è lui che risponde della guida, e tutto quello che già lo legge (notifiche, promemoria, guard "solo le tue guide", voice, swap) non è stato toccato. I colleghi aggiuntivi stanno in due tabelle di appoggio, gemelle a quelle già usate per i veicoli:
+
+| Tabella | Chiave |
+|---|---|
+| `AutoscuolaAppointmentInstructor` | `(appointmentId, instructorId)` |
+| `AutoscuolaGroupLessonInstructor` | `(groupLessonId, instructorId)` |
+
+Il principale **non** viene duplicato nel join. Migrazione `20261001160000_multi_instructor_group_and_exam`: additiva, nessuna colonna rimossa.
+
+> Perché non una N:N pura con `instructorId` eliminato: `instructorId` compare ~274 volte in `autoscuole.actions.ts` e ~133 in `AutoscuoleAgendaPage.tsx`, quasi tutte su aree (disponibilità, ore, promemoria) fuori dal perimetro della issue. Il rischio di regressione non valeva la pulizia.
+
+**Regole decise con Tiziano:**
+- **Ore**: una guida condivisa conta a **tutti** gli istruttori coinvolti — i totali stipendio cambiano, è voluto. In `getInstructorDrivingHours` e `…Range` la riga viene *espansa* in una voce per istruttore, così il calcolo a valle è rimasto identico. Gli esami non contavano ore prima e non ne contano ora (`type: { not: "esame" }`).
+- **Conflitti**: ogni istruttore coinvolto dev'essere libero, come il principale (`findGroupLessonOverlap`, `createExamEvent`). Con più di uno il messaggio dice **quale** non lo è.
+- **Permessi**: per chi è coinvolto la guida è sua a tutti gli effetti (vede **e** agisce: presenze, esito).
+- **Nessun tetto** al numero di istruttori.
+
+**Visibilità** — è il cuore della feature: nella bootstrap agenda il filtro `{ instructorId }` è diventato `OR: [{ instructorId }, { coInstructors: { some: … } }]`. Da lì passano sia il web sia il mobile, quindi il collega la vede in agenda su entrambi senza altro lavoro.
+
+**UI**
+- **Web**: `components/pages/Autoscuole/CoInstructorPicker.tsx` — chip a toggle sotto la Select dell'istruttore, usato in `GroupLessonCreateDialog`, `GroupLessonManageDialog` e nel form esame di `AutoscuoleAgendaPage`. In agenda una guida condivisa compare nella colonna di **ogni** istruttore coinvolto (`appointmentBelongsToInstructor`).
+- **Mobile**: `src/utils/coInstructors.ts` (`lessonInvolvesInstructor`, `formatInstructorNames`). I filtri "sono mie" di `IstruttoreHomeScreen` passano da lì; dettaglio gruppo/esame mostrano "Mario + Luca". Solo JS, nessuna build nativa.
+
+**API**: `createGroupLesson`, `updateGroupLesson`, `createExamEvent`, `updateExamInstructor` accettano `coInstructorIds[]`. Sulle azioni di **modifica**, `undefined` = non toccarli, `[]` = toglili tutti. Un esame è una riga **per allievo**: il join viene scritto su tutte, altrimenti il collega vedrebbe solo una parte dei candidati.
+
 ## Luogo di ritrovo (REG-409, 2026-09-19)
 Fino a questa modifica una guida di gruppo non aveva il campo Luogo — né a
 schema né nel dialog — quindi si ritrovava sempre in sede, anche in
