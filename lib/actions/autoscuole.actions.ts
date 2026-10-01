@@ -10465,6 +10465,8 @@ export async function getGroupLesson(groupLessonId: string) {
         notes: true,
         instructorId: true,
         instructor: { select: { id: true, name: true } },
+        // REG-585: i colleghi che la portano insieme al principale.
+        coInstructors: { select: { instructor: { select: { id: true, name: true } } } },
         vehicle: { select: { id: true, name: true, licenseCategory: true, transmission: true } },
         followVehicle: { select: { id: true, name: true } },
         fleetVehicles: {
@@ -10513,6 +10515,7 @@ export async function getGroupLesson(groupLessonId: string) {
         notes: l.notes,
         instructorId: l.instructorId,
         instructorName: l.instructor?.name ?? null,
+        coInstructors: l.coInstructors.map((row) => row.instructor),
         kind: l.kind,
         motoLessonType: l.motoLessonType,
         vehicleId: l.vehicle?.id ?? null,

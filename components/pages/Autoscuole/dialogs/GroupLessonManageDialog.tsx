@@ -44,6 +44,7 @@ import { cn } from "@/lib/utils";
 type ResourceOption = { id: string; name: string };
 import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
 import { formatStoredName, storedNameInitials } from "@/lib/autoscuole/student-name-order";
+import { CoInstructorPicker } from "@/components/pages/Autoscuole/CoInstructorPicker";
 
 type VehicleWithLicense = {
   id: string;
@@ -66,6 +67,8 @@ type GroupLessonDetail = {
   motoLessonType?: string | null;
   instructorId: string | null;
   instructorName: string | null;
+  /** REG-585: colleghi che portano la guida insieme al principale. */
+  coInstructors?: Array<{ id: string; name: string }>;
   vehicleId: string | null;
   vehicleName: string | null;
   followVehicleId?: string | null;
@@ -229,6 +232,7 @@ export function GroupLessonManageDialog({
   const [durationMin, setDurationMin] = React.useState("180");
   const [capacityStr, setCapacityStr] = React.useState("3");
   const [instructorId, setInstructorId] = React.useState<string>("");
+  const [coInstructorIds, setCoInstructorIds] = React.useState<string[]>([]);
   const [vehicleId, setVehicleId] = React.useState<string>("");
   // Moto group: editable fleet + shared follow car (mirrors the mobile sheet).
   const [fleetIds, setFleetIds] = React.useState<string[]>([]);
@@ -263,6 +267,7 @@ export function GroupLessonManageDialog({
           setDurationMin(String(durationOf(res.data.startsAt, res.data.endsAt)));
           setCapacityStr(String(res.data.capacity ?? 3));
           setInstructorId(res.data.instructorId ?? "");
+          setCoInstructorIds((res.data.coInstructors ?? []).map((i) => i.id));
           setVehicleId(res.data.vehicleId ?? "");
           setFleetIds((res.data.fleet ?? []).map((f) => f.id));
           setFollowId(res.data.followVehicleId ?? "");
@@ -502,6 +507,7 @@ export function GroupLessonManageDialog({
         startsAt: start.toISOString(),
         endsAt: end.toISOString(),
         instructorId: instructorId || null,
+        coInstructorIds,
         capacity: Number(capacityStr),
         // Moto group: fleet + shared follow car; no vehicle cascade onto the
         // participants (each keeps its assigned moto).
@@ -522,6 +528,7 @@ export function GroupLessonManageDialog({
     setDurationMin(String(durationOf(lesson.startsAt, lesson.endsAt)));
     setCapacityStr(String(lesson.capacity ?? 3));
     setInstructorId(lesson.instructorId ?? "");
+    setCoInstructorIds((lesson.coInstructors ?? []).map((i) => i.id));
     setVehicleId(lesson.vehicleId ?? "");
     setFleetIds((lesson.fleet ?? []).map((f) => f.id));
     setFollowId(lesson.followVehicleId ?? "");
@@ -630,7 +637,9 @@ export function GroupLessonManageDialog({
 
             <DetailRow
               label="Istruttore"
-              value={lesson.instructorName ?? "Da assegnare"}
+              value={
+                [lesson.instructorName ?? "Da assegnare", ...(lesson.coInstructors ?? []).map((i) => i.name)].join(" + ")
+              }
               editing={editingField === "instructor"}
               onEdit={() => startEditField("instructor")}
             >
@@ -644,6 +653,15 @@ export function GroupLessonManageDialog({
                   ))}
                 </SelectContent>
               </Select>
+              <div className="mt-3">
+                <CoInstructorPicker
+                  instructors={instructors}
+                  mainInstructorId={instructorId || null}
+                  value={coInstructorIds}
+                  onChange={setCoInstructorIds}
+                  disabled={busy}
+                />
+              </div>
               <EditFooter busy={busy} onSave={saveEditingField} onCancel={() => setEditingField(null)} />
             </DetailRow>
 

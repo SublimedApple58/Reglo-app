@@ -42,6 +42,7 @@ import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
 import { resolveGroupPrefilledLocationId } from "@/lib/autoscuole/location-for-license";
 import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
 import { vehicleServesLicense, MOTO_LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
+import { CoInstructorPicker } from "@/components/pages/Autoscuole/CoInstructorPicker";
 
 type ResourceOption = { id: string; name: string };
 
@@ -153,6 +154,8 @@ export function GroupLessonCreateDialog({
   const [durationMin, setDurationMin] = React.useState("180");
   const [capacityStr, setCapacityStr] = React.useState("3");
   const [instructorId, setInstructorId] = React.useState<string>("");
+  /** REG-585: colleghi che portano la guida insieme al principale. */
+  const [coInstructorIds, setCoInstructorIds] = React.useState<string[]>([]);
   const [vehicleId, setVehicleId] = React.useState<string>("");
   // Moto group: the chosen fleet of motos + one shared follow car.
   const [fleetIds, setFleetIds] = React.useState<string[]>([]);
@@ -223,6 +226,7 @@ export function GroupLessonCreateDialog({
     setDurationMin("180");
     setCapacityStr("3");
     setInstructorId(defaultInstructorId || "");
+    setCoInstructorIds([]);
     setVehicleId("");
     setFleetIds([]);
     setFollowVehicleId("");
@@ -430,6 +434,7 @@ export function GroupLessonCreateDialog({
         startsAt: start.toISOString(),
         endsAt: end.toISOString(),
         instructorId: instructorId || undefined,
+        coInstructorIds,
         ...(isMoto
           ? {
               kind: "moto" as const,
@@ -635,6 +640,12 @@ export function GroupLessonCreateDialog({
                     ))}
                   </SelectContent>
                 </Select>
+                <CoInstructorPicker
+                  instructors={instructors}
+                  mainInstructorId={instructorId || null}
+                  value={coInstructorIds}
+                  onChange={setCoInstructorIds}
+                />
               </div>
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Capienza</Label>

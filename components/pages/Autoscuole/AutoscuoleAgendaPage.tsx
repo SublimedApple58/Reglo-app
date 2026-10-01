@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CancelAppointmentDialog, type CancelDialogTarget, type CancelFault, type LateOutcome } from "@/components/pages/Autoscuole/CancelAppointmentDialog";
+import { CoInstructorPicker } from "@/components/pages/Autoscuole/CoInstructorPicker";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   Select,
@@ -170,6 +171,8 @@ type AppointmentRow = {
   cancellationKind?: string | null;
   creditApplied?: boolean | null;
   paymentRequired?: boolean | null;
+  /** REG-585: istruttori aggiuntivi (il principale resta in `instructor`). */
+  coInstructors?: Array<{ id: string; name: string }> | null;
   penaltyCutoffAt?: string | Date | null;
   penaltyAmount?: number | null;
   groupLessonId?: string | null;
@@ -391,6 +394,17 @@ const resolveCreateVehicleId = (args: {
     (exclusive.length ? exclusive[0].id : pool.length === 1 ? pool[0].id : "")
   );
 };
+
+/**
+ * REG-585 — una guida condivisa appartiene alla colonna di OGNI istruttore
+ * coinvolto, non solo del principale: è così che il collega la vede in agenda.
+ */
+const appointmentBelongsToInstructor = (
+  appointment: { instructor?: { id: string } | null; coInstructors?: Array<{ id: string }> | null },
+  instructorId: string,
+) =>
+  appointment.instructor?.id === instructorId ||
+  (appointment.coInstructors ?? []).some((co) => co.id === instructorId);
 
 const DAY_START_HOUR = 0;
 const DAY_END_HOUR = 24;
@@ -1183,7 +1197,7 @@ export function AutoscuoleAgendaPage({
   const [blockForm, setBlockForm] = React.useState({ instructorId: "", date: "", startTime: "09:00", duration: "60", reason: "", description: "", recurring: false, recurringWeeks: 12 });
   const [blockDeleteConfirm, setBlockDeleteConfirm] = React.useState<{ id: string; recurrenceGroupId: string | null } | null>(null);
   const [examDialogOpen, setExamDialogOpen] = React.useState(false);
-  const [examForm, setExamForm] = React.useState({ date: "", time: "09:00", duration: "60", timeSet: true, instructorId: "", studentIds: [] as string[], note: "" });
+  const [examForm, setExamForm] = React.useState({ date: "", time: "09:00", duration: "60", timeSet: true, instructorId: "", coInstructorIds: [] as string[], studentIds: [] as string[], note: "" });
   const [examCreating, setExamCreating] = React.useState(false);
   const [examStudentSearch, setExamStudentSearch] = React.useState("");
   // Pannello laterale "Aggiungi allievi" (stesso pattern delle guide di gruppo).
@@ -3625,7 +3639,7 @@ export function AutoscuoleAgendaPage({
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
-                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setExamForm({ date: normalizeDay(dayFocus).toISOString().slice(0, 10), time: "09:00", duration: "60", timeSet: true, instructorId: "", studentIds: [], note: "" }); setExamStudentSearch(""); setExamDialogOpen(true); }}
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setExamForm({ date: normalizeDay(dayFocus).toISOString().slice(0, 10), time: "09:00", duration: "60", timeSet: true, instructorId: "", coInstructorIds: [], studentIds: [], note: "" }); setExamStudentSearch(""); setExamDialogOpen(true); }}
                 >
                   <GraduationCap className="size-4 text-foreground" strokeWidth={1.7} />
                   Esame
@@ -3831,7 +3845,7 @@ export function AutoscuoleAgendaPage({
                 label: "Esame",
                 icon: <GraduationCap className="size-4 text-foreground" strokeWidth={1.7} />,
                 onSelect: () => closeAnd(() => {
-                  setExamForm({ date: slotMenu.ymd, time: slotMenu.time, duration: "60", timeSet: true, instructorId: slotMenu.instructorId ?? "", studentIds: [], note: "" });
+                  setExamForm({ date: slotMenu.ymd, time: slotMenu.time, duration: "60", timeSet: true, instructorId: slotMenu.instructorId ?? "", coInstructorIds: [], studentIds: [], note: "" });
                   setExamStudentSearch("");
                   setExamDialogOpen(true);
                 }),
@@ -4157,7 +4171,7 @@ export function AutoscuoleAgendaPage({
                     const instrAppts = dayAppts.filter((a) =>
                       columnsByVehicle
                         ? `veh:${a.vehicle?.id ?? "__none__"}` === instr.instructorId
-                        : a.instructor?.id === instr.instructorId,
+                        : appointmentBelongsToInstructor(a, instr.instructorId),
                     );
 
                     return (
@@ -4720,7 +4734,7 @@ export function AutoscuoleAgendaPage({
                 const instrAppointments = allDayAppointments.filter((a) =>
                   columnsByVehicle
                     ? `veh:${a.vehicle?.id ?? "__none__"}` === instr.id
-                    : a.instructor?.id === instr.id,
+                    : appointmentBelongsToInstructor(a, instr.id),
                 );
 
                 return (
@@ -6281,6 +6295,7 @@ export function AutoscuoleAgendaPage({
                   startsAt: startsAtIso,
                   endsAt: endsAtIso,
                   instructorId: instrId,
+                  coInstructorIds: examForm.coInstructorIds,
                   notes: examForm.note.trim() || undefined,
                 });
                 setExamCreating(false);
@@ -6335,6 +6350,19 @@ export function AutoscuoleAgendaPage({
                 {instructors.map((i) => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
               </SelectContent>
             </Select>
+            <div className="mt-2.5">
+              <CoInstructorPicker
+                instructors={instructors}
+                mainInstructorId={
+                  examForm.instructorId && examForm.instructorId !== "__none__"
+                    ? examForm.instructorId
+                    : null
+                }
+                value={examForm.coInstructorIds}
+                onChange={(next) => setExamForm((f) => ({ ...f, coInstructorIds: next }))}
+                label="Altri accompagnatori"
+              />
+            </div>
           </div>
           <div>
             <p className="mb-1.5 text-xs font-semibold text-[#555555]">
