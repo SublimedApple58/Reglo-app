@@ -338,6 +338,24 @@ const vehicleOfferedInCreate = (
   (student ? vehicleServesLicense(vehicle, student) : true);
 
 /**
+ * Come sopra, ma anche "usabile da QUESTO istruttore": un veicolo esclusivo di
+ * un altro istruttore non è suo, la risoluzione veicoli lato server non glielo
+ * assegnerebbe mai. Resta scegliibile a mano nella Select (che non filtra per
+ * istruttore, vedi docs/features/vehicles.md), ma non glielo suggeriamo e non
+ * glielo lasciamo addosso quando l'istruttore cambia.
+ */
+const vehicleUsableInCreate = (
+  vehicle: ResourceOption,
+  student: StudentOption | null,
+  bookingMode: "auto" | "moto",
+  instructorId: string,
+) =>
+  vehicleOfferedInCreate(vehicle, student, bookingMode) &&
+  (!instructorId ||
+    !vehicle.assignedInstructorId ||
+    vehicle.assignedInstructorId === instructorId);
+
+/**
  * REG-586 — veicolo precompilato nel form "Nuova guida", stessa idea del mobile
  * (`BookingForm.presetVehiclesForStudent`). Tra i veicoli che il picker offre
  * davvero, tolti quelli esclusivi di un ALTRO istruttore, si sceglie in ordine:
@@ -357,20 +375,9 @@ const resolveCreateVehicleId = (args: {
   bookingMode: "auto" | "moto";
   lastVehicleByInstructor: Record<string, string>;
 }): string => {
-  const offered = args.vehicles.filter((vehicle) =>
-    vehicleOfferedInCreate(vehicle, args.student, args.bookingMode),
+  const candidates = args.vehicles.filter((vehicle) =>
+    vehicleUsableInCreate(vehicle, args.student, args.bookingMode, args.instructorId),
   );
-  // Un veicolo esclusivo di un ALTRO istruttore non è suo: la risoluzione lato
-  // server non glielo assegnerebbe mai, quindi non lo suggeriamo. Resta
-  // comunque scegliibile a mano nella Select (il picker non filtra per
-  // istruttore — vedi docs/features/vehicles.md).
-  const candidates = args.instructorId
-    ? offered.filter(
-        (vehicle) =>
-          !vehicle.assignedInstructorId ||
-          vehicle.assignedInstructorId === args.instructorId,
-      )
-    : offered;
   if (!candidates.length) return "";
   const exclusive = args.instructorId
     ? candidates.filter((vehicle) => vehicle.assignedInstructorId === args.instructorId)
@@ -2351,6 +2358,12 @@ export function AutoscuoleAgendaPage({
   const createStudentRef = React.useRef<HTMLDivElement>(null);
   const createInstructorRef = React.useRef<HTMLDivElement>(null);
   const createVehicleRef = React.useRef<HTMLDivElement>(null);
+  /**
+   * REG-586: true quando il Veicolo è stato scelto a mano. Si azzera a ogni
+   * cambio di contesto (allievo, istruttore, modalità) e alla chiusura del
+   * form, così il prefill riprende il comando.
+   */
+  const createVehicleTouchedRef = React.useRef(false);
 
   const prefillLocationId = React.useCallback(
     (next: { studentId: string; vehicleId: string }): string => {
@@ -2374,13 +2387,25 @@ export function AutoscuoleAgendaPage({
   // click su uno slot, drag del ghost) e devono comportarsi tutte allo stesso
   // modo.
   React.useEffect(() => {
-    if (!createOpen || !vehiclesEnabled) return;
+    if (!createOpen) {
+      createVehicleTouchedRef.current = false;
+      return;
+    }
+    if (!vehiclesEnabled) return;
     setForm((prev) => {
       const student = students.find((s) => s.id === prev.studentId) ?? null;
       const current = prev.vehicleId
         ? vehicles.find((v) => v.id === prev.vehicleId) ?? null
         : null;
-      if (current && vehicleOfferedInCreate(current, student, prev.bookingMode)) return prev;
+      // Una scelta fatta a mano resta finché il picker la offre ancora (anche
+      // se è il veicolo di un altro istruttore: l'ha voluta l'utente). Una
+      // scelta messa dal prefill invece decade appena l'istruttore cambia.
+      const keepCurrent =
+        !!current &&
+        (createVehicleTouchedRef.current
+          ? vehicleOfferedInCreate(current, student, prev.bookingMode)
+          : vehicleUsableInCreate(current, student, prev.bookingMode, prev.instructorId));
+      if (keepCurrent) return prev;
       const nextVehicleId = resolveCreateVehicleId({
         vehicles,
         student,
@@ -5158,7 +5183,10 @@ export function AutoscuoleAgendaPage({
                   const Icon = opt.icon;
                   return (
                     <button key={opt.value} type="button"
-                      onClick={() => setForm((prev) => ({ ...prev, bookingMode: opt.value, studentId: "", vehicleId: "", followVehicleId: "", extraMotoVehicleIds: [], motoLessonType: null }))}
+                      onClick={() => {
+                      createVehicleTouchedRef.current = false;
+                      setForm((prev) => ({ ...prev, bookingMode: opt.value, studentId: "", vehicleId: "", followVehicleId: "", extraMotoVehicleIds: [], motoLessonType: null }));
+                    }}
                       className={cn("flex cursor-pointer items-center gap-2 rounded-[10px] border-[1.5px] px-3 py-2 text-left transition-colors", active ? "border-[#222222] bg-[#f7f7f7]" : "border-[#dddddd] hover:border-[#929292]")}>
                       <Icon className={cn("size-4 shrink-0", active ? "text-[#222222]" : "text-[#929292]")} />
                       <span className="flex min-w-0 items-baseline gap-1.5">
@@ -5269,6 +5297,7 @@ export function AutoscuoleAgendaPage({
                 // "toccato a mano". Il veicolo viene resettato qui, quindi la
                 // patente della guida è quella del percorso dell'allievo.
                 createLocationTouchedRef.current = false;
+                createVehicleTouchedRef.current = false;
                 const nextLocationId = prefillLocationId({ studentId: id, vehicleId: "" });
                 setForm((prev) => ({
                   ...prev,
@@ -5304,6 +5333,7 @@ export function AutoscuoleAgendaPage({
               <Select
                 value={form.instructorId}
                 onValueChange={(value) => {
+                  createVehicleTouchedRef.current = false;
                   setForm((prev) => ({ ...prev, instructorId: value }));
                   advanceCreateFocus({ instructorId: value });
                 }}
@@ -5322,6 +5352,9 @@ export function AutoscuoleAgendaPage({
                 <Select
                   value={form.vehicleId}
                   onValueChange={(value) => {
+                    // Scelta a mano: il prefill (REG-586) non la tocca più
+                    // finché non cambia il contesto (allievo/istruttore/modalità).
+                    createVehicleTouchedRef.current = true;
                     // Il veicolo determina la patente della guida (REG-409):
                     // ricalcolo il luogo, ma solo se non è già stato scelto a
                     // mano per questo allievo.
