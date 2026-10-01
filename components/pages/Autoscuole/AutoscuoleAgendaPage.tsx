@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { useAtomValue } from "jotai";
-import { Plus, SlidersHorizontal, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2, BookOpen, Lock, Printer, TrafficCone, Route, Truck } from "lucide-react";
+import { Plus, SlidersHorizontal, Users, Link2, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2, BookOpen, Lock, Printer, TrafficCone, Route, Truck } from "lucide-react";
 
 import { companyAtom } from "@/atoms/company.store";
 import { isConsortium } from "@/lib/services";
@@ -410,6 +410,37 @@ const appointmentBelongsToInstructor = (
  * REG-585 — il popover di un evento condiviso: "Marco Bianchi + Chiara Marino".
  * Con un solo istruttore resta identico a prima.
  */
+/**
+ * REG-585 — gli ALTRI istruttori di una guida condivisa, visti dalla colonna di
+ * uno di loro. È il segnale che lega i due blocchi su colonne diverse: nella
+ * colonna di Marco si legge "con Luca Ferrari", in quella di Luca "con Marco
+ * Bianchi", quindi si capisce che sono la stessa guida e non due.
+ */
+const sharedWithNames = (
+  appointment: {
+    instructor?: { id: string; name?: string | null } | null;
+    coInstructors?: Array<{ id: string; name: string }> | null;
+  },
+  columnInstructorId: string | null,
+) => {
+  const co = appointment.coInstructors ?? [];
+  if (!co.length) return [];
+  return [
+    ...(appointment.instructor ? [appointment.instructor] : []),
+    ...co,
+  ]
+    .filter((i) => i.id !== columnInstructorId)
+    .map((i) => i.name)
+    .filter((n): n is string => Boolean(n));
+};
+
+/** "Luca Ferrari" · "Luca Ferrari e Sara Greco" · "Luca Ferrari e altri 2". */
+const formatSharedWith = (names: string[]) => {
+  if (names.length <= 1) return names[0] ?? "";
+  if (names.length === 2) return `${names[0]} e ${names[1]}`;
+  return `${names[0]} e altri ${names.length - 1}`;
+};
+
 const instructorLine = (appointment: {
   instructor?: { name: string } | null;
   coInstructors?: Array<{ name: string }> | null;
@@ -4254,6 +4285,10 @@ export function AutoscuoleAgendaPage({
                           const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
                           const isExamInstr = item.type === "esame";
                           const isGroupLessonInstr = item.type === "group_lesson";
+                          // REG-585: colleghi con cui la guida è condivisa, visti da
+                          // questa colonna. Qui lo spazio è poco: solo l'icona, i nomi
+                          // nel tooltip e nel popover.
+                          const sharedWithInstr = sharedWithNames(item, instr.instructorId);
                           const isCompact = height <= 40;
                           const licenseTag = licenseTagFor(item);
                           // Moto lesson type: individual lessons carry it on the
@@ -4296,7 +4331,7 @@ export function AutoscuoleAgendaPage({
                                   type="button"
                                   className={cn("agenda-card group absolute left-0.5 right-0.5 z-10 flex flex-col justify-start rounded-[8px] text-[9px] leading-tight text-left hover:z-30", isPendingAction ? "pointer-events-none opacity-75" : "", instrCardClass)}
                                   style={{ top, height, ...(instrColorStyle ?? {}) }}
-                                  title={`${isExamInstr ? "🎓 ESAME · " : ""}${formatStudentName(item.student, studentNameOrder)} · ${formatEventType(item.type)} · ${formatTimeRange(start, end)}`}
+                                  title={`${isExamInstr ? "🎓 ESAME · " : ""}${formatStudentName(item.student, studentNameOrder)} · ${formatEventType(item.type)} · ${formatTimeRange(start, end)}${sharedWithInstr.length ? ` · condivisa con ${sharedWithInstr.join(", ")}` : ""}`}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     source?.onCardClick?.(item.id);
@@ -4316,7 +4351,10 @@ export function AutoscuoleAgendaPage({
                                         {consortiumStatusLabel(item.status, statusMeta)}
                                       </div>
                                     ) : null}
-                                    <div className={cn("font-bold truncate text-[10px]", isExamInstr ? "text-violet-800" : isGroupLessonInstr ? glTintInstr.name : "")}>{isExamInstr ? "🎓 " : ""}{isGroupLessonInstr ? item.student.firstName : formatStudentNameShort(item.student, studentNameOrder)}</div>
+                                    <div className={cn("flex min-w-0 items-center gap-0.5 font-bold text-[10px]", isExamInstr ? "text-violet-800" : isGroupLessonInstr ? glTintInstr.name : "")}>
+                                      {sharedWithInstr.length ? <Link2 className="size-2.5 shrink-0" strokeWidth={2.6} aria-hidden /> : null}
+                                      <span className="truncate">{isExamInstr ? "🎓 " : ""}{isGroupLessonInstr ? item.student.firstName : formatStudentNameShort(item.student, studentNameOrder)}</span>
+                                    </div>
                                     <div className={cn("text-[8px] truncate", isExamInstr ? "text-violet-600" : isGroupLessonInstr ? glTintInstr.time : "text-muted-foreground")}>{isExamInstr ? "Esame · " : isGroupLessonInstr ? `${glTintInstr.label} · ` : ""}{formatTimeRange(start, end)}{isCompact && licenseTag ? ` · ${licenseTag}` : ""}</div>
                                     {!isCompact && licenseTag ? (
                                       <div className={cn("text-[9px] font-semibold truncate", isExamInstr ? "text-violet-700" : "text-foreground/70")}>Patente {licenseTag}</div>
@@ -4822,7 +4860,11 @@ export function AutoscuoleAgendaPage({
                       const hasNotesDay = noteTextDay.length > 0;
                       // Righe di nota che entrano nello spazio residuo del blocco
                       // (multi-riga fino a riempire; "…" solo su ciò che non ci sta).
-                      const headerPxDay = 18 + 15 + (!isCompact && licenseTag ? 14 : 0) + (motoTypeLabelDay ? 18 : 0) + 22;
+                      // REG-585: i colleghi con cui questa guida è condivisa, visti
+                      // da questa colonna (vuoto se non è condivisa). Va calcolato
+                      // prima di headerPxDay: la riga "con ..." mangia spazio alle note.
+                      const sharedWithDay = sharedWithNames(item, columnsByVehicle ? null : instr.id);
+                      const headerPxDay = 18 + 15 + (!isCompact && licenseTag ? 14 : 0) + (motoTypeLabelDay ? 18 : 0) + (sharedWithDay.length ? 14 : 0) + 22;
                       const noteFillLinesDay = hasNotesDay ? Math.max(1, Math.floor((height - headerPxDay) / 14)) : 0;
                       const isPendingAction = pendingEventActionId === item.id;
                       const glTintDay = groupLessonTint(item);
@@ -4902,6 +4944,15 @@ export function AutoscuoleAgendaPage({
                                   {!isCompact && licenseTag ? (
                                     <div className={cn("truncate whitespace-nowrap text-[10px] font-semibold", isExamDay ? "text-violet-700" : "text-foreground/70")}>
                                       Patente {licenseTag}
+                                    </div>
+                                  ) : null}
+                                  {/* REG-585: lo stesso blocco sta anche nella colonna dei colleghi. */}
+                                  {sharedWithDay.length ? (
+                                    <div className="flex min-w-0 items-center gap-1 text-[10px] font-medium text-foreground/70">
+                                      <Link2 className="size-3 shrink-0" strokeWidth={2.2} aria-hidden />
+                                      <span className="truncate">
+                                        {isCompact ? formatSharedWith(sharedWithDay) : `con ${formatSharedWith(sharedWithDay)}`}
+                                      </span>
                                     </div>
                                   ) : null}
                                   {motoTypeLabelDay ? (
