@@ -1836,6 +1836,9 @@ export function AutoscuoleAgendaPage({
     // Con un flusso di creazione aperto, il click sulla griglia RIPOSIZIONA il
     // draft (stile Google Calendar) invece di aprire il menu slot.
     if (createOpen) {
+      // Cliccare una colonna Veicolo è una scelta esplicita del mezzo: vale
+      // come scelta a mano, il prefill (REG-586) non deve sovrascriverla.
+      if (colVehicleId) createVehicleTouchedRef.current = true;
       setForm((prev) => ({
         ...prev,
         day: ymd,
@@ -1994,6 +1997,9 @@ export function AutoscuoleAgendaPage({
       ? (colId!.slice(4) === "__none__" ? null : colId!.slice(4))
       : undefined;
     if (createOpen) {
+      // Cliccare una colonna Veicolo è una scelta esplicita del mezzo: vale
+      // come scelta a mano, il prefill (REG-586) non deve sovrascriverla.
+      if (colVehicleId) createVehicleTouchedRef.current = true;
       setForm((prev) => ({
         ...prev,
         day: ymd,

@@ -52,6 +52,18 @@ const istrs=await p.evaluate(()=>Array.from(document.querySelectorAll('[role="op
 await p.evaluate(()=>{const o=document.querySelectorAll('[role="option"]');o[1].click();});
 await p.waitForTimeout(2500);
 const c=await combos();
-console.log(`cambio istruttore su ${nome}: ${a.istruttore}/"${a.veicolo}" → ${c.istruttore}/"${c.veicolo}"  (opzioni: ${JSON.stringify(istrs)})`);
+console.log(`CAMBIO ISTRUTTORE su ${nome}: ${a.istruttore}/"${a.veicolo}" → ${c.istruttore}/"${c.veicolo}"`);
 await p.locator('[role="dialog"]').last().screenshot({path:`${OUT}/dopo-cambio-istruttore.png`});
+
+// scelta a mano: deve sopravvivere al re-render
+await openForm();
+const nome2=await pickStudent(0);
+const base=await combos();
+await p.evaluate(()=>document.querySelectorAll('[role="dialog"] [role="combobox"]')[1].click());
+await p.waitForTimeout(1800);
+const vOpts=await p.evaluate(()=>Array.from(document.querySelectorAll('[role="option"]')).map(e=>(e.textContent||'').trim()));
+await p.evaluate(()=>{const o=document.querySelectorAll('[role="option"]');o[o.length-1].click();});
+await p.waitForTimeout(2500);
+const manuale=await combos();
+console.log(`SCELTA A MANO su ${nome2}: prefill="${base.veicolo}" → scelto="${manuale.veicolo}" (opzioni ${JSON.stringify(vOpts)})`);
 await b.close();
