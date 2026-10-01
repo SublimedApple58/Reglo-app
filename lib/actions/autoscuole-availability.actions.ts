@@ -5042,6 +5042,9 @@ export async function respondGroupLessonInvite(
             locationId: true,
             priceAmount: true,
             notes: true,
+            // REG-585: il posto di chi accetta l'invito porta gli stessi
+            // istruttori del contenitore, come il luogo (REG-409).
+            coInstructors: { select: { instructorId: true } },
             vehicle: { select: { id: true, licenseCategory: true, transmission: true } },
             fleetVehicles: {
               select: { vehicle: { select: { id: true, licenseCategory: true, transmission: true } } },
@@ -5256,6 +5259,14 @@ export async function respondGroupLessonInvite(
           creditApplied: false,
           ...(isMoto && assignedVehicleId
             ? { appointmentVehicles: { create: [{ vehicleId: assignedVehicleId, role: "primary" }] } }
+            : {}),
+          // REG-585: stessi istruttori del contenitore.
+          ...(gl.coInstructors.length
+            ? {
+                coInstructors: {
+                  create: gl.coInstructors.map((c) => ({ instructorId: c.instructorId })),
+                },
+              }
             : {}),
         },
       });

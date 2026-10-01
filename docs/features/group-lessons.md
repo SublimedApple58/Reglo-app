@@ -61,6 +61,12 @@ Il principale **non** viene duplicato nel join. Migrazione `20261001160000_multi
 
 **API**: `createGroupLesson`, `updateGroupLesson`, `createExamEvent`, `updateExamInstructor` accettano `coInstructorIds[]`. Sulle azioni di **modifica**, `undefined` = non toccarli, `[]` = toglili tutti. Un esame è una riga **per allievo**: il join viene scritto su tutte, altrimenti il collega vedrebbe solo una parte dei candidati.
 
+> ⚠️ **I posti ereditano gli istruttori del container**, esattamente come il luogo (REG-409) — e per lo stesso motivo. Finché la guida è **vuota** l'agenda legge il contenitore; dal primo iscritto in poi legge le **righe-posto**. Se il posto porta solo `instructorId`, il collega sparisce dalla sua colonna e le ore tornano a contare solo al principale: cioè la feature si spegne da sola appena qualcuno si iscrive. Era così alla prima stesura, trovato verificando su staging il 2026-10-01.
+>
+> Quindi tutti e **quattro** i punti che creano un posto scrivono anche il join: `createGroupLesson` (ramo moto e ramo standard), `addGroupLessonParticipant`, `respondGroupLessonInvite`. E `updateGroupLesson` **riallinea i posti già esistenti** via `syncGroupSeatCoInstructors` quando i co-istruttori cambiano. Se in futuro nasce un quinto punto di creazione, va aggiunto lì.
+
+**Ore e doppio conteggio**: le ore si sommano **per riga-posto**, senza deduplica — una guida di gruppo con 3 iscritti vale già oggi 3 blocchi per il principale (comportamento preesistente, non introdotto qui). Propagando il join, il collega prende esattamente lo stesso trattamento del principale: simmetrico, nessun caso nuovo.
+
 ## Luogo di ritrovo (REG-409, 2026-09-19)
 Fino a questa modifica una guida di gruppo non aveva il campo Luogo — né a
 schema né nel dialog — quindi si ritrovava sempre in sede, anche in
