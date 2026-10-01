@@ -9091,7 +9091,23 @@ export async function updateExamInstructor(
         where: { id: { in: payload.appointmentIds }, companyId, type: "esame" },
         data: { instructorId: payload.instructorId ?? null },
       });
-      if (coInstructorIds === null) return;
+      if (coInstructorIds === null) {
+        // Il chiamante non li sta toccando, ma se il nuovo principale era uno
+        // dei colleghi va tolto dal join: se no comparirebbe due volte.
+        if (payload.instructorId) {
+          const own = await tx.autoscuolaAppointment.findMany({
+            where: { id: { in: payload.appointmentIds }, companyId, type: "esame" },
+            select: { id: true },
+          });
+          await tx.autoscuolaAppointmentInstructor.deleteMany({
+            where: {
+              appointmentId: { in: own.map((r) => r.id) },
+              instructorId: payload.instructorId,
+            },
+          });
+        }
+        return;
+      }
       // Le righe sono una per allievo: il join va riscritto su tutte.
       const rows = await tx.autoscuolaAppointment.findMany({
         where: { id: { in: payload.appointmentIds }, companyId, type: "esame" },
@@ -10865,6 +10881,16 @@ export async function updateGroupLesson(
     });
     if (!coResolved.ok) return { success: false as const, message: coResolved.message };
     const coInstructorIds = coResolved.ids;
+    // Il join va riscritto anche quando il chiamante NON passa
+    // `coInstructorIds`: se il nuovo principale era uno dei colleghi,
+    // `resolveCoInstructorIds` lo toglie dalla lista, ma senza questo controllo
+    // resterebbe nel join e comparirebbe due volte ("Luca + Luca"). Capita dal
+    // mobile, che cambia l'istruttore mandando il solo `instructorId`.
+    const currentCoIds = gl.coInstructors.map((row) => row.instructorId);
+    const coInstructorsChanged =
+      payload.coInstructorIds !== undefined ||
+      currentCoIds.length !== coInstructorIds.length ||
+      currentCoIds.some((id) => !coInstructorIds.includes(id));
 
     // Group-lesson seats always carry a student (only exam placeholders are
     // studentless); filter narrows the type without changing runtime behavior.
@@ -10941,8 +10967,9 @@ export async function updateGroupLesson(
             ...(payload.capacity !== undefined ? { capacity } : {}),
             ...(notes !== undefined ? { notes } : {}),
             ...(payload.motoLessonType !== undefined ? { motoLessonType: payload.motoLessonType } : {}),
-            // REG-585: riscrivi il join solo se il chiamante li sta toccando.
-            ...(payload.coInstructorIds !== undefined
+            // REG-585: riscrivi il join se il chiamante li tocca, o se il nuovo
+            // principale era uno di loro (vedi coInstructorsChanged).
+            ...(coInstructorsChanged
               ? {
                   coInstructors: {
                     deleteMany: {},
@@ -10954,7 +10981,7 @@ export async function updateGroupLesson(
               : {}),
           },
         });
-        if (payload.coInstructorIds !== undefined) {
+        if (coInstructorsChanged) {
           await syncGroupSeatCoInstructors(tx, gl.id, coInstructorIds);
         }
         if (payload.vehicleIds !== undefined) {
@@ -11021,8 +11048,9 @@ export async function updateGroupLesson(
           startsAt, endsAt, instructorId, vehicleId,
           ...(payload.capacity !== undefined ? { capacity: payload.capacity } : {}),
           ...(notes !== undefined ? { notes } : {}),
-          // REG-585: riscrivi il join solo se il chiamante li sta toccando.
-          ...(payload.coInstructorIds !== undefined
+          // REG-585: riscrivi il join se il chiamante li tocca, o se il nuovo
+          // principale era uno di loro (vedi coInstructorsChanged).
+          ...(coInstructorsChanged
             ? {
                 coInstructors: {
                   deleteMany: {},
@@ -11040,7 +11068,7 @@ export async function updateGroupLesson(
         where: { groupLessonId: gl.id, status: { in: GROUP_LESSON_ENROLLED_STATUSES } },
         data: { startsAt, endsAt, instructorId, vehicleId },
       });
-      if (payload.coInstructorIds !== undefined) {
+      if (coInstructorsChanged) {
         await syncGroupSeatCoInstructors(tx, gl.id, coInstructorIds);
       }
     });
