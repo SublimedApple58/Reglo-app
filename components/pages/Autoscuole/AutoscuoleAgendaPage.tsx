@@ -406,6 +406,24 @@ const appointmentBelongsToInstructor = (
   appointment.instructor?.id === instructorId ||
   (appointment.coInstructors ?? []).some((co) => co.id === instructorId);
 
+/**
+ * REG-585 — il popover di un evento condiviso: "Marco Bianchi + Chiara Marino".
+ * Con un solo istruttore resta identico a prima.
+ */
+const instructorLine = (appointment: {
+  instructor?: { name: string } | null;
+  coInstructors?: Array<{ name: string }> | null;
+}) => {
+  const names = [
+    appointment.instructor?.name,
+    ...(appointment.coInstructors ?? []).map((co) => co.name),
+  ].filter((n): n is string => Boolean(n));
+  return {
+    label: names.length > 1 ? "Istruttori" : "Istruttore",
+    value: names.length ? names.join(" + ") : "Non assegnato",
+  };
+};
+
 const DAY_START_HOUR = 0;
 const DAY_END_HOUR = 24;
 const SLOT_MINUTES = 30;
@@ -4324,7 +4342,7 @@ export function AutoscuoleAgendaPage({
                                     <div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div>
                                     <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
                                     <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                                      <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
+                                      <div>{instructorLine(item).label}: <span className="font-medium text-foreground/85">{instructorLine(item).value}</span></div>
                                       <StudentContactLines
                                         phone={phoneById.get(item.student.id)}
                                         schoolName={showSchoolFilter ? schoolByStudentId.get(item.student.id)?.name : null}
@@ -4914,7 +4932,7 @@ export function AutoscuoleAgendaPage({
                                 <div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div>
                                 <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
                                 <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                                  <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
+                                  <div>{instructorLine(item).label}: <span className="font-medium text-foreground/85">{instructorLine(item).value}</span></div>
                                   <StudentContactLines
                                     phone={phoneById.get(item.student.id)}
                                     schoolName={showSchoolFilter ? schoolByStudentId.get(item.student.id)?.name : null}

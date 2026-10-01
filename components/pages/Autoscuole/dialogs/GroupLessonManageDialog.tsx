@@ -636,7 +636,7 @@ export function GroupLessonManageDialog({
             </DetailRow>
 
             <DetailRow
-              label="Istruttore"
+              label={(lesson.coInstructors ?? []).length > 0 ? "Istruttori" : "Istruttore"}
               value={
                 [lesson.instructorName ?? "Da assegnare", ...(lesson.coInstructors ?? []).map((i) => i.name)].join(" + ")
               }

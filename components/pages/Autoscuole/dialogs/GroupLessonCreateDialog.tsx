@@ -551,7 +551,7 @@ export function GroupLessonCreateDialog({
       open={open}
       onClose={() => { if (!saving) onOpenChange(false); }}
       title="Nuova guida di gruppo"
-      subtitle={`1 istruttore · ${vehiclesEnabled ? "1 veicolo · " : ""}fino a ${CAPACITY} allievi`}
+      subtitle={`${coInstructorIds.length > 0 ? `${coInstructorIds.length + 1} istruttori` : "1 istruttore"} · ${vehiclesEnabled ? "1 veicolo · " : ""}fino a ${CAPACITY} allievi`}
       anchor={anchor ?? null}
       width={440}
       sidePanel={browseOpen ? browsePanel : null}
