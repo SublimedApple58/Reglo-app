@@ -640,6 +640,8 @@ export function GroupLessonCreateDialog({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="col-span-2">
                 <CoInstructorPicker
                   instructors={instructors}
                   mainInstructorId={instructorId || null}

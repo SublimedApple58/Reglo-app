@@ -87,8 +87,7 @@ export function CoInstructorPicker({
       )}
       {value.length > 0 && (
         <p className="text-[12px] font-medium text-[#6a6a6a]">
-          La guida comparirà in agenda anche a {value.length === 1 ? "lui" : "loro"}, e le
-          ore contano per tutti.
+          La guida comparirà in agenda anche a chi aggiungi, e le ore contano per tutti.
         </p>
       )}
     </div>
