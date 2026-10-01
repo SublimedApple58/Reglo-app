@@ -1121,6 +1121,15 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           locationId: true,
           groupLessonId: true,
           motoLessonType: true,
+          // Economia dell'annullamento (REG-587): senza questi campi il dialogo
+          // "Annulla guida" dell'agenda vedeva `penaltyCutoffAt` sempre null e
+          // quindi NESSUN annullamento risultava tardivo — il ramo con la scelta
+          // su credito/penale era irraggiungibile dall'agenda (funzionava solo
+          // dal dettaglio allievo, che legge dal registro guide).
+          penaltyCutoffAt: true,
+          penaltyAmount: true,
+          creditApplied: true,
+          paymentRequired: true,
           // Esito esame: il pannello di gestione lo mostra sulla riga dell'iscritto
           // e la modalina "Registra esito" ci si apre sopra. Viaggia con ...rest.
           examOutcome: true,
@@ -1304,6 +1313,9 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         .map((v) => v.vehicle);
       return {
         ...rest,
+        // Decimal → number: passa da JSON (route API), e una stringa qui romperebbe
+        // il `formatEuro` del dialogo di annullamento.
+        penaltyAmount: rest.penaltyAmount != null ? Number(rest.penaltyAmount) : null,
         // Pagellino (REG-443) appiattito per il client: il dialog "Modifica
         // guida" lo mostra e lo compila.
         evaluations: (evaluations ?? []).map((e) => ({
@@ -1396,6 +1408,12 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           type: "group_lesson",
           types: [],
           rating: null,
+          // Economia annullamento (REG-587): un container di gruppo vuoto non
+          // ha nulla in ballo — e comunque i gruppi hanno un flusso dedicato.
+          penaltyCutoffAt: null,
+          penaltyAmount: null,
+          creditApplied: false,
+          paymentRequired: false,
           evaluations: [],
           notes: gl.notes,
           status: "scheduled",

@@ -1,0 +1,18 @@
+import { chromium } from 'playwright';
+const BASE='https://staging.reglo.it', OUT='/tmp/hiro-design/reg-587';
+const b=await chromium.launch();
+const ctx=await b.newContext({viewport:{width:1440,height:1000},locale:'it-IT'});
+const p=await ctx.newPage();
+await p.goto(`${BASE}/it/sign-in`,{waitUntil:'domcontentloaded'});
+await p.fill('input[type="email"]','titolare@reglo.it'); await p.fill('input[type="password"]','RegloTest2026!');
+await p.click('button[type="submit"]'); await p.waitForTimeout(7000);
+await p.keyboard.press('Escape'); await p.waitForTimeout(600);
+await p.mouse.click(1144,142); await p.waitForTimeout(1200);
+await p.goto(`${BASE}/it/user/autoscuole?tab=settings`,{waitUntil:'domcontentloaded'});
+await p.waitForTimeout(5000);
+await p.locator('text=Prenotazioni e allievi').first().click(); await p.waitForTimeout(2500);
+await p.locator('text=Crediti e prezzi').first().click(); await p.waitForTimeout(3000);
+await p.screenshot({path:`${OUT}/dbg-crediti.png`});
+const t=await p.evaluate(()=>Array.from(document.querySelectorAll('button[role="switch"],[role="switch"]')).map((e,i)=>({i,state:e.getAttribute('data-state')||e.getAttribute('aria-checked'),near:(e.closest('div')?.textContent||'').trim().slice(0,60)})));
+console.log('switch:',JSON.stringify(t));
+await b.close();
