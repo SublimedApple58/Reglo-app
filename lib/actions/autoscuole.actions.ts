@@ -4392,6 +4392,12 @@ export async function hardCleanupAutoscuolaAppointment(
 const annulAppointmentSchema = z.object({
   appointmentId: z.string().uuid(),
   lateOutcome: z.enum(["penalize", "waive", "defer"]).optional(),
+  /**
+   * REG-587: di chi è l'imprevisto. "school" = nostro → nessuna penale, mai,
+   * anche annullando all'ultimo. È una constatazione, non una scelta economica:
+   * la può fare anche l'istruttore non titolare.
+   */
+  fault: z.enum(["student", "school"]).optional(),
 });
 
 export async function annulAutoscuolaAppointment(
@@ -4407,13 +4413,15 @@ export async function annulAutoscuolaAppointment(
       return { success: false, message: "Operazione non consentita." };
     }
     const payload = annulAppointmentSchema.parse(input);
-    // L'istruttore non titolare non può decidere addebito/rimborso sul tardivo.
+    // L'istruttore non titolare non può decidere addebito/rimborso sul tardivo;
+    // può però dire di chi è l'imprevisto, che è un fatto, non una decisione.
     const lateOutcome = isOwnerOrAdmin ? payload.lateOutcome : "defer";
     return await annulFutureAppointment({
       companyId: membership.companyId,
       appointmentId: payload.appointmentId,
       actorUserId: membership.userId,
       lateOutcome,
+      fault: payload.fault ?? "student",
     });
   } catch (error) {
     return { success: false, message: formatError(error) };

@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CancelAppointmentDialog, type CancelDialogTarget, type LateOutcome } from "@/components/pages/Autoscuole/CancelAppointmentDialog";
+import { CancelAppointmentDialog, type CancelDialogTarget, type CancelFault, type LateOutcome } from "@/components/pages/Autoscuole/CancelAppointmentDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   Select,
@@ -2724,12 +2724,13 @@ export function AutoscuoleAgendaPage({
     });
   };
 
-  const handleAnnulConfirm = async (lateOutcome?: LateOutcome) => {
+  const handleAnnulConfirm = async (opts?: { lateOutcome?: LateOutcome; fault?: CancelFault }) => {
     if (!cancelDialogTarget || cancelDialogBusy) return;
     setCancelDialogBusy(true);
     const res = await annulAutoscuolaAppointment({
       appointmentId: cancelDialogTarget.appointmentId,
-      lateOutcome,
+      lateOutcome: opts?.lateOutcome,
+      fault: opts?.fault,
     });
     setCancelDialogBusy(false);
     if (!res.success) {

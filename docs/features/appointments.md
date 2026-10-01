@@ -59,7 +59,17 @@ Un solo dialogo che decide da sé penale/credito. Attore: titolare/admin **oppur
   - `"waive"` → condona: credito reso / importo azzerato, `lateCancellationAction = "dismissed"`.
   - `"penalize"` → applica: credito **trattenuto** (nessun rimborso) / guida `manualPaymentStatus = "unpaid"` ("da pagare"), `lateCancellationAction = "charged"`.
   - `"defer"` → lasciata in coda **Cancellazioni tardive** (`lateCancellationAction = null`), decisione rimandata al pannello.
-- Ritorna `data: { isLate, coverage, lateCancellationAction, refundedCredit }`.
+- **Di chi è l'imprevisto** (`fault`, REG-587, 2026-10-01) — **la domanda viene PRIMA di tutto il resto** su un annullamento tardivo:
+  - `"student"` (default, comportamento storico): vale la regola del preavviso qui sopra.
+  - `"school"`: l'imprevisto è dell'autoscuola (istruttore indisponibile, veicolo guasto…) → **nessuna penale, mai**, anche annullando a 10 minuti dalla guida: credito reso, importo azzerato, `lateCancellationAction = null`, `cancellationKind = "operational_cancel"` + `cancellationReason = "school_fault"`. Il marcatore è ciò che tiene la guida **fuori dalla coda "Cancellazioni tardive"** (che filtra `manual_cancel`) e **fuori dal conteggio del blocco automatico per debito** (che guarda `lateCancellationAction = "charged"`). Notifica dedicata all'allievo ("Guida annullata dall'autoscuola… nessuna penale a tuo carico").
+  - `fault` è una **constatazione, non una scelta economica**: la può fare anche l'**istruttore** non titolare, che invece resta senza `lateOutcome` (forzato a `defer`).
+  - **Il default è `"student"` solo lato API**, per retrocompatibilità: le due UI **non** preselezionano nulla e non lasciano confermare finché non si risponde — era proprio il dare per scontato "colpa dell'allievo" il bug di REG-587.
+- Ritorna `data: { isLate, coverage, lateCancellationAction, refundedCredit, fault }`.
+
+#### UI della domanda (REG-587)
+- **Web** `CancelAppointmentDialog.tsx`: nel ramo "Annullamento tardivo", due `OptionRow` ("Dell'allievo" / "Dell'autoscuola" con tag *niente penale*) **sopra** le opzioni economiche. Scelta `school` → le opzioni economiche spariscono e compare il riquadro verde con l'effetto reale (credito reso / niente addebito) + "non finisce in Cancellazioni tardive". Il bottone di conferma è disabilitato finché `fault === null`.
+- **Mobile istruttore**: form sheet `app/(tabs)/home/cancel-fault.tsx` (HUG_SHEET) + `src/stores/cancelFaultStore.ts`, stesso pattern di `manage-lesson-correct`. Si apre **solo** quando la domanda ha una conseguenza: guida **futura**, non esame/gruppo, `scheduled|confirmed`, oltre `penaltyCutoffAt`. In tutti gli altri casi (guide passate, esami, gruppi, annullamenti nei tempi) resta il permanent-delete di sempre.
+- **Endpoint mobile** `POST /api/autoscuole/appointments/[id]/annul` → `annulAutoscuolaAppointment`. È lo stesso percorso del web: a differenza di `/permanent-cancel` **rilascia gli slot**.
 
 ### 2. "Rimuovi dallo storico" (guide PASSATE / concluse)
 Fa **sparire** una guida dallo storico allievo e dall'agenda, senza toccare penale/cutoff. Solo titolare/admin.

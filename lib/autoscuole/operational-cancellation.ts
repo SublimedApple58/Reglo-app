@@ -43,6 +43,8 @@ const formatCancellationTitle = (value: string) => {
       return "Guida annullata";
     case "owner_delete":
       return "Guida annullata dalla segreteria";
+    case "school_fault":
+      return "Guida annullata dall'autoscuola";
     case "instructor_sick":
       return "🤒 Guida annullata — istruttore in malattia";
     case "instructor_vacation":
@@ -57,6 +59,8 @@ const formatCancellationBody = (value: string, slotLabel: string, instrLabel: st
   switch ((value ?? "").trim()) {
     case "instructor_cancel":
       return `La guida di ${slotLabel}${instrLabel} è stata annullata dall'istruttore. ${tail}`;
+    case "school_fault":
+      return `La guida di ${slotLabel}${instrLabel} è stata annullata per un imprevisto dell'autoscuola. Nessuna penale a tuo carico. ${tail}`;
     case "vehicle_inactive":
       return `La guida di ${slotLabel}${instrLabel} è stata annullata perché il veicolo non è più disponibile. ${tail}`;
     case "instructor_inactive":
@@ -438,6 +442,15 @@ export async function removeAppointmentFromRecord({
  *      · "waive"    → condona: credito reso / non addebitato (lateCancellationAction=dismissed)
  *      · "penalize" → applica: credito trattenuto / guida da pagare (lateCancellationAction=charged)
  *      · "defer"    → decidi dopo: lasciata in coda "Cancellazioni tardive" (null)
+ *
+ * REG-587 — `fault` dice DI CHI è l'imprevisto, ed è una constatazione, non una
+ * scelta economica (la può fare anche l'istruttore):
+ *  - "student" (default, comportamento storico): vale la regola del preavviso.
+ *  - "school": l'imprevisto è nostro (istruttore indisponibile, veicolo guasto…)
+ *    → NESSUNA penale, mai, anche se l'annullamento è all'ultimo: credito reso,
+ *    importo azzerato, e `cancellationKind = "operational_cancel"` così la guida
+ *    NON finisce nella coda "Cancellazioni tardive" (che filtra `manual_cancel`)
+ *    e non pesa sul blocco automatico per debito.
  * Esami e guide di gruppo hanno flussi dedicati → esclusi.
  */
 export async function annulFutureAppointment({
@@ -446,12 +459,14 @@ export async function annulFutureAppointment({
   appointmentId,
   actorUserId,
   lateOutcome,
+  fault = "student",
 }: {
   prisma?: PrismaClientLike;
   companyId: string;
   appointmentId: string;
   actorUserId?: string | null;
   lateOutcome?: "penalize" | "waive" | "defer";
+  fault?: "student" | "school";
 }): Promise<{
   success: boolean;
   message?: string;
@@ -460,6 +475,7 @@ export async function annulFutureAppointment({
     coverage: "credit" | "money" | "none";
     lateCancellationAction: "charged" | "dismissed" | null;
     refundedCredit: boolean;
+    fault: "student" | "school";
   };
 }> {
   const now = new Date();
@@ -515,8 +531,12 @@ export async function annulFutureAppointment({
   let waivePayment = false; // azzera l'importo dovuto
   let chargeMoney = false; // segna la guida come da pagare (penale denaro)
 
-  if (!isLate) {
-    // Nei tempi: nessuna penale.
+  // Imprevisto dell'autoscuola: l'allievo non c'entra, quindi è trattato come
+  // un annullamento nei tempi qualunque sia l'orario (REG-587).
+  const schoolFault = fault === "school";
+
+  if (!isLate || schoolFault) {
+    // Nessuna penale.
     refundCredit = coverage === "credit";
     waivePayment = coverage === "money";
   } else if (coverage !== "none") {
@@ -542,8 +562,10 @@ export async function annulFutureAppointment({
         status: "cancelled",
         cancelledAt: now,
         cancelledByUserId: actorUserId ?? null,
-        cancellationKind: "manual_cancel",
-        cancellationReason: "manual_cancel",
+        // `operational_cancel` tiene la guida fuori dalla coda "Cancellazioni
+        // tardive" e dai conteggi di debito: è l'autoscuola che ha disdetto.
+        cancellationKind: schoolFault ? "operational_cancel" : "manual_cancel",
+        cancellationReason: schoolFault ? "school_fault" : "manual_cancel",
         lateCancellationAction,
         ...(waivePayment && appointment.paymentRequired
           ? { paymentStatus: "waived", invoiceStatus: "not_required", manualPaymentStatus: null }
@@ -588,7 +610,7 @@ export async function annulFutureAppointment({
     companyId,
     studentId: appointment.studentId,
     startsAt: appointment.startsAt,
-    reason: "owner_delete",
+    reason: schoolFault ? "school_fault" : "owner_delete",
     instructorId: appointment.instructorId,
   });
 
@@ -599,7 +621,7 @@ export async function annulFutureAppointment({
 
   return {
     success: true,
-    data: { isLate, coverage, lateCancellationAction, refundedCredit: refundCredit },
+    data: { isLate, coverage, lateCancellationAction, refundedCredit: refundCredit, fault },
   };
 }
 

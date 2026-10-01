@@ -29,6 +29,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   CancelAppointmentDialog,
   type CancelDialogTarget,
+  type CancelFault,
   type LateOutcome,
 } from "@/components/pages/Autoscuole/CancelAppointmentDialog";
 import { ExpandingSearch } from "@/components/ui/expanding-search";
@@ -1880,13 +1881,14 @@ export function AutoscuoleStudentsPage({
 
   // Annulla una guida futura (esito credito/penale gestito nel dialogo). No optimistic.
   const handleAnnul = React.useCallback(
-    async (lateOutcome?: LateOutcome) => {
+    async (opts?: { lateOutcome?: LateOutcome; fault?: CancelFault }) => {
       if (!dialogTarget || cancelBusy) return;
       const studentId = register?.student.id;
       setCancelBusy(true);
       const res = await annulAutoscuolaAppointment({
         appointmentId: dialogTarget.appointmentId,
-        lateOutcome,
+        lateOutcome: opts?.lateOutcome,
+        fault: opts?.fault,
       });
       setCancelBusy(false);
       if (!res.success) {

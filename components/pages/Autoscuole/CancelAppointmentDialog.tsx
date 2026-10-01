@@ -41,6 +41,13 @@ export type CancelDialogTarget = {
 
 export type LateOutcome = "penalize" | "waive" | "defer";
 
+/**
+ * REG-587 — di chi è l'imprevisto che fa saltare la guida all'ultimo.
+ * "student" → vale la regola del preavviso (penale/credito trattenuto).
+ * "school"  → imprevisto nostro: nessuna penale, mai.
+ */
+export type CancelFault = "student" | "school";
+
 const formatEuro = (v: number) => `€ ${v.toFixed(2)}`;
 
 const formatCountdown = (from: Date, to: Date) => {
@@ -116,16 +123,20 @@ export function CancelAppointmentDialog({
   /** Istruttore non titolare: niente scelte economiche → sempre in coda tardive. */
   canDecideEconomics?: boolean;
   onClose: () => void;
-  onAnnul: (lateOutcome?: LateOutcome) => void;
+  onAnnul: (opts?: { lateOutcome?: LateOutcome; fault?: CancelFault }) => void;
   onRemove: (opts: { keepInHours: boolean; refundCredit: boolean }) => void;
 }) {
   const nameOrder = useStudentNameOrder();
   const [lateOutcome, setLateOutcome] = React.useState<LateOutcome>("penalize");
+  // Nessun default: su un annullamento tardivo di chi sia l'imprevisto lo deve
+  // dire chi annulla (REG-587). Dare per scontato "dell'allievo" e' il bug.
+  const [fault, setFault] = React.useState<CancelFault | null>(null);
   const [keepInHours, setKeepInHours] = React.useState(false);
   const [refundCredit, setRefundCredit] = React.useState(false);
 
   React.useEffect(() => {
     setLateOutcome("penalize");
+    setFault(null);
     setKeepInHours(false);
     setRefundCredit(false);
   }, [target?.appointmentId]);
@@ -160,14 +171,19 @@ export function CancelAppointmentDialog({
     </div>
   );
 
-  const footer = (confirmLabel: string, onConfirm: () => void, danger = true) => (
+  const footer = (
+    confirmLabel: string,
+    onConfirm: () => void,
+    danger = true,
+    disabled = false,
+  ) => (
     <DialogFooter className="mt-5">
       <Button variant="ghost" onClick={onClose} disabled={busy}>
         Indietro
       </Button>
       <Button
         onClick={onConfirm}
-        disabled={busy}
+        disabled={busy || disabled}
         className={danger ? "bg-[#dc2626] text-white hover:bg-[#b91c1c]" : undefined}
       >
         {busy ? <LoadingDots className="scale-[0.6]" /> : confirmLabel}
@@ -266,13 +282,14 @@ export function CancelAppointmentDialog({
               <span>Non verrà addebitato nulla a {student}.</span>
             </div>
           )}
-          {footer("Annulla la guida", () => onAnnul(undefined))}
+          {footer("Annulla la guida", () => onAnnul())}
         </DialogContent>
       </Dialog>
     );
   }
 
   // Tardivo.
+  const schoolFault = fault === "school";
   const lateHeaderNote =
     coverage === "credit"
       ? `Mancano ${formatCountdown(now, target.startsAt)} alla guida (sotto il limite di ${cutoffHours ?? "?"}h). Di norma l'allievo perde il credito.`
@@ -292,7 +309,49 @@ export function CancelAppointmentDialog({
           <span>{lateHeaderNote}</span>
         </div>
 
-        {coverage !== "none" && canDecideEconomics && (
+        {/* REG-587 — prima domanda: di chi è l'imprevisto. Finché non si
+            risponde non si può confermare: è proprio il dare per scontato
+            "dell'allievo" che faceva pagare penali non dovute. */}
+        <p className="mt-4 text-[13px] font-semibold text-foreground">
+          Di chi è l&apos;imprevisto?
+        </p>
+        <div className="mt-2 flex flex-col gap-2">
+          <OptionRow
+            selected={fault === "student"}
+            onClick={() => setFault("student")}
+            title={`Dell'allievo`}
+            sub={`${student} disdice all'ultimo: vale la regola del preavviso.`}
+          />
+          <OptionRow
+            selected={fault === "school"}
+            onClick={() => setFault("school")}
+            title="Dell'autoscuola"
+            sub="Istruttore indisponibile, veicolo guasto, imprevisto nostro."
+            tag="niente penale"
+          />
+        </div>
+
+        {schoolFault && (
+          <div className="mt-3 flex items-start gap-2.5 rounded-[11px] bg-[#F0FDF4] px-3 py-2.5 text-[13px] text-[#067647]">
+            <span>{coverage === "credit" ? "↩︎" : coverage === "money" ? "€" : "✓"}</span>
+            <span>
+              {coverage === "credit" ? (
+                <>
+                  Nessuna penale: il <b>credito</b> torna a {student}.
+                </>
+              ) : coverage === "money" ? (
+                <>
+                  Nessuna penale: non verrà addebitato nulla a {student}.
+                </>
+              ) : (
+                <>Nessuna penale a carico di {student}.</>
+              )}{" "}
+              La guida non finisce in <b>Cancellazioni tardive</b>.
+            </span>
+          </div>
+        )}
+
+        {fault === "student" && coverage !== "none" && canDecideEconomics && (
           <>
             <p className="mt-4 text-[13px] font-semibold text-foreground">
               {coverage === "credit" ? `Cosa fare con il credito di ${student}?` : "Cosa vuoi fare?"}
@@ -333,14 +392,26 @@ export function CancelAppointmentDialog({
           </>
         )}
 
-        {coverage !== "none" && !canDecideEconomics && (
+        {fault === "student" && coverage !== "none" && !canDecideEconomics && (
           <p className="mt-3 text-[13px] font-medium text-[#6a6a76]">
             La cancellazione verrà gestita dal titolare in <b>Cancellazioni tardive</b>.
           </p>
         )}
 
-        {footer("Annulla la guida", () =>
-          onAnnul(coverage === "none" ? undefined : canDecideEconomics ? lateOutcome : "defer"),
+        {footer(
+          "Annulla la guida",
+          () =>
+            onAnnul({
+              fault: fault ?? "student",
+              lateOutcome:
+                schoolFault || coverage === "none"
+                  ? undefined
+                  : canDecideEconomics
+                    ? lateOutcome
+                    : "defer",
+            }),
+          true,
+          fault === null,
         )}
       </DialogContent>
     </Dialog>
