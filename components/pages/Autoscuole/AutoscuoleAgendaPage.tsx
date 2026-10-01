@@ -3755,7 +3755,7 @@ export function AutoscuoleAgendaPage({
           target={cancelDialogTarget}
           busy={cancelDialogBusy}
           onClose={() => { if (!cancelDialogBusy) setCancelDialogTarget(null); }}
-          onAnnul={(lateOutcome) => void handleAnnulConfirm(lateOutcome)}
+          onAnnul={(opts) => void handleAnnulConfirm(opts)}
           onRemove={(opts) => void handleRemoveConfirm(opts)}
         />
         <GroupLessonCreateDialog

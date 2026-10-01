@@ -3314,7 +3314,7 @@ export function AutoscuoleStudentsPage({
           onClose={() => {
             if (!cancelBusy) setDialogTarget(null);
           }}
-          onAnnul={(lateOutcome) => void handleAnnul(lateOutcome)}
+          onAnnul={(opts) => void handleAnnul(opts)}
           onRemove={(opts) => void handleRemove(opts)}
         />
       </div>
