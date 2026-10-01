@@ -360,13 +360,7 @@ export function CancelAppointmentDialog({
               <OptionRow
                 selected={lateOutcome === "penalize"}
                 onClick={() => setLateOutcome("penalize")}
-                title={
-                  coverage === "credit"
-                    ? "Trattieni il credito"
-                    : `Addebita la guida${
-                        target.penaltyAmount ? ` · ${formatEuro(target.penaltyAmount)}` : ""
-                      }`
-                }
+                title={coverage === "credit" ? "Trattieni il credito" : "Addebita la guida"}
                 sub={
                   coverage === "credit"
                     ? "Segui la regola: l'allievo perde la guida."
