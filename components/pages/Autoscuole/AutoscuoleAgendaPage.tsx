@@ -340,7 +340,7 @@ const vehicleOfferedInCreate = (
 /**
  * REG-586 — veicolo precompilato nel form "Nuova guida", stessa idea del mobile
  * (`BookingForm.presetVehiclesForStudent`). Tra i veicoli che il picker offre
- * davvero si sceglie, in ordine:
+ * davvero, tolti quelli esclusivi di un ALTRO istruttore, si sceglie in ordine:
  *   1. un veicolo ESCLUSIVO dell'istruttore: a quello il backend lo obbliga
  *      comunque (`lib/autoscuole/vehicle-resolution.ts`), suggerirgliene un
  *      altro sarebbe fuorviante;
@@ -357,9 +357,20 @@ const resolveCreateVehicleId = (args: {
   bookingMode: "auto" | "moto";
   lastVehicleByInstructor: Record<string, string>;
 }): string => {
-  const candidates = args.vehicles.filter((vehicle) =>
+  const offered = args.vehicles.filter((vehicle) =>
     vehicleOfferedInCreate(vehicle, args.student, args.bookingMode),
   );
+  // Un veicolo esclusivo di un ALTRO istruttore non è suo: la risoluzione lato
+  // server non glielo assegnerebbe mai, quindi non lo suggeriamo. Resta
+  // comunque scegliibile a mano nella Select (il picker non filtra per
+  // istruttore — vedi docs/features/vehicles.md).
+  const candidates = args.instructorId
+    ? offered.filter(
+        (vehicle) =>
+          !vehicle.assignedInstructorId ||
+          vehicle.assignedInstructorId === args.instructorId,
+      )
+    : offered;
   if (!candidates.length) return "";
   const exclusive = args.instructorId
     ? candidates.filter((vehicle) => vehicle.assignedInstructorId === args.instructorId)
