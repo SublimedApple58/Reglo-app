@@ -295,7 +295,7 @@ export function CancelAppointmentDialog({
       ? `Mancano ${formatCountdown(now, target.startsAt)} alla guida (sotto il limite di ${cutoffHours ?? "?"}h). Di norma l'allievo perde il credito.`
       : coverage === "money"
         ? `Mancano ${formatCountdown(now, target.startsAt)} (sotto il limite di ${cutoffHours ?? "?"}h). L'allievo dovrebbe pagare comunque la guida${target.penaltyAmount != null ? ` (penale ${formatEuro(target.penaltyAmount)})` : ""}.`
-        : `L'annullamento è tardivo, ma per questa guida non ci sono crediti né importi in gioco.`;
+        : `Mancano ${formatCountdown(now, target.startsAt)} alla guida (sotto il limite di ${cutoffHours ?? "?"}h). Di norma la guida viene addebitata all'allievo.`;
 
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
@@ -351,7 +351,7 @@ export function CancelAppointmentDialog({
           </div>
         )}
 
-        {fault === "student" && coverage !== "none" && canDecideEconomics && (
+        {fault === "student" && canDecideEconomics && (
           <>
             <p className="mt-4 text-[13px] font-semibold text-foreground">
               {coverage === "credit" ? `Cosa fare con il credito di ${student}?` : "Cosa vuoi fare?"}
@@ -363,7 +363,9 @@ export function CancelAppointmentDialog({
                 title={
                   coverage === "credit"
                     ? "Trattieni il credito"
-                    : `Addebita la penale${target.penaltyAmount != null ? ` · ${formatEuro(target.penaltyAmount)}` : ""}`
+                    : `Addebita la guida${
+                        target.penaltyAmount ? ` · ${formatEuro(target.penaltyAmount)}` : ""
+                      }`
                 }
                 sub={
                   coverage === "credit"
@@ -378,7 +380,7 @@ export function CancelAppointmentDialog({
                 sub={
                   coverage === "credit"
                     ? `Condoni: ${student} riavrà 1 credito guida.`
-                    : "Condoni: nessun importo a carico dell'allievo."
+                    : `Condoni: niente a carico di ${student}.`
                 }
               />
               <OptionRow
@@ -392,7 +394,7 @@ export function CancelAppointmentDialog({
           </>
         )}
 
-        {fault === "student" && coverage !== "none" && !canDecideEconomics && (
+        {fault === "student" && !canDecideEconomics && (
           <p className="mt-3 text-[13px] font-medium text-[#6a6a76]">
             La cancellazione verrà gestita dal titolare in <b>Cancellazioni tardive</b>.
           </p>
@@ -403,12 +405,10 @@ export function CancelAppointmentDialog({
           () =>
             onAnnul({
               fault: fault ?? "student",
-              lateOutcome:
-                schoolFault || coverage === "none"
-                  ? undefined
-                  : canDecideEconomics
-                    ? lateOutcome
-                    : "defer",
+              // Senza credito la penale è un addebito vero, quindi la scelta
+              // serve anche lì (REG-587): l'unico caso senza esito economico
+              // resta l'imprevisto dell'autoscuola.
+              lateOutcome: schoolFault ? undefined : canDecideEconomics ? lateOutcome : "defer",
             }),
           true,
           fault === null,

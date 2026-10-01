@@ -438,7 +438,9 @@ export async function removeAppointmentFromRecord({
  * economico in base a copertura (credito / denaro / niente) e tempistica:
  *  - NEI TEMPI (annullamento prima del cutoff di preavviso): nessuna penale →
  *    credito reso, importo azzerato.
- *  - TARDIVO: serve la scelta del titolare (`lateOutcome`):
+ *  - TARDIVO: serve la scelta del titolare (`lateOutcome`), anche quando non
+ *    c'è nulla di "coperto" (niente credito, niente importo): lì "penalize"
+ *    significa addebito vero (`manualPaymentStatus = "unpaid"`):
  *      · "waive"    → condona: credito reso / non addebitato (lateCancellationAction=dismissed)
  *      · "penalize" → applica: credito trattenuto / guida da pagare (lateCancellationAction=charged)
  *      · "defer"    → decidi dopo: lasciata in coda "Cancellazioni tardive" (null)
@@ -539,15 +541,20 @@ export async function annulFutureAppointment({
     // Nessuna penale.
     refundCredit = coverage === "credit";
     waivePayment = coverage === "money";
-  } else if (coverage !== "none") {
+  } else {
+    // Tardivo per colpa dell'allievo. Vale ANCHE quando non c'è né credito né
+    // importo (`coverage === "none"`): lì la penale non è lo storno di un
+    // credito ma un addebito vero — la guida diventa "da pagare" e pesa sul
+    // blocco automatico per debito, esattamente come fa il pannello
+    // "Cancellazioni tardive" quando il titolare sceglie "Addebita".
     const outcome = lateOutcome ?? "defer";
     if (outcome === "waive") {
       refundCredit = coverage === "credit";
       waivePayment = coverage === "money";
       lateCancellationAction = "dismissed";
     } else if (outcome === "penalize") {
-      // credito: trattenuto (nessun rimborso). denaro: da pagare.
-      chargeMoney = coverage === "money";
+      // credito: trattenuto (nessun rimborso). denaro o niente: da pagare.
+      chargeMoney = coverage !== "credit";
       lateCancellationAction = "charged";
     } else {
       // defer → resta in coda "Cancellazioni tardive" (lateCancellationAction null)

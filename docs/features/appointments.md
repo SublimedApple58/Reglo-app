@@ -55,9 +55,9 @@ Un solo dialogo che decide da sé penale/credito. Attore: titolare/admin **oppur
 - Effetti fissi: `status → cancelled`, `cancellationKind = "manual_cancel"` (+ `cancellationReason "manual_cancel"`), slot liberati (`releaseSlotsForAppointment`), notifica allievo (push+email, reason `owner_delete`). **Esami e guide di gruppo esclusi** (flussi dedicati).
 - **`coverage`** = `credit` (se `creditApplied`) / `money` (se `paymentRequired`) / `none`. **`isLate`** = `now > penaltyCutoffAt`.
 - **Nei tempi** (`!isLate`): nessuna penale → se `credit` restituisce 1 credito (`adjustStudentLessonCredits` +1, `creditRefundedAt`); se `money` azzera l'importo (`paymentStatus "waived"`, `invoiceStatus "not_required"`). `lateCancellationAction` resta `null`.
-- **Tardivo** (`isLate` + coverage ≠ none) con `lateOutcome`:
+- **Tardivo** (`isLate`) con `lateOutcome` — **vale per tutte e tre le coperture**, `none` compresa (REG-587, 2026-10-01: prima il ramo era `coverage !== "none"` e una guida senza credito né importo finiva sempre in coda, senza che il titolare potesse decidere al momento). Senza copertura la penale **non** è lo storno di un credito ma un **addebito vero**: `manualPaymentStatus = "unpaid"` → la guida risulta "da pagare" e pesa sul blocco automatico per debito, esattamente come fa il pannello "Cancellazioni tardive" alla voce "Addebita" in modalità manuale.
   - `"waive"` → condona: credito reso / importo azzerato, `lateCancellationAction = "dismissed"`.
-  - `"penalize"` → applica: credito **trattenuto** (nessun rimborso) / guida `manualPaymentStatus = "unpaid"` ("da pagare"), `lateCancellationAction = "charged"`.
+  - `"penalize"` → applica: credito **trattenuto** (nessun rimborso); con copertura `money` **o `none`** la guida diventa `manualPaymentStatus = "unpaid"` ("da pagare"). `lateCancellationAction = "charged"`.
   - `"defer"` → lasciata in coda **Cancellazioni tardive** (`lateCancellationAction = null`), decisione rimandata al pannello.
 - **Di chi è l'imprevisto** (`fault`, REG-587, 2026-10-01) — **la domanda viene PRIMA di tutto il resto** su un annullamento tardivo:
   - `"student"` (default, comportamento storico): vale la regola del preavviso qui sopra.
