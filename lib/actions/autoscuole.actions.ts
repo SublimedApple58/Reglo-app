@@ -1058,6 +1058,8 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
             type: "esame",
             OR: [
               { instructorId: instructorRecord.id },
+              // REG-585: anche gli esami in cui è istruttore aggiunto.
+              { coInstructors: { some: { instructorId: instructorRecord.id } } },
               ...(clusterStudentIds.length
                 ? [{ studentId: { in: clusterStudentIds } }]
                 : []),
@@ -1077,17 +1079,20 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
       ...(normalizedStatus ? { status: normalizedStatus } : {}),
       ...(normalizedType ? { type: normalizedType } : {}),
     };
+    // REG-585: "le mie guide" ora include quelle condivise con me da un collega.
+    // È questo OR che le fa comparire in agenda all'istruttore aggiunto, sia sul
+    // web sia sul mobile (che legge da questa stessa bootstrap).
+    const minePredicate: Prisma.AutoscuolaAppointmentWhereInput[] = input.instructorId
+      ? [
+          { instructorId: input.instructorId },
+          { coInstructors: { some: { instructorId: input.instructorId } } },
+        ]
+      : [];
     const appointmentsWhere: Prisma.AutoscuolaAppointmentWhereInput =
       input.instructorId && examVisibilityClause
-        ? {
-            ...baseWhere,
-            OR: [
-              { instructorId: input.instructorId },
-              examVisibilityClause,
-            ],
-          }
+        ? { ...baseWhere, OR: [...minePredicate, examVisibilityClause] }
         : input.instructorId
-          ? { ...baseWhere, instructorId: input.instructorId }
+          ? { ...baseWhere, OR: minePredicate }
           : baseWhere;
 
     const [appointments, students, instructors, vehicles, instructorBlocks, holidays, agendaLimits, lastInstructorRows, lastVehicleByStudentRows, lastVehicleByInstructorRows] = await Promise.all([
@@ -1130,6 +1135,10 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           penaltyAmount: true,
           creditApplied: true,
           paymentRequired: true,
+          // REG-585: istruttori aggiuntivi dell'esame. Viaggiano appiattiti come
+          // `coInstructors: [{id, name}]` così agenda web e mobile possono
+          // mettere la guida anche nella colonna del collega.
+          coInstructors: { select: { instructor: { select: { id: true, name: true } } } },
           // Esito esame: il pannello di gestione lo mostra sulla riga dell'iscritto
           // e la modalina "Registra esito" ci si apre sopra. Viaggia con ...rest.
           examOutcome: true,
@@ -1311,8 +1320,11 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
       const extraMotoVehicles = appointmentVehicles
         .filter((v) => v.role === "primary" && v.vehicleId !== rest.vehicleId)
         .map((v) => v.vehicle);
+      const { coInstructors, ...restNoCo } = rest;
       return {
-        ...rest,
+        ...restNoCo,
+        // REG-585: appiattito a [{id, name}] come `instructor`.
+        coInstructors: (coInstructors ?? []).map((row) => row.instructor),
         // Decimal → number: passa da JSON (route API), e una stringa qui romperebbe
         // il `formatEuro` del dialogo di annullamento.
         penaltyAmount: rest.penaltyAmount != null ? Number(rest.penaltyAmount) : null,
@@ -1365,7 +1377,15 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           companyId,
           status: "scheduled",
           startsAt: { gte: from, lt: to },
-          ...(input.instructorId ? { instructorId: input.instructorId } : {}),
+          // REG-585: anche i gruppi in cui l'istruttore è aggiunto.
+          ...(input.instructorId
+            ? {
+                OR: [
+                  { instructorId: input.instructorId },
+                  { coInstructors: { some: { instructorId: input.instructorId } } },
+                ],
+              }
+            : {}),
           ...(input.vehicleId ? { vehicleId: input.vehicleId } : {}),
           appointments: { none: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } } },
         },
@@ -1381,6 +1401,8 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           vehicleId: true,
           locationId: true,
           instructor: { select: { id: true, name: true } },
+          // REG-585: istruttori aggiuntivi del gruppo.
+          coInstructors: { select: { instructor: { select: { id: true, name: true } } } },
           vehicle: { select: { id: true, name: true, transmission: true } },
           location: {
             select: {
@@ -1414,6 +1436,8 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           penaltyAmount: null,
           creditApplied: false,
           paymentRequired: false,
+          // REG-585: il container porta i suoi istruttori aggiuntivi.
+          coInstructors: gl.coInstructors.map((row) => row.instructor),
           evaluations: [],
           notes: gl.notes,
           status: "scheduled",
@@ -8716,9 +8740,15 @@ export async function materializeExamSlot(params: {
   startsAt: Date;
   endsAt: Date | null;
   instructorId: string | null;
+  /** REG-585: istruttori aggiuntivi, replicati su OGNI riga dell'esame. */
+  coInstructorIds?: string[];
   notes: string | null;
 }): Promise<number> {
   const { companyId, studentIds, startsAt, endsAt, instructorId, notes } = params;
+  // Il principale non si duplica nel join: lì stanno solo i colleghi.
+  const coInstructorIds = Array.from(
+    new Set((params.coInstructorIds ?? []).filter((id) => id && id !== instructorId)),
+  );
 
   const base = {
     companyId,
@@ -8730,6 +8760,11 @@ export async function materializeExamSlot(params: {
     instructorId: instructorId ?? null,
     vehicleId: null,
     paymentRequired: false,
+    // Un esame è una riga PER ALLIEVO: gli istruttori aggiuntivi vanno su
+    // tutte, altrimenti il collega vedrebbe solo una parte dei candidati.
+    ...(coInstructorIds.length
+      ? { coInstructors: { create: coInstructorIds.map((instructorId) => ({ instructorId })) } }
+      : {}),
   };
 
   // Existing empty placeholder(s) for this exact slot, if any.
@@ -8766,7 +8801,18 @@ export async function materializeExamSlot(params: {
           where: { id: ph.id },
           // Convert the placeholder into a real seat; refresh notes if provided
           // so a just-filled exam stays consistent with newly-created seats.
-          data: { studentId: studentIds[i], ...(notes != null ? { notes } : {}) },
+          data: {
+            studentId: studentIds[i],
+            ...(notes != null ? { notes } : {}),
+            // REG-585: riallinea gli istruttori aggiuntivi del placeholder a
+            // quelli richiesti ora (il titolare può averli cambiati nel mentre).
+            coInstructors: {
+              deleteMany: {},
+              ...(coInstructorIds.length
+                ? { create: coInstructorIds.map((instructorId) => ({ instructorId })) }
+                : {}),
+            },
+          },
         }),
       );
       i++;
@@ -8790,6 +8836,8 @@ const createExamEventSchema = z.object({
   startsAt: z.string(),
   endsAt: z.string().optional().nullable(),
   instructorId: z.string().uuid().optional().nullable(),
+  /** REG-585: istruttori aggiuntivi. Nessun tetto al numero (scelta di Tiziano). */
+  coInstructorIds: z.array(z.string().uuid()).optional(),
   notes: z.string().optional(),
 });
 
@@ -8821,6 +8869,26 @@ export async function createExamEvent(
         select: { id: true },
       });
       if (!instr) return { success: false as const, message: "Istruttore non trovato." };
+    }
+    // REG-585: stessi controlli sugli aggiuntivi. Il principale, se ripetuto,
+    // viene semplicemente scartato invece di dare errore.
+    const coInstructorIds = Array.from(
+      new Set((payload.coInstructorIds ?? []).filter((id) => id !== payload.instructorId)),
+    );
+    if (coInstructorIds.length) {
+      if (!payload.instructorId) {
+        return {
+          success: false as const,
+          message: "Scegli prima l'istruttore principale dell'esame.",
+        };
+      }
+      const found = await prisma.autoscuolaInstructor.findMany({
+        where: { id: { in: coInstructorIds }, companyId, status: { not: "inactive" } },
+        select: { id: true },
+      });
+      if (found.length !== coInstructorIds.length) {
+        return { success: false as const, message: "Istruttore aggiuntivo non trovato." };
+      }
     }
 
     // Validate all students belong to this company
@@ -8854,23 +8922,39 @@ export async function createExamEvent(
           message: `${count} ${count === 1 ? "allievo ha" : "allievi hanno"} già un impegno in quell'orario.`,
         };
       }
-      if (payload.instructorId) {
+      // REG-585: ogni istruttore dell'esame dev'essere libero, non solo il primo.
+      const examInstructorIds = [payload.instructorId, ...coInstructorIds].filter(
+        Boolean,
+      ) as string[];
+      for (const examInstructorId of examInstructorIds) {
         const instrConflict = await prisma.autoscuolaAppointment.findFirst({
           where: {
             companyId,
-            instructorId: payload.instructorId,
+            OR: [
+              { instructorId: examInstructorId },
+              { coInstructors: { some: { instructorId: examInstructorId } } },
+            ],
             status: { in: activeStatuses },
             startsAt: { lt: endsAt },
             endsAt: { gt: startsAt },
             // Exclude THIS exam's own rows (same slot+instructor): adding a
             // student to an exam the instructor already accompanies — incl. an
             // empty exam's placeholder — is not a real conflict.
-            NOT: { type: "esame", instructorId: payload.instructorId, startsAt, endsAt },
+            NOT: { type: "esame", startsAt, endsAt },
           },
           select: { id: true },
         });
         if (instrConflict) {
-          return { success: false as const, message: "L'istruttore ha già un impegno in quell'orario." };
+          const who =
+            examInstructorIds.length > 1
+              ? (
+                  await prisma.autoscuolaInstructor.findFirst({
+                    where: { id: examInstructorId, companyId },
+                    select: { name: true },
+                  })
+                )?.name ?? "Un istruttore"
+              : "L'istruttore";
+          return { success: false as const, message: `${who} ha già un impegno in quell'orario.` };
         }
       }
     }
@@ -8883,6 +8967,7 @@ export async function createExamEvent(
       startsAt,
       endsAt,
       instructorId: payload.instructorId ?? null,
+      coInstructorIds,
       notes: payload.notes ?? null,
     });
 
@@ -8961,6 +9046,8 @@ export async function removeExamStudent(appointmentId: string) {
 const updateExamEventSchema = z.object({
   appointmentIds: z.array(z.string().uuid()).min(1),
   instructorId: z.string().uuid().optional().nullable(),
+  /** REG-585: istruttori aggiuntivi. Assente = non toccarli. */
+  coInstructorIds: z.array(z.string().uuid()).optional(),
 });
 
 export async function updateExamInstructor(
@@ -8973,9 +9060,48 @@ export async function updateExamInstructor(
     }
     const payload = updateExamEventSchema.parse(input);
 
-    await prisma.autoscuolaAppointment.updateMany({
-      where: { id: { in: payload.appointmentIds }, companyId: membership.companyId, type: "esame" },
-      data: { instructorId: payload.instructorId ?? null },
+    const companyId = membership.companyId;
+    // REG-585: `coInstructorIds` assente = il chiamante non li sta toccando
+    // (cambio del solo principale). Lista vuota = toglili tutti.
+    const coInstructorIds =
+      payload.coInstructorIds === undefined
+        ? null
+        : Array.from(
+            new Set(payload.coInstructorIds.filter((id) => id !== payload.instructorId)),
+          );
+
+    if (coInstructorIds?.length) {
+      const found = await prisma.autoscuolaInstructor.findMany({
+        where: { id: { in: coInstructorIds }, companyId, status: { not: "inactive" } },
+        select: { id: true },
+      });
+      if (found.length !== coInstructorIds.length) {
+        return { success: false as const, message: "Istruttore aggiuntivo non trovato." };
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.autoscuolaAppointment.updateMany({
+        where: { id: { in: payload.appointmentIds }, companyId, type: "esame" },
+        data: { instructorId: payload.instructorId ?? null },
+      });
+      if (coInstructorIds === null) return;
+      // Le righe sono una per allievo: il join va riscritto su tutte.
+      const rows = await tx.autoscuolaAppointment.findMany({
+        where: { id: { in: payload.appointmentIds }, companyId, type: "esame" },
+        select: { id: true },
+      });
+      await tx.autoscuolaAppointmentInstructor.deleteMany({
+        where: { appointmentId: { in: rows.map((r) => r.id) } },
+      });
+      if (coInstructorIds.length) {
+        await tx.autoscuolaAppointmentInstructor.createMany({
+          data: rows.flatMap((r) =>
+            coInstructorIds.map((instructorId) => ({ appointmentId: r.id, instructorId })),
+          ),
+          skipDuplicates: true,
+        });
+      }
     });
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
@@ -9245,6 +9371,7 @@ async function findGroupLessonOverlap({
   startsAt,
   endsAt,
   instructorId,
+  coInstructorIds = [],
   vehicleIds,
   studentIds,
   excludeGroupLessonId,
@@ -9254,6 +9381,11 @@ async function findGroupLessonOverlap({
   startsAt: Date;
   endsAt: Date;
   instructorId: string | null;
+  /**
+   * REG-585: istruttori AGGIUNTIVI. Vanno verificati uno per uno come il
+   * principale — Tiziano: "il co-istruttore deve essere libero in quell'orario".
+   */
+  coInstructorIds?: string[];
   vehicleIds: string[];
   studentIds: string[];
   excludeGroupLessonId?: string;
@@ -9293,22 +9425,46 @@ async function findGroupLessonOverlap({
   };
   const reserved = Array.from(new Set(vehicleIds.filter(Boolean)));
 
-  if (instructorId) {
-    const instrConflict = await db.autoscuolaAppointment.findFirst({
-      where: { ...baseWhere, instructorId },
-      select: { id: true },
-    });
-    if (instrConflict) return "L'istruttore ha già un impegno in quell'orario.";
-    const blockConflict = await db.autoscuolaInstructorBlock.findFirst({
-      where: { companyId, instructorId, startsAt: { lt: endsAt }, endsAt: { gt: startsAt } },
-      select: { id: true },
-    });
-    if (blockConflict) return "L'istruttore ha uno slot bloccato in quell'orario.";
-    const instrContainer = await db.autoscuolaGroupLesson.findFirst({
-      where: { ...containerWhere, instructorId },
-      select: { id: true },
-    });
-    if (instrContainer) return "L'istruttore ha già un impegno in quell'orario.";
+  // REG-585: ogni istruttore coinvolto dev'essere libero, principale o no.
+  // Il nome nel messaggio evita il "quale dei tre?" quando sono in più.
+  const involvedInstructorIds = Array.from(
+    new Set([instructorId, ...coInstructorIds].filter(Boolean) as string[]),
+  );
+  for (const involvedId of involvedInstructorIds) {
+    const [instrConflict, blockConflict, instrContainer] = await Promise.all([
+      db.autoscuolaAppointment.findFirst({
+        where: {
+          ...baseWhere,
+          OR: [{ instructorId: involvedId }, { coInstructors: { some: { instructorId: involvedId } } }],
+        },
+        select: { id: true },
+      }),
+      db.autoscuolaInstructorBlock.findFirst({
+        where: { companyId, instructorId: involvedId, startsAt: { lt: endsAt }, endsAt: { gt: startsAt } },
+        select: { id: true },
+      }),
+      db.autoscuolaGroupLesson.findFirst({
+        where: {
+          ...containerWhere,
+          OR: [{ instructorId: involvedId }, { coInstructors: { some: { instructorId: involvedId } } }],
+        },
+        select: { id: true },
+      }),
+    ]);
+    if (instrConflict || instrContainer || blockConflict) {
+      const who =
+        involvedInstructorIds.length > 1
+          ? (
+              await db.autoscuolaInstructor.findFirst({
+                where: { id: involvedId, companyId },
+                select: { name: true },
+              })
+            )?.name ?? "Un istruttore"
+          : "L'istruttore";
+      return blockConflict
+        ? `${who} ha uno slot bloccato in quell'orario.`
+        : `${who} ha già un impegno in quell'orario.`;
+    }
   }
   if (reserved.length) {
     const vehicleConflict = await db.autoscuolaAppointment.findFirst({
@@ -9463,6 +9619,35 @@ async function motosTakenByParticipants(
   return new Set(rows.map((r) => r.vehicleId).filter((v): v is string => Boolean(v)));
 }
 
+/**
+ * REG-585 — normalizza e valida gli istruttori AGGIUNTIVI di una guida di
+ * gruppo o di un esame: via i duplicati, via il principale (sta già nella sua
+ * colonna), e tutti devono esistere e non essere disattivati.
+ */
+async function resolveCoInstructorIds({
+  companyId,
+  instructorId,
+  requested,
+}: {
+  companyId: string;
+  instructorId: string | null;
+  requested: string[] | undefined;
+}): Promise<{ ok: true; ids: string[] } | { ok: false; message: string }> {
+  const ids = Array.from(new Set((requested ?? []).filter((id) => id && id !== instructorId)));
+  if (!ids.length) return { ok: true, ids: [] };
+  if (!instructorId) {
+    return { ok: false, message: "Scegli prima l'istruttore principale." };
+  }
+  const found = await prisma.autoscuolaInstructor.findMany({
+    where: { id: { in: ids }, companyId, status: { not: "inactive" } },
+    select: { id: true },
+  });
+  if (found.length !== ids.length) {
+    return { ok: false, message: "Istruttore aggiuntivo non trovato." };
+  }
+  return { ok: true, ids };
+}
+
 const createGroupLessonSchema = z.object({
   startsAt: z.string(),
   endsAt: z.string(),
@@ -9476,6 +9661,8 @@ const createGroupLessonSchema = z.object({
   /** Moto lesson type (kind="moto" only): "birilli" | "strada" | null. */
   motoLessonType: z.enum(MOTO_LESSON_TYPES).nullable().optional(),
   instructorId: z.string().uuid().optional().nullable(),
+  /** REG-585: istruttori aggiuntivi sul container. Nessun tetto al numero. */
+  coInstructorIds: z.array(z.string().uuid()).optional(),
   /**
    * Luogo di ritrovo (REG-409). Omesso → lo risolve il backend con la stessa
    * precedenza del campo "Luogo" della guida singola, così anche un client che
@@ -9540,6 +9727,13 @@ export async function createGroupLesson(
     if (!instructorId) {
       return { success: false as const, message: "Seleziona l'istruttore della guida di gruppo." };
     }
+    const coResolved = await resolveCoInstructorIds({
+      companyId,
+      instructorId,
+      requested: payload.coInstructorIds,
+    });
+    if (!coResolved.ok) return { success: false as const, message: coResolved.message };
+    const coInstructorIds = coResolved.ids;
 
     // Luogo di ritrovo (REG-409): quello scelto a mano se valido, altrimenti
     // risolto dalla patente della guida e dai default degli allievi. Le
@@ -9657,6 +9851,7 @@ export async function createGroupLesson(
         startsAt,
         endsAt,
         instructorId,
+        coInstructorIds,
         vehicleIds: reserved,
         studentIds,
       });
@@ -9694,6 +9889,10 @@ export async function createGroupLesson(
             priceAmount: priceDecimal,
             notes: payload.notes ?? null,
             createdByUserId: membership.userId,
+            // REG-585: istruttori aggiuntivi del gruppo.
+            ...(coInstructorIds.length
+              ? { coInstructors: { create: coInstructorIds.map((instructorId) => ({ instructorId })) } }
+              : {}),
             fleetVehicles: { create: setup.fleet.map((v) => ({ vehicleId: v.id })) },
           },
         });
@@ -9775,6 +9974,7 @@ export async function createGroupLesson(
       startsAt,
       endsAt,
       instructorId,
+      coInstructorIds,
       vehicleIds: vehicleId ? [vehicleId] : [],
       studentIds,
     });
@@ -9808,6 +10008,10 @@ export async function createGroupLesson(
           priceAmount: priceDecimal,
           notes: payload.notes ?? null,
           createdByUserId: membership.userId,
+          // REG-585: istruttori aggiuntivi del gruppo.
+          ...(coInstructorIds.length
+            ? { coInstructors: { create: coInstructorIds.map((instructorId) => ({ instructorId })) } }
+            : {}),
         },
       });
       if (studentIds.length) {
@@ -10495,6 +10699,8 @@ const updateGroupLessonSchema = z.object({
   startsAt: z.string().optional(),
   endsAt: z.string().optional(),
   instructorId: z.string().uuid().nullable().optional(),
+  /** REG-585: istruttori aggiuntivi. Assente = non toccarli; [] = toglili tutti. */
+  coInstructorIds: z.array(z.string().uuid()).optional(),
   vehicleId: z.string().uuid().nullable().optional(),
   /** Moto group: replace the moto fleet (must still cover assigned participants). */
   vehicleIds: z.array(z.string().uuid()).optional(),
@@ -10531,6 +10737,9 @@ export async function updateGroupLesson(
       select: {
         id: true, startsAt: true, endsAt: true, capacity: true,
         kind: true, instructorId: true, vehicleId: true, followVehicleId: true,
+        // REG-585: servono per ricontrollarli contro il nuovo orario quando il
+        // chiamante non li tocca.
+        coInstructors: { select: { instructorId: true } },
         fleetVehicles: { select: { vehicleId: true } },
         appointments: {
           where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
@@ -10557,6 +10766,17 @@ export async function updateGroupLesson(
       });
       if (!instr) return { success: false as const, message: "Istruttore non trovato." };
     }
+    // REG-585: `undefined` = il chiamante non li sta toccando → si tengono
+    // quelli già sul container, che vanno comunque ricontrollati contro il
+    // nuovo orario.
+    const coResolved = await resolveCoInstructorIds({
+      companyId,
+      instructorId,
+      requested:
+        payload.coInstructorIds ?? gl.coInstructors.map((row) => row.instructorId),
+    });
+    if (!coResolved.ok) return { success: false as const, message: coResolved.message };
+    const coInstructorIds = coResolved.ids;
 
     // Group-lesson seats always carry a student (only exam placeholders are
     // studentless); filter narrows the type without changing runtime behavior.
@@ -10620,7 +10840,7 @@ export async function updateGroupLesson(
 
       const reserved = [...newFleetIds, followVehicleId].filter((v): v is string => Boolean(v));
       const overlapErr = await findGroupLessonOverlap({
-        companyId, startsAt, endsAt, instructorId, vehicleIds: reserved, studentIds,
+        companyId, startsAt, endsAt, instructorId, coInstructorIds, vehicleIds: reserved, studentIds,
         excludeGroupLessonId: gl.id,
       });
       if (overlapErr) return { success: false as const, message: overlapErr };
@@ -10633,6 +10853,17 @@ export async function updateGroupLesson(
             ...(payload.capacity !== undefined ? { capacity } : {}),
             ...(notes !== undefined ? { notes } : {}),
             ...(payload.motoLessonType !== undefined ? { motoLessonType: payload.motoLessonType } : {}),
+            // REG-585: riscrivi il join solo se il chiamante li sta toccando.
+            ...(payload.coInstructorIds !== undefined
+              ? {
+                  coInstructors: {
+                    deleteMany: {},
+                    ...(coInstructorIds.length
+                      ? { create: coInstructorIds.map((instructorId) => ({ instructorId })) }
+                      : {}),
+                  },
+                }
+              : {}),
           },
         });
         if (payload.vehicleIds !== undefined) {
@@ -10684,7 +10915,7 @@ export async function updateGroupLesson(
     }
 
     const overlapErr = await findGroupLessonOverlap({
-      companyId, startsAt, endsAt, instructorId,
+      companyId, startsAt, endsAt, instructorId, coInstructorIds,
       vehicleIds: vehicleId ? [vehicleId] : [], studentIds,
       excludeGroupLessonId: gl.id,
     });
@@ -10697,6 +10928,17 @@ export async function updateGroupLesson(
           startsAt, endsAt, instructorId, vehicleId,
           ...(payload.capacity !== undefined ? { capacity: payload.capacity } : {}),
           ...(notes !== undefined ? { notes } : {}),
+          // REG-585: riscrivi il join solo se il chiamante li sta toccando.
+          ...(payload.coInstructorIds !== undefined
+            ? {
+                coInstructors: {
+                  deleteMany: {},
+                  ...(coInstructorIds.length
+                    ? { create: coInstructorIds.map((instructorId) => ({ instructorId })) }
+                    : {}),
+                },
+              }
+            : {}),
         },
       }),
       // ENROLLED (non solo ACTIVE): sposta anche i posti finalizzati di una guida
@@ -11704,10 +11946,17 @@ export async function getInstructorDrivingHours(input: {
 
     const instructorIds = targetInstructors.map((i) => i.id);
 
-    const appointments = await prisma.autoscuolaAppointment.findMany({
+    // REG-585: una guida di gruppo condivisa conta le ore a TUTTI gli istruttori
+    // coinvolti (scelta esplicita di Tiziano: i totali stipendi cambiano).
+    // La riga viene espansa in una voce per istruttore, così tutto il calcolo a
+    // valle resta identico e continua a ragionare su `{instructorId, …}`.
+    const appointmentRows = await prisma.autoscuolaAppointment.findMany({
       where: {
         companyId,
-        instructorId: { in: instructorIds },
+        OR: [
+          { instructorId: { in: instructorIds } },
+          { coInstructors: { some: { instructorId: { in: instructorIds } } } },
+        ],
         status: { in: ["completed", "checked_in", "no_show"] },
         type: { not: "esame" },
         startsAt: { gte: rangeStart, lt: rangeEnd },
@@ -11716,7 +11965,23 @@ export async function getInstructorDrivingHours(input: {
         instructorId: true,
         startsAt: true,
         endsAt: true,
+        coInstructors: { select: { instructorId: true } },
       },
+    });
+    const targetSet = new Set(instructorIds);
+    const appointments = appointmentRows.flatMap((row) => {
+      const involved = Array.from(
+        new Set(
+          [row.instructorId, ...row.coInstructors.map((c) => c.instructorId)].filter(
+            (id): id is string => !!id && targetSet.has(id),
+          ),
+        ),
+      );
+      return involved.map((instructorId) => ({
+        instructorId,
+        startsAt: row.startsAt,
+        endsAt: row.endsAt,
+      }));
     });
 
     // Lezioni teoriche (block `theory_lesson`) nello stesso range — categoria
@@ -12076,15 +12341,40 @@ export async function getInstructorDrivingHoursRange(input: {
     const granularity: "day" | "week" = spanDays <= 14 ? "day" : "week";
 
     const instructorIds = targetInstructors.map((i) => i.id);
-    const appointments = await prisma.autoscuolaAppointment.findMany({
+    // REG-585: come nella variante legacy, una guida condivisa conta le ore a
+    // ogni istruttore coinvolto — la riga viene espansa una volta per ciascuno.
+    const appointmentRows = await prisma.autoscuolaAppointment.findMany({
       where: {
         companyId,
-        instructorId: { in: instructorIds },
+        OR: [
+          { instructorId: { in: instructorIds } },
+          { coInstructors: { some: { instructorId: { in: instructorIds } } } },
+        ],
         status: { in: ["completed", "checked_in", "no_show"] },
         type: { not: "esame" },
         startsAt: { gte: rangeStartDate, lt: rangeEndExclusive },
       },
-      select: { instructorId: true, startsAt: true, endsAt: true },
+      select: {
+        instructorId: true,
+        startsAt: true,
+        endsAt: true,
+        coInstructors: { select: { instructorId: true } },
+      },
+    });
+    const targetSet = new Set(instructorIds);
+    const appointments = appointmentRows.flatMap((row) => {
+      const involved = Array.from(
+        new Set(
+          [row.instructorId, ...row.coInstructors.map((c) => c.instructorId)].filter(
+            (id): id is string => !!id && targetSet.has(id),
+          ),
+        ),
+      );
+      return involved.map((instructorId) => ({
+        instructorId,
+        startsAt: row.startsAt,
+        endsAt: row.endsAt,
+      }));
     });
 
     // Lezioni teoriche nello stesso range — categoria separata.

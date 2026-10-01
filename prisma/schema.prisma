@@ -558,6 +558,8 @@ model AutoscuolaAppointment {
   voiceCalls               AutoscuolaVoiceCall[]
   swapOffers               AutoscuolaSwapOffer[]
   appointmentVehicles      AutoscuolaAppointmentVehicle[]
+  /// Istruttori aggiuntivi (REG-585). Il principale resta `instructorId`.
+  coInstructors            AutoscuolaAppointmentInstructor[]
   consorzioAccountingCodes ConsorzioAppointmentAccountingCode[]
   consorzioGuideRequests   ConsorzioGuideRequest[]
   consorzioBilling         ConsorzioLessonBilling?
@@ -757,6 +759,9 @@ model AutoscuolaInstructor {
   // Preferred vehicle per license category (tie-break when several compatible).
   preferredVehicles      AutoscuolaInstructorPreferredVehicle[]
   groupLessons           AutoscuolaGroupLesson[]
+  /// Guide/esami in cui è istruttore AGGIUNTIVO (REG-585).
+  coAppointments         AutoscuolaAppointmentInstructor[]
+  coGroupLessons         AutoscuolaGroupLessonInstructor[]
 
   @@unique([companyId, userId])
   @@index([companyId])
@@ -854,6 +859,35 @@ model AutoscuolaInstructorPreferredVehicle {
 /// "auto al seguito"). The `role="primary"` row always mirrors
 /// AutoscuolaAppointment.vehicleId (kept as source of truth for existing reads);
 /// `role="follow"` is the additional follow car.
+/// REG-585 — istruttori AGGIUNTIVI di un esame (o di un posto di guida di
+/// gruppo). `AutoscuolaAppointment.instructorId` resta l'istruttore
+/// PRINCIPALE: è lui che risponde della guida (notifiche, guard "solo le tue
+/// guide"). Qui stanno i colleghi che la condividono: la vedono in agenda,
+/// possono agire sulla guida e le ore contano anche a loro.
+/// Il principale NON va duplicato qui — è già nella colonna.
+model AutoscuolaAppointmentInstructor {
+  appointmentId String @db.Uuid
+  instructorId  String @db.Uuid
+
+  appointment AutoscuolaAppointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  instructor  AutoscuolaInstructor  @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+
+  @@id([appointmentId, instructorId])
+  @@index([instructorId])
+}
+
+/// REG-585 — come sopra, per il CONTAINER della guida di gruppo.
+model AutoscuolaGroupLessonInstructor {
+  groupLessonId String @db.Uuid
+  instructorId  String @db.Uuid
+
+  groupLesson AutoscuolaGroupLesson @relation(fields: [groupLessonId], references: [id], onDelete: Cascade)
+  instructor  AutoscuolaInstructor  @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+
+  @@id([groupLessonId, instructorId])
+  @@index([instructorId])
+}
+
 model AutoscuolaAppointmentVehicle {
   appointmentId String @db.Uuid
   vehicleId     String @db.Uuid
@@ -1090,15 +1124,17 @@ model AutoscuolaGroupLesson {
   createdAt       DateTime  @default(now()) @db.Timestamp(6)
   updatedAt       DateTime  @updatedAt
 
-  company       Company                        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  location      AutoscuolaLocation?            @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  instructor    AutoscuolaInstructor?          @relation(fields: [instructorId], references: [id], onDelete: SetNull)
-  vehicle       AutoscuolaVehicle?             @relation("GroupLessonVehicle", fields: [vehicleId], references: [id], onDelete: SetNull)
-  followVehicle AutoscuolaVehicle?             @relation("GroupLessonFollowVehicle", fields: [followVehicleId], references: [id], onDelete: SetNull)
-  createdBy     User?                          @relation("GroupLessonCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  company       Company                           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  location      AutoscuolaLocation?               @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  instructor    AutoscuolaInstructor?             @relation(fields: [instructorId], references: [id], onDelete: SetNull)
+  vehicle       AutoscuolaVehicle?                @relation("GroupLessonVehicle", fields: [vehicleId], references: [id], onDelete: SetNull)
+  followVehicle AutoscuolaVehicle?                @relation("GroupLessonFollowVehicle", fields: [followVehicleId], references: [id], onDelete: SetNull)
+  createdBy     User?                             @relation("GroupLessonCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   appointments  AutoscuolaAppointment[]
   invites       AutoscuolaGroupLessonInvite[]
   fleetVehicles AutoscuolaGroupLessonVehicle[]
+  /// Istruttori aggiuntivi (REG-585). Il principale resta `instructorId`.
+  coInstructors AutoscuolaGroupLessonInstructor[]
 
   @@index([companyId])
   @@index([companyId, startsAt])
@@ -1348,33 +1384,33 @@ model AutoscuolaMessageRule {
 }
 
 model AutoscuolaMessageLog {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId     String   @db.Uuid
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId         String   @db.Uuid
   /// Null per i promemoria automatici: non nascono da una regola configurata.
   /// Erano obbligatori, ed è il motivo per cui i promemoria non potevano
   /// scrivere qui e i loro fallimenti restavano muti (REG-500).
-  ruleId        String?  @db.Uuid
-  templateId    String?  @db.Uuid
+  ruleId            String?  @db.Uuid
+  templateId        String?  @db.Uuid
   /// Che messaggio era: `appointment_reminder_student`, `morning_reminder_student`,
   /// … Per i messaggi da regola resta null, la regola dice già tutto.
-  kind          String?
-  appointmentId String?  @db.Uuid
-  studentId     String?  @db.Uuid
-  channel       String
-  recipient     String
-  status        String   @default("sent")
-  error         String?
+  kind              String?
+  appointmentId     String?  @db.Uuid
+  studentId         String?  @db.Uuid
+  channel           String
+  recipient         String
+  status            String   @default("sent")
+  error             String?
   /// Id del messaggio lato fornitore, per agganciare gli stati di consegna che
   /// arrivano dal webhook.
   providerMessageId String?
-  payload       Json?
-  sentAt        DateTime @default(now()) @db.Timestamp(6)
+  payload           Json?
+  sentAt            DateTime @default(now()) @db.Timestamp(6)
 
   company     Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   rule        AutoscuolaMessageRule?     @relation(fields: [ruleId], references: [id], onDelete: Cascade)
   template    AutoscuolaMessageTemplate? @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  appointment AutoscuolaAppointment?    @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
-  student     User?                     @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  appointment AutoscuolaAppointment?     @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  student     User?                      @relation(fields: [studentId], references: [id], onDelete: SetNull)
 
   @@unique([ruleId, appointmentId, recipient, channel])
   @@index([companyId])
