@@ -83,6 +83,12 @@ Fa **sparire** una guida dallo storico allievo e dall'agenda, senza toccare pena
 - **Server action** `coverAppointmentWithLessonCredit({ appointmentId })`: applica 1 credito a una guida **da pagare** (tipicamente guida di gruppo, che nasce `paymentRequired`/`creditApplied = false`). Consuma 1 credito (`adjustStudentLessonCredits` −1, `booking_consume`), setta `creditApplied = true`, `manualPaymentStatus = null`. Blocca esami, guide già coperte/pagate, richiede `lessonCreditFlowEnabled`. Guardia `canManageStudentCredits`.
 - **UI**: link "Copri con credito" nella riga guida (`AutoscuoleStudentsPage.tsx`) quando c'è un importo aperto, non è esame, e l'allievo ha crediti disponibili.
 
+### Ordine dello storico guide (REG-584, 2026-10-01)
+Lo storico del dettaglio allievo è **cronologico, le guide più recenti in cima**, e l'ordine è lo stesso nei due tab che lo mostrano:
+- **Web** (`AutoscuoleStudentsPage.tsx`): helper condiviso `byMostRecentFirst` usato sia da `renderPanelLessons` (tab "Guide") sia da `renderPanelNotes` (tab "Note"). Il server (`getAutoscuolaStudentDrivingRegister` + `buildDrivingRegisterData`) ordina già per `startsAt desc`: il sort client è esplicito perché il tab "Guide" prima **portava in testa le guide da pagare**, cosa che spezzava la sequenza delle date ed era un doppione del filtro "Da pagare".
+- **Mobile**: `StudentNotesDetailScreen` (storico) e `StudentMyNotesScreen` (note dell'allievo) ordinavano già `startsAt desc` — non toccati.
+- Se aggiungi un terzo criterio di ordinamento (priorità, non pagate, ecc.), mettilo in un **filtro**, non nel sort: la lista deve restare leggibile come una sequenza di date.
+
 ### Preavviso consultabile dopo la decisione
 `getAutoscuolaStudentDrivingRegister` ritorna anche `penaltyCutoffAt`. Nel tab "Guide" per gli annullamenti **dell'allievo** (`cancellationKind === "manual_cancel"`) si mostra Pill **"Preavviso: Xh Ymin"** (ricalcolata client da `startsAt − cancelledAt`, **non** persistita) + badge **"Tardiva"** quando `cancelledAt > penaltyCutoffAt`. Resta consultabile **anche dopo** la decisione della coda tardive.
 

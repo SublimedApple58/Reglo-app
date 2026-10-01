@@ -593,6 +593,17 @@ const listButtonClass =
 const redLinkClass =
   "cursor-pointer text-[12px] font-medium text-[#dc2626] hover:underline disabled:cursor-default disabled:opacity-50";
 
+/**
+ * Storico guide: sempre cronologico, le più recenti in cima (REG-584).
+ * Vale sia per il tab "Guide" sia per il tab "Note": sono due viste dello
+ * stesso elenco, quindi devono scorrere nello stesso ordine.
+ */
+const lessonStartMs = (lesson: { startsAt: string | Date }) =>
+  (lesson.startsAt instanceof Date ? lesson.startsAt : new Date(lesson.startsAt)).getTime();
+
+const byMostRecentFirst = <T extends { startsAt: string | Date }>(a: T, b: T) =>
+  lessonStartMs(b) - lessonStartMs(a);
+
 /** "Preavviso dato" = quanto tempo prima dell'inizio guida è arrivato l'annullamento. */
 const formatNoticeGiven = (startsAt: Date, cancelledAt: Date) => {
   const mins = Math.max(0, Math.round((startsAt.getTime() - cancelledAt.getTime()) / 60000));
@@ -3045,21 +3056,10 @@ export function AutoscuoleStudentsPage({
 
   const renderPanelLessons = () => {
     if (!register) return null;
-    const sortedLessons = [...register.lessons].sort((a, b) => {
-      const aUnpaid = a.manualPaymentStatus !== "paid" && (
-        (["completed", "checked_in"].includes(a.status) && manualMode) ||
-        a.manualPaymentStatus === "unpaid" ||
-        (["cancelled", "no_show"].includes(a.status) && a.lateCancellationAction === "charged" && a.manualPaymentStatus === "unpaid")
-      );
-      const bUnpaid = b.manualPaymentStatus !== "paid" && (
-        (["completed", "checked_in"].includes(b.status) && manualMode) ||
-        b.manualPaymentStatus === "unpaid" ||
-        (["cancelled", "no_show"].includes(b.status) && b.lateCancellationAction === "charged" && b.manualPaymentStatus === "unpaid")
-      );
-      if (aUnpaid && !bUnpaid) return -1;
-      if (!aUnpaid && bUnpaid) return 1;
-      return 0;
-    });
+    // REG-584: ordine cronologico puro. Prima le guide da pagare venivano
+    // portate in testa: con il filtro "Da pagare" qui accanto era un doppione e
+    // spezzava la sequenza delle date, che è il modo in cui si legge lo storico.
+    const sortedLessons = [...register.lessons].sort(byMostRecentFirst);
     if (!sortedLessons.length) {
       return (
         <div className="pt-8 text-center">
@@ -3070,8 +3070,6 @@ export function AutoscuoleStudentsPage({
 
     // ── Filtri client-side (criteri logici sulle guide già caricate) ──
     const nowMs = Date.now();
-    const startMs = (l: LessonEntry) =>
-      (l.startsAt instanceof Date ? l.startsAt : new Date(l.startsAt)).getTime();
     // "Da pagare" = solo guide EFFETTUATE non pagate (o annullate con penale non
     // pagata). NON le future programmate (anche se marcate da pagare) e NON quelle
     // coperte da credito (già saldate col pacchetto crediti → mostrano "Coperta da
@@ -3087,7 +3085,7 @@ export function AutoscuoleStudentsPage({
       );
     const predicates: Record<LessonFilter, (l: LessonEntry) => boolean> = {
       all: () => true,
-      upcoming: (l) => ["scheduled", "confirmed"].includes(l.status) && startMs(l) > nowMs,
+      upcoming: (l) => ["scheduled", "confirmed"].includes(l.status) && lessonStartMs(l) > nowMs,
       unpaid: lessonUnpaid,
       completed: (l) => ["completed", "checked_in"].includes(l.status),
       cancelled: (l) => ["cancelled", "no_show"].includes(l.status),
@@ -3330,12 +3328,14 @@ export function AutoscuoleStudentsPage({
         </div>
       );
     }
-    const aggregate = aggregateStudentEvaluations(register.lessons, evalSheetItems);
+    // Stesso ordine del tab "Guide": più recenti in cima (REG-584).
+    const orderedLessons = [...register.lessons].sort(byMostRecentFirst);
+    const aggregate = aggregateStudentEvaluations(orderedLessons, evalSheetItems);
     return (
       <div>
         {aggregate ? <EvaluationAverages aggregate={aggregate} /> : null}
         {aggregate ? <p className={sectionLabelClass}>Guida per guida</p> : null}
-        {register.lessons.map((lesson) => {
+        {orderedLessons.map((lesson) => {
           const hasNote = !!lesson.notes?.trim();
           const isExam = lesson.type === "esame";
           const startDate = lesson.startsAt instanceof Date ? lesson.startsAt : new Date(lesson.startsAt);
