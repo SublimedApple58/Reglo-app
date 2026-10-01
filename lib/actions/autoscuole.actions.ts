@@ -9061,12 +9061,39 @@ export async function updateExamInstructor(
 ) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    if (membership.role !== "admin" && membership.autoscuolaRole !== "OWNER") {
+    const isStaffOwner = membership.role === "admin" || isOwner(membership.autoscuolaRole);
+    if (!isStaffOwner && !isInstructor(membership.autoscuolaRole)) {
       return { success: false as const, message: "Operazione non consentita." };
     }
     const payload = updateExamEventSchema.parse(input);
 
     const companyId = membership.companyId;
+
+    // REG-585: anche l'istruttore puo' gestire i colleghi su un esame, ma solo
+    // se e' LUI il principale — e su tutte le righe dell'esame, non su una
+    // parte. Il titolare non ha questo vincolo.
+    if (!isStaffOwner) {
+      const ownInstructorId = await resolveOwnInstructorId(companyId, membership.userId);
+      if (!ownInstructorId) {
+        return { success: false as const, message: "Profilo istruttore non trovato." };
+      }
+      const mine = await prisma.autoscuolaAppointment.count({
+        where: {
+          id: { in: payload.appointmentIds },
+          companyId,
+          type: "esame",
+          instructorId: ownInstructorId,
+        },
+      });
+      if (mine !== payload.appointmentIds.length) {
+        return { success: false as const, message: "Puoi gestire solo i tuoi esami." };
+      }
+      // Un istruttore non puo' spostare l'esame a un collega: cambia solo i suoi
+      // accompagnatori. Il principale resta lui.
+      if (payload.instructorId !== undefined && payload.instructorId !== ownInstructorId) {
+        return { success: false as const, message: "Non puoi cambiare l'istruttore principale." };
+      }
+    }
     // REG-585: `coInstructorIds` assente = il chiamante non li sta toccando
     // (cambio del solo principale). Lista vuota = toglili tutti.
     const coInstructorIds =

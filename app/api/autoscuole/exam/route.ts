@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/db/prisma";
 import { requireServiceAccess } from "@/lib/service-access";
 import { formatError } from "@/lib/utils";
-import { createExamEvent, updateExamTime, materializeExamSlot } from "@/lib/actions/autoscuole.actions";
+import { createExamEvent, updateExamTime, updateExamInstructor, materializeExamSlot } from "@/lib/actions/autoscuole.actions";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
@@ -199,6 +199,12 @@ const updateExamTimeSchema = z.object({
   endsAt: z.string().optional().nullable(),
 });
 
+const updateExamInstructorSchema = z.object({
+  appointmentIds: z.array(z.string().uuid()).min(1),
+  instructorId: z.string().uuid().optional().nullable(),
+  coInstructorIds: z.array(z.string().uuid()),
+});
+
 export async function PATCH(request: Request) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
@@ -214,6 +220,13 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
+    // REG-585: la stessa PATCH serve due cose diverse. Con `coInstructorIds`
+    // si stanno gestendo gli accompagnatori (dal mobile: il principale
+    // aggiunge o toglie un collega), senza si sta spostando l'orario.
+    if (body && typeof body === "object" && "coInstructorIds" in body) {
+      const result = await updateExamInstructor(updateExamInstructorSchema.parse(body));
+      return NextResponse.json(result, { status: result.success ? 200 : 400 });
+    }
     const payload = updateExamTimeSchema.parse(body);
     const result = await updateExamTime(payload);
     return NextResponse.json(result, { status: result.success ? 200 : 400 });
