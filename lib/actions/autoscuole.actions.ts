@@ -14,6 +14,7 @@ import { notifyAutoscuolaCaseStatusChange } from "@/lib/autoscuole/communication
 import { BOOKING_SOURCE, staffBookingSource } from "@/lib/autoscuole/booking-source";
 import { broadcastWaitlistOffer, buildAvailabilityResolver, getStudentBookingBlockStatus, cancelGroupLessonParticipantAppointment } from "@/lib/actions/autoscuole-availability.actions";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
+import { appointmentBusyInstructorIds } from "@/lib/autoscuole/appointment-busy";
 import { fetchGroupLessonBusyRows } from "@/lib/autoscuole/group-lesson-busy";
 import { resolveGroupLessonLocationId } from "@/lib/autoscuole/locations";
 import {
@@ -3392,6 +3393,10 @@ export async function createAutoscuolaAppointment(
     ].filter((id): id is string => Boolean(id));
     const conflictOr: Array<Record<string, unknown>> = [
       { instructorId: resolvedInstructorId },
+      // REG-591: l'istruttore e' occupato anche quando ACCOMPAGNA la guida di
+      // un collega (guida di gruppo o esame a due). Senza questo ramo il
+      // controllo lo vedeva libero e si creava una doppia prenotazione.
+      { coInstructors: { some: { instructorId: resolvedInstructorId } } },
     ];
     for (const vehicleId of reservedVehicleIds) {
       conflictOr.push({ vehicleId });
@@ -3867,6 +3872,8 @@ export async function createAutoscuolaAppointmentBatch(
     ].filter((id): id is string => Boolean(id));
     const batchConflictOr: Array<Record<string, unknown>> = [
       { instructorId: resolvedInstructorId },
+      // REG-591, come sopra: vale anche per la prenotazione multipla.
+      { coInstructors: { some: { instructorId: resolvedInstructorId } } },
     ];
     for (const vid of batchReservedVehicleIds) {
       batchConflictOr.push({ vehicleId: vid });
@@ -4820,12 +4827,15 @@ export async function rescheduleAutoscuolaAppointment(
     const scanEnd = new Date(newEnd);
     scanEnd.setDate(scanEnd.getDate() + 1);
 
-    const overlapOr: Array<{
-      instructorId?: string;
-      vehicleId?: string;
-      studentId?: string;
-    }> = [];
-    if (appointment.instructorId) overlapOr.push({ instructorId: appointment.instructorId });
+    const overlapOr: Array<Record<string, unknown>> = [];
+    if (appointment.instructorId) {
+      overlapOr.push({ instructorId: appointment.instructorId });
+      // REG-591: e' occupato anche dove ACCOMPAGNA (guida di gruppo o esame a
+      // due), non solo dove e' il principale.
+      overlapOr.push({
+        coInstructors: { some: { instructorId: appointment.instructorId } },
+      });
+    }
     if (appointment.vehicleId) overlapOr.push({ vehicleId: appointment.vehicleId });
     // Same-student overlap: the allievo cannot end up with two engagements at
     // the same time, even with a different instructor+vehicle.
@@ -4846,6 +4856,7 @@ export async function rescheduleAutoscuolaAppointment(
           studentId: true,
           startsAt: true,
           endsAt: true,
+          coInstructors: { select: { instructorId: true } },
         },
       });
       const conflict = conflicts.find((item) => {
@@ -4856,8 +4867,11 @@ export async function rescheduleAutoscuolaAppointment(
       if (conflict) {
         const byStudent = conflict.studentId === appointment.studentId;
         const byInstructor =
-          appointment.instructorId &&
-          conflict.instructorId === appointment.instructorId;
+          !!appointment.instructorId &&
+          (conflict.instructorId === appointment.instructorId ||
+            (conflict.coInstructors ?? []).some(
+              (c) => c.instructorId === appointment.instructorId,
+            ));
         return {
           success: false,
           message: byStudent
@@ -7713,7 +7727,11 @@ export async function createInstructorBlock(
       const appointmentConflict = await prisma.autoscuolaAppointment.findFirst({
         where: {
           companyId: membership.companyId,
-          instructorId: targetInstructor.id,
+          // REG-591: conta anche quello che l'istruttore accompagna.
+          OR: [
+            { instructorId: targetInstructor.id },
+            { coInstructors: { some: { instructorId: targetInstructor.id } } },
+          ],
           status: { notIn: ["cancelled"] },
           startsAt: { lt: blockEnd },
           endsAt: { gt: blockStart },
@@ -7841,7 +7859,11 @@ export async function updateInstructorBlock(
       const appointmentConflict = await prisma.autoscuolaAppointment.findFirst({
         where: {
           companyId: membership.companyId,
-          instructorId: block.instructorId,
+          // REG-591: conta anche quello che l'istruttore accompagna.
+          OR: [
+            { instructorId: block.instructorId },
+            { coInstructors: { some: { instructorId: block.instructorId } } },
+          ],
           status: { notIn: ["cancelled"] },
           startsAt: { lt: nextEnd },
           endsAt: { gt: nextStart },
@@ -12386,12 +12408,23 @@ async function loadAgendaOccupancy(input: {
     prisma.autoscuolaAppointment.findMany({
       where: {
         companyId,
-        instructorId: { in: instructorIds },
+        // REG-591: anche le guide che l'istruttore ACCOMPAGNA lo tengono
+        // occupato — Tiziano l'ha deciso con REG-585 ("le ore contano per
+        // tutti"), ma qui si filtrava ancora sul solo principale.
+        OR: [
+          { instructorId: { in: instructorIds } },
+          { coInstructors: { some: { instructorId: { in: instructorIds } } } },
+        ],
         status: { not: "cancelled" },
         startsAt: { lt: windowEnd },
         endsAt: { gt: windowStart },
       },
-      select: { instructorId: true, startsAt: true, endsAt: true },
+      select: {
+        instructorId: true,
+        startsAt: true,
+        endsAt: true,
+        coInstructors: { select: { instructorId: true } },
+      },
     }),
     fetchGroupLessonBusyRows(companyId, windowStart, windowEnd),
     prisma.autoscuolaHoliday.findMany({
@@ -12420,8 +12453,13 @@ async function loadAgendaOccupancy(input: {
     list.push({ start, end });
     busyByInstructor.set(instructorId, list);
   };
-  for (const appt of busyAppointments) pushBusy(appt.instructorId, appt.startsAt, appt.endsAt);
-  for (const gl of groupLessonRows) pushBusy(gl.instructorId, gl.startsAt, gl.endsAt);
+  for (const appt of busyAppointments) {
+    for (const id of appointmentBusyInstructorIds(appt)) pushBusy(id, appt.startsAt, appt.endsAt);
+  }
+  for (const gl of groupLessonRows) {
+    pushBusy(gl.instructorId, gl.startsAt, gl.endsAt);
+    for (const id of gl.coInstructorIds) pushBusy(id, gl.startsAt, gl.endsAt);
+  }
 
   // Le pause fra una guida e l'altra sono blocchi, ma contano come ore
   // OCCUPATE, non come indisponibilità: vedi `splitBlocksByNature`.

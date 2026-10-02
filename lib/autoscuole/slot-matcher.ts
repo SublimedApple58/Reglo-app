@@ -22,6 +22,11 @@ import {
   requiresFollowCar,
 } from "@/lib/autoscuole/follow-car";
 import {
+  APPOINTMENT_BUSY_SELECT,
+  appointmentBusyOwnerIds,
+  type BusyAppointment,
+} from "@/lib/autoscuole/appointment-busy";
+import {
   addGroupLessonBusyIntervals,
   fetchGroupLessonBusyRows,
 } from "@/lib/autoscuole/group-lesson-busy";
@@ -189,16 +194,12 @@ const buildCandidateStarts = (
 };
 
 const buildAppointmentMaps = (
-  appointments: Array<{
-    instructorId: string | null;
-    vehicleId: string | null;
-    // Null only for studentless exam placeholders — they still reserve the
-    // instructor/vehicle but have no student interval to record.
-    studentId: string | null;
-    startsAt: Date;
-    endsAt: Date | null;
-    appointmentVehicles?: Array<{ vehicleId: string }>;
-  }>,
+  appointments: Array<
+    BusyAppointment & {
+      startsAt: Date;
+      endsAt: Date | null;
+    }
+  >,
 ) => {
   const starts = new Map<string, Set<number>>();
   const ends = new Map<string, Set<number>>();
@@ -219,14 +220,9 @@ const buildAppointmentMaps = (
   for (const appointment of appointments) {
     const start = appointment.startsAt.getTime();
     const end = appointment.endsAt?.getTime() ?? start + SLOT_MINUTES * 60 * 1000;
-    if (appointment.studentId) add(appointment.studentId, start, end);
-    if (appointment.instructorId) add(appointment.instructorId, start, end);
-    if (appointment.vehicleId) add(appointment.vehicleId, start, end);
-    // Multi-vehicle lessons (e.g. moto + follow car) reserve every vehicle in
-    // the join, not just the primary `vehicleId`.
-    for (const link of appointment.appointmentVehicles ?? []) {
-      if (link.vehicleId !== appointment.vehicleId) add(link.vehicleId, start, end);
-    }
+    // Allievo, istruttore, CO-ISTRUTTORI e veicoli: la lista sta in
+    // `appointment-busy.ts`, in un posto solo (REG-591).
+    for (const ownerId of appointmentBusyOwnerIds(appointment)) add(ownerId, start, end);
   }
 
   return { starts, ends, intervals };
@@ -428,14 +424,7 @@ export async function findBestAutoscuolaSlot(
         status: { notIn: ["cancelled"] },
         startsAt: { gte: fullRangeStart, lt: fullRangeEnd },
       },
-      select: {
-        instructorId: true,
-        vehicleId: true,
-        studentId: true,
-        startsAt: true,
-        endsAt: true,
-        appointmentVehicles: { select: { vehicleId: true } },
-      },
+      select: APPOINTMENT_BUSY_SELECT,
     }),
     prisma.autoscuolaInstructorBlock.findMany({
       where: {
