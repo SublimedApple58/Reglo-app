@@ -8990,6 +8990,12 @@ const addExamStudentSchema = z.object({
   startsAt: z.string(),
   endsAt: z.string().optional().nullable(),
   instructorId: z.string().uuid().optional().nullable(),
+  /**
+   * REG-589: gli accompagnatori aggiuntivi dell'esame. Senza questo, un allievo
+   * aggiunto DOPO nasceva con il solo principale e l'esame risultava condiviso
+   * solo a metà (righe con il collega e righe senza).
+   */
+  coInstructorIds: z.array(z.string().uuid()).optional(),
   notes: z.string().optional(),
 });
 
@@ -9018,6 +9024,8 @@ export async function addExamStudent(
       startsAt: new Date(payload.startsAt),
       endsAt: payload.endsAt ? new Date(payload.endsAt) : null,
       instructorId: payload.instructorId ?? null,
+      // REG-589: la riga nuova nasce con gli stessi accompagnatori delle altre.
+      coInstructorIds: payload.coInstructorIds,
       notes: payload.notes ?? null,
     });
 

@@ -214,6 +214,14 @@ type ExamGroup = {
   endsAt: string | null;
   instructorId: string | null;
   instructor: ResourceOption | null;
+  /**
+   * REG-589 — i colleghi che accompagnano l'esame. Senza questo campo il
+   * raggruppamento perdeva il dato e l'esame finiva SOLO nella colonna del
+   * principale: il co-istruttore non lo vedeva in agenda (segnalato da
+   * Autoscuola Robatto). Le guide di gruppo non ne soffrivano perché restano
+   * righe appuntamento complete, mentre gli esami vengono ricostruiti qui.
+   */
+  coInstructors: Array<{ id: string; name: string }>;
   appointments: AppointmentRow[];
   notes: string | null;
 };
@@ -440,6 +448,14 @@ const formatSharedWith = (names: string[]) => {
   if (names.length === 2) return `${names[0]} e ${names[1]}`;
   return `${names[0]} e altri ${names.length - 1}`;
 };
+
+/** REG-589 — l'esame è di chi lo accompagna, principale o aggiunto. */
+const examGroupBelongsToInstructor = (
+  group: { instructorId: string | null; coInstructors?: Array<{ id: string }> },
+  instructorId: string,
+) =>
+  group.instructorId === instructorId ||
+  (group.coInstructors ?? []).some((co) => co.id === instructorId);
 
 const instructorLine = (appointment: {
   instructor?: { name: string } | null;
@@ -1316,6 +1332,8 @@ export function AutoscuoleAgendaPage({
   const [examDraftTime, setExamDraftTime] = React.useState<string | null>(null);
   const [examDraftDurationMin, setExamDraftDurationMin] = React.useState(60);
   const [examDraftInstructorId, setExamDraftInstructorId] = React.useState<string | null>(null);
+  // REG-589: accompagnatori aggiuntivi, modificabili anche su un esame esistente.
+  const [examDraftCoInstructorIds, setExamDraftCoInstructorIds] = React.useState<string[]>([]);
   const [examDraftStudentIds, setExamDraftStudentIds] = React.useState<string[]>([]);
   // Init i draft solo alla PRIMA apertura (non a ogni update del gruppo).
   const examPanelOpenedRef = React.useRef(false);
@@ -1328,6 +1346,7 @@ export function AutoscuoleAgendaPage({
         setExamDraftTime(g.endsAt ? `${String(gs.getHours()).padStart(2, "0")}:${String(gs.getMinutes()).padStart(2, "0")}` : null);
         setExamDraftDurationMin(g.endsAt ? Math.max(15, Math.round((toDate(g.endsAt).getTime() - gs.getTime()) / 60000)) : 60);
         setExamDraftInstructorId(g.instructorId ?? null);
+        setExamDraftCoInstructorIds(g.coInstructors.map((co) => co.id));
         setExamDraftStudentIds(g.appointments.filter((a) => !isExamPlaceholder(a)).map((a) => a.student.id));
         examPanelOpenedRef.current = true;
       }
@@ -1339,6 +1358,7 @@ export function AutoscuoleAgendaPage({
       setExamDraftTime(null);
       setExamDraftDurationMin(60);
       setExamDraftInstructorId(null);
+      setExamDraftCoInstructorIds([]);
       setExamDraftStudentIds([]);
     }
   }, [examPanelGroup]);
@@ -1627,12 +1647,20 @@ export function AutoscuoleAgendaPage({
     const groups: ExamGroup[] = [];
     for (const [key, appts] of examMap) {
       const first = appts[0];
+      // Unione su TUTTE le righe, non solo la prima: un esame vecchio può avere
+      // il collegamento solo su una parte dei posti, e basta una riga per dire
+      // che il collega è coinvolto.
+      const coById = new Map<string, { id: string; name: string }>();
+      for (const a of appts) {
+        for (const co of a.coInstructors ?? []) coById.set(co.id, co);
+      }
       groups.push({
         key,
         startsAt: typeof first.startsAt === "string" ? first.startsAt : (first.startsAt as Date).toISOString(),
         endsAt: first.endsAt ? (typeof first.endsAt === "string" ? first.endsAt : (first.endsAt as Date).toISOString()) : null,
         instructorId: first.instructor?.id ?? null,
         instructor: first.instructor ?? null,
+        coInstructors: Array.from(coById.values()),
         appointments: appts,
         notes: first.notes ?? null,
       });
@@ -2387,7 +2415,12 @@ export function AutoscuoleAgendaPage({
       if (item.cancellationKind === "record_cleanup") return false;
 
       // Filtri multi-selezione (vuoto = tutto passa).
-      if (instructorFilter.length > 0 && !instructorFilter.includes(item.instructor?.id ?? "")) {
+      // REG-589: filtrando per un collega, una guida condivisa deve restare.
+      if (
+        instructorFilter.length > 0 &&
+        !instructorFilter.includes(item.instructor?.id ?? "") &&
+        !(item.coInstructors ?? []).some((co) => instructorFilter.includes(co.id))
+      ) {
         return false;
       }
       if (vehicleFilter.length > 0) {
@@ -3115,7 +3148,11 @@ export function AutoscuoleAgendaPage({
 
     // Gli esami rispettano gli stessi filtri istruttore/tipo della vista.
     const visibleExams = examGroups.filter((eg) => {
-      if (instructorFilter.length > 0 && !instructorFilter.includes(eg.instructorId ?? "")) return false;
+      if (
+        instructorFilter.length > 0 &&
+        !instructorFilter.includes(eg.instructorId ?? "") &&
+        !eg.coInstructors.some((co) => instructorFilter.includes(co.id))
+      ) return false;
       if (typeFilter.length > 0 && !typeFilter.includes("esame")) return false;
       const start = toDate(eg.startsAt);
       return start >= rangeStart && start < rangeEnd;
@@ -4465,7 +4502,7 @@ export function AutoscuoleAgendaPage({
                         })}
                         {/* Exam blocks for this instructor on this day */}
                         {examGroups
-                          .filter((eg) => eg.instructorId === instr.instructorId && formatYmd(toDate(eg.startsAt)) === dateKey)
+                          .filter((eg) => examGroupBelongsToInstructor(eg, instr.instructorId) && formatYmd(toDate(eg.startsAt)) === dateKey)
                           .map((eg) => {
                             const egStart = toDate(eg.startsAt);
                             const examHasTime = Boolean(eg.endsAt);
@@ -5071,7 +5108,7 @@ export function AutoscuoleAgendaPage({
                     {examGroups
                       .filter(
                         (eg) =>
-                          eg.instructorId === instr.id &&
+                          examGroupBelongsToInstructor(eg, instr.id) &&
                           Boolean(eg.endsAt) &&
                           formatYmd(toDate(eg.startsAt)) === formatYmd(day),
                       )
@@ -5103,6 +5140,23 @@ export function AutoscuoleAgendaPage({
                               <div className="truncate text-[10px] text-violet-500">
                                 {formatTimeRange(egStart, egEnd)}
                               </div>
+                              {/* REG-589: lo stesso esame sta anche nella colonna del collega. */}
+                              {(() => {
+                                const withNames = [
+                                  ...(eg.instructor ? [eg.instructor] : []),
+                                  ...eg.coInstructors,
+                                ]
+                                  .filter((i) => i.id !== instr.id)
+                                  .map((i) => i.name)
+                                  .filter((n): n is string => Boolean(n));
+                                if (!eg.coInstructors.length || !withNames.length) return null;
+                                return (
+                                  <div className="flex items-center gap-1 truncate text-[10px] font-medium text-violet-600">
+                                    <Link2 className="size-2.5 shrink-0" strokeWidth={2.4} aria-hidden />
+                                    <span className="truncate">con {formatSharedWith(withNames)}</span>
+                                  </div>
+                                );
+                              })()}
                               <div className="mt-0.5 flex flex-col gap-px">
                                 {(() => {
                                   const real = eg.appointments.filter(
@@ -5832,9 +5886,11 @@ export function AutoscuoleAgendaPage({
             const durationChanged = examDraftTime !== null && examDraftDurationMin !== origDurationMin;
             const timingChanged = timeChanged || durationChanged;
             const instrChanged = examDraftInstructorId !== origInstructorId;
+            const origCoIds = eg.coInstructors.map((co) => co.id);
+            const coChanged = sortIds(examDraftCoInstructorIds) !== sortIds(origCoIds);
             const noteChanged = examNoteDraft.trim() !== (eg.notes ?? "").trim();
             const studentsChanged = sortIds(examDraftStudentIds) !== sortIds(origStudentIds);
-            const examDirty = timingChanged || instrChanged || noteChanged || studentsChanged;
+            const examDirty = timingChanged || instrChanged || coChanged || noteChanged || studentsChanged;
             // endsAt = start + durata scelta. Preservare la durata è ciò che tiene
             // insieme il gruppo esame (chiave = start|end|istruttore): un allievo
             // aggiunto o un cambio orario mantengono lo stesso [start,end].
@@ -5866,18 +5922,18 @@ export function AutoscuoleAgendaPage({
                 // Move any empty placeholder to the target slot BEFORE adding, so the
                 // first added student converts it (matched by slot) rather than
                 // spawning a ghost row at the old time.
-                if (placeholderApptIds.length && (timingChanged || instrChanged)) {
+                if (placeholderApptIds.length && (timingChanged || instrChanged || coChanged)) {
                   if (timingChanged) {
                     const r = await updateExamTime({ appointmentIds: placeholderApptIds, startsAt, endsAt });
                     if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
                   }
-                  if (instrChanged) {
-                    const r = await updateExamInstructor({ appointmentIds: placeholderApptIds, instructorId: examDraftInstructorId });
+                  if (instrChanged || coChanged) {
+                    const r = await updateExamInstructor({ appointmentIds: placeholderApptIds, instructorId: examDraftInstructorId, coInstructorIds: examDraftCoInstructorIds });
                     if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
                   }
                 }
                 for (const sid of added) {
-                  const r = await addExamStudent({ studentId: sid, startsAt, endsAt, instructorId: examDraftInstructorId, notes: examNoteDraft.trim() || undefined });
+                  const r = await addExamStudent({ studentId: sid, startsAt, endsAt, instructorId: examDraftInstructorId, coInstructorIds: examDraftCoInstructorIds, notes: examNoteDraft.trim() || undefined });
                   if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
                 }
                 const keptApptIds = origStudentIds
@@ -5892,8 +5948,8 @@ export function AutoscuoleAgendaPage({
                     const r = await updateExamTime({ appointmentIds: metaApptIds, startsAt, endsAt });
                     if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
                   }
-                  if (instrChanged) {
-                    const r = await updateExamInstructor({ appointmentIds: metaApptIds, instructorId: examDraftInstructorId });
+                  if (instrChanged || coChanged) {
+                    const r = await updateExamInstructor({ appointmentIds: metaApptIds, instructorId: examDraftInstructorId, coInstructorIds: examDraftCoInstructorIds });
                     if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
                   }
                   if (noteChanged) {
@@ -5965,6 +6021,18 @@ export function AutoscuoleAgendaPage({
                           {instructors.map((i) => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
                         </SelectContent>
                       </Select>
+                    </div>
+                    {/* REG-589: mancava del tutto in modifica — i colleghi si
+                        potevano mettere solo alla creazione dell'esame. */}
+                    <div className="mt-2.5">
+                      <CoInstructorPicker
+                        instructors={instructors}
+                        mainInstructorId={examDraftInstructorId}
+                        value={examDraftCoInstructorIds}
+                        onChange={setExamDraftCoInstructorIds}
+                        disabled={examPanelPending}
+                        label="Altri accompagnatori"
+                      />
                     </div>
                   </div>
 
