@@ -14,6 +14,10 @@ import {
   type FollowCarRules,
 } from "@/lib/autoscuole/follow-car";
 import {
+  APPOINTMENT_BUSY_SELECT,
+  appointmentBusyOwnerIds,
+} from "@/lib/autoscuole/appointment-busy";
+import {
   addGroupLessonBusyIntervals,
   fetchGroupLessonBusyRows,
 } from "@/lib/autoscuole/group-lesson-busy";
@@ -188,14 +192,7 @@ export async function buildSlotAssignmentContext(args: {
           status: { notIn: ["cancelled"] },
           startsAt: { gte: appointmentScanStart, lt: rangeEnd },
         },
-        select: {
-          studentId: true,
-          instructorId: true,
-          vehicleId: true,
-          startsAt: true,
-          endsAt: true,
-          appointmentVehicles: { select: { vehicleId: true } },
-        },
+        select: APPOINTMENT_BUSY_SELECT,
       }),
       prisma.autoscuolaInstructorBlock.findMany({
         where: {
@@ -218,14 +215,8 @@ export async function buildSlotAssignmentContext(args: {
   for (const appt of appointments) {
     const start = appt.startsAt.getTime();
     const end = appt.endsAt?.getTime() ?? start + 30 * 60 * 1000;
-    // studentId is null only for studentless exam placeholders (no student
-    // interval to reserve); instructor/vehicle below are still reserved.
-    if (appt.studentId) add(appt.studentId, start, end);
-    if (appt.instructorId) add(appt.instructorId, start, end);
-    if (appt.vehicleId) add(appt.vehicleId, start, end);
-    for (const link of appt.appointmentVehicles ?? []) {
-      if (link.vehicleId !== appt.vehicleId) add(link.vehicleId, start, end);
-    }
+    // Allievo, istruttore, CO-ISTRUTTORI e veicoli (REG-591).
+    for (const ownerId of appointmentBusyOwnerIds(appt)) add(ownerId, start, end);
   }
   for (const block of blocks) {
     add(block.instructorId, block.startsAt.getTime(), block.endsAt.getTime());

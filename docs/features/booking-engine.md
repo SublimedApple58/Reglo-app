@@ -77,3 +77,20 @@ pre-gate appointments. If full gate coverage is ever required, add the
 - **Payments** — captures payment snapshot on booking
 - **Instructor Clusters** — respects cluster assignments, autonomous mode, durations
 - **Notifications** — waitlist broadcasts
+
+## Chi è occupato: `appointment-busy.ts` (REG-591, 2026-10-02)
+
+Il motore ragiona per **proprietario**: allievo, istruttore, veicolo, ognuno con la sua lista di intervalli occupati. Costruire quella lista vuol dire rispondere a una domanda sola — *questa riga chi impegna?* — e la risposta stava scritta a mano in **cinque** posti: `slot-matcher.ts`, `slot-assignment.ts` e tre builder dentro `autoscuole-availability.actions.ts`.
+
+Non sono stati aggiornati insieme. Con REG-585 una guida di gruppo o un esame hanno potuto avere un **secondo istruttore** (`AutoscuolaAppointmentInstructor`), ma le cinque copie guardavano solo `instructorId`: per il motore il collega restava **libero** in quell'ora e gli allievi si prenotavano sopra. Doppia prenotazione vera.
+
+Ora la risposta sta in `lib/autoscuole/appointment-busy.ts`:
+- `appointmentBusyOwnerIds(appt)` → allievo + principale + **co-istruttori** + veicolo + veicoli del join;
+- `appointmentBusyInstructorIds(appt)` → solo gli istruttori, per chi non tratta veicoli (report ore);
+- `APPOINTMENT_BUSY_SELECT` → il `select` Prisma che li carica.
+
+⚠️ **Funzione e select vanno in coppia**: un campo aggiunto alla funzione ma non al select è `undefined` a runtime e non impegna nessuno, **in silenzio**. È esattamente il modo in cui il bug può tornare.
+
+Fuori dal motore valgono le stesse regole: `findGroupLessonOverlap` e il check istruttori dell'esame erano già a posto da REG-585; sono stati allineati `createAutoscuolaAppointment`, `createAutoscuolaAppointmentBatch`, lo **spostamento** guida, la creazione/spostamento di un **blocco** istruttore e il report ore. Le guide di gruppo **vuote** non hanno righe appuntamento: i loro co-istruttori arrivano dal contenitore, via `group-lesson-busy.ts`.
+
+Test: `tests/unit/autoscuole/appointment-busy.test.ts`.
