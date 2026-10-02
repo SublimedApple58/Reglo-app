@@ -3626,6 +3626,10 @@ const createAppointmentBatchSchema = z.object({
   locationId: z.string().uuid().optional().nullable(),
   type: z.string().optional(),
   types: z.array(z.string()).optional(),
+  // REG-590: la nota del form si applica a OGNI guida del batch (gli altri
+  // campi condivisi si comportano cosi'). Il form web ha il campo Note anche
+  // in multipla: senza questo la nota sparirebbe in silenzio.
+  notes: z.string().optional(),
   skipWeeklyLimitCheck: z.boolean().optional(),
   // Vedi createAppointmentSchema.allowPast — consente di registrare slot passati
   // dopo conferma esplicita dell'utente.
@@ -4021,7 +4025,7 @@ export async function createAutoscuolaAppointmentBatch(
             vehicleId: payload.vehicleId ?? null,
             motoLessonType: payload.motoLessonType ?? null,
             locationId: batchLocationId,
-            notes: null,
+            notes: payload.notes?.trim() || null,
             paymentRequired: paymentSnapshot.paymentRequired,
             paymentStatus: paymentSnapshot.paymentStatus,
             priceAmount: paymentSnapshot.priceAmount,

@@ -112,6 +112,16 @@ Lo storico del dettaglio allievo è **cronologico, le guide più recenti in cima
 ### Ore istruttore
 `getInstructorDrivingHours`/`getInstructorDrivingHoursRange` contano solo status `completed`/`checked_in`/`no_show`. Quindi: annullo futuro (`cancelled`) e rimozione `keepInHours=false` (`cancelled`) escono dalle ore; rimozione `keepInHours=true` (stato invariato) **resta** nelle ore. Vedi `features/instructor-hours.md`.
 
+## Prenotazione multipla anche da web (REG-590, 2026-10-02)
+
+Il toggle **"Prenotazione multipla"** nel popover *Nuovo appuntamento* (`AutoscuoleAgendaPage.tsx`) replica quello dell'app (`reglo-mobile/src/components/booking/BookingForm.tsx`): acceso, Giorno/Orario/Durata singoli lasciano il posto a una **lista di guide** (`entries`), ognuna con data, ora e durata proprie; **tutto il resto resta condiviso** — allievo, istruttore, veicolo, auto al seguito, moto aggiuntive, tipo guida, luogo e **nota**. Max 20 guide (il cap è nello schema, `.max(20)`).
+
+- **Backend già esistente**: `createAutoscuolaAppointmentBatch` (usata dall'app via `/api/autoscuole/instructor-bookings/confirm-batch`) è una server action → il web la chiama **diretta**, niente route nuova, niente migrazione. L'unica aggiunta è `notes` nello schema del batch: il form web ha il campo Note anche in multipla, e senza quel campo la nota sparirebbe in silenzio. La nota si scrive su **ogni** guida creata, come gli altri campi condivisi.
+- **Tutto-o-niente**: al primo conflitto (istruttore/veicolo occupato, slot bloccato, guida di gruppo, due guide del batch che si sovrappongono) l'azione torna `success: false` e **non crea nulla**. Il messaggio nomina lo slot (`"Conflitto per lo slot del 05/10 09:00…"`) e va mostrato **così com'è**: un "errore" generico costringerebbe a cercare a mano quale guida non va.
+- **Conferme**: `WEEKLY_LIMIT_CONFIRM` si ritenta con `skipWeeklyLimitCheck` (come nel singolo). `LESSON_BUFFER_CONFIRM` **non esiste** sul percorso batch — non va gestito. La conferma "guida nel passato" si chiede **una volta sola**, sulla guida più vecchia del gruppo.
+- **Anteprima**: un blocco tratteggiato per **ogni** guida (`multiGhosts`), numerato, e ognuno è **trascinabile** per conto suo — `moveDraftTo(ymd, time, colId, entryId?)` sposta la guida di quel ghost; cliccando una colonna vuota (nessun `entryId`) si muove **l'ultima** guida, quella che si sta posando. ⚠️ `moveDraftTo` è condivisa con esame/blocco/gruppo/modifica guida/richiesta consorzio: il ramo nuovo vive **dentro** `if (createOpen)` e solo quando `multiMode`, gli altri rami non cambiano. `renderGhostBlock` è il markup unico del ghost (singolo + multipli); `ghostTint(durMin)` è la tinta per durata, prima ricopiata in ogni ramo.
+- In multipla `draftGhost` torna `null`: giorno e ora del form non vogliono più dire niente, e lasciarlo acceso dipingeva un ghost fantasma in più.
+
 ## Key functions
 - `createAutoscuolaAppointment()` — single lesson. Conflict scan istruttore+veicoli (aggirabile con `skipConflictCheck`, il "prenota comunque") **+ sovrapposizione stesso allievo (2026-07-29, HARD: non aggirabile)** — *"L'allievo ha già una guida o un esame in quell'orario."* (segnalazione Macchiavello: stesso allievo, stessa ora, 2 istruttori). Il percorso allievo (`createBookingRequest`) aveva già il proprio guard.
 - `createAutoscuolaAppointmentBatch()` — batch (exams)

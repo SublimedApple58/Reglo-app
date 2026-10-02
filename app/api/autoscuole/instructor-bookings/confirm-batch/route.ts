@@ -12,6 +12,7 @@ export async function POST(request: Request) {
     motoLessonType: payload.motoLessonType ?? null,
     locationId: payload.locationId,
     entries: payload.entries,
+    notes: payload.notes,
     type: payload.lessonType,
     types: payload.types,
     skipWeeklyLimitCheck: payload.skipWeeklyLimitCheck === true,
