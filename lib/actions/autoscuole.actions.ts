@@ -9085,21 +9085,35 @@ export async function updateExamInstructor(
       if (!ownInstructorId) {
         return { success: false as const, message: "Profilo istruttore non trovato." };
       }
+      // REG-589: non basta essere il PRINCIPALE. Chi accompagna l'esame da
+      // collega ci agisce con gli stessi permessi (deciso con Tiziano), quindi
+      // vale anche l'essere già nel join.
       const mine = await prisma.autoscuolaAppointment.count({
         where: {
           id: { in: payload.appointmentIds },
           companyId,
           type: "esame",
-          instructorId: ownInstructorId,
+          OR: [
+            { instructorId: ownInstructorId },
+            { coInstructors: { some: { instructorId: ownInstructorId } } },
+          ],
         },
       });
       if (mine !== payload.appointmentIds.length) {
-        return { success: false as const, message: "Puoi gestire solo i tuoi esami." };
+        return { success: false as const, message: "Puoi gestire solo gli esami che accompagni." };
       }
       // Un istruttore non puo' spostare l'esame a un collega: cambia solo i suoi
       // accompagnatori. Il principale resta lui.
-      if (payload.instructorId !== undefined && payload.instructorId !== ownInstructorId) {
-        return { success: false as const, message: "Non puoi cambiare l'istruttore principale." };
+      // Il principale lo cambia solo il titolare: un collega tocca solo la
+      // lista degli accompagnatori.
+      if (payload.instructorId !== undefined) {
+        const principal = await prisma.autoscuolaAppointment.findFirst({
+          where: { id: { in: payload.appointmentIds }, companyId, type: "esame" },
+          select: { instructorId: true },
+        });
+        if (principal && payload.instructorId !== principal.instructorId) {
+          return { success: false as const, message: "Non puoi cambiare l'istruttore principale." };
+        }
       }
     }
     // REG-585: `coInstructorIds` assente = il chiamante non li sta toccando
