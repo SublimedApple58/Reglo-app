@@ -50,6 +50,7 @@ import {
 import { updateCompanyService } from "@/lib/actions/backoffice.actions";
 import { impersonateCompany } from "@/lib/actions/backoffice.actions";
 import { affiliateCompanyName } from "@/lib/consorzio/affiliate-name";
+import { affiliateInviteTargets } from "@/lib/consorzio/affiliate-invite-targets";
 import { AffiliateLinkDialog } from "./AffiliateLinkDialog";
 import { AffiliateBulkInviteDialog } from "./AffiliateBulkInviteDialog";
 
@@ -123,9 +124,9 @@ export default function BackofficeConsorzioDetailPage({ detail }: { detail: Cons
     );
   }, [detail.schools, query]);
 
-  const pendingInvites = detail.schools.filter(
-    (school) => school.companyId && (school.access === "not_invited" || school.access === "expired"),
-  ).length;
+  // Titolari da invitare, uno per email: la stessa regola del modale e del
+  // pulsante lato consorzio (`lib/consorzio/affiliate-invite-targets.ts`).
+  const pendingInvites = affiliateInviteTargets(detail.schools).groups.length;
 
   const run = async (schoolId: string, fn: () => Promise<{ success: boolean; message?: string }>) => {
     setBusyId(schoolId);
@@ -236,7 +237,7 @@ export default function BackofficeConsorzioDetailPage({ detail }: { detail: Cons
         <div className="flex items-center gap-2">
           {pendingInvites > 0 && (
             <Button variant="outline" onClick={() => setBulkOpen(true)}>
-              Invita tutte le non invitate · {pendingInvites}
+              Invita i titolari non invitati · {pendingInvites}
             </Button>
           )}
         </div>

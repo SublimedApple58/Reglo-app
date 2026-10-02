@@ -12,6 +12,12 @@
  * otto indirizzi coprono più sedi, e in quel caso un invito solo vale per
  * tutte — la riga "Sedi coperte" lo dice esplicitamente, altrimenti sembra un
  * invito mancante.
+ *
+ * Vale anche per una consorziata **non ancora collegata** a una Company: prima
+ * questa card le diceva "se ne occupa Reglo" e nascondeva ogni azione, e in
+ * produzione erano tutte e 37. Ora l'invito crea la Company da sé, quindi
+ * restano nascoste solo le due righe che parlano di una Company che ancora non
+ * esiste.
  */
 
 import * as React from "react";
@@ -103,16 +109,16 @@ export function SchoolAccessCard({
               L&apos;invito a <b>{row.invite.email}</b> è scaduto: va rimandato.
             </>
           ) : row.access === "not_linked" ? (
-            <>Questa autoscuola non è ancora collegata a Reglo. Se ne occupa Reglo.</>
+            <>Il titolare non ha ancora un accesso: l&apos;invito glielo crea.</>
           ) : (
             <>Il titolare non può ancora entrare in Reglo.</>
           )}
         </div>
       </div>
 
-      {row.access !== "not_linked" && (
-        <>
-          <dl className="mt-4">
+      <dl className="mt-4">
+        {row.companyId && (
+          <>
             <Row label="Autoscuola su Reglo" value={row.companyName ?? "—"} />
             <Row
               label="Reglo"
@@ -128,79 +134,79 @@ export function SchoolAccessCard({
                 </span>
               }
             />
-            <Row
-              label="Email del titolare"
-              value={
-                editingEmail ? (
-                  <input
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    autoFocus
-                    className="w-[260px] rounded-lg border border-[#dddddd] px-2.5 py-1.5 text-right text-[14px] font-semibold text-[#222222] outline-none focus:border-[#222222]"
-                  />
-                ) : (
-                  <span>
-                    {row.email ?? "—"}{" "}
-                    <span className="font-medium text-[#929292]">(dall&apos;anagrafica)</span>
-                  </span>
-                )
-              }
-            />
-            {row.invite && row.invite.email !== (row.email ?? "") && (
-              <Row label="Invito mandato a" value={row.invite.email} />
-            )}
-            {row.sharedWith.length > 0 && (
-              <Row
-                label="Sedi coperte da questo invito"
-                value={
-                  <span>
-                    {row.sharedWith.length + 1}{" "}
-                    <span className="font-medium text-[#929292]">
-                      · {[row.schoolName, ...row.sharedWith].join(", ")}
-                    </span>
-                  </span>
-                }
+          </>
+        )}
+        <Row
+          label="Email del titolare"
+          value={
+            editingEmail ? (
+              <input
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                autoFocus
+                className="w-[260px] rounded-lg border border-[#dddddd] px-2.5 py-1.5 text-right text-[14px] font-semibold text-[#222222] outline-none focus:border-[#222222]"
               />
-            )}
-          </dl>
+            ) : (
+              <span>
+                {row.email ?? "—"}{" "}
+                <span className="font-medium text-[#929292]">(dall&apos;anagrafica)</span>
+              </span>
+            )
+          }
+        />
+        {row.invite && row.invite.email !== (row.email ?? "") && (
+          <Row label="Invito mandato a" value={row.invite.email} />
+        )}
+        {row.sharedWith.length > 0 && (
+          <Row
+            label="Sedi coperte da questo invito"
+            value={
+              <span>
+                {row.sharedWith.length + 1}{" "}
+                <span className="font-medium text-[#929292]">
+                  · {[row.schoolName, ...row.sharedWith].join(", ")}
+                </span>
+              </span>
+            }
+          />
+        )}
+        </dl>
 
-          <div className="mt-[18px] flex flex-wrap items-center gap-2.5">
+        <div className="mt-[18px] flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={invite}
+            disabled={busy || row.access === "active"}
+            className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-4 py-[10px] text-[14px] font-semibold text-white shadow-cta transition-opacity hover:opacity-90 disabled:cursor-default disabled:opacity-40"
+          >
+            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+            {invited ? "Reinvia invito" : "Invita titolare"}
+          </button>
+          {invited && (
             <button
               type="button"
-              onClick={invite}
-              disabled={busy || row.access === "active"}
-              className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-4 py-[10px] text-[14px] font-semibold text-white shadow-cta transition-opacity hover:opacity-90 disabled:cursor-default disabled:opacity-40"
+              onClick={copyLink}
+              className="flex cursor-pointer items-center gap-2 rounded-[10px] border border-[#dddddd] bg-white px-[14px] py-[9px] text-[13.5px] font-semibold text-[#222222] transition-colors hover:bg-[#f7f7f7]"
             >
-              {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-              {invited ? "Reinvia invito" : "Invita titolare"}
+              {copied ? <Check className="h-4 w-4 text-[#1a7f50]" /> : <Copy className="h-4 w-4" />}
+              {copied ? "Copiato" : "Copia link"}
             </button>
-            {invited && (
-              <button
-                type="button"
-                onClick={copyLink}
-                className="flex cursor-pointer items-center gap-2 rounded-[10px] border border-[#dddddd] bg-white px-[14px] py-[9px] text-[13.5px] font-semibold text-[#222222] transition-colors hover:bg-[#f7f7f7]"
-              >
-                {copied ? <Check className="h-4 w-4 text-[#1a7f50]" /> : <Copy className="h-4 w-4" />}
-                {copied ? "Copiato" : "Copia link"}
-              </button>
-            )}
-            {row.access !== "active" && !editingEmail && (
-              <button
-                type="button"
-                onClick={() => setEditingEmail(true)}
-                className="cursor-pointer text-[13px] font-semibold text-[#222222] hover:opacity-70"
-              >
-                Cambia email
-              </button>
-            )}
-          </div>
+          )}
+          {row.access !== "active" && !editingEmail && (
+            <button
+              type="button"
+              onClick={() => setEditingEmail(true)}
+              className="cursor-pointer text-[13px] font-semibold text-[#222222] hover:opacity-70"
+            >
+              Cambia email
+            </button>
+          )}
+        </div>
 
-          <p className="mt-3.5 text-[12.5px] leading-[1.55] text-[#6a6a6a]">
-            Il link porta a una pagina dove il titolare <b>sceglie la sua password</b> ed entra
-            nella sua autoscuola. Tu non vedi e non imposti la password.
-          </p>
-        </>
-      )}
+        <p className="mt-3.5 text-[12.5px] leading-[1.55] text-[#6a6a6a]">
+          Il link porta a una pagina dove il titolare <b>sceglie la sua password</b> ed
+          entra nella sua autoscuola. Tu non vedi e non imposti la password.
+        </p>
     </div>
   );
 }

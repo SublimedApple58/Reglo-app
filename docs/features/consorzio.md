@@ -236,9 +236,45 @@ stessa funzione interna). Stati per scuola: `not_linked` · `not_invited` ·
 > accept esistenti e **solo** per inviti verso company con `affiliateOf`.
 
 "Copia link" esiste perché le mail si perdono (e su staging gli invii esterni
-sono no-op): il link è lo stesso token, si manda su WhatsApp. "Invita tutte le
-non invitate" mostra l'anteprima raggruppata per email e richiede una conferma
+sono no-op): il link è lo stesso token, si manda su WhatsApp. "Invita i titolari
+non invitati" mostra l'anteprima raggruppata per email e richiede una conferma
 esplicita — sono mail vere verso clienti veri.
+
+#### L'invito crea la Company che manca
+
+**Chi è "da invitare" si decide in un posto solo**:
+`lib/consorzio/affiliate-invite-targets.ts` (`affiliateInviteTargets`, puro,
+unit test `tests/unit/consorzio/affiliate-invite-targets.test.ts`). Lo leggono
+il pulsante del consorzio, quello del backoffice e l'anteprima del modale.
+Regola: si invita `not_linked` · `not_invited` · `expired` (non `invited`, che
+ha un invito valido, non `active`, che già entra), serve un'email in anagrafica
+(senza, la scuola finisce in `missingEmail`, che la UI dice), e si raggruppa per
+email — **un gruppo = una mail = un titolare**, perché l'invito è del titolare e
+non della sede.
+
+`sendOwnerInvite` **crea la Company** della consorziata che non ce l'ha
+(`createAffiliateCompany`, servizio DISABLED, sede di default, collegamento
+scritto nei due posti), anche per le sedi sorelle con la stessa email:
+`siblingSchoolsForEmail` non filtra più sulle collegate, altrimenti un titolare
+con cinque sedi otterrebbe l'accesso a una sola.
+
+> ⚠️ **Il bug del 2026-10-02.** Il consorzio vedeva «Invita i titolari non
+> invitati · 37» e apriva un modale che diceva «Invita 0 titolari · Nessuna
+> autoscuola da invitare». Due cause sovrapposte:
+> 1. **il backfill non era mai girato in produzione** — tutte e 37 le
+>    consorziate avevano `linkedCompanyId` null, e `sendOwnerInvite` si fermava
+>    con "Collega prima l'autoscuola a una Company Reglo", collegamento
+>    possibile solo dal backoffice una scuola alla volta. Quindi: nessun
+>    titolare invitabile, e non per l'email — tutte e 37 ce l'avevano;
+> 2. **il contatore contava un'altra cosa** — il pulsante riusava il conteggio
+>    della pastiglia "Da invitare" (tutte le sedi che non accedono, comprese le
+>    già invitate e le non collegate), mentre il modale agisce sui titolari.
+>    Anche a backfill fatto le due cifre avrebbero continuato a divergere.
+>
+> Il fix tiene entrambe: l'invito si collega da sé (quindi `createConsorzioSchool`
+> può continuare a non creare niente, e una consorziata che non entrerà mai in
+> Reglo non si porta dietro una Company vuota) e il conteggio è la stessa
+> funzione che il modale usa per decidere.
 
 ### Dove
 
@@ -246,6 +282,7 @@ esplicita — sono mail vere verso clienti veri.
 |---|---|
 | Helper + guardia | `lib/services.ts` (`affiliateConsorzioId`, `isConsorzioAffiliate`, `isAffiliateWithoutReglo`), `lib/service-access.ts` (`requireAffiliateSchool`) |
 | Azioni | `lib/actions/consorzio-affiliate.actions.ts` (collega/crea/scollega/inviti/bulk), `lib/consorzio/affiliate-invites.ts` |
+| Chi è "da invitare" | `lib/consorzio/affiliate-invite-targets.ts` — regola pura condivisa da pulsante consorzio, pulsante backoffice e anteprima del modale (unit test `tests/unit/consorzio/affiliate-invite-targets.test.ts`) |
 | Nome Company | `lib/consorzio/affiliate-name.ts` — Title Case dall'anagrafica in MAIUSCOLO (`ODOS S.CROCE` → `Odos S.Croce`); un nome già curato non si tocca |
 | Backoffice | `app/[locale]/backoffice/consorzi/[companyId]/page.tsx`, `BackofficeConsorzioDetailPage.tsx`, `AffiliateLinkDialog.tsx`, `AffiliateBulkInviteDialog.tsx`; la riga di un consorzio in `BackofficeCompaniesPage` ora **naviga** invece di aprire il drawer (vedi sotto) |
 | Account consorzio | `ConsorzioSchoolsPage` (colonne Accesso e Stato + filtro + invito massivo), `SchoolAccessCard.tsx`, `school-access.tsx` (badge e filtro condivisi) |

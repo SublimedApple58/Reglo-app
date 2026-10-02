@@ -131,6 +131,7 @@ import {
   listConsorzioSchoolsAccess,
   type AffiliateSchoolRow,
 } from "@/lib/actions/consorzio-affiliate.actions";
+import { affiliateInviteTargets } from "@/lib/consorzio/affiliate-invite-targets";
 import { AffiliateBulkInviteDialog } from "@/components/pages/Backoffice/AffiliateBulkInviteDialog";
 import { AccessBadge, matchesAccessFilter, type AccessFilter } from "./school-access";
 
@@ -204,6 +205,18 @@ export function ConsorzioSchoolsPage() {
     return { all: schools.length, active, pending };
   }, [schools, access]);
 
+  /**
+   * Quanti titolari il pulsante riesce davvero a invitare — che NON è
+   * `accessCounts.pending`: quello conta le *sedi* che non accedono (comprese
+   * le già invitate), e il pulsante agisce sui *titolari* da invitare, uno per
+   * email. Contandoli a modo suo diceva "37" e apriva un modale da "0".
+   * La regola sta dove la legge anche il server: non possono più divergere.
+   */
+  const invitableOwners = React.useMemo(
+    () => affiliateInviteTargets(Array.from(access.values())).groups.length,
+    [access],
+  );
+
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -242,13 +255,13 @@ export function ConsorzioSchoolsPage() {
               className="w-full border-0 bg-transparent p-0 text-[15px] font-medium text-[#222222] outline-none placeholder:text-[#a0a0a0]"
             />
           </div>
-          {accessCounts.pending > 0 && (
+          {invitableOwners > 0 && (
             <button
               type="button"
               onClick={() => setBulkOpen(true)}
               className="flex cursor-pointer items-center gap-2 rounded-full border border-[#dddddd] bg-white px-[16px] py-[10px] text-sm font-semibold text-[#222222] transition-colors hover:bg-[#f7f7f7]"
             >
-              Invita i titolari non invitati · {accessCounts.pending}
+              Invita i titolari non invitati · {invitableOwners}
             </button>
           )}
           <button
