@@ -2767,6 +2767,9 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
               updatedAt: true,
             },
           },
+          // REG-585/589: anche l'allievo vede chi accompagna il suo esame
+          // insieme al principale (decisione di Tiziano, 2026-10-02).
+          coInstructors: { select: { instructor: { select: { id: true, name: true } } } },
           vehicle: {
             select: {
               id: true,
@@ -2816,8 +2819,11 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
         success: true,
         data: appointments.map((item) => {
           const gl = item.groupLessonId ? glInfo.get(item.groupLessonId) : null;
+          const { coInstructors, ...rest } = item;
           return {
-            ...item,
+            ...rest,
+            // Appiattito a [{id, name}] come nel ramo full e nella bootstrap.
+            coInstructors: (coInstructors ?? []).map((row) => row.instructor),
             case: null,
             student: mapCaseStudent(item.student),
             ...(gridFlags.get(item.id) ?? {}),
@@ -2853,6 +2859,9 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
         },
         case: true,
         instructor: true,
+        // REG-589: stessa forma del ramo light e della bootstrap, cosi' chi
+        // legge da qui non si ritrova il campo mancante senza accorgersene.
+        coInstructors: { select: { instructor: { select: { id: true, name: true } } } },
         vehicle: true,
         location: true,
         // Pagellino (REG-443): lo storico guide lato scuola (app istruttore)
@@ -2877,8 +2886,11 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
       success: true,
       data: appointments.map((item) => {
         const gl = item.groupLessonId ? glInfo.get(item.groupLessonId) : null;
+        const { coInstructors, ...rest } = item;
         return {
-          ...item,
+          ...rest,
+          // Appiattito a [{id, name}] come negli altri rami.
+          coInstructors: (coInstructors ?? []).map((row) => row.instructor),
           student: mapCaseStudent(item.student),
           ...(gridFlags.get(item.id) ?? {}),
           groupLessonCapacity: gl?.capacity ?? null,
