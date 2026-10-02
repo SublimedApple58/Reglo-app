@@ -4542,6 +4542,25 @@ export function AutoscuoleAgendaPage({
                                     <GraduationCap className="size-2.5 shrink-0" /> Esame
                                   </div>
                                   <div className="text-[8px] text-violet-500 truncate">{formatTimeRange(egStart, egEnd)}</div>
+                                  {/* REG-589: lo stesso esame sta anche nella colonna del collega.
+                                      Qui la colonna e' stretta: icona + nomi, senza "con". */}
+                                  {(() => {
+                                    if (!eg.coInstructors.length) return null;
+                                    const withNames = [
+                                      ...(eg.instructor ? [eg.instructor] : []),
+                                      ...eg.coInstructors,
+                                    ]
+                                      .filter((i) => i.id !== instr.instructorId)
+                                      .map((i) => i.name)
+                                      .filter((n): n is string => Boolean(n));
+                                    if (!withNames.length) return null;
+                                    return (
+                                      <div className="flex items-center gap-0.5 truncate text-[8px] font-semibold text-violet-600">
+                                        <Link2 className="size-2 shrink-0" strokeWidth={2.6} aria-hidden />
+                                        <span className="truncate">{formatSharedWith(withNames)}</span>
+                                      </div>
+                                    );
+                                  })()}
                                   <div className="mt-0.5 flex flex-col gap-px">
                                     {(() => {
                                       const real = eg.appointments.filter((a) => !isExamPlaceholder(a));
