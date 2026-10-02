@@ -35,18 +35,21 @@ import {
   siblingSchoolsForEmail,
   upsertOwnerInvite,
 } from "@/lib/consorzio/affiliate-invites";
+import {
+  affiliateInviteTargets,
+  type AffiliateAccessStatus,
+} from "@/lib/consorzio/affiliate-invite-targets";
 import { sendCompanyInviteEmail } from "@/email";
 import { routing } from "@/i18n/routing";
 import { SERVER_URL } from "@/lib/constants";
 import crypto from "crypto";
 
-/** Stato dell'accesso del titolare di una consorziata. */
-export type AffiliateAccessStatus =
-  | "not_linked" // nessuna Company: non c'è niente in cui entrare
-  | "not_invited" // Company creata, nessun invito mai partito
-  | "invited" // invito pendente e ancora valido
-  | "expired" // invito partito ma scaduto: va rimandato
-  | "active"; // esiste almeno un titolare che accede
+/**
+ * Stato dell'accesso del titolare di una consorziata. Definito nel modulo puro
+ * `lib/consorzio/affiliate-invite-targets.ts` insieme alla regola di chi è "da
+ * invitare", che lo legge: tenere i due a contatto è il punto.
+ */
+export type { AffiliateAccessStatus };
 
 export type AffiliateSchoolRow = {
   schoolId: string;
@@ -442,52 +445,70 @@ export async function createAffiliateCompanyForSchool(
     if (school.status === "removed") throw new Error("Autoscuola rimossa dal consorzio.");
     if (school.linkedCompanyId) throw new Error("Questa consorziata è già collegata.");
 
-    const name = payload.name?.trim() || affiliateCompanyName(school.name);
-
-    const companyId = await prisma.$transaction(async (tx) => {
-      const inviteCode = crypto.randomBytes(3).toString("hex").toUpperCase().slice(0, 6);
-      const company = await tx.company.create({
-        data: { name, inviteCode },
-        select: { id: true },
-      });
-
-      await tx.companyService.create({
-        data: {
-          companyId: company.id,
-          serviceKey: "AUTOSCUOLE",
-          status: "DISABLED",
-          limits: { affiliateOf: school.consorzioCompanyId } as Prisma.InputJsonValue,
-        },
-      });
-
-      // Stessa forma della registrazione web: senza sede di default la scuola
-      // non può creare niente il giorno in cui attiva Reglo.
-      await tx.autoscuolaLocation.create({
-        data: {
-          companyId: company.id,
-          name: `Sede ${name}`,
-          isDefault: true,
-          isPrecise: false,
-        },
-      });
-
-      await tx.consorzioSchool.update({
-        where: { id: school.id },
-        data: { linkedCompanyId: company.id },
-      });
-
-      return company.id;
-    });
-
-    await invalidateAutoscuoleCache({
-      companyId: school.consorzioCompanyId,
-      segments: [AUTOSCUOLE_CACHE_SEGMENTS.SETTINGS],
-    });
-
-    return { success: true as const, data: { companyId, name } };
+    const created = await createAffiliateCompany(school, payload.name);
+    return { success: true as const, data: created };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
+}
+
+/**
+ * La creazione vera e propria, senza guardie: la Company di una consorziata che
+ * non ce l'ha ancora.
+ *
+ * La usano due percorsi — l'azione di backoffice qui sopra e **l'invito al
+ * titolare**, che non può più fermarsi davanti a una scuola non collegata:
+ * in produzione erano tutte e 37, e il consorzio non aveva modo di invitare
+ * nessuno. Chi chiama controlla prima che la scuola esista, non sia rimossa e
+ * non sia già collegata.
+ */
+async function createAffiliateCompany(
+  school: { id: string; name: string; consorzioCompanyId: string },
+  overrideName?: string,
+): Promise<{ companyId: string; name: string }> {
+  const name = overrideName?.trim() || affiliateCompanyName(school.name);
+
+  const companyId = await prisma.$transaction(async (tx) => {
+    const inviteCode = crypto.randomBytes(3).toString("hex").toUpperCase().slice(0, 6);
+    const company = await tx.company.create({
+      data: { name, inviteCode },
+      select: { id: true },
+    });
+
+    await tx.companyService.create({
+      data: {
+        companyId: company.id,
+        serviceKey: "AUTOSCUOLE",
+        status: "DISABLED",
+        limits: { affiliateOf: school.consorzioCompanyId } as Prisma.InputJsonValue,
+      },
+    });
+
+    // Stessa forma della registrazione web: senza sede di default la scuola
+    // non può creare niente il giorno in cui attiva Reglo.
+    await tx.autoscuolaLocation.create({
+      data: {
+        companyId: company.id,
+        name: `Sede ${name}`,
+        isDefault: true,
+        isPrecise: false,
+      },
+    });
+
+    await tx.consorzioSchool.update({
+      where: { id: school.id },
+      data: { linkedCompanyId: company.id },
+    });
+
+    return company.id;
+  });
+
+  await invalidateAutoscuoleCache({
+    companyId: school.consorzioCompanyId,
+    segments: [AUTOSCUOLE_CACHE_SEGMENTS.SETTINGS],
+  });
+
+  return { companyId, name };
 }
 
 /**
@@ -590,6 +611,13 @@ type InviteResult = {
  * UNA mail. Ritorna anche il link, che la UI offre come "Copia link": su
  * staging gli invii esterni sono no-op, e in generale quando la mail non arriva
  * il consorzio lo manda su WhatsApp.
+ *
+ * Se una di quelle sedi non ha ancora la sua Company, **la crea qui**
+ * (`createAffiliateCompany`, servizio spento). Prima si fermava con "Collega
+ * prima l'autoscuola a una Company Reglo", e il collegamento si poteva fare
+ * solo dal backoffice una scuola alla volta: in produzione nessuna delle 37
+ * consorziate era collegata, quindi nessun titolare era invitabile e il
+ * pulsante "Invita i titolari non invitati" apriva un modale vuoto.
  */
 async function sendOwnerInvite(input: {
   schoolId: string;
@@ -608,14 +636,12 @@ async function sendOwnerInvite(input: {
       id: true,
       name: true,
       email: true,
+      consorzioCompanyId: true,
       linkedCompanyId: true,
       linkedCompany: { select: { id: true, name: true } },
     },
   });
   if (!school) throw new Error("Autoscuola consorziata non trovata.");
-  if (!school.linkedCompanyId || !school.linkedCompany) {
-    throw new Error("Collega prima l'autoscuola a una Company Reglo.");
-  }
 
   const email = (input.email ?? school.email ?? "").trim().toLowerCase();
   if (!email) throw new Error("Questa autoscuola non ha un'email: inseriscila prima di invitare.");
@@ -630,12 +656,28 @@ async function sendOwnerInvite(input: {
     consorzioCompanyId: input.consorzioCompanyId,
     email,
   });
-  // La scuola di partenza c'è sempre, anche se l'email è appena cambiata.
+  // La scuola di partenza va per prima e c'è sempre, anche se l'email è appena
+  // cambiata (e quindi `siblings` non la contiene).
+  const sedi = [school, ...siblings.filter((sibling) => sibling.id !== school.id)];
+
   const targets = new Map<string, string>();
-  targets.set(school.linkedCompanyId, school.name);
-  for (const sibling of siblings) {
-    if (sibling.linkedCompanyId) targets.set(sibling.linkedCompanyId, sibling.name);
+  let primaryCompanyId: string | null = null;
+  let primaryCompanyName = school.linkedCompany?.name ?? null;
+  for (const sede of sedi) {
+    let companyId = sede.linkedCompanyId;
+    if (!companyId) {
+      const created = await createAffiliateCompany({
+        id: sede.id,
+        name: sede.name,
+        consorzioCompanyId: school.consorzioCompanyId,
+      });
+      companyId = created.companyId;
+      if (sede.id === school.id) primaryCompanyName = created.name;
+    }
+    targets.set(companyId, sede.name);
+    if (sede.id === school.id) primaryCompanyId = companyId;
   }
+  if (!primaryCompanyId) throw new Error("Autoscuola consorziata non collegabile.");
 
   let primary: { token: string; expiresAt: Date } | null = null;
   for (const companyId of targets.keys()) {
@@ -644,7 +686,7 @@ async function sendOwnerInvite(input: {
       email,
       invitedById: input.invitedById,
     });
-    if (companyId === school.linkedCompanyId) {
+    if (companyId === primaryCompanyId) {
       primary = { token: invite.token, expiresAt: invite.expiresAt };
     }
   }
@@ -655,7 +697,7 @@ async function sendOwnerInvite(input: {
   try {
     await sendCompanyInviteEmail({
       to: email,
-      companyName: school.linkedCompany.name,
+      companyName: primaryCompanyName ?? school.name,
       inviteUrl,
       mobileInviteUrl: null,
       invitedByName: input.invitedByName,
@@ -736,32 +778,9 @@ export async function previewBulkAffiliateInvites(consorzioCompanyId?: string) {
     }
 
     const rows = await readAffiliateSchoolRows(targetConsorzioId);
-    const pending = rows.filter(
-      (row) => row.companyId && (row.access === "not_invited" || row.access === "expired"),
-    );
-
-    const groups = new Map<string, { email: string; schools: string[]; schoolIds: string[] }>();
-    const missingEmail: string[] = [];
-    for (const row of pending) {
-      const email = (row.email ?? "").trim().toLowerCase();
-      if (!email) {
-        missingEmail.push(row.schoolName);
-        continue;
-      }
-      const group = groups.get(email) ?? { email, schools: [], schoolIds: [] };
-      group.schools.push(row.schoolName);
-      group.schoolIds.push(row.schoolId);
-      groups.set(email, group);
-    }
-
-    return {
-      success: true as const,
-      data: {
-        groups: Array.from(groups.values()).sort((a, b) => b.schools.length - a.schools.length),
-        schoolsCount: pending.length - missingEmail.length,
-        missingEmail,
-      },
-    };
+    // Stessa regola del contatore sul pulsante: vedi
+    // `lib/consorzio/affiliate-invite-targets.ts`.
+    return { success: true as const, data: affiliateInviteTargets(rows) };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
@@ -790,31 +809,27 @@ export async function sendBulkAffiliateInvites(input: {
 
     const wanted = new Set(input.emails.map((email) => email.trim().toLowerCase()));
     const rows = await readAffiliateSchoolRows(targetConsorzioId);
-    const pending = rows.filter(
-      (row) =>
-        row.companyId &&
-        (row.access === "not_invited" || row.access === "expired") &&
-        wanted.has((row.email ?? "").trim().toLowerCase()),
+    // I gruppi che l'anteprima ha mostrato, ricalcolati qui: il client manda le
+    // email, non chi può riceverle.
+    const groups = affiliateInviteTargets(rows).groups.filter((group) =>
+      wanted.has(group.email),
     );
 
-    // Una sola scuola per email: `sendOwnerInvite` copre già tutte le sedi.
-    const seen = new Set<string>();
+    // Una mail per gruppo: `sendOwnerInvite` copre già tutte le sedi di quel
+    // titolare, quindi basta partire da una qualsiasi.
     let sent = 0;
     const failed: string[] = [];
-    for (const row of pending) {
-      const email = (row.email ?? "").trim().toLowerCase();
-      if (seen.has(email)) continue;
-      seen.add(email);
+    for (const group of groups) {
       try {
         await sendOwnerInvite({
-          schoolId: row.schoolId,
+          schoolId: group.schoolIds[0],
           consorzioCompanyId: targetConsorzioId,
           invitedById,
           invitedByName,
         });
         sent += 1;
       } catch {
-        failed.push(email);
+        failed.push(group.email);
       }
     }
 

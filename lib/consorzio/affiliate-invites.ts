@@ -18,7 +18,14 @@ import type { Prisma } from "@prisma/client";
 
 export const INVITE_TTL_DAYS = 7;
 
-/** Sedi dello stesso consorzio che condividono l'email di questa scuola. */
+/**
+ * Sedi dello stesso consorzio che condividono l'email di questa scuola.
+ *
+ * Include anche le sedi **non ancora collegate** a una Company: l'invito la
+ * crea (`sendOwnerInvite`), e lasciarle fuori darebbe al titolare l'accesso a
+ * una sola delle sue sedi — il contrario di quello che la riga "Sedi coperte da
+ * questo invito" promette.
+ */
 export async function siblingSchoolsForEmail(input: {
   consorzioCompanyId: string;
   email: string;
@@ -30,7 +37,6 @@ export async function siblingSchoolsForEmail(input: {
     where: {
       consorzioCompanyId: input.consorzioCompanyId,
       status: { not: "removed" },
-      linkedCompanyId: { not: null },
     },
     select: { id: true, name: true, email: true, linkedCompanyId: true },
   });
