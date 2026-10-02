@@ -49,6 +49,14 @@ Un `useEffect` toglie gli id che non esistono più (luogo archiviato, istruttore
 rimosso, cambio autoscuola): un filtro fantasma svuoterebbe la lista senza che
 si capisca perché.
 
+## Lista scrollabile nel dialog (REG-549, 2026-10-02)
+
+Con molte voci (es. "Filtra per veicolo" di un'autoscuola con 15+ mezzi) la lista supera `max-h-72` e scrolla. Prima era un `div` con `-mx-1 … px-1`: il box usciva dalla cassa del dialog e, siccome `DialogContent` è `overflow: visible` con `rounded-[24px]`, su chi ha le **barre di scorrimento sempre visibili** (Windows/Linux, o macOS con il mouse) la barra e il suo fondo bianco si disegnavano sopra l'angolo arrotondato e lo squadravano. Su macOS con trackpad le barre sono overlay e non si vede nulla — per questo va provato forzando `::-webkit-scrollbar`, se no "da me funziona".
+
+Ora la lista è una **cassa sua** (`rounded-[12px] border-[1.5px] border-[#ededed] p-1`), lo stesso pattern delle liste nei pannelli (`ExamOutcomePanel`, pannello esame dell'agenda): la barra vive dentro quel riquadro e non tocca più l'angolo del dialog, e l'ultima riga tagliata cade sul bordo della cassa, dove si legge come "continua" invece che come un errore di rendering. `overscroll-contain` evita che arrivando in fondo si scrolli la pagina dietro.
+
+⚠️ Vale per **tutti** i filtri di **entrambe** le pagine: il componente è uno solo.
+
 ## Connections
 
 - → **Agenda**: `ToolbarFilters` è lo stesso file. Chi lo tocca cambia entrambe
