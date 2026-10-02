@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { useAtomValue } from "jotai";
-import { Plus, SlidersHorizontal, Users, Link2, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2, BookOpen, Lock, Printer, TrafficCone, Route, Truck } from "lucide-react";
+import { Plus, Layers, SlidersHorizontal, Users, Link2, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2, BookOpen, Lock, Printer, TrafficCone, Route, Truck } from "lucide-react";
 
 import { companyAtom } from "@/atoms/company.store";
 import { isConsortium } from "@/lib/services";
@@ -39,6 +39,7 @@ import {
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   createAutoscuolaAppointment,
+  createAutoscuolaAppointmentBatch,
   annulAutoscuolaAppointment,
   hardCleanupAutoscuolaAppointment,
   updateAutoscuolaAppointmentStatus,
@@ -475,6 +476,23 @@ const DAY_START_HOUR = 0;
 const DAY_END_HOUR = 24;
 const SLOT_MINUTES = 30;
 const SLOT_OPTIONS = ["30", "45", "60", "90", "120"];
+
+/**
+ * Tinta del blocco tratteggiato in anteprima, per durata — le stesse fasce di
+ * colore dei blocchi veri in agenda. Era ricopiata in ogni ramo del ghost;
+ * REG-590 ne ha aggiunto un terzo (le guide della prenotazione multipla), e
+ * tre copie delle stesse cinque soglie divergono al primo ritocco.
+ */
+const ghostTint = (durMin: number) => ({
+  cardClass:
+    durMin <= 30 ? "bg-[#E3EEFF]/80 border-[#8fb8f2]" :
+    durMin <= 45 ? "bg-[#EAF7CE]/80 border-[#aecb6b]" :
+    durMin <= 60 ? "bg-[#FCEFC7]/80 border-[#dcb84f]" :
+    durMin <= 90 ? "bg-[#F9DDF3]/80 border-[#d98cc7]" :
+    "bg-[#FBD9DD]/80 border-[#dd8f99]",
+  dotClass:
+    durMin <= 30 ? "bg-[#3b82f6]" : durMin <= 45 ? "bg-[#84cc16]" : durMin <= 60 ? "bg-[#f59e0b]" : durMin <= 90 ? "bg-[#d946ef]" : "bg-[#f43f5e]",
+});
 // Chip durata rapide per gli esami; per durate fuori standard c'è il TimePicker "fine".
 const EXAM_DURATION_CHIPS = [30, 45, 60, 90, 120, 180, 240];
 const fmtExamDuration = (min: number) => {
@@ -1234,6 +1252,15 @@ export function AutoscuoleAgendaPage({
     duration: "30",
     notes: "",
   });
+  /**
+   * REG-590 — prenotazione multipla, come da app: acceso il toggle, Giorno/
+   * Orario/Durata singoli lasciano il posto a una lista di guide. Tutto il
+   * resto (allievo, veicoli, tipo, luogo, nota) resta CONDIVISO, esattamente
+   * come nel batch del backend.
+   */
+  type BookingEntry = { id: string; day: string; time: string; duration: string };
+  const [multiMode, setMultiMode] = React.useState(false);
+  const [entries, setEntries] = React.useState<BookingEntry[]>([]);
   type AgendaLocationOption = {
     id: string;
     name: string;
@@ -2081,7 +2108,7 @@ export function AutoscuoleAgendaPage({
 
   // Sposta il draft attivo su un nuovo slot (click su griglia o drag del ghost).
   // `colId` è l'identità della colonna: id istruttore o "veh:<id>" (vista Veicoli).
-  const moveDraftTo = React.useCallback((ymd: string, time: string, colId: string | null) => {
+  const moveDraftTo = React.useCallback((ymd: string, time: string, colId: string | null, entryId?: string) => {
     const isVehicleCol = colId?.startsWith("veh:") ?? false;
     const instructorId = isVehicleCol ? null : colId;
     const colVehicleId = isVehicleCol
@@ -2091,13 +2118,30 @@ export function AutoscuoleAgendaPage({
       // Cliccare una colonna Veicolo è una scelta esplicita del mezzo: vale
       // come scelta a mano, il prefill (REG-586) non deve sovrascriverla.
       if (colVehicleId) createVehicleTouchedRef.current = true;
-      setForm((prev) => ({
-        ...prev,
-        day: ymd,
-        time,
-        instructorId: instructorId ?? prev.instructorId,
-        ...(colVehicleId !== undefined && colVehicleId !== null ? { vehicleId: colVehicleId } : {}),
-      }));
+      if (multiMode) {
+        // REG-590: in multipla giorno e ora stanno sulle singole guide.
+        // Trascinando un ghost arriva il suo `entryId`; cliccando una colonna
+        // vuota no, e allora si muove l'ULTIMA guida — quella che si sta
+        // posando. Istruttore e veicolo restano condivisi, come nel batch.
+        setEntries((prev) => {
+          if (!prev.length) return prev;
+          const targetId = entryId ?? prev[prev.length - 1].id;
+          return prev.map((e) => (e.id === targetId ? { ...e, day: ymd, time } : e));
+        });
+        setForm((prev) => ({
+          ...prev,
+          instructorId: instructorId ?? prev.instructorId,
+          ...(colVehicleId !== undefined && colVehicleId !== null ? { vehicleId: colVehicleId } : {}),
+        }));
+      } else {
+        setForm((prev) => ({
+          ...prev,
+          day: ymd,
+          time,
+          instructorId: instructorId ?? prev.instructorId,
+          ...(colVehicleId !== undefined && colVehicleId !== null ? { vehicleId: colVehicleId } : {}),
+        }));
+      }
     } else if (examDialogOpen) {
       setExamForm((prev) => ({ ...prev, date: ymd, time, timeSet: true, instructorId: instructorId ?? prev.instructorId }));
     } else if (blockDialogOpen) {
@@ -2119,12 +2163,17 @@ export function AutoscuoleAgendaPage({
           : prev,
       );
     }
-  }, [createOpen, examDialogOpen, blockDialogOpen, createGroupLessonOpen, editAppointmentTarget, guideRequest]);
+  }, [createOpen, multiMode, examDialogOpen, blockDialogOpen, createGroupLessonOpen, editAppointmentTarget, guideRequest]);
 
   // Drag del ghost: verticale = orario (scatti di 15'), orizzontale = giorno /
   // colonna istruttore (hit-test su [data-agenda-col-day]).
   const ghostDragRef = React.useRef(false);
-  const onGhostPointerDown = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+  /**
+   * REG-590 — `entryId` identifica la guida della prenotazione multipla a cui
+   * appartiene il ghost trascinato. Fuori dalla multipla resta `undefined` e
+   * il comportamento è quello di sempre (si muove il form).
+   */
+  const makeGhostPointerDown = React.useCallback((entryId?: string) => (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
     const node = event.currentTarget;
@@ -2146,7 +2195,7 @@ export function AutoscuoleAgendaPage({
       const key = `${ymd}|${time}|${instr ?? ""}`;
       if (key === lastKey) return;
       lastKey = key;
-      moveDraftTo(ymd, time, instr);
+      moveDraftTo(ymd, time, instr, entryId);
     };
     const onUp = () => {
       ghostDragRef.current = false;
@@ -2158,6 +2207,7 @@ export function AutoscuoleAgendaPage({
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   }, [moveDraftTo, PIXELS_PER_MINUTE, DAY_START_HOUR, totalMinutes]);
+  const onGhostPointerDown = React.useMemo(() => makeGhostPointerDown(), [makeGhostPointerDown]);
 
   // ── Draft ghost: anteprima live dell'evento in creazione ──
   // Derivato dal form del popover attivo; mostra in griglia il blocco che si
@@ -2178,17 +2228,12 @@ export function AutoscuoleAgendaPage({
       const [h, m] = time.split(":").map(Number);
       return h * 60 + m - DAY_START_HOUR * 60;
     };
-    if (createOpen && form.day && form.time) {
+    // REG-590: in prenotazione multipla il giorno/ora del form non vogliono
+    // dire più niente — le guide stanno in `entries` e hanno i loro ghost
+    // (`multiGhosts`). Qui ci si tira indietro per non lasciarne uno fantasma.
+    if (createOpen && !multiMode && form.day && form.time) {
       const dur = parseInt(form.duration, 10) || 30;
       const student = students.find((s) => s.id === form.studentId);
-      const cardClass =
-        dur <= 30 ? "bg-[#E3EEFF]/80 border-[#8fb8f2]" :
-        dur <= 45 ? "bg-[#EAF7CE]/80 border-[#aecb6b]" :
-        dur <= 60 ? "bg-[#FCEFC7]/80 border-[#dcb84f]" :
-        dur <= 90 ? "bg-[#F9DDF3]/80 border-[#d98cc7]" :
-        "bg-[#FBD9DD]/80 border-[#dd8f99]";
-      const dotClass =
-        dur <= 30 ? "bg-[#3b82f6]" : dur <= 45 ? "bg-[#84cc16]" : dur <= 60 ? "bg-[#f59e0b]" : dur <= 90 ? "bg-[#d946ef]" : "bg-[#f43f5e]";
       return {
         ymd: form.day,
         startMin: parseStart(form.time),
@@ -2196,20 +2241,12 @@ export function AutoscuoleAgendaPage({
         instructorId: form.instructorId || null,
         vehicleId: form.vehicleId || null,
         title: student ? formatStudentName(student, studentNameOrder) : "Nuova guida",
-        cardClass,
-        dotClass,
+        ...ghostTint(dur),
       };
     }
     if (editAppointmentTarget && editDraft?.date && editDraft.time) {
       const dur = editDraft.durationMin || 30;
-      const cardClass =
-        dur <= 30 ? "bg-[#E3EEFF]/80 border-[#8fb8f2]" :
-        dur <= 45 ? "bg-[#EAF7CE]/80 border-[#aecb6b]" :
-        dur <= 60 ? "bg-[#FCEFC7]/80 border-[#dcb84f]" :
-        dur <= 90 ? "bg-[#F9DDF3]/80 border-[#d98cc7]" :
-        "bg-[#FBD9DD]/80 border-[#dd8f99]";
-      const dotClass =
-        dur <= 30 ? "bg-[#3b82f6]" : dur <= 45 ? "bg-[#84cc16]" : dur <= 60 ? "bg-[#f59e0b]" : dur <= 90 ? "bg-[#d946ef]" : "bg-[#f43f5e]";
+      const { cardClass, dotClass } = ghostTint(dur);
       const who = `${editAppointmentTarget.student?.firstName ?? ""} ${editAppointmentTarget.student?.lastName ?? ""}`.trim();
       return {
         ymd: editDraft.date,
@@ -2262,7 +2299,37 @@ export function AutoscuoleAgendaPage({
       };
     }
     return null;
-  }, [createOpen, form.day, form.time, form.duration, form.studentId, form.instructorId, form.vehicleId, students, examDialogOpen, examForm, blockDialogOpen, blockForm, blockKind, createGroupLessonOpen, groupDraft, editAppointmentTarget, editDraft, DAY_START_HOUR, studentNameOrder]);
+  }, [createOpen, multiMode, form.day, form.time, form.duration, form.studentId, form.instructorId, form.vehicleId, students, examDialogOpen, examForm, blockDialogOpen, blockForm, blockKind, createGroupLessonOpen, groupDraft, editAppointmentTarget, editDraft, DAY_START_HOUR, studentNameOrder]);
+
+  /**
+   * REG-590 — un blocco tratteggiato per OGNI guida della prenotazione
+   * multipla: si vede la serie prima di confermare, e si può ancora
+   * trascinare la singola guida in agenda (il drag porta il suo `id`).
+   * Stessa forma di `draftGhost`, più l'id, così il renderer è uno solo.
+   */
+  const multiGhosts = React.useMemo(() => {
+    if (!createOpen || !multiMode) return [];
+    const student = students.find((s) => s.id === form.studentId);
+    const title = student ? formatStudentName(student, studentNameOrder) : "Nuova guida";
+    return entries
+      .filter((e) => e.day && e.time)
+      .map((e, idx) => {
+        const dur = parseInt(e.duration, 10) || 30;
+        const [h, m] = e.time.split(":").map(Number);
+        return {
+          id: e.id,
+          ymd: e.day,
+          startMin: h * 60 + m - DAY_START_HOUR * 60,
+          durMin: dur,
+          instructorId: form.instructorId || null,
+          vehicleId: form.vehicleId || null,
+          // Numerate: con più guide nello stesso giorno sapere QUALE si sta
+          // spostando è l'unica cosa che le distingue.
+          title: `${idx + 1}. ${title}`,
+          ...ghostTint(dur),
+        };
+      });
+  }, [createOpen, multiMode, entries, form.studentId, form.instructorId, form.vehicleId, students, studentNameOrder, DAY_START_HOUR]);
 
   // Annullamento pregresso dell'allievo su QUESTO orario. Se l'allievo aveva
   // annullato lui una guida che iniziava a questo istante, mostriamo un banner
@@ -2304,8 +2371,11 @@ export function AutoscuoleAgendaPage({
   // L'agenda segue il draft: se il giorno esce dal range visibile naviga da
   // sola, e scrolla verticalmente fino all'orario del ghost.
   React.useEffect(() => {
-    if (!draftGhost || ghostDragRef.current) return;
-    const target = toDate(`${draftGhost.ymd}T00:00:00`);
+    // In multipla il riferimento è la PRIMA guida: seguire l'ultima toccata
+    // farebbe saltare la vista a ogni ritocco di una guida lontana.
+    const follow = draftGhost ?? multiGhosts[0] ?? null;
+    if (!follow || ghostDragRef.current) return;
+    const target = toDate(`${follow.ymd}T00:00:00`);
     const normalized = normalizeDay(target);
     if (viewMode === "week") {
       const ws = weekAnchor(normalized, viewPrefs.weekMode);
@@ -2315,29 +2385,44 @@ export function AutoscuoleAgendaPage({
     }
     const scroller = calendarScrollRef.current;
     if (scroller) {
-      const top = Math.max(0, draftGhost.startMin * PIXELS_PER_MINUTE - 140);
+      const top = Math.max(0, follow.startMin * PIXELS_PER_MINUTE - 140);
       scroller.scrollTo({ top, behavior: "smooth" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftGhost?.ymd, draftGhost?.startMin]);
+  }, [draftGhost?.ymd, draftGhost?.startMin, multiGhosts[0]?.ymd, multiGhosts[0]?.startMin]);
 
-  // Ghost del draft nella colonna giusta. instructorId=null (vista classica)
-  // → matcha solo il giorno; nelle viste istruttori matcha la colonna, e se
-  // l'istruttore non è ancora scelto appare tratteggiato in tutte (opaco).
-  const renderDraftGhost = (day: Date, colId: string | null) => {
-    if (!draftGhost || draftGhost.ymd !== formatYmd(day)) return null;
+  /**
+   * Un blocco tratteggiato in colonna. Condiviso fra il draft singolo e le
+   * guide della prenotazione multipla (REG-590): stessa forma, stesso drag,
+   * un solo markup da tenere allineato ai blocchi veri.
+   */
+  const renderGhostBlock = (
+    g: {
+      ymd: string;
+      startMin: number;
+      durMin: number;
+      instructorId: string | null;
+      vehicleId: string | null;
+      title: string;
+      cardClass: string;
+      dotClass: string;
+    },
+    colId: string | null,
+    key: string,
+    onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void,
+  ) => {
     let unassigned = false;
     if (colId?.startsWith("veh:")) {
       // Vista Veicoli (consorzio): il ghost segue il mezzo del draft; senza
       // mezzo scelto vive nella colonna "Senza mezzo".
-      if (colId !== `veh:${draftGhost.vehicleId ?? "__none__"}`) return null;
-      unassigned = draftGhost.vehicleId === null;
+      if (colId !== `veh:${g.vehicleId ?? "__none__"}`) return null;
+      unassigned = g.vehicleId === null;
     } else {
-      unassigned = colId !== null && draftGhost.instructorId === null;
-      if (colId !== null && draftGhost.instructorId !== null && draftGhost.instructorId !== colId) return null;
+      unassigned = colId !== null && g.instructorId === null;
+      if (colId !== null && g.instructorId !== null && g.instructorId !== colId) return null;
     }
-    const startMin = Math.max(0, draftGhost.startMin);
-    const durMin = Math.min(draftGhost.durMin, totalMinutes - startMin);
+    const startMin = Math.max(0, g.startMin);
+    const durMin = Math.min(g.durMin, totalMinutes - startMin);
     const endTotal = startMin + DAY_START_HOUR * 60 + durMin;
     const startLabel = `${pad(Math.floor((startMin + DAY_START_HOUR * 60) / 60))}:${pad((startMin + DAY_START_HOUR * 60) % 60)}`;
     const endLabel = `${pad(Math.floor(endTotal / 60) % 24)}:${pad(endTotal % 60)}`;
@@ -2345,28 +2430,52 @@ export function AutoscuoleAgendaPage({
     const small = height < 40;
     return (
       <motion.div
-        key={`draft-ghost-${draftGhost.ymd}-${colId ?? "day"}`}
+        key={key}
         layout
         initial={{ opacity: 0, scale: 0.94 }}
         animate={{ opacity: unassigned ? 0.45 : 1, scale: 1 }}
         transition={{ duration: 0.18, ease: "easeOut" }}
         className={cn(
           "absolute left-1 right-1 z-30 cursor-grab touch-none select-none overflow-hidden rounded-lg border-[1.5px] border-dashed px-2 py-1 shadow-[0_6px_22px_rgba(16,24,40,0.16)] active:cursor-grabbing",
-          draftGhost.cardClass,
+          g.cardClass,
         )}
         style={{ top: startMin * PIXELS_PER_MINUTE, height }}
-        onPointerDown={onGhostPointerDown}
+        onPointerDown={onPointerDown}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[#222222]">
-          <span className={cn("size-1.5 shrink-0 rounded-full", draftGhost.dotClass)} />
+          <span className={cn("size-1.5 shrink-0 rounded-full", g.dotClass)} />
           {startLabel} – {endLabel}
         </div>
         {!small && (
-          <div className="mt-0.5 truncate text-[10.5px] font-medium text-[#555555]">{draftGhost.title}</div>
+          <div className="mt-0.5 truncate text-[10.5px] font-medium text-[#555555]">{g.title}</div>
         )}
       </motion.div>
     );
+  };
+
+  // Ghost del draft nella colonna giusta. instructorId=null (vista classica)
+  // → matcha solo il giorno; nelle viste istruttori matcha la colonna, e se
+  // l'istruttore non è ancora scelto appare tratteggiato in tutte (opaco).
+  const renderDraftGhost = (day: Date, colId: string | null) => {
+    if (!draftGhost || draftGhost.ymd !== formatYmd(day)) return null;
+    return renderGhostBlock(
+      draftGhost,
+      colId,
+      `draft-ghost-${draftGhost.ymd}-${colId ?? "day"}`,
+      onGhostPointerDown,
+    );
+  };
+
+  /** REG-590 — i ghost delle guide della prenotazione multipla, uno per guida. */
+  const renderMultiGhosts = (day: Date, colId: string | null) => {
+    if (!multiGhosts.length) return null;
+    const ymd = formatYmd(day);
+    return multiGhosts
+      .filter((g) => g.ymd === ymd)
+      .map((g) =>
+        renderGhostBlock(g, colId, `multi-ghost-${g.id}-${colId ?? "day"}`, makeGhostPointerDown(g.id)),
+      );
   };
 
   // Fetch instructor availability for the visible range
@@ -2491,6 +2600,9 @@ export function AutoscuoleAgendaPage({
   React.useEffect(() => {
     if (!createOpen) {
       createVehicleTouchedRef.current = false;
+      // REG-590: la multipla non sopravvive alla chiusura del popover.
+      setMultiMode(false);
+      setEntries([]);
       return;
     }
     if (!vehiclesEnabled) return;
@@ -2572,6 +2684,75 @@ export function AutoscuoleAgendaPage({
       target.scrollIntoView({ behavior: "smooth", block: "center" });
       target.querySelector<HTMLElement>("button, input")?.focus({ preventScroll: true });
     }, 160);
+  };
+
+  /**
+   * REG-590 — accendere la multipla porta dentro la guida che si stava già
+   * compilando (giorno/ora/durata correnti); spegnerla svuota la lista. Stesso
+   * `setMulti` del form mobile, così i due si comportano uguale.
+   */
+  const setMulti = (value: boolean) => {
+    setMultiMode(value);
+    if (value) {
+      setEntries([
+        {
+          id: `e-${Date.now()}`,
+          day: form.day || formatYmd(dayFocus),
+          time: form.time || "09:00",
+          duration: form.duration,
+        },
+      ]);
+    } else {
+      setEntries([]);
+    }
+  };
+
+  /**
+   * REG-590 — guide del gruppo che si accavallano fra loro. Il backend le
+   * rifiuta ("Due o più guide nella prenotazione si sovrappongono") ma solo al
+   * salvataggio, e intanto l'utente ha riempito tutto il form. Qui si vede
+   * subito: la riga si segna in rosso e il bottone non parte. Capita da sé
+   * allungando la durata di una guida sopra quella dopo.
+   */
+  const overlappingEntryIds = React.useMemo(() => {
+    const spans = entries
+      .filter((e) => e.day && e.time)
+      .map((e) => {
+        const start = buildLocalDateTime(e.day, e.time).getTime();
+        return { id: e.id, start, end: start + (parseInt(e.duration, 10) || 30) * 60 * 1000 };
+      })
+      .filter((sp) => !Number.isNaN(sp.start));
+    const bad = new Set<string>();
+    for (let i = 0; i < spans.length; i++) {
+      for (let j = i + 1; j < spans.length; j++) {
+        if (spans[i].start < spans[j].end && spans[i].end > spans[j].start) {
+          bad.add(spans[i].id);
+          bad.add(spans[j].id);
+        }
+      }
+    }
+    return bad;
+  }, [entries]);
+
+  const updateEntry = (id: string, patch: Partial<BookingEntry>) =>
+    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+
+  /** Aggiunge una guida IN CODA alla precedente: stesso giorno, stessa durata,
+   *  ora = fine di quella prima. È il gesto che si ripete di più. */
+  const addEntry = () => {
+    setEntries((prev) => {
+      if (prev.length >= 20) return prev;
+      const last = prev[prev.length - 1];
+      if (!last) {
+        return [{ id: `e-${Date.now()}`, day: form.day || formatYmd(dayFocus), time: form.time || "09:00", duration: form.duration }];
+      }
+      const [h, m] = last.time.split(":").map(Number);
+      const endMin = h * 60 + m + (parseInt(last.duration, 10) || 30);
+      const nextTime = endMin >= 24 * 60
+        ? last.time
+        : `${pad(Math.floor(endMin / 60))}:${pad(endMin % 60)}`;
+      return [...prev, { id: `e-${Date.now()}`, day: last.day, time: nextTime, duration: last.duration }];
+    });
   };
 
   const handleCreate = async (opts?: { allowPast?: boolean }) => {
@@ -2714,6 +2895,139 @@ export function AutoscuoleAgendaPage({
           top: Math.max(0, startMin * PIXELS_PER_MINUTE - 140),
           behavior: "smooth",
         });
+      }
+    }
+    load({ silent: true });
+  };
+
+  /**
+   * REG-590 — conferma della prenotazione multipla. Stessi controlli del
+   * singolo (allievo, veicolo idoneo, auto al seguito) più quelli che hanno
+   * senso solo su una serie.
+   *
+   * Il batch lato server è TUTTO-O-NIENTE: al primo conflitto non crea nulla e
+   * torna un messaggio che nomina lo slot ("Conflitto per lo slot del 05/10
+   * 09:00…"). Quel messaggio si mostra com'è: dire "errore" e basta
+   * costringerebbe a cercare a mano quale guida non va.
+   */
+  const handleCreateBatch = async (opts?: { allowPast?: boolean }) => {
+    const isMotoMode = vehiclesEnabled && form.bookingMode === "moto";
+    const needFollowCar =
+      isMotoMode && Object.values(followCarRules).some((r) => r?.enabled === true);
+    if (!form.studentId || !form.instructorId || (vehiclesEnabled && !form.vehicleId)) {
+      toast.info({ description: "Completa tutti i campi richiesti." });
+      return;
+    }
+    if (!entries.length) {
+      toast.info({ description: "Aggiungi almeno una guida." });
+      return;
+    }
+    if (entries.some((e) => !e.day || !e.time)) {
+      toast.info({ description: "Completa giorno e orario di ogni guida." });
+      return;
+    }
+    if (vehiclesEnabled && form.vehicleId) {
+      const st = students.find((s) => s.id === form.studentId);
+      const veh = vehicles.find((v) => v.id === form.vehicleId);
+      if (st && veh && !vehicleServesLicense(veh, st)) {
+        toast.info({ description: "Il veicolo selezionato non è idoneo alla patente dell'allievo." });
+        return;
+      }
+    }
+    if (needFollowCar && !form.followVehicleId) {
+      toast.info({ description: "Scegli l'auto al seguito (o \"Nessuna\") per la guida moto." });
+      return;
+    }
+    const parsed = entries.map((e) => {
+      const start = buildLocalDateTime(e.day, e.time);
+      return { start, end: new Date(start.getTime() + (parseInt(e.duration, 10) || 30) * 60 * 1000) };
+    });
+    if (parsed.some((p) => Number.isNaN(p.start.getTime()))) {
+      toast.error({ description: "Data o orario non validi." });
+      return;
+    }
+    // Conferma "nel passato" sulla guida PIÙ VECCHIA del gruppo: una sola
+    // domanda per tutto il batch, come fa l'app.
+    const earliestPast = parsed
+      .map((p) => p.start)
+      .filter((d) => d.getTime() < Date.now())
+      .sort((a, b) => a.getTime() - b.getTime())[0];
+    if (!opts?.allowPast && earliestPast) {
+      setPendingPastStart(earliestPast);
+      setPastConfirmOpen(true);
+      return;
+    }
+    setCreating(true);
+    const makePayload = (skip?: boolean) => ({
+      studentId: form.studentId,
+      instructorId: form.instructorId,
+      type: form.types[0] || form.type,
+      types: form.types,
+      vehicleId: vehiclesEnabled ? form.vehicleId : null,
+      followVehicleId:
+        needFollowCar && form.followVehicleId !== "__none__" ? form.followVehicleId : null,
+      extraMotoVehicleIds: isMotoMode
+        ? form.extraMotoVehicleIds.filter((id) => id !== form.vehicleId)
+        : [],
+      motoLessonType: isMotoMode ? form.motoLessonType : null,
+      locationId: form.locationId || null,
+      notes: form.notes.trim() || undefined,
+      entries: parsed.map((p) => ({ startsAt: p.start.toISOString(), endsAt: p.end.toISOString() })),
+      ...(skip ? { skipWeeklyLimitCheck: true } : {}),
+      ...(opts?.allowPast ? { allowPast: true } : {}),
+    });
+    let res = await createAutoscuolaAppointmentBatch(makePayload());
+    if (!res.success && (res as { code?: string }).code === "WEEKLY_LIMIT_CONFIRM") {
+      setCreating(false);
+      const confirmed = window.confirm(
+        res.message ?? "L'allievo supererebbe il limite settimanale. Procedere comunque?",
+      );
+      if (!confirmed) return;
+      setCreating(true);
+      res = await createAutoscuolaAppointmentBatch(makePayload(true));
+    }
+    if (!res.success) {
+      setCreating(false);
+      toast.error({ description: res.message ?? "Impossibile creare le guide." });
+      return;
+    }
+    const created = (res as { data?: { created?: number } }).data?.created ?? parsed.length;
+    setCreating(false);
+    setCreateOpen(false);
+    setMultiMode(false);
+    setEntries([]);
+    setForm({
+      studentId: "",
+      type: "guida",
+      types: ["guida"],
+      day: "",
+      time: "09:00",
+      instructorId: "",
+      bookingMode: "auto",
+      vehicleId: "",
+      followVehicleId: "",
+      extraMotoVehicleIds: [],
+      motoLessonType: null,
+      locationId: defaultLocationId,
+      duration: "30",
+      notes: "",
+    });
+    createLocationTouchedRef.current = false;
+    toast.success({ description: `${created} guid${created === 1 ? "a prenotata" : "e prenotate"}.` });
+    // L'agenda segue la PRIMA guida creata, come fa col singolo.
+    {
+      const first = parsed.map((p) => p.start).sort((a, b) => a.getTime() - b.getTime())[0];
+      const createdDay = normalizeDay(first);
+      if (viewMode === "week") {
+        const ws = weekAnchor(createdDay, viewPrefs.weekMode);
+        if (ws.getTime() !== weekStart.getTime()) setWeekStart(ws);
+      } else if (createdDay.getTime() !== dayFocus.getTime()) {
+        setDayFocus(createdDay);
+      }
+      const startMin = first.getHours() * 60 + first.getMinutes() - DAY_START_HOUR * 60;
+      const scroller = calendarScrollRef.current;
+      if (scroller) {
+        scroller.scrollTo({ top: Math.max(0, startMin * PIXELS_PER_MINUTE - 140), behavior: "smooth" });
       }
     }
     load({ silent: true });
@@ -3053,6 +3367,7 @@ export function AutoscuoleAgendaPage({
     const unassignedNeeded =
       (appointmentsByDay[0] ?? []).some((a) => !a.vehicle?.id) ||
       (draftGhost !== null && draftGhost.vehicleId === null) ||
+      multiGhosts.some((g) => g.vehicleId === null) ||
       (guideRequest !== null && guideDraft !== null && guideDraft.vehicleId === null);
     return unassignedNeeded
       ? [...base, { id: "veh:__none__", name: "Senza mezzo", ranges: [] as Array<{ startMinutes: number; endMinutes: number }> }]
@@ -4064,6 +4379,7 @@ export function AutoscuoleAgendaPage({
             columnsByVehicle &&
             (appointmentsByDay.some((list) => list.some((a) => !a.vehicle?.id)) ||
               (draftGhost !== null && draftGhost.vehicleId === null) ||
+              multiGhosts.some((g) => g.vehicleId === null) ||
               (guideRequest !== null && guideDraft !== null && guideDraft.vehicleId === null));
           const weekVehicleCols = unassignedNeeded
             ? [
@@ -4272,6 +4588,7 @@ export function AutoscuoleAgendaPage({
                         {renderSlotGhost(day, instr.instructorId)}
                         {renderGuideRequestGhost(day, instr.instructorId)}
                         {renderDraftGhost(day, instr.instructorId)}
+                        {renderMultiGhosts(day, instr.instructorId)}
                         {isColumnHoliday && instrIdx === 0 && (
                           <div className="pointer-events-none sticky top-3 z-20 flex justify-center">
                             <button
@@ -4861,6 +5178,7 @@ export function AutoscuoleAgendaPage({
                     {renderSlotGhost(day, instr.id)}
                     {renderGuideRequestGhost(day, instr.id)}
                     {renderDraftGhost(day, instr.id)}
+                    {renderMultiGhosts(day, instr.id)}
                     {/* Availability bands — offset e clip alla finestra oraria visibile
                         (startMinutes è da mezzanotte, la griglia parte da DAY_START_HOUR). */}
                     {instr.ranges.map((range, ri) => {
@@ -5291,7 +5609,7 @@ export function AutoscuoleAgendaPage({
         open={createOpen}
         onClose={() => { if (!creating) setCreateOpen(false); }}
         title="Nuovo appuntamento"
-        subtitle="Il blocco tratteggiato in agenda si aggiorna mentre compili"
+        subtitle={multiMode ? "I blocchi tratteggiati in agenda si aggiornano mentre compili" : "Il blocco tratteggiato in agenda si aggiorna mentre compili"}
         anchor={popoverAnchor}
         footer={
           <>
@@ -5300,40 +5618,144 @@ export function AutoscuoleAgendaPage({
             </button>
             <button
               type="button"
-              disabled={creating || !form.studentId || !form.day || !form.time || !form.instructorId || (vehiclesEnabled && !form.vehicleId)}
-              onClick={() => handleCreate()}
+              disabled={
+                creating ||
+                !form.studentId ||
+                !form.instructorId ||
+                (vehiclesEnabled && !form.vehicleId) ||
+                (multiMode
+                  ? !entries.length || entries.some((e) => !e.day || !e.time) || overlappingEntryIds.size > 0
+                  : !form.day || !form.time)
+              }
+              onClick={() => (multiMode ? handleCreateBatch() : handleCreate())}
               className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
             >
-              {creating ? <LoadingDots className="min-h-5" /> : "Crea guida"}
+              {creating ? (
+                <LoadingDots className="min-h-5" />
+              ) : multiMode ? (
+                `Crea ${entries.length} guid${entries.length === 1 ? "a" : "e"}`
+              ) : (
+                "Crea guida"
+              )}
             </button>
           </>
         }
       >
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Giorno</p>
-              <DatePickerInput value={form.day} onChange={(value) => setForm((prev) => ({ ...prev, day: value }))} />
-            </div>
-            <div>
-              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Orario</p>
-              <TimePickerInput value={form.time} onChange={(value) => setForm((prev) => ({ ...prev, time: value }))} />
-            </div>
+          {/* REG-590 — prenotazione multipla: stesso gesto dell'app. Acceso,
+              Giorno/Orario/Durata lasciano il posto alla lista delle guide;
+              tutto il resto del form resta condiviso fra tutte. */}
+          <div
+            className="flex cursor-pointer items-center justify-between gap-3 rounded-[10px] bg-[#f8f8f8] px-3.5 py-2.5"
+            onClick={() => setMulti(!multiMode)}
+          >
+            <span className="flex min-w-0 items-center gap-2.5">
+              <Layers className={cn("size-4 shrink-0", multiMode ? "text-[#222222]" : "text-[#929292]")} />
+              <span className="flex min-w-0 flex-col">
+                <span className="text-[13px] font-medium text-[#555555]">Prenotazione multipla</span>
+                <span className="truncate text-[10.5px] font-medium text-[#929292]">Più guide in una volta sola</span>
+              </span>
+            </span>
+            <InlineToggle checked={multiMode} size="sm" />
           </div>
-          <div>
-            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Durata</p>
-            <div className="flex flex-wrap gap-1.5">
-              {SLOT_OPTIONS.map((option) => {
-                const active = form.duration === option;
-                return (
-                  <button key={option} type="button" onClick={() => setForm((prev) => ({ ...prev, duration: option }))}
-                    className={cn("cursor-pointer rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors", active ? "border-[#222222] bg-[#222222] text-white" : "border-[#dddddd] bg-white text-[#555555] hover:border-[#929292]")}>
-                    {option} min
-                  </button>
-                );
-              })}
+
+          {!multiMode && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="mb-1.5 text-xs font-semibold text-[#555555]">Giorno</p>
+                  <DatePickerInput value={form.day} onChange={(value) => setForm((prev) => ({ ...prev, day: value }))} />
+                </div>
+                <div>
+                  <p className="mb-1.5 text-xs font-semibold text-[#555555]">Orario</p>
+                  <TimePickerInput value={form.time} onChange={(value) => setForm((prev) => ({ ...prev, time: value }))} />
+                </div>
+              </div>
+              <div>
+                <p className="mb-1.5 text-xs font-semibold text-[#555555]">Durata</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {SLOT_OPTIONS.map((option) => {
+                    const active = form.duration === option;
+                    return (
+                      <button key={option} type="button" onClick={() => setForm((prev) => ({ ...prev, duration: option }))}
+                        className={cn("cursor-pointer rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors", active ? "border-[#222222] bg-[#222222] text-white" : "border-[#dddddd] bg-white text-[#555555] hover:border-[#929292]")}>
+                        {option} min
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+
+          {multiMode && (
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between">
+                <p className="text-xs font-semibold text-[#555555]">
+                  Guide · {entries.length}
+                </p>
+                <span className="text-[10.5px] font-medium text-[#929292]">
+                  {entries.length >= 20 ? "Massimo raggiunto" : "Max 20"}
+                </span>
+              </div>
+              {entries.map((entry, idx) => (
+                <div
+                  key={entry.id}
+                  className={cn(
+                    "rounded-[10px] border bg-white p-2.5 transition-colors",
+                    overlappingEntryIds.has(entry.id) ? "border-[#C13515] bg-[#FFF8F7]" : "border-[#dddddd]",
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#222222] text-[10px] font-semibold tabular-nums text-white">
+                      {idx + 1}
+                    </span>
+                    <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
+                      <DatePickerInput value={entry.day} onChange={(value) => updateEntry(entry.id, { day: value })} />
+                      <TimePickerInput value={entry.time} onChange={(value) => updateEntry(entry.id, { time: value })} />
+                    </div>
+                    {entries.length > 1 ? (
+                      <button
+                        type="button"
+                        aria-label={`Rimuovi la guida ${idx + 1}`}
+                        onClick={() => setEntries((prev) => prev.filter((e) => e.id !== entry.id))}
+                        className="cursor-pointer rounded-md p-1 text-[#929292] transition-colors hover:bg-[#FFF1F0] hover:text-[#C13515]"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5 pl-7">
+                    {SLOT_OPTIONS.map((option) => {
+                      const active = entry.duration === option;
+                      return (
+                        <button key={option} type="button" onClick={() => updateEntry(entry.id, { duration: option })}
+                          className={cn("cursor-pointer rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors", active ? "border-[#222222] bg-[#222222] text-white" : "border-[#dddddd] bg-white text-[#555555] hover:border-[#929292]")}>
+                          {option} min
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              {overlappingEntryIds.size > 0 ? (
+                <p className="flex items-center gap-1.5 px-0.5 text-[11px] font-medium text-[#C13515]">
+                  <AlertTriangle className="size-3.5 shrink-0" />
+                  Due o più guide si sovrappongono: correggi orario o durata.
+                </p>
+              ) : null}
+              {entries.length < 20 ? (
+                <button
+                  type="button"
+                  onClick={addEntry}
+                  className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-[#dddddd] px-3 py-2 text-[12px] font-semibold text-[#555555] transition-colors hover:border-[#929292] hover:text-[#222222]"
+                >
+                  <Plus className="size-3.5" />
+                  Aggiungi guida
+                </button>
+              ) : null}
             </div>
-          </div>
+          )}
           {vehiclesEnabled && (
             <div>
               <p className="mb-1.5 text-xs font-semibold text-[#555555]">Modalità</p>
@@ -6813,7 +7235,8 @@ export function AutoscuoleAgendaPage({
               className="bg-[#111111] hover:bg-[#000000]"
               onClick={() => {
                 setPastConfirmOpen(false);
-                void handleCreate({ allowPast: true });
+                // REG-590: riprende il flusso da cui è partita la domanda.
+                void (multiMode ? handleCreateBatch({ allowPast: true }) : handleCreate({ allowPast: true }));
               }}
             >
               Prenota comunque

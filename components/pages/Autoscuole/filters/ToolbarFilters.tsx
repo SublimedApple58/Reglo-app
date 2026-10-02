@@ -129,7 +129,23 @@ export function ToolbarFilters({
           </DialogHeader>
           {editor && editing ? (
             <div className="space-y-4">
-              <div className="-mx-1 max-h-72 space-y-0.5 overflow-y-auto px-1">
+              {/*
+                REG-549 — quando la lista scrolla (molti veicoli) succedevano
+                due cose brutte. Il `-mx-1` spingeva il box fuori dalla cassa
+                del dialog, e siccome `DialogContent` è `overflow: visible` con
+                angoli da 24px, su chi ha le barre di scorrimento SEMPRE VISIBILI
+                (Windows/Linux, o macOS con mouse) la barra e il suo fondo bianco
+                si disegnavano sopra l'angolo arrotondato, squadrandolo. E
+                l'ultima riga restava tagliata a metà nel vuoto, che sembra un
+                errore di rendering più che una lista che continua.
+
+                Ora la lista è una CASSA sua — bordo tenue e angoli propri, lo
+                stesso pattern delle liste nei pannelli (`ExamOutcomePanel`,
+                pannello esame dell'agenda): la barra sta dentro quel riquadro e
+                non tocca più l'angolo del dialog, e la riga tagliata cade sul
+                bordo della cassa, dove si legge come "continua".
+              */}
+              <div className="max-h-72 space-y-0.5 overflow-y-auto overscroll-contain rounded-[12px] border-[1.5px] border-[#ededed] p-1">
                 {editing.options.length === 0 ? (
                   <p className="px-2.5 py-2 text-sm font-medium text-[#929292]">
                     Niente da filtrare qui.
