@@ -2707,6 +2707,33 @@ export function AutoscuoleAgendaPage({
     }
   };
 
+  /**
+   * REG-590 — guide del gruppo che si accavallano fra loro. Il backend le
+   * rifiuta ("Due o più guide nella prenotazione si sovrappongono") ma solo al
+   * salvataggio, e intanto l'utente ha riempito tutto il form. Qui si vede
+   * subito: la riga si segna in rosso e il bottone non parte. Capita da sé
+   * allungando la durata di una guida sopra quella dopo.
+   */
+  const overlappingEntryIds = React.useMemo(() => {
+    const spans = entries
+      .filter((e) => e.day && e.time)
+      .map((e) => {
+        const start = buildLocalDateTime(e.day, e.time).getTime();
+        return { id: e.id, start, end: start + (parseInt(e.duration, 10) || 30) * 60 * 1000 };
+      })
+      .filter((sp) => !Number.isNaN(sp.start));
+    const bad = new Set<string>();
+    for (let i = 0; i < spans.length; i++) {
+      for (let j = i + 1; j < spans.length; j++) {
+        if (spans[i].start < spans[j].end && spans[i].end > spans[j].start) {
+          bad.add(spans[i].id);
+          bad.add(spans[j].id);
+        }
+      }
+    }
+    return bad;
+  }, [entries]);
+
   const updateEntry = (id: string, patch: Partial<BookingEntry>) =>
     setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
 
@@ -5597,7 +5624,7 @@ export function AutoscuoleAgendaPage({
                 !form.instructorId ||
                 (vehiclesEnabled && !form.vehicleId) ||
                 (multiMode
-                  ? !entries.length || entries.some((e) => !e.day || !e.time)
+                  ? !entries.length || entries.some((e) => !e.day || !e.time) || overlappingEntryIds.size > 0
                   : !form.day || !form.time)
               }
               onClick={() => (multiMode ? handleCreateBatch() : handleCreate())}
@@ -5672,7 +5699,13 @@ export function AutoscuoleAgendaPage({
                 </span>
               </div>
               {entries.map((entry, idx) => (
-                <div key={entry.id} className="rounded-[10px] border border-[#dddddd] bg-white p-2.5">
+                <div
+                  key={entry.id}
+                  className={cn(
+                    "rounded-[10px] border bg-white p-2.5 transition-colors",
+                    overlappingEntryIds.has(entry.id) ? "border-[#C13515] bg-[#FFF8F7]" : "border-[#dddddd]",
+                  )}
+                >
                   <div className="flex items-center gap-2">
                     <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#222222] text-[10px] font-semibold tabular-nums text-white">
                       {idx + 1}
@@ -5705,6 +5738,12 @@ export function AutoscuoleAgendaPage({
                   </div>
                 </div>
               ))}
+              {overlappingEntryIds.size > 0 ? (
+                <p className="flex items-center gap-1.5 px-0.5 text-[11px] font-medium text-[#C13515]">
+                  <AlertTriangle className="size-3.5 shrink-0" />
+                  Due o più guide si sovrappongono: correggi orario o durata.
+                </p>
+              ) : null}
               {entries.length < 20 ? (
                 <button
                   type="button"
