@@ -13,9 +13,18 @@ import { prisma } from "@/db/prisma";
  * Every consumer that builds per-owner busy intervals (slot proposals, booking
  * confirm, slot-matcher) must ALSO merge these container intervals, keyed by
  * instructorId and vehicleId.
+ *
+ * REG-591: dal 2026-10-02 il contenitore porta anche i CO-ISTRUTTORI, che
+ * vanno impegnati esattamente come il principale.
  */
 export type GroupLessonBusyRow = {
   instructorId: string | null;
+  /**
+   * REG-591 — i colleghi sul contenitore. Una guida di gruppo VUOTA non ha
+   * righe appuntamento: senza questi, il secondo istruttore restava libero e
+   * gli allievi ci si prenotavano sopra.
+   */
+  coInstructorIds: string[];
   vehicleId: string | null;
   /** Shared follow car of a kind="moto" group (reserved at the container level). */
   followVehicleId: string | null;
@@ -45,10 +54,12 @@ export async function fetchGroupLessonBusyRows(
       startsAt: true,
       endsAt: true,
       fleetVehicles: { select: { vehicleId: true } },
+      coInstructors: { select: { instructorId: true } },
     },
   });
   return rows.map((r) => ({
     instructorId: r.instructorId,
+    coInstructorIds: r.coInstructors.map((c) => c.instructorId),
     vehicleId: r.vehicleId,
     followVehicleId: r.followVehicleId,
     fleetVehicleIds: r.fleetVehicles.map((f) => f.vehicleId),
@@ -72,6 +83,7 @@ export function addGroupLessonBusyIntervals(
     const end = gl.endsAt.getTime();
     for (const ownerId of [
       gl.instructorId,
+      ...gl.coInstructorIds,
       gl.vehicleId,
       gl.followVehicleId,
       ...gl.fleetVehicleIds,

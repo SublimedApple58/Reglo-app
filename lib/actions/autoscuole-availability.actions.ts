@@ -78,6 +78,11 @@ import {
   computeFreeIntervalsInRange,
 } from "@/lib/autoscuole/slot-packing";
 import {
+  APPOINTMENT_BUSY_SELECT,
+  appointmentBusyOwnerIds,
+  type BusyAppointment,
+} from "@/lib/autoscuole/appointment-busy";
+import {
   addGroupLessonBusyIntervals,
   fetchGroupLessonBusyRows,
 } from "@/lib/autoscuole/group-lesson-busy";
@@ -1895,16 +1900,12 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     ]);
 
     const buildAppointmentMaps = (
-      appointments: Array<{
-        instructorId: string | null;
-        vehicleId: string | null;
-        // Null only for studentless exam placeholders — they still reserve the
-        // instructor/vehicle but have no student interval to record.
-        studentId: string | null;
-        startsAt: Date;
-        endsAt: Date | null;
-        appointmentVehicles?: Array<{ vehicleId: string }>;
-      }>,
+      appointments: Array<
+        BusyAppointment & {
+          startsAt: Date;
+          endsAt: Date | null;
+        }
+      >,
     ) => {
       const starts = new Map<string, Set<number>>();
       const ends = new Map<string, Set<number>>();
@@ -1926,19 +1927,8 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         const start = appointment.startsAt.getTime();
         const end =
           appointment.endsAt?.getTime() ?? start + SLOT_MINUTES * 60 * 1000;
-        if (appointment.studentId) add(appointment.studentId, start, end);
-        if (appointment.instructorId) {
-          add(appointment.instructorId, start, end);
-        }
-        if (appointment.vehicleId) {
-          add(appointment.vehicleId, start, end);
-        }
-        // Follow car (and any secondary vehicle) reserved by the appointment.
-        for (const link of appointment.appointmentVehicles ?? []) {
-          if (link.vehicleId !== appointment.vehicleId) {
-            add(link.vehicleId, start, end);
-          }
-        }
+        // Allievo, istruttore, CO-ISTRUTTORI e veicoli (REG-591).
+        for (const ownerId of appointmentBusyOwnerIds(appointment)) add(ownerId, start, end);
       }
 
       return { starts, ends, intervals };
@@ -2111,7 +2101,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             status: { notIn: ["cancelled"] },
             startsAt: { gte: appointmentScanStart, lt: rangeEnd },
           },
-          include: { appointmentVehicles: { select: { vehicleId: true } } },
+          select: APPOINTMENT_BUSY_SELECT,
         }),
         prisma.autoscuolaInstructorBlock.findMany({
           where: {
@@ -3203,7 +3193,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
           status: { notIn: ["cancelled"] },
           startsAt: { gte: appointmentScanStart, lt: rangeEnd },
         },
-        include: { appointmentVehicles: { select: { vehicleId: true } } },
+        select: APPOINTMENT_BUSY_SELECT,
       }),
       prisma.autoscuolaInstructorBlock.findMany({
         where: {
@@ -3230,12 +3220,8 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         set.add(start);
         starts.set(ownerId, set);
       };
-      if (appt.studentId) addInterval(appt.studentId); // null only for studentless exam placeholders
-      if (appt.instructorId) addInterval(appt.instructorId);
-      if (appt.vehicleId) addInterval(appt.vehicleId);
-      for (const link of appt.appointmentVehicles ?? []) {
-        if (link.vehicleId !== appt.vehicleId) addInterval(link.vehicleId);
-      }
+      // Allievo, istruttore, CO-ISTRUTTORI e veicoli (REG-591).
+      for (const ownerId of appointmentBusyOwnerIds(appt)) addInterval(ownerId);
     }
 
     // Instructor blocks (sick leave, etc.) were fetched in the parallel wave
@@ -3677,7 +3663,7 @@ export async function getDateAvailabilityMap(
           status: { notIn: ["cancelled"] },
           startsAt: { gte: appointmentScanStart, lt: rangeEnd },
         },
-        include: { appointmentVehicles: { select: { vehicleId: true } } },
+        select: APPOINTMENT_BUSY_SELECT,
       }),
       prisma.autoscuolaInstructorBlock.findMany({
         where: {
@@ -3701,12 +3687,8 @@ export async function getDateAvailabilityMap(
         list.push({ start, end });
         intervals.set(ownerId, list);
       };
-      if (appt.studentId) addInterval(appt.studentId); // null only for studentless exam placeholders
-      if (appt.instructorId) addInterval(appt.instructorId);
-      if (appt.vehicleId) addInterval(appt.vehicleId);
-      for (const link of appt.appointmentVehicles ?? []) {
-        if (link.vehicleId !== appt.vehicleId) addInterval(link.vehicleId);
-      }
+      // Allievo, istruttore, CO-ISTRUTTORI e veicoli (REG-591).
+      for (const ownerId of appointmentBusyOwnerIds(appt)) addInterval(ownerId);
     }
     for (const block of dateMapInstructorBlocks) {
       const list = intervals.get(block.instructorId) ?? [];
