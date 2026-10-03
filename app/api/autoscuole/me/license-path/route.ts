@@ -14,7 +14,7 @@ import { formatError } from "@/lib/utils";
  * (staff picks for a student), this is self-scoped: the caller can only set the
  * license on their own membership, and only while the first-access gate applies
  * (self-registered AND not yet chosen). Categories are the student subset
- * (B / AM / A1 / A2 / A); transmission (manuale/automatico) is chosen for every
+ * (B / AM quadriciclo / B1 / AM / A1 / A2 / A); transmission (manuale/automatico) is chosen for every
  * category — cars and moto alike.
  */
 const bodySchema = z.object({

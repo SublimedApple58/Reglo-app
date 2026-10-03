@@ -73,6 +73,10 @@ export const DURATION_COLOR_ENTRIES: AgendaColorEntry[] = [
   ENTRY("d90plus", "Oltre 90 minuti", "> 90", "#FBD9DD", "rgba(244,63,94,0.22)"),
 ];
 
+// Quadricicli (REG-588): famiglia propria, giallo. La B1 eredita dalla AMQ
+// finché qualcuno non la personalizza, come CE/C1 dalla C.
+const QUAD_BG = "#FFF1CF";
+const QUAD_SHADOW = "rgba(234,179,8,0.22)";
 const C_BG = "#FCEFC7";
 const C_SHADOW = "rgba(245,158,11,0.22)";
 const D_BG = "#F9DDF3";
@@ -88,6 +92,8 @@ export const LICENSE_COLOR_ENTRIES: AgendaColorEntry[] = [
   ENTRY("b", "Patente B", "B", "#E3EEFF", "rgba(59,130,246,0.22)"),
   ENTRY("autom", "Cambio automatico (B autom., …)", "B autom.", "#CFFAFE", "rgba(6,182,212,0.22)"),
   ENTRY("be", "Patente BE", "BE", "#E6E9FF", "rgba(99,102,241,0.22)"),
+  ENTRY("amq", "AM quadriciclo (microcar)", "AM quadr.", QUAD_BG, QUAD_SHADOW),
+  ENTRY("b1", "Patente B1", "B1", QUAD_BG, QUAD_SHADOW, "amq"),
   ENTRY("am", "Patente AM", "AM", "#EAF7CE", "rgba(132,204,22,0.22)"),
   ENTRY("a1", "Patente A1", "A1", "#D6F5E3", "rgba(16,185,129,0.22)"),
   ENTRY("a2", "Patente A2", "A2", "#FFE8D1", "rgba(249,115,22,0.22)"),
@@ -110,6 +116,7 @@ const licenseEntryByKey = new Map(LICENSE_COLOR_ENTRIES.map((e) => [e.key, e]));
 /** Gruppi del pannello "Personalizza i colori" (criterio patente). */
 export const LICENSE_COLOR_GROUPS: Array<{ label: string; keys: string[] }> = [
   { label: "Auto", keys: ["b", "autom", "be"] },
+  { label: "Quadricicli", keys: ["amq", "b1"] },
   { label: "Moto", keys: ["am", "a1", "a2", "a"] },
   { label: "Camion", keys: ["c", "ce", "c1", "c1e"] },
   { label: "Autobus", keys: ["d", "de", "d1", "d1e"] },
