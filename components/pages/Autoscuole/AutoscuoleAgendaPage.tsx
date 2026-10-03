@@ -4493,7 +4493,18 @@ export function AutoscuoleAgendaPage({
                           style={{ gridColumn: `${2 + dayIdx * instrCount} / span ${instrCount}` }}
                         >
                           {dayExams.length > 0 ? (
-                            <div className="flex flex-wrap gap-0.5 px-1 py-0.5">
+                            /* w-0 + min-w-full: le pastiglie NON contribuiscono alla
+                               larghezza intrinseca delle tracce. Questa banda è una
+                               griglia SEPARATA da quella del corpo (condividono solo il
+                               template e lo scroll): un giorno con più esami chiedeva —
+                               via max-content di un flex-wrap, che è la somma delle
+                               pastiglie su UNA riga — colonne più larghe qui che là, e la
+                               banda del mercoledì finiva sopra il giovedì (segnalazione
+                               Solferino, 03/10/2026: banda 3279px contro 1736px del
+                               corpo). Stesso rimedio delle etichette istruttore
+                               nell'header, e flex-col perché impilate lo erano già. */
+                            <div className="w-0 min-w-full">
+                            <div className="flex flex-col gap-0.5 px-1 py-0.5">
                               {dayExams.map((eg) => {
                                 const egStart = toDate(eg.startsAt);
                                 const examHasTime = Boolean(eg.endsAt);
@@ -4503,14 +4514,15 @@ export function AutoscuoleAgendaPage({
                                     key={`exam-hdr-${eg.key}`}
                                     type="button"
                                     onClick={() => { setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
-                                    className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 text-[9px] font-semibold text-violet-700 hover:bg-violet-100 transition-colors cursor-pointer"
+                                    className="flex w-full min-w-0 items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 text-[9px] font-semibold text-violet-700 hover:bg-violet-100 transition-colors cursor-pointer"
                                   >
                                     <GraduationCap className="size-3 shrink-0" />
-                                    <span>Esame {examHasTime ? formatTimeRange(egStart, egEnd) : "· orario da definire"}</span>
-                                    <span className="text-violet-500">{(() => { const n = eg.appointments.filter((a) => !isExamPlaceholder(a)).length; return n === 0 ? "· vuoto" : `· ${n} all.`; })()}</span>
+                                    <span className="truncate">Esame {examHasTime ? formatTimeRange(egStart, egEnd) : "· orario da definire"}</span>
+                                    <span className="shrink-0 text-violet-500">{(() => { const n = eg.appointments.filter((a) => !isExamPlaceholder(a)).length; return n === 0 ? "· vuoto" : `· ${n} all.`; })()}</span>
                                   </button>
                                 );
                               })}
+                            </div>
                             </div>
                           ) : null}
                         </div>
