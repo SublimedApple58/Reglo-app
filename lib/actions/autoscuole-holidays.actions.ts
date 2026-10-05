@@ -227,6 +227,8 @@ export async function createHoliday(
             await sendDynamicEmail({
               to: studentUser.email,
               subject: title,
+              eyebrow: "Autoscuola chiusa",
+              tone: "danger",
               body,
             });
           }
@@ -415,7 +417,13 @@ export async function createHolidayRange(
             select: { email: true },
           });
           if (studentUser?.email) {
-            await sendDynamicEmail({ to: studentUser.email, subject: title, body });
+            await sendDynamicEmail({
+              to: studentUser.email,
+              subject: title,
+              eyebrow: "Autoscuola chiusa",
+              tone: "danger",
+              body,
+            });
           }
         } catch (error) {
           console.error("Holiday email error", error);

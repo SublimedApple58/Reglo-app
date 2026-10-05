@@ -4662,7 +4662,7 @@ export async function broadcastWaitlistOffer({
     hour: "2-digit",
     minute: "2-digit",
   });
-  const message = `Si e liberato uno slot guida il ${formattedDate} alle ${formattedTime}. Apri Reglo per accettare o rifiutare la proposta.`;
+  const message = `Si è liberato un posto per una guida il ${formattedDate} alle ${formattedTime}. Apri Reglo per accettare o lasciarlo a un altro allievo.`;
   const title = "⏰ Slot guida disponibile";
 
   if (channels.includes("push")) {
@@ -4697,6 +4697,8 @@ export async function broadcastWaitlistOffer({
           await sendDynamicEmail({
             to: student.user.email,
             subject: title,
+            eyebrow: "Posto libero",
+            tone: "info",
             body: message,
           });
         }
@@ -4935,7 +4937,13 @@ export async function broadcastGroupLessonInvite({
   for (const student of eligible) {
     if (channels.includes("email") && student.user.email) {
       try {
-        await sendDynamicEmail({ to: student.user.email, subject: title, body: message });
+        await sendDynamicEmail({
+          to: student.user.email,
+          subject: title,
+          eyebrow: "Guida di gruppo",
+          tone: "info",
+          body: message,
+        });
       } catch (error) {
         console.error("Group lesson invite email error", error);
       }

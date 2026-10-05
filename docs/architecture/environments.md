@@ -18,7 +18,7 @@ the app behaves as production (sends ON) — so dev/prod are never silently mute
 
 On **staging** (or with `DISABLE_EXTERNAL_SENDS=1`) every real outbound
 integration is a **no-op**, so QA on a copied DB never reaches real users:
-- **Email** — guarded centrally in `email/index.tsx` (`getResend()` returns a stub).
+- **Email** — guarded centrally in `email/index.ts` (`getResend()` returns a stub).
 - **Push** — `lib/autoscuole/push.ts` (`sendAutoscuolaPushToUsers` returns a zero result).
 - **WhatsApp/SMS** — `lib/autoscuole/whatsapp.ts` (`sendAutoscuolaWhatsApp` returns early).
 - **Fatture in Cloud** — `lib/integrations/fatture-in-cloud.ts` (`getFicConnection` throws the "not connected" error → the existing graceful `issued_stripe` fallback runs; no real invoice).

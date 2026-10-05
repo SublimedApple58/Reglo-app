@@ -596,6 +596,8 @@ const notifyStudentAppointmentCancelled = async ({
       await sendDynamicEmail({
         to: studentUser.email,
         subject: title,
+        eyebrow: "Guida annullata",
+        tone: "danger",
         body,
       });
     } catch (error) {
@@ -686,6 +688,8 @@ const notifyAppointmentRescheduled = async ({
         await sendDynamicEmail({
           to: studentUser.email,
           subject: title,
+          eyebrow: "Guida spostata",
+          tone: "info",
           body,
         });
       } catch (error) {

@@ -1,5 +1,10 @@
 # Communications
 
+> **Veste delle email**: il contenitore è unico, in `email/template.ts` — vedi
+> [email-template.md](email-template.md). Qui si decide *cosa* dice il messaggio
+> (e che canali usa), lì *com'è fatta* la mail.
+
+
 ## What it does
 Message templates, reminder rules, appointment reminders, case deadline notifications, and all background processing jobs.
 

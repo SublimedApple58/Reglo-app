@@ -114,8 +114,12 @@ const seedUser = (email: string) => {
 
 /** Legge il codice in chiaro dall'email appena "spedita". */
 const sentCode = () => {
-  const body = sendDynamicEmail.mock.calls.at(-1)?.[0]?.body as string;
-  return body.match(/^\d{6}$/m)?.[0] ?? "";
+  // Dal template REG-599 il codice viaggia nel riquadro evidenziato, non nel
+  // corpo: è quello che l'allievo vede per primo aprendo la mail.
+  const highlight = sendDynamicEmail.mock.calls.at(-1)?.[0]?.highlight as
+    | { value?: string }
+    | undefined;
+  return highlight?.value?.match(/^\d{6}$/)?.[0] ?? "";
 };
 
 beforeEach(() => {

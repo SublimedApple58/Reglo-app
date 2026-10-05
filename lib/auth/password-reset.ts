@@ -117,16 +117,18 @@ export async function requestPasswordResetCode(
       await sendDynamicEmail({
         to: email,
         subject: "Il tuo codice per reimpostare la password — Reglo",
+        eyebrow: "Sicurezza",
+        heading: "Reimposta la tua password",
         body: [
           name ? `Ciao ${name},` : "Ciao,",
           "",
-          `hai richiesto di reimpostare la password del tuo account Reglo. Usa questo codice ${where}:`,
-          "",
-          code,
-          "",
-          `Il codice scade tra ${minutes} minuti.`,
-          "Se non hai richiesto tu il reset, ignora questa email: la password resta invariata.",
+          `hai chiesto di reimpostare la password del tuo account Reglo. Inserisci questo codice ${where}:`,
         ].join("\n"),
+        // Il codice va nel riquadro, non nel corpo: è l'unica cosa che chi apre
+        // questa mail sta cercando, e nel riquadro si legge (e si copia) subito.
+        highlight: { label: "Il tuo codice", value: code, mono: true },
+        bodyAfter: `Il codice scade tra ${minutes} minuti.`,
+        footerNote: "Se non hai richiesto tu il reset, ignora questa email: la password resta com'è.",
       });
     } catch (err) {
       console.error("[password-reset] email send failed", err);
