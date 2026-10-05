@@ -404,7 +404,7 @@ const sendPaymentNotification = async ({
   body,
   kind,
   appointmentId,
-  tone = "neutral",
+  tone = "brand",
 }: {
   prisma: PrismaClientLike;
   companyId: string;
@@ -415,7 +415,7 @@ const sendPaymentNotification = async ({
   kind: string;
   appointmentId?: string;
   /** Solo per l'email: il push non ha colori. */
-  tone?: "neutral" | "positive" | "danger";
+  tone?: "brand" | "positive" | "danger";
 }) => {
   const member = await prisma.companyMember.findFirst({
     where: {
@@ -1689,7 +1689,7 @@ const attemptAutomaticPaymentRecord = async ({
         ? "Non siamo riusciti a completare l'addebito automatico. Salda dall'app per tornare a prenotare le guide."
         : "L'addebito automatico non è andato a buon fine. Ci riproviamo noi tra poco: non devi fare nulla.",
       kind: exhausted ? "appointment_payment_failed_blocking" : "appointment_payment_retry",
-      tone: exhausted ? "danger" : "neutral",
+      tone: exhausted ? "danger" : "brand",
       appointmentId: payment.appointment.id,
     });
 

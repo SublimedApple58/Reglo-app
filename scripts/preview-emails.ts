@@ -36,7 +36,7 @@ const samples: Array<{ file: string; content: RegloEmailContent }> = [
     content: {
       subject: "Domani hai la guida — Reglo",
       eyebrow: "Promemoria",
-      tone: "info",
+      tone: "brand",
       body: "Promemoria: domani hai una guida alle 15:00. Durata 60 minuti.",
     },
   },
@@ -79,7 +79,7 @@ const samples: Array<{ file: string; content: RegloEmailContent }> = [
     content: {
       subject: "⏰ Slot guida disponibile",
       eyebrow: "Posto libero",
-      tone: "info",
+      tone: "brand",
       body: "Si è liberato un posto per una guida il 14/10/2026 alle 15:00. Apri Reglo per accettare o lasciarlo a un altro allievo.",
     },
   },

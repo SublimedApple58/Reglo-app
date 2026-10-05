@@ -29,8 +29,14 @@
  * @see docs/features/email-template.md
  */
 
-/** Tipo di email: decide l'unico colore che compare nel messaggio. */
-export type EmailTone = "neutral" | "info" | "positive" | "danger";
+/**
+ * Tipo di email: decide l'unico colore che compare nel messaggio.
+ *
+ * Sono tre, non quattro: con la testata nera un accento nero non si vedrebbe,
+ * e "promemoria" contro "invito" non è una distinzione che interessi a chi
+ * legge. Quella che interessa è: **è normale, è andata bene, c'è un problema.**
+ */
+export type EmailTone = "brand" | "positive" | "danger";
 
 type ToneStyle = {
   /** Barra da 4px in cima alla card. */
@@ -49,8 +55,9 @@ type ToneStyle = {
  * "Accesso a Reglo" del consorzio, il giallo degli highlight informativi.
  */
 const TONES: Record<EmailTone, ToneStyle> = {
-  neutral: { bar: "#111111", ink: "#6a6a6a", tint: "#f7f7f7", border: "#e6e6e6" },
-  info: { bar: "#FACC15", ink: "#A16207", tint: "#FEFCE8", border: "#FEF08A" },
+  // Il giallo è l'accento di Reglo: c'era nel marchio storico, è l'oro del sito
+  // pubblico, ed è il colore che il design system tiene per gli highlight.
+  brand: { bar: "#FACC15", ink: "#A16207", tint: "#FEFCE8", border: "#FEF08A" },
   positive: { bar: "#22C55E", ink: "#1a7f50", tint: "#f0faf4", border: "#c5e8d4" },
   danger: { bar: "#c13515", ink: "#c13515", tint: "#fdf2ef", border: "#f3d3c9" },
 };
@@ -64,8 +71,12 @@ const COLORS = {
   body: "#444444",
   muted: "#6a6a6a",
   soft: "#929292",
-  hairline: "#f0f0f0",
+  hairline: "#ececec",
+  tint: "#f7f7f7",
 };
+
+/** Il sito pubblico è www.reglo.it; `baseUrl` è l'app (app.reglo.it). */
+const SITE_URL = "https://www.reglo.it";
 
 /**
  * Nessun font custom: in email non si caricano (e quando si caricano, non
@@ -147,8 +158,6 @@ export const splitParagraphs = (body: string): string[] =>
 const paragraphHtml = (block: string) =>
   escapeHtml(block).replace(/\n/g, "<br />");
 
-const td = (styles: string) => `style="${styles}"`;
-
 const renderHighlight = (highlight: EmailHighlight, tone: ToneStyle) => {
   const label = highlight.label
     ? `<div style="font-family:${FONT_STACK}; font-size:11px; font-weight:700; letter-spacing:0.9px; text-transform:uppercase; color:${tone.ink}; padding-bottom:8px;">${escapeHtml(highlight.label)}</div>`
@@ -199,7 +208,7 @@ export const renderRegloEmail = (
   { baseUrl }: { baseUrl: string },
 ): string => {
   const base = baseUrl.replace(/\/$/, "");
-  const tone = TONES[content.tone ?? "neutral"];
+  const tone = TONES[content.tone ?? "brand"];
   const heading = (content.heading ?? headingFromSubject(content.subject)).trim();
   const paragraphs = splitParagraphs(content.body);
   const preheader = (content.preheader ?? paragraphs[0] ?? heading).slice(0, 140);
@@ -207,14 +216,14 @@ export const renderRegloEmail = (
   const eyebrowRow = content.eyebrow
     ? `
               <tr>
-                <td style="padding:26px 0 0; font-family:${FONT_STACK}; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:${tone.ink};">${escapeHtml(content.eyebrow)}</td>
+                <td style="padding:0; font-family:${FONT_STACK}; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:${tone.ink};">${escapeHtml(content.eyebrow)}</td>
               </tr>`
     : "";
 
   const headingRow = heading
     ? `
               <tr>
-                <td style="padding:${content.eyebrow ? "8px" : "26px"} 0 0; font-family:${FONT_STACK}; font-size:21px; line-height:1.3; font-weight:600; color:${COLORS.ink};">${escapeHtml(heading)}</td>
+                <td style="padding:${content.eyebrow ? "9px" : "0"} 0 0; font-family:${FONT_STACK}; font-size:23px; line-height:1.28; font-weight:600; letter-spacing:-0.3px; color:${COLORS.ink};">${escapeHtml(heading)}</td>
               </tr>`
     : "";
 
@@ -222,7 +231,7 @@ export const renderRegloEmail = (
     .map(
       (block, index) => `
               <tr>
-                <td style="padding:${index === 0 ? (heading ? "14px" : "26px") : "12px"} 0 0; font-family:${FONT_STACK}; font-size:15px; line-height:1.65; color:${COLORS.body};">${paragraphHtml(block)}</td>
+                <td style="padding:${index === 0 ? (heading ? "14px" : "0") : "12px"} 0 0; font-family:${FONT_STACK}; font-size:15px; line-height:1.65; color:${COLORS.body};">${paragraphHtml(block)}</td>
               </tr>`,
     )
     .join("");
@@ -239,8 +248,11 @@ export const renderRegloEmail = (
     )
     .join("");
   const ctaRow = content.cta ? renderCta(content.cta, content.fallbackLink) : "";
-  const footerNote = content.footerNote
-    ? `<div style="padding-top:6px; color:${COLORS.soft};">${escapeHtml(content.footerNote)}</div>`
+  const footerNoteRow = content.footerNote
+    ? `
+                  <tr>
+                    <td style="padding:14px 0 0; font-family:${FONT_STACK}; font-size:12px; line-height:1.6; color:${COLORS.soft};">${escapeHtml(content.footerNote)}</td>
+                  </tr>`
     : "";
 
   return `<!doctype html>
@@ -257,40 +269,76 @@ export const renderRegloEmail = (
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${COLORS.page}" style="background:${COLORS.page}; margin:0; padding:0; width:100%;">
       <tr>
         <td align="center" style="padding:36px 16px;">
-          <!-- Il div esterno è quello che arrotonda e ritaglia: la barra colorata
-               in cima è a filo, e un <table> non ritaglia i figli in modo
-               affidabile. Outlook ignora il raggio e mostra una card squadrata. -->
-          <div style="max-width:560px; margin:0 auto; border-radius:18px; overflow:hidden;">
+          <!-- Il div esterno è quello che arrotonda e ritaglia: testata scura e
+               piede grigio sono a filo del bordo, e un <table> non ritaglia i
+               figli in modo affidabile. Outlook ignora il raggio: card squadrata. -->
+          <div style="max-width:560px; margin:0 auto; border-radius:20px; overflow:hidden;">
           <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width:560px; background:${COLORS.card}; border-collapse:collapse;">
+
+            <!-- Testata: il marchio sta su fondo nero, non su bianco. È quello che
+                 si vede per primo aprendo la mail, e dice Reglo prima del testo. -->
+            <tr>
+              <td bgcolor="${COLORS.ink}" style="background:${COLORS.ink}; padding:22px 34px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td valign="middle" style="padding-right:11px;">
+                      <img src="${base}/images/nav/logo-reglo-white.png" width="28" height="28" alt="Reglo" style="display:block; width:28px; height:28px;" />
+                    </td>
+                    <td valign="middle" style="font-family:${FONT_STACK}; font-size:20px; font-weight:600; letter-spacing:-0.3px; color:#ffffff; line-height:28px;">Reglo</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Il filo colorato separa testata e contenuto: è l'unico colore
+                 della mail e dice che tipo di messaggio è. -->
             <tr>
               <td bgcolor="${tone.bar}" height="4" style="background:${tone.bar}; height:4px; line-height:4px; font-size:0; padding:0;">&nbsp;</td>
             </tr>
+
             <tr>
-              <td style="padding:30px 34px 34px;">
+              <td style="padding:30px 34px 36px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${eyebrowRow}${headingRow}${bodyRows}${highlightRow}${afterRows}${ctaRow}
+                </table>
+              </td>
+            </tr>
+
+            <!-- Firma. Pannello a tutta larghezza, non una riga di piccolo in
+                 fondo al testo: è la parte che dice chi ha scritto. -->
+            <tr>
+              <td bgcolor="${COLORS.tint}" style="background:${COLORS.tint}; border-top:1px solid ${COLORS.hairline}; padding:24px 34px 26px;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                   <tr>
-                    <td ${td("padding:0;")}>
+                    <td style="padding:0;">
                       <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                         <tr>
-                          <td bgcolor="${COLORS.ink}" width="40" height="40" align="center" valign="middle" style="background:${COLORS.ink}; width:40px; height:40px; border-radius:12px; text-align:center;">
-                            <img src="${base}/images/nav/logo-reglo-white.png" width="22" height="22" alt="Reglo" style="display:block; margin:0 auto; width:22px; height:22px;" />
+                          <td bgcolor="${COLORS.ink}" width="34" height="34" align="center" valign="middle" style="background:${COLORS.ink}; width:34px; height:34px; border-radius:10px; text-align:center;">
+                            <img src="${base}/images/nav/logo-reglo-white.png" width="19" height="19" alt="" style="display:block; margin:0 auto; width:19px; height:19px;" />
+                          </td>
+                          <td valign="middle" style="padding-left:12px; font-family:${FONT_STACK}; line-height:1.45;">
+                            <div style="font-size:14px; font-weight:600; color:${COLORS.ink};">Reglo</div>
+                            <div style="font-size:12.5px; color:${COLORS.muted};">La tua autoscuola, semplice.</div>
                           </td>
                         </tr>
                       </table>
                     </td>
-                  </tr>${eyebrowRow}${headingRow}${bodyRows}${highlightRow}${afterRows}${ctaRow}
+                  </tr>
                   <tr>
-                    <td style="padding:30px 0 0;">
-                      <div style="height:1px; line-height:1px; font-size:0; background:${COLORS.hairline};">&nbsp;</div>
-                      <div style="padding-top:16px; font-family:${FONT_STACK}; font-size:12px; line-height:1.6; color:${COLORS.soft};">
-                        <a href="${base}" style="color:${COLORS.muted}; text-decoration:none; font-weight:600;">reglo.it</a> · La tua autoscuola, semplice.
-                        ${footerNote}
-                      </div>
+                    <td style="padding:16px 0 0; font-family:${FONT_STACK}; font-size:12.5px; font-weight:600; color:${COLORS.muted};">
+                      <a href="${base}" style="color:${COLORS.text}; text-decoration:none;">Apri Reglo</a>
+                      <span style="color:#c2c2c2; padding:0 6px;">·</span>
+                      <a href="${SITE_URL}" style="color:${COLORS.text}; text-decoration:none;">reglo.it</a>
+                    </td>
+                  </tr>${footerNoteRow}
+                  <tr>
+                    <td style="padding:14px 0 0; font-family:${FONT_STACK}; font-size:11.5px; line-height:1.6; color:#a3a3a3;">
+                      Ricevi questa email perché hai un account Reglo.
                     </td>
                   </tr>
                 </table>
               </td>
             </tr>
+
           </table>
           </div>
         </td>
@@ -320,7 +368,8 @@ export const renderRegloEmailText = (content: RegloEmailContent): string => {
   if (content.cta) lines.push("", `${content.cta.label}: ${content.cta.url}`);
   if (content.fallbackLink)
     lines.push(`${content.fallbackLink.label}: ${content.fallbackLink.url}`);
-  lines.push("", "—", "reglo.it · La tua autoscuola, semplice.");
+  lines.push("", "—", "Reglo · La tua autoscuola, semplice.", "www.reglo.it");
   if (content.footerNote) lines.push(content.footerNote);
+  lines.push("Ricevi questa email perché hai un account Reglo.");
   return lines.join("\n");
 };

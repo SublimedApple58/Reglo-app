@@ -689,7 +689,7 @@ const notifyAppointmentRescheduled = async ({
           to: studentUser.email,
           subject: title,
           eyebrow: "Guida spostata",
-          tone: "info",
+          tone: "brand",
           body,
         });
       } catch (error) {

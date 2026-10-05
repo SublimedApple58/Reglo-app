@@ -66,10 +66,18 @@ describe("HTML della mail", () => {
     expect(render(base)).not.toMatch(/#EC4899/i);
   });
 
-  it("colora la barra in alto secondo il tono, uno per mail", () => {
+  it("colora il filo sotto la testata secondo il tono, uno per mail", () => {
     expect(render({ ...base, tone: "danger" })).toContain("#c13515");
     expect(render({ ...base, tone: "positive" })).toContain("#22C55E");
-    expect(render({ ...base, tone: "info" })).toContain("#FACC15");
+    // Default = brand: giallo Reglo. Un accento nero sparirebbe sulla testata nera.
+    expect(render(base)).toContain("#FACC15");
+  });
+
+  it("mette il marchio due volte: testata nera in cima e firma in fondo", () => {
+    const html = render(base);
+    expect(html.match(/logo-reglo-white\.png/g)).toHaveLength(2);
+    expect(html).toContain("La tua autoscuola, semplice.");
+    expect(html).toContain("Ricevi questa email perché hai un account Reglo.");
   });
 
   it("scrive il preheader con la prima riga del corpo, non con la parola 'Reglo'", () => {

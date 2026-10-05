@@ -26,7 +26,7 @@ await sendDynamicEmail({
   to: student.email,
   subject: "Domani hai la guida — Reglo",
   eyebrow: "Promemoria",
-  tone: "info",
+  tone: "brand",
   body: "Promemoria: domani hai una guida alle 15:00. Durata 60 minuti.",
 });
 ```
@@ -37,7 +37,7 @@ await sendDynamicEmail({
 | `body` | Testo semplice. **Riga vuota = nuovo paragrafo**, a capo singolo resta a capo. |
 | `heading` | Titolo diverso dall'oggetto. |
 | `eyebrow` | Due parole sopra il titolo ("Promemoria", "Pagamenti", "Sicurezza"). |
-| `tone` | `neutral` · `info` · `positive` · `danger`. |
+| `tone` | `brand` (default) · `positive` · `danger`. |
 | `cta` / `fallbackLink` | Bottone nero + link di riserva (serve quando la CTA apre l'app). |
 | `highlight` | Riquadro colorato: codici (`mono: true`), importi. |
 | `bodyAfter` | Testo **dopo** il riquadro ("il codice scade tra…"). |
@@ -49,23 +49,34 @@ scrive l'autoscuola, e non deve poter iniettare HTML.
 
 ## Le scelte, e perché
 
-**Un colore per mail.** Il design system dice superfici neutre e colore solo
-dove porta informazione. Qui il colore compare in tre punti coordinati — la
-barra da 4px in cima, la sopra-riga, il bordo del riquadro — e dice che tipo di
+**Testata nera, firma in fondo.** La mail si apre con un blocco `#111111` che
+porta marchio e nome: è la prima cosa che si vede, e dice Reglo prima del testo.
+Si chiude con un pannello grigio a tutta larghezza — marchio, nome, pay-off,
+link, e la riga che spiega perché quella mail è arrivata. Non una riga di
+piccolo appiccicata in fondo al testo: una firma.
+
+**Un colore per mail.** Il colore compare in tre punti coordinati — il filo da
+4px sotto la testata, la sopra-riga, il bordo del riquadro — e dice che tipo di
 messaggio è:
 
 | Tono | Colore | Quando |
 |------|--------|--------|
-| `neutral` | `#111111` | Inviti, benvenuto, avvisi di servizio |
-| `info` | `#FACC15` | Promemoria, posti liberi, guida spostata |
+| `brand` (default) | `#FACC15` | Tutto il traffico normale: inviti, promemoria, codici, posti liberi |
 | `positive` | `#22C55E` | Pagamento registrato, conferme |
 | `danger` | `#c13515` | Guide annullate, autoscuola chiusa, pagamento fallito |
 
-**Il marchio sta in una pastiglia nera.** Il marchio Reglo è nero su
-trasparente: in dark mode i client che scuriscono gli sfondi lo farebbero
-sparire. Dentro una cella `bgcolor="#111111"` con la variante bianca si vede
-uguale in chiaro e in scuro. È anche il lockup del sito pubblico — reglo.it usa
-il marchio da solo, senza lettering.
+I toni sono **tre, non quattro**. Un quarto tono nero sparirebbe contro la
+testata nera, e "promemoria" contro "invito" non è una distinzione che
+interessi a chi legge: quella che interessa è *è normale, è andata bene, c'è un
+problema*. Il giallo è l'accento di Reglo — c'era nel marchio storico, è l'oro
+del sito pubblico, ed è quello che il design system tiene per gli highlight.
+
+**Il marchio è sempre bianco su nero.** Il marchio Reglo è nero su trasparente:
+in dark mode i client che scuriscono gli sfondi lo farebbero sparire. Nella
+testata sta sulla fascia nera, nella firma dentro una pastiglia `#111111`: in
+chiaro e in scuro si vede uguale. Il nome "Reglo" gli sta accanto come testo —
+l'unico lockup con lettering che esiste negli asset è quello **vecchio
+rosa/giallo**, e il sito pubblico usa comunque il marchio da solo.
 
 **Tabelle e stile inline.** Outlook su Windows impagina col motore di Word:
 niente flex, niente grid, `max-width` ignorato. E Gmail scarta i `<style>` nel
@@ -87,16 +98,16 @@ aiuta, in un titolo di email no. L'oggetto in posta resta intatto.
 
 | Dove | Mail | Tono |
 |------|------|------|
-| `email/index.ts` | Invito a una company (titolare, istruttore, allievo) | neutral |
-| `lib/auth/password-reset.ts` | Codice di reset password (riquadro mono) | neutral |
-| `lib/autoscuole/communications.ts` | Promemoria guida/esame: generico, mattutino, giorno prima, istruttore | info |
-| `lib/autoscuole/communications.ts` | Comunicazioni da regola (testo dell'autoscuola) | neutral |
+| `email/index.ts` | Invito a una company (titolare, istruttore, allievo) | brand |
+| `lib/auth/password-reset.ts` | Codice di reset password (riquadro mono) | brand |
+| `lib/autoscuole/communications.ts` | Promemoria guida/esame: generico, mattutino, giorno prima, istruttore | brand |
+| `lib/autoscuole/communications.ts` | Comunicazioni da regola (testo dell'autoscuola) | brand |
 | `lib/autoscuole/operational-cancellation.ts` | Annullamenti organizzativi (malattia, ferie, veicolo…) | danger |
-| `lib/actions/autoscuole.actions.ts` | Guida annullata · Guida spostata | danger · info |
+| `lib/actions/autoscuole.actions.ts` | Guida annullata · Guida spostata | danger · brand |
 | `lib/actions/autoscuole-holidays.actions.ts` | Autoscuola chiusa (giorno singolo e periodo) | danger |
-| `lib/actions/autoscuole-availability.actions.ts` | Posto libero · Guida di gruppo disponibile | info |
-| `lib/actions/autoscuole-swap.actions.ts` | Richiesta sostituzione | info |
-| `lib/autoscuole/payments.ts` | Metodo richiesto · Pagamento registrato · Non riuscito | neutral · positive · danger |
+| `lib/actions/autoscuole-availability.actions.ts` | Posto libero · Guida di gruppo disponibile | brand |
+| `lib/actions/autoscuole-swap.actions.ts` | Richiesta sostituzione | brand |
+| `lib/autoscuole/payments.ts` | Metodo richiesto · Pagamento registrato · Non riuscito | brand · positive · danger |
 | `lib/actions/support.actions.ts` | Avvisi interni al team (assistenza, feedback, novità) | varia |
 
 ## Testi rifatti con REG-599

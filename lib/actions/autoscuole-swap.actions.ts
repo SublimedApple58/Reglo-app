@@ -423,7 +423,7 @@ export async function createSwapOffer(
             to: student.user.email,
             subject: title,
             eyebrow: "Richiesta sostituzione",
-            tone: "info",
+            tone: "brand",
             body: message,
           });
         } catch (error) {
