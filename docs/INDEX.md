@@ -27,7 +27,7 @@
 | Instructor Hours (report "Ore guida": ore svolte + ore disponibili/occupate REG-444 + export CSV) | [instructor-hours.md](features/instructor-hours.md) | `autoscuole.actions.ts` (`getInstructorDrivingHours`, `getInstructorDrivingHoursRange`), `instructor-hours/route.ts`, `lib/autoscuole/agenda-occupancy.ts`, `AutoscuoleOreGuidaPage.tsx`, `ore-guida-export.ts` |
 | Instructor Colors | [instructor-colors.md](features/instructor-colors.md) | `lib/autoscuole/instructor-colors.ts`, `color-swatch-picker.tsx`, `AspettoSettingsPane.tsx`, `AutoscuoleAgendaPage.tsx` |
 | Aspetto (pannello Impostazioni: criterio colore agenda durata/patente + colori istruttori + ordine colonne istruttore) | [appearance-settings.md](features/appearance-settings.md) | `AspettoSettingsPane.tsx`, `lib/autoscuole/agenda-color-criterion.ts` (`LICENSE_COLOR_ENTRIES`), `lib/autoscuole/agenda-instructor-order.ts` (`agendaInstructorOrder`, REG-449), `autoscuole-settings.actions.ts` (`agendaColorCriterion`), `AutoscuoleAgendaPage.tsx` (`licenseColorEntryForTag`, legenda dinamica) |
-| Communications | [communications.md](features/communications.md) | `communications.ts`, `whatsapp.ts` |
+| Communications | [communications.md](features/communications.md) | `communications.ts`, `whatsapp-delivery.ts` (cancello unico), `whatsapp-sender.ts` (Telnyx), `whatsapp-templates.ts`, `whatsapp-consent.ts`, `delivery-log.ts` |
 | Cases & Deadlines | [cases-deadlines.md](features/cases-deadlines.md) | `autoscuole.actions.ts` |
 | Repositioning **(retired)** | [repositioning.md](features/repositioning.md) | `repositioning.ts` |
 | Penalties | [penalties.md](features/penalties.md) | `payments.ts`, `communications.ts` |

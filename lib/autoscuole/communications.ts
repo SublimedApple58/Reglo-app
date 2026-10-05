@@ -3,7 +3,7 @@
 import { tokenRegex } from "@/components/shared/token-input/token-utils";
 import { sendDynamicEmail } from "@/email";
 import { prisma as defaultPrisma } from "@/db/prisma";
-import { sendAutoscuolaWhatsApp } from "@/lib/autoscuole/whatsapp";
+import { deliverWhatsApp } from "@/lib/autoscuole/whatsapp-delivery";
 import { deliverAndLog } from "@/lib/autoscuole/delivery-log";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
@@ -316,7 +316,28 @@ export const sendAutoscuolaMessage = async ({
           body,
         });
       } else {
-        await sendAutoscuolaWhatsApp({ to: recipient, body });
+        // Le comunicazioni da regola sono testo libero scritto dall'autoscuola,
+        // e Meta consente testo libero solo entro 24 ore da un messaggio
+        // dell'utente: un avviso che parte per nostra iniziativa e' sempre
+        // fuori. Finche' non esiste un template approvato per le regole, qui
+        // non parte niente — e resta scritto che non e' partito, invece di
+        // fallire ogni volta contro il fornitore.
+        await prisma.autoscuolaMessageLog.create({
+          data: {
+            companyId: rule.companyId,
+            ruleId: rule.id,
+            templateId: template.id,
+            appointmentId: appointmentId ?? null,
+            studentId: studentId ?? null,
+            channel: normalizedChannel,
+            recipient,
+            status: "skipped",
+            error:
+              "WhatsApp da regola non supportato: serve un template approvato da Meta (REG-500)",
+            payload: { subject, body, ...(dedupeKey ? { dedupeKey } : {}) },
+          },
+        });
+        continue;
       }
 
       await prisma.autoscuolaMessageLog.create({
@@ -754,17 +775,30 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
         );
       }
       if (studentChannels.includes("whatsapp") && studentProfile.phone) {
-        await deliverAndLog(
+        await deliverWhatsApp(
           {
             companyId: service.companyId,
             kind: "appointment_reminder_student",
-            channel: "whatsapp",
             recipient: studentProfile.phone ?? "",
             appointmentId: appointment.id,
             studentId: appointment.studentId,
             body,
           },
-          (to) => sendAutoscuolaWhatsApp({ to: to, body }),
+          isExam
+            ? {
+                templateKind: "exam_reminder_student",
+                values: {
+                  nome: studentProfile.firstName,
+                  data: formatAutoscuolaDateOnly(appointment.startsAt),
+                },
+              }
+            : {
+                values: {
+                  nome: studentProfile.firstName,
+                  quando: startsAtLabel,
+                  durata: String(durationMinutes),
+                },
+              },
         );
       }
       if (studentChannels.includes("push")) {
@@ -830,17 +864,23 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
         );
       }
       if (instructorChannels.includes("whatsapp") && instructor.phone) {
-        await deliverAndLog(
+        await deliverWhatsApp(
           {
             companyId: service.companyId,
             kind: "appointment_reminder_instructor",
-            channel: "whatsapp",
             recipient: instructor.phone ?? "",
             appointmentId: appointment.id,
             studentId: appointment.studentId,
             body,
           },
-          (to) => sendAutoscuolaWhatsApp({ to: to, body }),
+          {
+            values: {
+              nome_istruttore: instructor.name,
+              nome_allievo: studentName,
+              quando: startsAtLabel,
+              durata: String(durationMinutes),
+            },
+          },
         );
       }
       if (instructorChannels.includes("push") && instructor.userId) {
@@ -979,17 +1019,29 @@ export const processAutoscuolaMorningReminders = async ({
       }
 
       if (studentChannels.includes("whatsapp") && studentProfile.phone) {
-        await deliverAndLog(
+        await deliverWhatsApp(
           {
             companyId: service.companyId,
             kind: "morning_reminder_student",
-            channel: "whatsapp",
             recipient: studentProfile.phone ?? "",
             appointmentId: appointment.id,
             studentId: appointment.studentId,
             body,
           },
-          (to) => sendAutoscuolaWhatsApp({ to: to, body }),
+          isExam
+            ? {
+                templateKind: "exam_reminder_student",
+                values: {
+                  nome: studentProfile.firstName,
+                  data: formatAutoscuolaDateOnly(appointment.startsAt),
+                },
+              }
+            : {
+                values: {
+                  nome: studentProfile.firstName,
+                  ora: startsAtLabel.split(" alle ")[1] ?? startsAtLabel,
+                },
+              },
         );
       }
 
@@ -1127,17 +1179,24 @@ export const processAutoscuolaDayBeforeReminders = async ({
       }
 
       if (studentChannels.includes("whatsapp") && studentProfile.phone) {
-        await deliverAndLog(
+        await deliverWhatsApp(
           {
             companyId: service.companyId,
             kind: "day_before_reminder_student",
-            channel: "whatsapp",
             recipient: studentProfile.phone ?? "",
             appointmentId: appointment.id,
             studentId: appointment.studentId,
             body,
           },
-          (to) => sendAutoscuolaWhatsApp({ to: to, body }),
+          isExam
+            ? {
+                templateKind: "exam_reminder_student",
+                values: {
+                  nome: studentProfile.firstName,
+                  data: formatAutoscuolaDateOnly(appointment.startsAt),
+                },
+              }
+            : { values: { nome: studentProfile.firstName, quando: startsAtLabel } },
         );
       }
 

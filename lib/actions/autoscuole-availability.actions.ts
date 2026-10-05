@@ -7,7 +7,7 @@ import { Prisma } from "@prisma/client";
 import { sendDynamicEmail } from "@/email";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
-import { sendAutoscuolaWhatsApp } from "@/lib/autoscuole/whatsapp";
+import { deliverWhatsApp } from "@/lib/autoscuole/whatsapp-delivery";
 import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
@@ -4706,12 +4706,17 @@ export async function broadcastWaitlistOffer({
     }
 
     if (channels.includes("whatsapp")) {
-      try {
-        if (student.user.phone) {
-          await sendAutoscuolaWhatsApp({ to: student.user.phone, body: message });
-        }
-      } catch (error) {
-        console.error("Waitlist WhatsApp error", error);
+      if (student.user.phone) {
+        await deliverWhatsApp(
+          {
+            companyId,
+            kind: "waitlist_slot_student",
+            recipient: student.user.phone,
+            studentId: student.user.id,
+            body: message,
+          },
+          { values: {} },
+        );
       }
     }
   }
@@ -4936,11 +4941,16 @@ export async function broadcastGroupLessonInvite({
       }
     }
     if (channels.includes("whatsapp") && student.user.phone) {
-      try {
-        await sendAutoscuolaWhatsApp({ to: student.user.phone, body: message });
-      } catch (error) {
-        console.error("Group lesson invite WhatsApp error", error);
-      }
+      await deliverWhatsApp(
+        {
+          companyId,
+          kind: "group_lesson_invite_student",
+          recipient: student.user.phone,
+          studentId: student.user.id,
+          body: message,
+        },
+        { values: {} },
+      );
     }
   }
 
