@@ -5,7 +5,7 @@ import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { sendDynamicEmail } from "@/email";
-import { sendAutoscuolaWhatsApp } from "@/lib/autoscuole/whatsapp";
+import { deliverWhatsApp } from "@/lib/autoscuole/whatsapp-delivery";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import { adjustStudentLessonCredits } from "@/lib/autoscuole/payments";
 import {
@@ -430,11 +430,19 @@ export async function createSwapOffer(
       }
 
       if (channels.includes("whatsapp") && student.user.phone) {
-        try {
-          await sendAutoscuolaWhatsApp({ to: student.user.phone, body: message });
-        } catch (error) {
-          console.error("Swap WhatsApp error", error);
-        }
+        // Testo libero: senza un template approvato Meta non lo accetta fuori
+        // dalle 24 ore. Il cancello unico lo registra come `skipped` col motivo
+        // invece di sbattere contro il fornitore (REG-500).
+        await deliverWhatsApp(
+          {
+            companyId: membership.companyId,
+            kind: "swap_offer_student",
+            recipient: student.user.phone,
+            studentId: student.user.id,
+            body: message,
+          },
+          { values: {} },
+        );
       }
     }
 
