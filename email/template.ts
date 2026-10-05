@@ -293,7 +293,9 @@ export const renderRegloEmail = (
  */
 export const renderRegloEmailText = (content: RegloEmailContent): string => {
   const heading = (content.heading ?? headingFromSubject(content.subject)).trim();
-  const lines = [heading, "", ...splitParagraphs(content.body)];
+  // I paragrafi vanno separati da una riga vuota anche qui: unendoli con un solo
+  // "\n" il testo semplice arrivava tutto attaccato.
+  const lines = [heading, "", ...splitParagraphs(content.body).join("\n\n").split("\n")];
   if (content.highlight) {
     lines.push(
       "",

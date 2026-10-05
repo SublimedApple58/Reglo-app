@@ -152,6 +152,8 @@ describe("versione testo", () => {
       cta: { label: "Apri Reglo", url: "https://app.reglo.it" },
     });
     expect(text).toContain("Reimposta la password");
+    // I paragrafi restano separati da una riga vuota anche in testo semplice.
+    expect(text).toContain("Ciao Marco,\n\nusa questo codice:");
     expect(text).toContain("Il tuo codice: 123456");
     expect(text).toContain("Scade tra 10 minuti.");
     expect(text).toContain("Apri Reglo: https://app.reglo.it");
