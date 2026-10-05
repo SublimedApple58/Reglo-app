@@ -54,16 +54,17 @@ ragione: erano strati di colore che non aggiungevano informazione (l'etichetta
 la dice già a parole) e facevano sembrare il prodotto meno serio. La mail è in
 **bianco e nero**, e un test impedisce che i colori rientrino di soppiatto.
 
-**Testata chiara, firma in fondo.** In cima la stessa barra della web app:
-marchio nella pastiglia nera, "Reglo" accanto, un filo grigio sotto. In fondo un
-pannello a tutta larghezza con marchio, nome, pay-off, link e la riga che spiega
-perché quella mail è arrivata. Non una riga di piccolo appiccicata sotto al
-testo: una firma. L'identità la fanno il marchio, il carattere e lo spazio.
+**Nessuna cornice.** Il contenuto sta in una colonna centrata (max 580px) su
+bianco: niente card arrotondata, niente bordo, niente sfondo grigio intorno.
+Una card che galleggia su grigio è un espediente da newsletter, e si vede che
+lo è. A separare le parti bastano due fili grigi: uno sotto la testata, uno
+sopra la firma. Anche il riquadro del codice è delimitato da fili, non da un
+fondo pieno.
 
-> **Scelta ancora aperta**: `renderRegloEmail` accetta `signature: "light" |
-> "dark"`. `dark` mette la firma finale su fondo nero — più peso al marchio alla
-> chiusura, senza appesantire l'apertura. Quando la scelta è fatta, l'opzione
-> sparisce e resta una resa sola.
+**Testata e firma.** In cima marchio nella pastiglia nera + "Reglo", come la
+barra in alto della web app. In fondo marchio, nome, pay-off, link e la riga che
+spiega perché quella mail è arrivata: una firma, non quattro parole in grigino.
+L'identità la fanno il marchio, il carattere e lo spazio.
 
 **Il marchio è sempre bianco su nero.** Il marchio Reglo è nero su trasparente:
 in dark mode i client che scuriscono gli sfondi lo farebbero sparire. Nella
@@ -75,10 +76,6 @@ rosa/giallo**, e il sito pubblico usa comunque il marchio da solo.
 **Tabelle e stile inline.** Outlook su Windows impagina col motore di Word:
 niente flex, niente grid, `max-width` ignorato. E Gmail scarta i `<style>` nel
 `<head>`. Il test lo blinda: niente `<style>`, niente `class=`.
-
-**La card la ritaglia un `<div>`, non la `<table>`.** La barra colorata è a filo
-col bordo superiore, e una tabella non ritaglia i figli in modo affidabile.
-Outlook ignora il raggio e mostra una card squadrata: accettabile.
 
 **Ogni mail parte anche in testo semplice** (`renderRegloEmailText`): i filtri
 antispam la cercano, e chi legge in testo altrimenti riceve l'HTML grezzo.

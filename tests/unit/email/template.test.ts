@@ -66,13 +66,21 @@ describe("HTML della mail", () => {
     expect(render(base)).not.toMatch(/#EC4899/i);
   });
 
+  it("non incornicia la mail: niente card, niente sfondo di pagina diverso", () => {
+    const html = render(base);
+    // Il contenuto sta in una colonna centrata su bianco, non in un riquadro.
+    expect(html).not.toMatch(/border-radius:\s*(18|20)px/);
+    expect(html).not.toMatch(/#f0f0f0/i);
+    expect(html).toContain("max-width:580px");
+  });
+
   it("non colora niente per tipo di messaggio: la mail è in bianco e nero", () => {
     const html = render({ ...base, eyebrow: "Guida annullata" });
     // Nessun verde/rosso/giallo: l'identità la fanno marchio e carattere.
     expect(html).not.toMatch(/#FACC15|#22C55E|#c13515|#A16207/i);
   });
 
-  it("mette il marchio due volte: testata nera in cima e firma in fondo", () => {
+  it("mette il marchio due volte: in testata e nella firma", () => {
     const html = render(base);
     expect(html.match(/logo-reglo-white\.png/g)).toHaveLength(2);
     expect(html).toContain("La tua autoscuola, semplice.");

@@ -87,12 +87,3 @@ for (const { file, content } of samples) {
   console.log(path.join(OUT, `${file}.html`));
 }
 
-// Variante in valutazione: stessa testata chiara, firma finale su fondo nero.
-for (const { file, content } of samples.slice(0, 2)) {
-  const name = `${file}-b-firma-scura`;
-  fs.writeFileSync(
-    path.join(OUT, `${name}.html`),
-    renderRegloEmail(content, { baseUrl, signature: "dark" }),
-  );
-  console.log(path.join(OUT, `${name}.html`));
-}
