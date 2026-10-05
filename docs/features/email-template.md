@@ -59,7 +59,12 @@ sopra la firma. Anche il riquadro del codice è delimitato da fili, non da un
 fondo pieno.
 
 **Il peso del marchio è in testata, la firma è una riga.** In apertura
-marchio, nome e pay-off; in calce solo i link e la riga di servizio. Il marchio
+marchio, nome e pay-off; in calce solo i link e la riga di servizio. La firma
+non è chiusa da un filo a tutta larghezza ma da una **regola corta di 36px**:
+chiude il testo come un segno tipografico invece di tagliare la pagina in due.
+Pesi leggeri (500, mai grassetto), separatore `/` in grigio chiaro, e tre
+livelli di grigio che scendono — nota della mail, link, riga di servizio —
+perché lì sotto non c'è niente da leggere con urgenza. Il marchio
 è quello **nero sul chiaro** (`logo-reglo-tight.png`, lo stesso della web app),
 dentro una cella con `bgcolor="#ffffff"` esplicito: senza, un client in dark
 mode scurisce il fondo e un marchio nero su trasparente sparisce.

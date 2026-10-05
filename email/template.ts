@@ -201,7 +201,7 @@ export const renderRegloEmail = (
   const footerNoteRow = content.footerNote
     ? `
                   <tr>
-                    <td style="padding:14px 0 0; font-family:${FONT_STACK}; font-size:12px; line-height:1.6; color:${COLORS.soft};">${escapeHtml(content.footerNote)}</td>
+                    <td style="padding:20px 0 0; font-family:${FONT_STACK}; font-size:12.5px; line-height:1.65; color:${COLORS.muted};">${escapeHtml(content.footerNote)}</td>
                   </tr>`
     : "";
 
@@ -254,21 +254,23 @@ export const renderRegloEmail = (
               </td>
             </tr>
 
-            <!-- Firma: una riga di link e una di servizio. Il marchio sta in
-                 testata, qui non serve ripeterlo in grande. -->
+            <!-- Firma. Il tocco grafico è una regola corta invece del filo a
+                 tutta larghezza: chiude il testo come un segno tipografico,
+                 senza tagliare la pagina in due. Pesi leggeri e molta aria —
+                 qui non c'è niente da leggere con urgenza. -->
             <tr>
-              <td style="padding:40px 0 0;">
-                <div style="height:1px; line-height:1px; font-size:0; background:${COLORS.hairline};">&nbsp;</div>
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <td style="padding:44px 0 0;">
+                <div style="width:36px; height:1px; line-height:1px; font-size:0; background:#d6d6d6;">&nbsp;</div>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${footerNoteRow}
                   <tr>
-                    <td style="padding:18px 0 0; font-family:${FONT_STACK}; font-size:12.5px; line-height:1.6; color:${COLORS.soft};">
-                      <a href="${base}" style="color:${COLORS.text}; text-decoration:none; font-weight:600;">Apri Reglo</a>
-                      <span style="color:#c9c9c9; padding:0 6px;">·</span>
-                      <a href="${SITE_URL}" style="color:${COLORS.text}; text-decoration:none; font-weight:600;">reglo.it</a>
+                    <td style="padding:${content.footerNote ? "14px" : "20px"} 0 0; font-family:${FONT_STACK}; font-size:13px; line-height:1.6; color:${COLORS.body}; letter-spacing:0.1px;">
+                      <a href="${base}" style="color:${COLORS.body}; text-decoration:none; font-weight:500;">Apri Reglo</a>
+                      <span style="color:#d6d6d6; padding:0 9px; font-weight:400;">/</span>
+                      <a href="${SITE_URL}" style="color:${COLORS.body}; text-decoration:none; font-weight:500;">reglo.it</a>
                     </td>
-                  </tr>${footerNoteRow}
+                  </tr>
                   <tr>
-                    <td style="padding:6px 0 0; font-family:${FONT_STACK}; font-size:11.5px; line-height:1.6; color:#a3a3a3;">
+                    <td style="padding:9px 0 0; font-family:${FONT_STACK}; font-size:11.5px; line-height:1.6; color:#b2b2b2; letter-spacing:0.1px;">
                       Ricevi questa email perché hai un account Reglo.
                     </td>
                   </tr>
