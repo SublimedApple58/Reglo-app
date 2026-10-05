@@ -18,6 +18,11 @@ import { useAtomValue } from "jotai";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import PaymentsSettingsPane from "@/components/pages/Autoscuole/PaymentsSettingsPane";
+import {
+  LICENSE_PATH_BUCKETS as LICENSE_PATH_BUCKET_KEYS,
+  LICENSE_PATH_BUCKET_CATEGORIES,
+  LICENSE_PATH_BUCKET_LABELS,
+} from "@/lib/autoscuole/license";
 import { ConsorzioPrezziPane } from "@/components/pages/Consorzio/ConsorzioPrezziPane";
 import { companyAtom } from "@/atoms/company.store";
 import { isConsortium } from "@/lib/services";
@@ -133,11 +138,13 @@ const APP_BOOKING_ACTOR_OPTIONS = [
   { value: "both", label: "Entrambi" },
 ] as const;
 // REG-426: license-path buckets for the per-path "chi prenota" override.
-const LICENSE_PATH_BUCKETS = [
-  { key: "moto" as const, label: "Percorso moto", cats: "AM · A1 · A2 · A" },
-  { key: "auto" as const, label: "Percorso auto", cats: "B · BE" },
-  { key: "pro" as const, label: "Percorso professionali", cats: "C · CE · D · DE" },
-];
+// Le didascalie arrivano da `lib/autoscuole/license.ts`: erano ricopiate a mano
+// qui, e una patente nuova (REG-588) le avrebbe lasciate a mentire.
+const LICENSE_PATH_BUCKETS = LICENSE_PATH_BUCKET_KEYS.map((key) => ({
+  key,
+  label: LICENSE_PATH_BUCKET_LABELS[key],
+  cats: LICENSE_PATH_BUCKET_CATEGORIES[key],
+}));
 const INSTRUCTOR_BOOKING_MODE_OPTIONS = [
   { value: "manual_full", label: "Manuale totale" },
   { value: "manual_engine", label: "Manuale + motore annullamenti" },

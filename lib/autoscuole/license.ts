@@ -23,12 +23,33 @@ export const LICENSE_CATEGORIES = [
   "DE",
   "CQC",
   "ADR",
+  "AMQ",
+  "B1",
   "AM",
   "A1",
   "A2",
   "A",
 ] as const;
 export type LicenseCategory = (typeof LICENSE_CATEGORIES)[number];
+
+/**
+ * Quadricicli (REG-588) — **quattro ruote, non moto.**
+ *
+ * La AM copre per legge sia il ciclomotore sia il quadriciclo leggero, ma per
+ * un'autoscuola sono due corsi su due mezzi diversi: la microcar ha volante e
+ * abitacolo. Qui `AM` resta il ciclomotore e `AMQ` è il quadriciclo leggero;
+ * `B1` è il quadriciclo pesante.
+ *
+ * ⚠️ Stanno **fuori** da `MOTO_LICENSE_CATEGORIES`, e non per ordine: la
+ * famiglia moto ha una gerarchia AM < A1 < A2 < A per cui un allievo della A
+ * può guidare un mezzo AM (`licenseCategoryEligible`). Mettendoci dentro la
+ * microcar, a un allievo della A verrebbe assegnata una microcar — e si
+ * accenderebbero anche le funzioni moto (tipo guida birilli/strada, guide di
+ * gruppo moto, `assignMotoForStudent`). Essendo non-moto, ciascuna delle due
+ * combacia **solo con se stessa**, che è quello che serve.
+ */
+export const QUADRICYCLE_LICENSE_CATEGORIES = ["AMQ", "B1"] as const satisfies
+  readonly LicenseCategory[];
 
 export const TRANSMISSIONS = ["manual", "automatic"] as const;
 export type Transmission = (typeof TRANSMISSIONS)[number];
@@ -39,7 +60,7 @@ export type Transmission = (typeof TRANSMISSIONS)[number];
  * moto "A" family. Professional/trailer categories (BE/C/CE/D/DE) are set by
  * staff on the web, not chosen by the student. Order = display order in the gate.
  */
-export const STUDENT_LICENSE_CATEGORIES = ["B", "AM", "A1", "A2", "A"] as const;
+export const STUDENT_LICENSE_CATEGORIES = ["B", "AMQ", "B1", "AM", "A1", "A2", "A"] as const;
 export type StudentLicenseCategory = (typeof STUDENT_LICENSE_CATEGORIES)[number];
 
 export function isStudentLicenseCategory(
@@ -64,6 +85,8 @@ export const LICENSE_CATEGORY_LABELS: Record<LicenseCategory, string> = {
   DE: "DE (autobus + rimorchio)",
   CQC: "CQC (qualificazione)",
   ADR: "ADR (merci pericolose)",
+  AMQ: "AM quadriciclo (microcar)",
+  B1: "B1 (quadriciclo pesante)",
   AM: "AM (ciclomotore)",
   A1: "A1 (125)",
   A2: "A2 (media)",
@@ -127,6 +150,8 @@ export function isConsortiumLicenseCategory(
 export const AUTOSCUOLA_LICENSE_CATEGORIES = [
   "B",
   "BE",
+  "AMQ",
+  "B1",
   "C",
   "CE",
   "D",
@@ -158,6 +183,7 @@ const LICENSE_CATEGORY_GROUP_DEFS: Array<{
   categories: readonly LicenseCategory[];
 }> = [
   { label: "Auto", categories: ["B", "BE"] },
+  { label: "Quadricicli", categories: ["AMQ", "B1"] },
   { label: "Moto", categories: ["AM", "A1", "A2", "A"] },
   { label: "Camion", categories: ["C", "CE", "C1", "C1E"] },
   { label: "Autobus", categories: ["D", "DE", "D1", "D1E"] },
@@ -212,8 +238,12 @@ export function isMotoLicenseCategory(value: unknown): boolean {
  * as "chi prenota dall'app". Three groups so the professional categories are
  * NOT hidden under "auto":
  * - moto: AM · A1 · A2 · A
- * - auto: B · BE  (everyday car + trailer)
+ * - auto: B · BE + i quadricicli AMQ · B1  (everyday car + trailer)
  * - pro:  C · CE · D · DE  (truck/bus, professional)
+ *
+ * I quadricicli (REG-588) stanno in "auto" di proposito: sono mezzi a quattro
+ * ruote, e chi prenota una microcar segue le stesse regole di chi prenota
+ * un'auto. Nessun bucket nuovo = nessun setting nuovo da configurare.
  */
 export const LICENSE_PATH_BUCKETS = ["moto", "auto", "pro"] as const;
 export type LicensePathBucket = (typeof LICENSE_PATH_BUCKETS)[number];
@@ -227,7 +257,7 @@ export const LICENSE_PATH_BUCKET_LABELS: Record<LicensePathBucket, string> = {
 /** Short list of the categories in each bucket, for UI captions. */
 export const LICENSE_PATH_BUCKET_CATEGORIES: Record<LicensePathBucket, string> = {
   moto: "AM · A1 · A2 · A",
-  auto: "B · BE",
+  auto: "B · BE · AM quadr. · B1",
   pro: "C · CE · D · DE",
 };
 
@@ -247,6 +277,10 @@ const PRO_LICENSE_CATEGORIES = new Set<string>([
 /**
  * Map a license category to its path bucket. Unknown/empty → "auto" (the safe
  * default: the everyday car path, never accidentally moto or pro).
+ *
+ * I quadricicli AMQ/B1 cadono in "auto" da questo stesso default — è voluto, e
+ * `tests/unit/autoscuole/license-quadricycles.test.ts` lo tiene fermo, perché
+ * un default silenzioso non è una decisione finché non è scritta.
  */
 export function licensePathBucket(value: unknown): LicensePathBucket {
   if (isMotoLicenseCategory(value)) return "moto";

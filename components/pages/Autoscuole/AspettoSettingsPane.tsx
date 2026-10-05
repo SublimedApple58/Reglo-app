@@ -542,8 +542,8 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
                 </div>
               ))}
               <p className="mt-1 text-[12px] font-medium leading-normal text-[#a8a8a8]">
-                CE, C1, C1E e CQC hanno il colore della C, DE, D1 e D1E quello della D, finché non
-                li personalizzi.
+                CE, C1, C1E e CQC hanno il colore della C, DE, D1 e D1E quello della D, la B1
+                quello della AM quadriciclo, finché non li personalizzi.
               </p>
             </div>
           ) : (

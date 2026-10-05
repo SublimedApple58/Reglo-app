@@ -48,6 +48,11 @@ import {
   type WeeklySchedule,
 } from "@/lib/autoscuole/weekly-schedule";
 import { cn } from "@/lib/utils";
+import {
+  LICENSE_PATH_BUCKETS as LICENSE_PATH_BUCKET_KEYS,
+  LICENSE_PATH_BUCKET_CATEGORIES,
+  LICENSE_PATH_BUCKET_LABELS,
+} from "@/lib/autoscuole/license";
 import { CodiceTab } from "@/components/pages/Autoscuole/instructor-qr/CodiceTab";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -1764,11 +1769,14 @@ const CLUSTER_ACTOR_OPTIONS: Array<{ v: string; l: string }> = [
   { v: "both", l: "Entrambi" },
 ];
 
-const CLUSTER_PATH_BUCKETS = [
-  { key: "moto" as const, label: "Percorso moto", cats: "AM · A1 · A2 · A" },
-  { key: "auto" as const, label: "Percorso auto", cats: "B · BE" },
-  { key: "pro" as const, label: "Percorso professionali", cats: "C · CE · D · DE" },
-];
+// Didascalie dal modulo patenti: era la terza copia a mano della stessa lista
+// (le altre due in BookingsTab e in license.ts), e una patente nuova le avrebbe
+// lasciate a mentire tutte e tre in modo diverso.
+const CLUSTER_PATH_BUCKETS = LICENSE_PATH_BUCKET_KEYS.map((key) => ({
+  key,
+  label: LICENSE_PATH_BUCKET_LABELS[key],
+  cats: LICENSE_PATH_BUCKET_CATEGORIES[key],
+}));
 
 /** "Chi prenota" del cluster: un solo controllo. Il dropdown ha una voce
  * "Differenzia per percorso…" che, quando scelta, espande il pannello con le

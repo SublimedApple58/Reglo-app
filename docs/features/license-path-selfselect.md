@@ -11,7 +11,7 @@ Quando un allievo si registra **in autonomia** dal mobile (self sign-up), al **p
 
 Migrazione: `prisma/migrations/20260828000000_add_company_member_self_registered/` — `ALTER TABLE "CompanyMember" ADD COLUMN "selfRegistered" BOOLEAN NOT NULL DEFAULT false;` (additiva, no backfill).
 
-Tassonomia condivisa: `lib/autoscuole/license.ts` → nuova costante `STUDENT_LICENSE_CATEGORIES = ['B','AM','A1','A2','A']` (+ type guard `isStudentLicenseCategory`). È il sottoinsieme di `LICENSE_CATEGORIES` che l'allievo può scegliere da sé (le pro/rimorchio BE/C/CE/D/DE restano staff-only). `TRANSMISSIONS` (`manual|automatic`) vale per **tutte** le categorie (auto e moto).
+Tassonomia condivisa: `lib/autoscuole/license.ts` → nuova costante `STUDENT_LICENSE_CATEGORIES = ['B','AMQ','B1','AM','A1','A2','A']` (i quadricicli dal 03/10/2026, REG-588) (+ type guard `isStudentLicenseCategory`). È il sottoinsieme di `LICENSE_CATEGORIES` che l'allievo può scegliere da sé (le pro/rimorchio BE/C/CE/D/DE restano staff-only). `TRANSMISSIONS` (`manual|automatic`) vale per **tutte** le categorie (auto e moto).
 
 ## File chiave
 
