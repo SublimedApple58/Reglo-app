@@ -312,7 +312,9 @@ export const sendAutoscuolaMessage = async ({
       if (normalizedChannel === "email") {
         await sendDynamicEmail({
           to: recipient,
-          subject: subject ?? "Reglo Autoscuole",
+          // Oggetto e corpo li scrive l'autoscuola: qui non ci mettiamo
+          // sopra-riga nostre, la mail è sua.
+          subject: subject ?? "Un messaggio dalla tua autoscuola",
           body,
         });
       } else {
@@ -769,7 +771,7 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
           },
           (to) => sendDynamicEmail({
               to: to,
-              subject: isExam ? "Reglo Autoscuole · Promemoria esame" : "Reglo Autoscuole · Reminder guida",
+              subject: isExam ? "Promemoria esame — Reglo" : "Promemoria guida — Reglo",
               body,
             }),
         );
@@ -858,7 +860,7 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
           },
           (to) => sendDynamicEmail({
               to,
-              subject: "Reglo Autoscuole · Reminder guida",
+              subject: "Promemoria guida — Reglo",
               body,
             }),
         );
@@ -1058,7 +1060,7 @@ export const processAutoscuolaMorningReminders = async ({
           },
           (to) => sendDynamicEmail({
               to: to,
-              subject: isExam ? "Reglo Autoscuole · Esame oggi" : "Reglo Autoscuole · Guida oggi",
+              subject: isExam ? "Oggi hai l'esame — Reglo" : "Oggi hai la guida — Reglo",
               body,
             }),
         );
@@ -1213,7 +1215,7 @@ export const processAutoscuolaDayBeforeReminders = async ({
           },
           (to) => sendDynamicEmail({
               to: to,
-              subject: isExam ? "Reglo Autoscuole · Esame domani" : "Reglo Autoscuole · Guida domani",
+              subject: isExam ? "Domani hai l'esame — Reglo" : "Domani hai la guida — Reglo",
               body,
             }),
         );

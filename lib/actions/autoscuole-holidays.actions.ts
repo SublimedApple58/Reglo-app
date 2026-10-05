@@ -415,7 +415,11 @@ export async function createHolidayRange(
             select: { email: true },
           });
           if (studentUser?.email) {
-            await sendDynamicEmail({ to: studentUser.email, subject: title, body });
+            await sendDynamicEmail({
+              to: studentUser.email,
+              subject: title,
+              body,
+            });
           }
         } catch (error) {
           console.error("Holiday email error", error);

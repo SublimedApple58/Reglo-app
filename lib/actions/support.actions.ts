@@ -198,12 +198,11 @@ export async function sendSupportMessage(input: z.infer<typeof sendMessageSchema
         await sendDynamicEmail({
           to: SUPPORT_NOTIFY_EMAILS,
           subject: `Assistenza — nuovo messaggio da ${companyName}`,
+          cta: { label: "Apri il backoffice", url: `${SERVER_URL}/it/backoffice/support` },
           body: [
             `Nuovo messaggio nel centro assistenza da ${companyName}${senderName ? ` (${senderName})` : ""}:`,
             "",
             body,
-            "",
-            `Rispondi dal backoffice: ${SERVER_URL}/it/backoffice/support`,
           ].join("\n"),
         });
       } catch (err) {
@@ -254,14 +253,13 @@ export async function submitProductFeedback(input: z.infer<typeof feedbackSchema
         await sendDynamicEmail({
           to: GLOBAL_ADMIN_EMAIL,
           subject: `Feedback ${parsed.rating}★ da ${companyName}`,
+          cta: { label: "Tutti i feedback", url: `${SERVER_URL}/it/backoffice/feedback` },
           body: [
             `Nuovo feedback da ${companyName}${userName ? ` (${userName})` : ""}:`,
             "",
             `Valutazione: ${"★".repeat(parsed.rating)}${"☆".repeat(5 - parsed.rating)} (${parsed.rating}/5)`,
             parsed.tags.length ? `Aree segnalate: ${parsed.tags.join(", ")}` : null,
             parsed.message ? `Messaggio: ${parsed.message}` : null,
-            "",
-            `Tutti i feedback: ${SERVER_URL}/it/backoffice/feedback`,
           ]
             .filter((line): line is string => line !== null)
             .join("\n"),

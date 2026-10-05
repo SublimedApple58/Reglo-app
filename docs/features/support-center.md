@@ -1,5 +1,8 @@
 # Support Center + Product Feedback
 
+> Gli avvisi al team passano dal template unico: [email-template.md](email-template.md).
+
+
 Chat di assistenza REALE tra le autoscuole (web app) e il team Reglo (backoffice), più il salvataggio dei feedback prodotto. Sostituisce i mock precedenti (risposta finta di "Giulia" e feedback non salvato).
 
 ## Modello dati (Prisma)

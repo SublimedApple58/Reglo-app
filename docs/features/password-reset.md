@@ -15,7 +15,7 @@ la policy di sicurezza è scritta una volta sola.
 | `prisma/schema.prisma` → `PasswordResetCode` | Una riga per codice emesso: `userId`, `codeHash`, `attempts`, `expiresAt`, `consumedAt`. Relazione su `User.passwordResetCodes`. |
 | `lib/auth/password-reset.ts` | **Cuore condiviso.** Policy + `requestPasswordResetCode`, `checkPasswordResetCode`, `applyNewPassword` (e i mattoni `generateOtpCode`, `createResetCode`, `findValidResetCode`, `canRequestResetCode`). |
 | `lib/validators.ts` | `passwordResetRequestSchema`, `passwordResetVerifySchema`, `passwordResetConfirmSchema` (usati dalle route mobile). |
-| `email/index.tsx` → `sendDynamicEmail` | Consegna l'email col codice (Resend). |
+| `email/index.ts` → `sendDynamicEmail` | Consegna l'email col codice (Resend). Dal REG-599 il codice viaggia nel **riquadro evidenziato** (`highlight`), non nel corpo: vedi [email-template.md](email-template.md). |
 
 ### Mobile (API)
 

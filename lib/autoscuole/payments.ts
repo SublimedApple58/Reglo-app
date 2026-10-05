@@ -379,6 +379,22 @@ const resolveAppointmentPaymentStatus = (
   return "pending_penalty";
 };
 
+/**
+ * Come si chiama una fase di pagamento **per l'allievo**. I valori interni
+ * (`penalty`, `settlement`, `invoice`, `manual_recovery`) non devono comparire
+ * in nessun messaggio.
+ */
+const describePaymentPhase = (phase: string) => {
+  switch (phase) {
+    case "penalty":
+      return "Abbiamo registrato il pagamento della penale.";
+    case "settlement":
+      return "Abbiamo registrato il pagamento della guida.";
+    default:
+      return "Abbiamo registrato il tuo pagamento.";
+  }
+};
+
 const sendPaymentNotification = async ({
   prisma,
   companyId,
@@ -1385,8 +1401,8 @@ export async function prepareAppointmentPaymentSnapshot({
       companyId,
       studentId,
       channels: config.channels,
-      title: "Reglo Autoscuole · Metodo di pagamento richiesto",
-      body: "Per prenotare una guida aggiungi un metodo di pagamento nelle impostazioni dell'app.",
+      title: "Aggiungi un metodo di pagamento",
+      body: "Per prenotare le guide serve un metodo di pagamento. Lo aggiungi dalle impostazioni dell'app, in un minuto.",
       kind: "payment_method_required",
     });
     throw new Error(
@@ -1618,8 +1634,11 @@ const attemptAutomaticPaymentRecord = async ({
       companyId: payment.companyId,
       studentId: payment.studentId,
       channels: config.channels,
-      title: "Reglo Autoscuole · Pagamento riuscito",
-      body: `Pagamento ${payment.phase} registrato con successo.`,
+      title: "Pagamento registrato",
+      // Prima diceva `Pagamento ${payment.phase} registrato`, cioè "Pagamento
+      // manual_recovery registrato": il nome interno della fase finiva
+      // nell'email dell'allievo.
+      body: `${describePaymentPhase(payment.phase)} Trovi il dettaglio nell'app.`,
       kind: "appointment_payment_succeeded",
       appointmentId: payment.appointment.id,
     });
@@ -1659,12 +1678,10 @@ const attemptAutomaticPaymentRecord = async ({
       companyId: payment.companyId,
       studentId: payment.studentId,
       channels: config.channels,
-      title: exhausted
-        ? "Reglo Autoscuole · Pagamento insoluto"
-        : "Reglo Autoscuole · Pagamento da riprovare",
+      title: exhausted ? "Pagamento non riuscito" : "Riproviamo il pagamento",
       body: exhausted
-        ? "Impossibile completare l'addebito automatico. Salda dall'app per continuare a prenotare."
-        : "Addebito automatico non riuscito. Riproveremo automaticamente.",
+        ? "Non siamo riusciti a completare l'addebito automatico. Salda dall'app per tornare a prenotare le guide."
+        : "L'addebito automatico non è andato a buon fine. Ci riproviamo noi tra poco: non devi fare nulla.",
       kind: exhausted ? "appointment_payment_failed_blocking" : "appointment_payment_retry",
       appointmentId: payment.appointment.id,
     });

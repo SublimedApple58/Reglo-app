@@ -202,6 +202,13 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Backoffice KPI**: stessa definizione di saturazione, stessa matematica (`lib/backoffice/agenda-saturation.ts`). Se cambia la definizione qui, il KPI interno e il report del titolare divergono: cambiarli insieme
 - → **Mobile**: NESSUN impatto. Il mobile consuma la shape `InstructorHoursRange` (`?from&to`), che non è stata toccata; `occupancy` vive solo nella shape legacy `InstructorHoursEntry` del web
 
+### Template email (REG-599)
+- → **TUTTE le mail del prodotto**: esiste un solo contenitore (`email/template.ts`) e un solo punto di invio (`email/index.ts`). Chi aggiunge una mail passa da `sendDynamicEmail` con **testo semplice**: non si scrive HTML nei call site, e **non si introducono colori per tipo di messaggio** (bocciati in revisione il 2026-10-05: la mail è in bianco e nero, la categoria la dice il titolo, senza etichette sopra) né cornici (niente card su sfondo grigio: colonna centrata su bianco), e non si crea un secondo template (prima ce n'erano due, divergenti — quello react-email dell'invito è stato eliminato)
+- ← **Notifiche push**: titolo e corpo di annullamenti, pagamenti e promemoria sono **gli stessi** di push ed email (`autoscuole.actions.ts`, `operational-cancellation.ts`, `payments.ts`, `communications.ts`). Riscrivere quelle stringhe cambia due canali insieme: l'oggetto email-only sta accanto, nel `subject`
+- → **Comunicazioni da regola**: oggetto e corpo li scrive l'autoscuola e passano per `escapeHtml` — nessuna sopra-riga nostra sopra un messaggio suo
+- → **Design system**: i colori sono quelli di `docs/design-system.md` §2 (bianco/nero, `#111111`), non la vecchia palette slate `#1E293B`/`#64748B` che il template aveva ereditato. Un test lo blinda
+- → **Logo**: sta in **testata** con nome e pay-off, e la firma in calce resta una riga di link (`public/images/nav/logo-reglo-tight.png`, lo stesso della web app) dentro una cella con `bgcolor="#ffffff"` dichiarato — senza, un client in dark mode scurisce il fondo e un marchio nero su trasparente sparisce
+
 ### Support Center + Feedback
 - → **Users Directory**: `SupportMessage.senderUserId` / `ProductFeedback.userId` SetNull su delete utente (il nome resta come snapshot `senderName`/`userName`)
 - → **Backoffice**: nuove pagine support/feedback sotto la stessa auth cookie (`requireGlobalAdmin`); header con nav + badge non-letti
