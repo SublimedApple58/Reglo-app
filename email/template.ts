@@ -29,39 +29,6 @@
  * @see docs/features/email-template.md
  */
 
-/**
- * Tipo di email: decide l'unico colore che compare nel messaggio.
- *
- * Sono tre, non quattro: con la testata nera un accento nero non si vedrebbe,
- * e "promemoria" contro "invito" non è una distinzione che interessi a chi
- * legge. Quella che interessa è: **è normale, è andata bene, c'è un problema.**
- */
-export type EmailTone = "brand" | "positive" | "danger";
-
-type ToneStyle = {
-  /** Barra da 4px in cima alla card. */
-  bar: string;
-  /** Colore della sopra-riga (eyebrow) e del testo dentro il riquadro. */
-  ink: string;
-  /** Fondo del riquadro evidenziato. */
-  tint: string;
-  /** Bordo del riquadro evidenziato. */
-  border: string;
-};
-
-/**
- * Valori presi da `docs/design-system.md` (palette bianco/nero di settembre) e
- * dalle superfici di stato già in uso nel prodotto — il verde/bordo del blocco
- * "Accesso a Reglo" del consorzio, il giallo degli highlight informativi.
- */
-const TONES: Record<EmailTone, ToneStyle> = {
-  // Il giallo è l'accento di Reglo: c'era nel marchio storico, è l'oro del sito
-  // pubblico, ed è il colore che il design system tiene per gli highlight.
-  brand: { bar: "#FACC15", ink: "#A16207", tint: "#FEFCE8", border: "#FEF08A" },
-  positive: { bar: "#22C55E", ink: "#1a7f50", tint: "#f0faf4", border: "#c5e8d4" },
-  danger: { bar: "#c13515", ink: "#c13515", tint: "#fdf2ef", border: "#f3d3c9" },
-};
-
 const COLORS = {
   page: "#f0f0f0",
   card: "#ffffff",
@@ -109,7 +76,6 @@ export type RegloEmailContent = {
   heading?: string | null;
   /** Sopra-riga: due parole che dicono di che si tratta ("Promemoria"). */
   eyebrow?: string | null;
-  tone?: EmailTone;
   cta?: EmailCta | null;
   /** Link di riserva sotto il bottone (es. "apri su web" quando la CTA apre l'app). */
   fallbackLink?: EmailCta | null;
@@ -158,9 +124,9 @@ export const splitParagraphs = (body: string): string[] =>
 const paragraphHtml = (block: string) =>
   escapeHtml(block).replace(/\n/g, "<br />");
 
-const renderHighlight = (highlight: EmailHighlight, tone: ToneStyle) => {
+const renderHighlight = (highlight: EmailHighlight) => {
   const label = highlight.label
-    ? `<div style="font-family:${FONT_STACK}; font-size:11px; font-weight:700; letter-spacing:0.9px; text-transform:uppercase; color:${tone.ink}; padding-bottom:8px;">${escapeHtml(highlight.label)}</div>`
+    ? `<div style="font-family:${FONT_STACK}; font-size:11px; font-weight:700; letter-spacing:0.9px; text-transform:uppercase; color:${COLORS.soft}; padding-bottom:8px;">${escapeHtml(highlight.label)}</div>`
     : "";
   const valueStyle = highlight.mono
     ? `font-family:${MONO_STACK}; font-size:28px; font-weight:600; letter-spacing:6px; color:${COLORS.ink};`
@@ -170,7 +136,7 @@ const renderHighlight = (highlight: EmailHighlight, tone: ToneStyle) => {
                 <td style="padding:22px 0 0;">
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;">
                     <tr>
-                      <td bgcolor="${tone.tint}" style="background:${tone.tint}; border:1px solid ${tone.border}; border-radius:14px; padding:18px 22px; text-align:center;">
+                      <td bgcolor="${COLORS.tint}" style="background:${COLORS.tint}; border:1px solid ${COLORS.hairline}; border-radius:14px; padding:18px 22px; text-align:center;">
                         ${label}<div style="${valueStyle}">${escapeHtml(highlight.value)}</div>
                       </td>
                     </tr>
@@ -205,10 +171,33 @@ const renderCta = (cta: EmailCta, fallback?: EmailCta | null) => {
 /** HTML completo della mail. `baseUrl` serve solo per logo e link al sito. */
 export const renderRegloEmail = (
   content: RegloEmailContent,
-  { baseUrl }: { baseUrl: string },
+  {
+    baseUrl,
+    signature = "light",
+  }: {
+    baseUrl: string;
+    /**
+     * Fondo della firma in calce. `dark` dà più peso al marchio alla chiusura
+     * senza appesantire l'apertura. Scelta di design ancora aperta: quando è
+     * decisa, questa opzione sparisce e resta una sola resa.
+     */
+    signature?: "light" | "dark";
+  },
 ): string => {
   const base = baseUrl.replace(/\/$/, "");
-  const tone = TONES[content.tone ?? "brand"];
+  const dark = signature === "dark";
+  const sig = {
+    bg: dark ? COLORS.ink : COLORS.tint,
+    border: dark ? COLORS.ink : COLORS.hairline,
+    chip: dark ? "#ffffff" : COLORS.ink,
+    mark: dark ? "logo-reglo-tight" : "logo-reglo-white",
+    name: dark ? "#ffffff" : COLORS.ink,
+    tagline: dark ? "#9a9a9a" : COLORS.muted,
+    link: dark ? "#ffffff" : COLORS.text,
+    sep: dark ? "#555555" : "#c2c2c2",
+    note: dark ? "#8a8a8a" : COLORS.soft,
+    legal: dark ? "#6f6f6f" : "#a3a3a3",
+  };
   const heading = (content.heading ?? headingFromSubject(content.subject)).trim();
   const paragraphs = splitParagraphs(content.body);
   const preheader = (content.preheader ?? paragraphs[0] ?? heading).slice(0, 140);
@@ -216,7 +205,7 @@ export const renderRegloEmail = (
   const eyebrowRow = content.eyebrow
     ? `
               <tr>
-                <td style="padding:0; font-family:${FONT_STACK}; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:${tone.ink};">${escapeHtml(content.eyebrow)}</td>
+                <td style="padding:0; font-family:${FONT_STACK}; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:${COLORS.soft};">${escapeHtml(content.eyebrow)}</td>
               </tr>`
     : "";
 
@@ -236,9 +225,7 @@ export const renderRegloEmail = (
     )
     .join("");
 
-  const highlightRow = content.highlight
-    ? renderHighlight(content.highlight, tone)
-    : "";
+  const highlightRow = content.highlight ? renderHighlight(content.highlight) : "";
   const afterRows = splitParagraphs(content.bodyAfter ?? "")
     .map(
       (block) => `
@@ -251,7 +238,7 @@ export const renderRegloEmail = (
   const footerNoteRow = content.footerNote
     ? `
                   <tr>
-                    <td style="padding:14px 0 0; font-family:${FONT_STACK}; font-size:12px; line-height:1.6; color:${COLORS.soft};">${escapeHtml(content.footerNote)}</td>
+                    <td style="padding:14px 0 0; font-family:${FONT_STACK}; font-size:12px; line-height:1.6; color:${sig.note};">${escapeHtml(content.footerNote)}</td>
                   </tr>`
     : "";
 
@@ -275,25 +262,21 @@ export const renderRegloEmail = (
           <div style="max-width:560px; margin:0 auto; border-radius:20px; overflow:hidden;">
           <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width:560px; background:${COLORS.card}; border-collapse:collapse;">
 
-            <!-- Testata: il marchio sta su fondo nero, non su bianco. È quello che
-                 si vede per primo aprendo la mail, e dice Reglo prima del testo. -->
+            <!-- Testata chiara, la stessa barra in alto della web app: marchio
+                 nella pastiglia nera, nome accanto, un filo grigio sotto. Niente
+                 fascia scura e niente barra colorata per tipo di messaggio:
+                 l'identità la fanno il marchio e il carattere, non gli strati. -->
             <tr>
-              <td bgcolor="${COLORS.ink}" style="background:${COLORS.ink}; padding:22px 34px;">
+              <td style="padding:24px 34px 20px; border-bottom:1px solid ${COLORS.hairline};">
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                   <tr>
-                    <td valign="middle" style="padding-right:11px;">
-                      <img src="${base}/images/nav/logo-reglo-white.png" width="28" height="28" alt="Reglo" style="display:block; width:28px; height:28px;" />
+                    <td bgcolor="${COLORS.ink}" width="34" height="34" align="center" valign="middle" style="background:${COLORS.ink}; width:34px; height:34px; border-radius:10px; text-align:center;">
+                      <img src="${base}/images/nav/logo-reglo-white.png" width="19" height="19" alt="Reglo" style="display:block; margin:0 auto; width:19px; height:19px;" />
                     </td>
-                    <td valign="middle" style="font-family:${FONT_STACK}; font-size:20px; font-weight:600; letter-spacing:-0.3px; color:#ffffff; line-height:28px;">Reglo</td>
+                    <td valign="middle" style="padding-left:12px; font-family:${FONT_STACK}; font-size:19px; font-weight:600; letter-spacing:-0.3px; color:${COLORS.ink}; line-height:34px;">Reglo</td>
                   </tr>
                 </table>
               </td>
-            </tr>
-
-            <!-- Il filo colorato separa testata e contenuto: è l'unico colore
-                 della mail e dice che tipo di messaggio è. -->
-            <tr>
-              <td bgcolor="${tone.bar}" height="4" style="background:${tone.bar}; height:4px; line-height:4px; font-size:0; padding:0;">&nbsp;</td>
             </tr>
 
             <tr>
@@ -306,32 +289,32 @@ export const renderRegloEmail = (
             <!-- Firma. Pannello a tutta larghezza, non una riga di piccolo in
                  fondo al testo: è la parte che dice chi ha scritto. -->
             <tr>
-              <td bgcolor="${COLORS.tint}" style="background:${COLORS.tint}; border-top:1px solid ${COLORS.hairline}; padding:24px 34px 26px;">
+              <td bgcolor="${sig.bg}" style="background:${sig.bg}; border-top:1px solid ${sig.border}; padding:24px 34px 26px;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                   <tr>
                     <td style="padding:0;">
                       <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                         <tr>
-                          <td bgcolor="${COLORS.ink}" width="34" height="34" align="center" valign="middle" style="background:${COLORS.ink}; width:34px; height:34px; border-radius:10px; text-align:center;">
-                            <img src="${base}/images/nav/logo-reglo-white.png" width="19" height="19" alt="" style="display:block; margin:0 auto; width:19px; height:19px;" />
+                          <td bgcolor="${sig.chip}" width="34" height="34" align="center" valign="middle" style="background:${sig.chip}; width:34px; height:34px; border-radius:10px; text-align:center;">
+                            <img src="${base}/images/nav/${sig.mark}.png" width="19" height="19" alt="" style="display:block; margin:0 auto; width:19px; height:19px;" />
                           </td>
                           <td valign="middle" style="padding-left:12px; font-family:${FONT_STACK}; line-height:1.45;">
-                            <div style="font-size:14px; font-weight:600; color:${COLORS.ink};">Reglo</div>
-                            <div style="font-size:12.5px; color:${COLORS.muted};">La tua autoscuola, semplice.</div>
+                            <div style="font-size:14px; font-weight:600; color:${sig.name};">Reglo</div>
+                            <div style="font-size:12.5px; color:${sig.tagline};">La tua autoscuola, semplice.</div>
                           </td>
                         </tr>
                       </table>
                     </td>
                   </tr>
                   <tr>
-                    <td style="padding:16px 0 0; font-family:${FONT_STACK}; font-size:12.5px; font-weight:600; color:${COLORS.muted};">
-                      <a href="${base}" style="color:${COLORS.text}; text-decoration:none;">Apri Reglo</a>
-                      <span style="color:#c2c2c2; padding:0 6px;">·</span>
-                      <a href="${SITE_URL}" style="color:${COLORS.text}; text-decoration:none;">reglo.it</a>
+                    <td style="padding:16px 0 0; font-family:${FONT_STACK}; font-size:12.5px; font-weight:600;">
+                      <a href="${base}" style="color:${sig.link}; text-decoration:none;">Apri Reglo</a>
+                      <span style="color:${sig.sep}; padding:0 6px;">·</span>
+                      <a href="${SITE_URL}" style="color:${sig.link}; text-decoration:none;">reglo.it</a>
                     </td>
                   </tr>${footerNoteRow}
                   <tr>
-                    <td style="padding:14px 0 0; font-family:${FONT_STACK}; font-size:11.5px; line-height:1.6; color:#a3a3a3;">
+                    <td style="padding:14px 0 0; font-family:${FONT_STACK}; font-size:11.5px; line-height:1.6; color:${sig.legal};">
                       Ricevi questa email perché hai un account Reglo.
                     </td>
                   </tr>

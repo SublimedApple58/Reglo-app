@@ -228,7 +228,6 @@ export async function createHoliday(
               to: studentUser.email,
               subject: title,
               eyebrow: "Autoscuola chiusa",
-              tone: "danger",
               body,
             });
           }
@@ -421,7 +420,6 @@ export async function createHolidayRange(
               to: studentUser.email,
               subject: title,
               eyebrow: "Autoscuola chiusa",
-              tone: "danger",
               body,
             });
           }

@@ -4698,7 +4698,6 @@ export async function broadcastWaitlistOffer({
             to: student.user.email,
             subject: title,
             eyebrow: "Posto libero",
-            tone: "brand",
             body: message,
           });
         }
@@ -4941,7 +4940,6 @@ export async function broadcastGroupLessonInvite({
           to: student.user.email,
           subject: title,
           eyebrow: "Guida di gruppo",
-          tone: "brand",
           body: message,
         });
       } catch (error) {

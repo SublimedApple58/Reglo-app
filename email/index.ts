@@ -11,7 +11,6 @@ import {
   renderRegloEmailText,
   type EmailCta,
   type EmailHighlight,
-  type EmailTone,
 } from "./template";
 
 const getResend = () => {
@@ -56,7 +55,6 @@ export const sendDynamicEmail = async ({
   from,
   heading,
   eyebrow,
-  tone,
   cta,
   fallbackLink,
   highlight,
@@ -74,8 +72,6 @@ export const sendDynamicEmail = async ({
   heading?: string | null;
   /** Sopra-riga, es. "Promemoria" o "Pagamenti". */
   eyebrow?: string | null;
-  /** Colore unico della mail: dice di che tipo di messaggio si tratta. */
-  tone?: EmailTone;
   cta?: EmailCta | null;
   fallbackLink?: EmailCta | null;
   highlight?: EmailHighlight | null;
@@ -88,7 +84,6 @@ export const sendDynamicEmail = async ({
     bodyAfter,
     heading,
     eyebrow,
-    tone,
     cta,
     fallbackLink,
     highlight,

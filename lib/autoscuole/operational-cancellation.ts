@@ -205,7 +205,6 @@ const notifyOperationalCancellation = async ({
         to: studentUser.email,
         subject: title,
         eyebrow: "Guida annullata",
-        tone: "danger",
         body,
       });
     } catch (error) {

@@ -255,7 +255,6 @@ export async function submitProductFeedback(input: z.infer<typeof feedbackSchema
           to: GLOBAL_ADMIN_EMAIL,
           subject: `Feedback ${parsed.rating}★ da ${companyName}`,
           eyebrow: "Feedback",
-          tone: parsed.rating >= 4 ? "positive" : parsed.rating <= 2 ? "danger" : "brand",
           cta: { label: "Tutti i feedback", url: `${SERVER_URL}/it/backoffice/feedback` },
           body: [
             `Nuovo feedback da ${companyName}${userName ? ` (${userName})` : ""}:`,

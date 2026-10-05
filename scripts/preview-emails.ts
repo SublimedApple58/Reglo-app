@@ -36,7 +36,6 @@ const samples: Array<{ file: string; content: RegloEmailContent }> = [
     content: {
       subject: "Domani hai la guida — Reglo",
       eyebrow: "Promemoria",
-      tone: "brand",
       body: "Promemoria: domani hai una guida alle 15:00. Durata 60 minuti.",
     },
   },
@@ -61,7 +60,6 @@ const samples: Array<{ file: string; content: RegloEmailContent }> = [
     content: {
       subject: "🤒 Guida annullata — istruttore in malattia",
       eyebrow: "Guida annullata",
-      tone: "danger",
       body: "La guida di martedì 14 ottobre alle 15:00 con Chiara Bianchi è stata annullata perché l'istruttore è in malattia. Contatta la segreteria per riprenotarla.",
     },
   },
@@ -70,7 +68,6 @@ const samples: Array<{ file: string; content: RegloEmailContent }> = [
     content: {
       subject: "Pagamento registrato",
       eyebrow: "Pagamenti",
-      tone: "positive",
       body: "Abbiamo registrato il pagamento della guida. Trovi il dettaglio nell'app.",
     },
   },
@@ -79,7 +76,6 @@ const samples: Array<{ file: string; content: RegloEmailContent }> = [
     content: {
       subject: "⏰ Slot guida disponibile",
       eyebrow: "Posto libero",
-      tone: "brand",
       body: "Si è liberato un posto per una guida il 14/10/2026 alle 15:00. Apri Reglo per accettare o lasciarlo a un altro allievo.",
     },
   },
@@ -89,4 +85,14 @@ fs.mkdirSync(OUT, { recursive: true });
 for (const { file, content } of samples) {
   fs.writeFileSync(path.join(OUT, `${file}.html`), renderRegloEmail(content, { baseUrl }));
   console.log(path.join(OUT, `${file}.html`));
+}
+
+// Variante in valutazione: stessa testata chiara, firma finale su fondo nero.
+for (const { file, content } of samples.slice(0, 2)) {
+  const name = `${file}-b-firma-scura`;
+  fs.writeFileSync(
+    path.join(OUT, `${name}.html`),
+    renderRegloEmail(content, { baseUrl, signature: "dark" }),
+  );
+  console.log(path.join(OUT, `${name}.html`));
 }

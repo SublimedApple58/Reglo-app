@@ -773,7 +773,6 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
               to: to,
               subject: isExam ? "Promemoria esame — Reglo" : "Promemoria guida — Reglo",
               eyebrow: "Promemoria",
-              tone: "brand",
               body,
             }),
         );
@@ -864,7 +863,6 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
               to,
               subject: "Promemoria guida — Reglo",
               eyebrow: "Promemoria",
-              tone: "brand",
               body,
             }),
         );
@@ -1066,7 +1064,6 @@ export const processAutoscuolaMorningReminders = async ({
               to: to,
               subject: isExam ? "Oggi hai l'esame — Reglo" : "Oggi hai la guida — Reglo",
               eyebrow: "Promemoria",
-              tone: "brand",
               body,
             }),
         );
@@ -1223,7 +1220,6 @@ export const processAutoscuolaDayBeforeReminders = async ({
               to: to,
               subject: isExam ? "Domani hai l'esame — Reglo" : "Domani hai la guida — Reglo",
               eyebrow: "Promemoria",
-              tone: "brand",
               body,
             }),
         );

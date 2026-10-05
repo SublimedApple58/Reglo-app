@@ -597,7 +597,6 @@ const notifyStudentAppointmentCancelled = async ({
         to: studentUser.email,
         subject: title,
         eyebrow: "Guida annullata",
-        tone: "danger",
         body,
       });
     } catch (error) {
@@ -689,7 +688,6 @@ const notifyAppointmentRescheduled = async ({
           to: studentUser.email,
           subject: title,
           eyebrow: "Guida spostata",
-          tone: "brand",
           body,
         });
       } catch (error) {

@@ -66,11 +66,10 @@ describe("HTML della mail", () => {
     expect(render(base)).not.toMatch(/#EC4899/i);
   });
 
-  it("colora il filo sotto la testata secondo il tono, uno per mail", () => {
-    expect(render({ ...base, tone: "danger" })).toContain("#c13515");
-    expect(render({ ...base, tone: "positive" })).toContain("#22C55E");
-    // Default = brand: giallo Reglo. Un accento nero sparirebbe sulla testata nera.
-    expect(render(base)).toContain("#FACC15");
+  it("non colora niente per tipo di messaggio: la mail è in bianco e nero", () => {
+    const html = render({ ...base, eyebrow: "Guida annullata" });
+    // Nessun verde/rosso/giallo: l'identità la fanno marchio e carattere.
+    expect(html).not.toMatch(/#FACC15|#22C55E|#c13515|#A16207/i);
   });
 
   it("mette il marchio due volte: testata nera in cima e firma in fondo", () => {
