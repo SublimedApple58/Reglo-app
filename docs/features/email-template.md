@@ -58,12 +58,11 @@ lo è. A separare le parti bastano due fili grigi: uno sotto la testata, uno
 sopra la firma. Anche il riquadro del codice è delimitato da fili, non da un
 fondo pieno.
 
-**Il marchio compare una volta sola, in firma.** Metterlo in testata *e* in
-calce è la stessa cosa detta due volte: la mail apre direttamente col titolo e
-chiude con la firma — marchio, nome, pay-off, link e la riga che spiega perché
-è arrivata. Il marchio è quello **nero sul chiaro**, dentro una cella con
-`bgcolor="#ffffff"` esplicito: senza, un client in dark mode scurisce il fondo
-e un marchio nero su trasparente sparisce.
+**Il peso del marchio è in testata, la firma è una riga.** In apertura
+marchio, nome e pay-off; in calce solo i link e la riga di servizio. Il marchio
+è quello **nero sul chiaro** (`logo-reglo-tight.png`, lo stesso della web app),
+dentro una cella con `bgcolor="#ffffff"` esplicito: senza, un client in dark
+mode scurisce il fondo e un marchio nero su trasparente sparisce.
 
 **Niente etichette di categoria sopra il titolo.** C'è stato un giro con una
 sopra-riga tipo `INVITO` / `GUIDA ANNULLATA`: bocciata, e con ragione —

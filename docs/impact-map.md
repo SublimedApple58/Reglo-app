@@ -207,7 +207,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - ← **Notifiche push**: titolo e corpo di annullamenti, pagamenti e promemoria sono **gli stessi** di push ed email (`autoscuole.actions.ts`, `operational-cancellation.ts`, `payments.ts`, `communications.ts`). Riscrivere quelle stringhe cambia due canali insieme: l'oggetto email-only sta accanto, nel `subject`
 - → **Comunicazioni da regola**: oggetto e corpo li scrive l'autoscuola e passano per `escapeHtml` — nessuna sopra-riga nostra sopra un messaggio suo
 - → **Design system**: i colori sono quelli di `docs/design-system.md` §2 (bianco/nero, `#111111`), non la vecchia palette slate `#1E293B`/`#64748B` che il template aveva ereditato. Un test lo blinda
-- → **Logo**: compare **una volta sola**, nella firma in calce (`public/images/nav/logo-reglo-tight.png`, lo stesso della web app) dentro una cella con `bgcolor="#ffffff"` dichiarato — senza, un client in dark mode scurisce il fondo e un marchio nero su trasparente sparisce
+- → **Logo**: sta in **testata** con nome e pay-off, e la firma in calce resta una riga di link (`public/images/nav/logo-reglo-tight.png`, lo stesso della web app) dentro una cella con `bgcolor="#ffffff"` dichiarato — senza, un client in dark mode scurisce il fondo e un marchio nero su trasparente sparisce
 
 ### Support Center + Feedback
 - → **Users Directory**: `SupportMessage.senderUserId` / `ProductFeedback.userId` SetNull su delete utente (il nome resta come snapshot `senderName`/`userName`)

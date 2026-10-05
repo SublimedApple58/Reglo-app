@@ -54,7 +54,7 @@ describe("HTML della mail", () => {
     // Il marchio è nero su trasparente: senza fondo bianco dichiarato, un
     // client che scurisce gli sfondi lo farebbe sparire.
     expect(html).toContain("/images/nav/logo-reglo-tight.png");
-    expect(html).toContain('bgcolor="#ffffff" width="32"');
+    expect(html).toContain('bgcolor="#ffffff" width="42"');
   });
 
   it("usa i colori del design system, non la vecchia palette slate", () => {
@@ -81,10 +81,14 @@ describe("HTML della mail", () => {
     expect(html).not.toMatch(/#FACC15|#22C55E|#c13515|#A16207/i);
   });
 
-  it("mette il marchio una volta sola, nella firma", () => {
+  it("tiene il marchio in testata e lascia in calce una firma di una riga", () => {
     const html = render(base);
     expect(html.match(/logo-reglo/g)).toHaveLength(1);
-    expect(html).toContain("La tua autoscuola, semplice.");
+    // Il pay-off sta accanto al marchio, in apertura; in calce solo i link.
+    // `indexOf` sul titolo non vale: compare anche nel <title>.
+    expect(html.indexOf("La tua autoscuola, semplice.")).toBeLessThan(
+      html.lastIndexOf("Guida domani"),
+    );
     expect(html).toContain("Ricevi questa email perché hai un account Reglo.");
   });
 

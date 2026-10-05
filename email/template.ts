@@ -12,11 +12,12 @@
  * layout che regge ovunque. Lo stile è tutto inline per lo stesso motivo:
  * Gmail scarta i `<style>` nel `<head>` su buona parte dei client.
  *
- * ## Perché il logo compare una volta sola, in firma
- * In testata e in calce sarebbe la stessa cosa detta due volte. Il marchio è
- * quello nero su chiaro (`logo-reglo-tight.png`), dentro una cella con
- * `bgcolor="#ffffff"` dichiarato: senza, un client in dark mode scurisce il
- * fondo e un marchio nero su trasparente sparisce. Va da solo, senza
+ * ## Il marchio sta in testata, la firma è una riga
+ * Il peso del brand è in apertura — marchio, nome e pay-off — e in calce
+ * restano solo i link e la riga di servizio. Il marchio è quello nero su
+ * chiaro (`logo-reglo-tight.png`), lo stesso della web app, dentro una cella
+ * con `bgcolor="#ffffff"` dichiarato: senza, un client in dark mode scurisce
+ * il fondo e un marchio nero su trasparente sparisce. Va da solo, senza
  * lettering, come sul sito pubblico.
  *
  * ## Bianco e nero, nessuna cornice
@@ -223,46 +224,51 @@ export const renderRegloEmail = (
                leggere. Le separazioni le fanno due fili grigi. -->
           <table role="presentation" width="580" cellpadding="0" cellspacing="0" border="0" align="center" style="width:100%; max-width:580px; text-align:left;">
 
+            <!-- Testata: è qui che sta il marchio, a piena presenza. Marchio,
+                 nome e pay-off, poi un filo. La firma in calce resta una riga. -->
+            <tr>
+              <td style="padding:0 0 22px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td bgcolor="#ffffff" width="42" height="42" align="center" valign="middle" style="background:#ffffff; width:42px; height:42px;">
+                      <img src="${base}/images/nav/logo-reglo-tight.png" width="42" height="42" alt="Reglo" style="display:block; width:42px; height:42px;" />
+                    </td>
+                    <td valign="middle" style="padding-left:14px; font-family:${FONT_STACK}; line-height:1.35;">
+                      <div style="font-size:22px; font-weight:600; letter-spacing:-0.4px; color:${COLORS.ink};">Reglo</div>
+                      <div style="font-size:13px; color:${COLORS.muted};">La tua autoscuola, semplice.</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
             <tr>
               <td style="padding:0;">
+                <div style="height:1px; line-height:1px; font-size:0; background:${COLORS.hairline};">&nbsp;</div>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:32px 0 0;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${headingRow}${bodyRows}${highlightRow}${afterRows}${ctaRow}
                 </table>
               </td>
             </tr>
 
-            <!-- Firma. È l'unico posto dove compaiono marchio e nome: in
-                 testata sarebbero la stessa cosa detta due volte.
-                 Il marchio è quello nero sul chiaro, dentro una cella con
-                 bgcolor bianco esplicito — senza, un client in dark mode
-                 scurisce il fondo e il marchio sparisce. -->
+            <!-- Firma: una riga di link e una di servizio. Il marchio sta in
+                 testata, qui non serve ripeterlo in grande. -->
             <tr>
               <td style="padding:40px 0 0;">
                 <div style="height:1px; line-height:1px; font-size:0; background:${COLORS.hairline};">&nbsp;</div>
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                   <tr>
-                    <td style="padding:24px 0 0;">
-                      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                        <tr>
-                          <td bgcolor="#ffffff" width="32" height="32" align="center" valign="middle" style="background:#ffffff; width:32px; height:32px;">
-                            <img src="${base}/images/nav/logo-reglo-tight.png" width="32" height="32" alt="Reglo" style="display:block; width:32px; height:32px;" />
-                          </td>
-                          <td valign="middle" style="padding-left:12px; font-family:${FONT_STACK}; line-height:1.4;">
-                            <div style="font-size:15px; font-weight:600; letter-spacing:-0.2px; color:${COLORS.ink};">Reglo</div>
-                            <div style="font-size:12.5px; color:${COLORS.muted};">La tua autoscuola, semplice.</div>
-                          </td>
-                        </tr>
-                      </table>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:18px 0 0; font-family:${FONT_STACK}; font-size:12.5px; font-weight:600;">
-                      <a href="${base}" style="color:${COLORS.text}; text-decoration:none;">Apri Reglo</a>
-                      <span style="color:#c2c2c2; padding:0 6px;">·</span>
-                      <a href="${SITE_URL}" style="color:${COLORS.text}; text-decoration:none;">reglo.it</a>
+                    <td style="padding:18px 0 0; font-family:${FONT_STACK}; font-size:12.5px; line-height:1.6; color:${COLORS.soft};">
+                      <a href="${base}" style="color:${COLORS.text}; text-decoration:none; font-weight:600;">Apri Reglo</a>
+                      <span style="color:#c9c9c9; padding:0 6px;">·</span>
+                      <a href="${SITE_URL}" style="color:${COLORS.text}; text-decoration:none; font-weight:600;">reglo.it</a>
                     </td>
                   </tr>${footerNoteRow}
                   <tr>
-                    <td style="padding:14px 0 0; font-family:${FONT_STACK}; font-size:11.5px; line-height:1.6; color:#a3a3a3;">
+                    <td style="padding:6px 0 0; font-family:${FONT_STACK}; font-size:11.5px; line-height:1.6; color:#a3a3a3;">
                       Ricevi questa email perché hai un account Reglo.
                     </td>
                   </tr>
