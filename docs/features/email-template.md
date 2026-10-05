@@ -10,7 +10,6 @@
 | `email/template.ts` | **Modulo puro**: tokens, layout HTML, versione testo. Niente Resend, niente env a parte il `baseUrl` passato dal chiamante. |
 | `email/index.ts` | Il client Resend e le due funzioni di invio: `sendDynamicEmail` e `sendCompanyInviteEmail`. |
 | `tests/unit/email/template.test.ts` | Titolo ricavato dall'oggetto, escape, toni, ordine dei blocchi, versione testo. |
-| `public/images/nav/logo-reglo-white.png` | Marchio bianco, usato dentro la pastiglia nera dell'intestazione. |
 
 Prima di REG-599 c'erano **due** template divergenti: una stringa HTML in
 `email/index.tsx` e un componente `@react-email/components`
@@ -25,7 +24,6 @@ Chi chiama passa **testo semplice**. La veste la mette il template.
 await sendDynamicEmail({
   to: student.email,
   subject: "Domani hai la guida — Reglo",
-  eyebrow: "Promemoria",
   body: "Promemoria: domani hai una guida alle 15:00. Durata 60 minuti.",
 });
 ```
@@ -35,7 +33,6 @@ await sendDynamicEmail({
 | `subject` | Oggetto. Se manca `heading`, diventa anche il titolo nel corpo. |
 | `body` | Testo semplice. **Riga vuota = nuovo paragrafo**, a capo singolo resta a capo. |
 | `heading` | Titolo diverso dall'oggetto. |
-| `eyebrow` | Due parole sopra il titolo ("Promemoria", "Pagamenti", "Sicurezza"). |
 | `cta` / `fallbackLink` | Bottone nero + link di riserva (serve quando la CTA apre l'app). |
 | `highlight` | Riquadro colorato: codici (`mono: true`), importi. |
 | `bodyAfter` | Testo **dopo** il riquadro ("il codice scade tra…"). |
@@ -49,7 +46,7 @@ scrive l'autoscuola, e non deve poter iniettare HTML.
 
 **Niente colori per tipo di messaggio.** Un annullamento e un promemoria hanno
 la stessa veste: cambia il testo, non la grafica. Ci sono stati due giri con la
-barra colorata sotto la testata e la sopra-riga in ocra — bocciati, e con
+barra colorata sotto la testata e l'etichetta di categoria in ocra — bocciati, e con
 ragione: erano strati di colore che non aggiungevano informazione (l'etichetta
 la dice già a parole) e facevano sembrare il prodotto meno serio. La mail è in
 **bianco e nero**, e un test impedisce che i colori rientrino di soppiatto.
@@ -61,17 +58,21 @@ lo è. A separare le parti bastano due fili grigi: uno sotto la testata, uno
 sopra la firma. Anche il riquadro del codice è delimitato da fili, non da un
 fondo pieno.
 
-**Testata e firma.** In cima marchio nella pastiglia nera + "Reglo", come la
-barra in alto della web app. In fondo marchio, nome, pay-off, link e la riga che
-spiega perché quella mail è arrivata: una firma, non quattro parole in grigino.
-L'identità la fanno il marchio, il carattere e lo spazio.
+**Il marchio compare una volta sola, in firma.** Metterlo in testata *e* in
+calce è la stessa cosa detta due volte: la mail apre direttamente col titolo e
+chiude con la firma — marchio, nome, pay-off, link e la riga che spiega perché
+è arrivata. Il marchio è quello **nero sul chiaro**, dentro una cella con
+`bgcolor="#ffffff"` esplicito: senza, un client in dark mode scurisce il fondo
+e un marchio nero su trasparente sparisce.
 
-**Il marchio è sempre bianco su nero.** Il marchio Reglo è nero su trasparente:
-in dark mode i client che scuriscono gli sfondi lo farebbero sparire. Nella
-testata sta sulla fascia nera, nella firma dentro una pastiglia `#111111`: in
-chiaro e in scuro si vede uguale. Il nome "Reglo" gli sta accanto come testo —
-l'unico lockup con lettering che esiste negli asset è quello **vecchio
-rosa/giallo**, e il sito pubblico usa comunque il marchio da solo.
+**Niente etichette di categoria sopra il titolo.** C'è stato un giro con una
+sopra-riga tipo `INVITO` / `GUIDA ANNULLATA`: bocciata, e con ragione —
+ripeteva il titolo con altre parole. Il titolo deve bastare da solo, ed è anche
+il motivo per cui `headingFromSubject` lo ripulisce.
+
+**Il nome "Reglo" è testo, non un lockup.** L'unico logo con lettering che
+esiste negli asset è quello **vecchio rosa/giallo**, e il sito pubblico usa
+comunque il marchio da solo.
 
 **Tabelle e stile inline.** Outlook su Windows impagina col motore di Word:
 niente flex, niente grid, `max-width` ignorato. E Gmail scarta i `<style>` nel
@@ -101,8 +102,8 @@ aiuta, in un titolo di email no. L'oggetto in posta resta intatto.
 | `lib/autoscuole/payments.ts` | Metodo richiesto · Pagamento registrato · Non riuscito |
 | `lib/actions/support.actions.ts` | Avvisi interni al team (assistenza, feedback, novità) |
 
-Che tipo di messaggio sia lo dice la **sopra-riga a parole** ("Promemoria",
-"Guida annullata", "Pagamenti"), non un colore.
+Che tipo di messaggio sia lo dice il **titolo**: niente colori e niente
+etichette di categoria.
 
 ## Testi rifatti con REG-599
 

@@ -117,7 +117,6 @@ export async function requestPasswordResetCode(
       await sendDynamicEmail({
         to: email,
         subject: "Il tuo codice per reimpostare la password — Reglo",
-        eyebrow: "Sicurezza",
         heading: "Reimposta la tua password",
         body: [
           name ? `Ciao ${name},` : "Ciao,",

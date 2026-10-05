@@ -19,7 +19,6 @@ const samples: Array<{ file: string; content: RegloEmailContent }> = [
     file: "1-invito",
     content: {
       subject: "Il tuo invito su Reglo — Autoscuola Solferino",
-      eyebrow: "Invito",
       heading: "Benvenuto in Autoscuola Solferino",
       body: [
         "Chiara Bianchi ti ha invitato a usare Reglo con Autoscuola Solferino.",
@@ -35,7 +34,6 @@ const samples: Array<{ file: string; content: RegloEmailContent }> = [
     file: "2-promemoria-guida",
     content: {
       subject: "Domani hai la guida — Reglo",
-      eyebrow: "Promemoria",
       body: "Promemoria: domani hai una guida alle 15:00. Durata 60 minuti.",
     },
   },
@@ -43,7 +41,6 @@ const samples: Array<{ file: string; content: RegloEmailContent }> = [
     file: "3-codice-password",
     content: {
       subject: "Il tuo codice per reimpostare la password — Reglo",
-      eyebrow: "Sicurezza",
       heading: "Reimposta la tua password",
       body: [
         "Ciao Marco,",
@@ -59,7 +56,6 @@ const samples: Array<{ file: string; content: RegloEmailContent }> = [
     file: "4-guida-annullata",
     content: {
       subject: "🤒 Guida annullata — istruttore in malattia",
-      eyebrow: "Guida annullata",
       body: "La guida di martedì 14 ottobre alle 15:00 con Chiara Bianchi è stata annullata perché l'istruttore è in malattia. Contatta la segreteria per riprenotarla.",
     },
   },
@@ -67,7 +63,6 @@ const samples: Array<{ file: string; content: RegloEmailContent }> = [
     file: "5-pagamento-registrato",
     content: {
       subject: "Pagamento registrato",
-      eyebrow: "Pagamenti",
       body: "Abbiamo registrato il pagamento della guida. Trovi il dettaglio nell'app.",
     },
   },
@@ -75,7 +70,6 @@ const samples: Array<{ file: string; content: RegloEmailContent }> = [
     file: "6-posto-libero",
     content: {
       subject: "⏰ Slot guida disponibile",
-      eyebrow: "Posto libero",
       body: "Si è liberato un posto per una guida il 14/10/2026 alle 15:00. Apri Reglo per accettare o lasciarlo a un altro allievo.",
     },
   },

@@ -204,7 +204,6 @@ const notifyOperationalCancellation = async ({
       await sendDynamicEmail({
         to: studentUser.email,
         subject: title,
-        eyebrow: "Guida annullata",
         body,
       });
     } catch (error) {

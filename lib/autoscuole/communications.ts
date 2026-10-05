@@ -772,7 +772,6 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
           (to) => sendDynamicEmail({
               to: to,
               subject: isExam ? "Promemoria esame — Reglo" : "Promemoria guida — Reglo",
-              eyebrow: "Promemoria",
               body,
             }),
         );
@@ -862,7 +861,6 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
           (to) => sendDynamicEmail({
               to,
               subject: "Promemoria guida — Reglo",
-              eyebrow: "Promemoria",
               body,
             }),
         );
@@ -1063,7 +1061,6 @@ export const processAutoscuolaMorningReminders = async ({
           (to) => sendDynamicEmail({
               to: to,
               subject: isExam ? "Oggi hai l'esame — Reglo" : "Oggi hai la guida — Reglo",
-              eyebrow: "Promemoria",
               body,
             }),
         );
@@ -1219,7 +1216,6 @@ export const processAutoscuolaDayBeforeReminders = async ({
           (to) => sendDynamicEmail({
               to: to,
               subject: isExam ? "Domani hai l'esame — Reglo" : "Domani hai la guida — Reglo",
-              eyebrow: "Promemoria",
               body,
             }),
         );

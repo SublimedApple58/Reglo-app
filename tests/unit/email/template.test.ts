@@ -49,11 +49,12 @@ describe("paragrafi dal testo semplice", () => {
 describe("HTML della mail", () => {
   const base = { subject: "Guida domani", body: "Promemoria guida il 14 ottobre." };
 
-  it("mette il marchio bianco su pastiglia nera, non il marchio nero su trasparente", () => {
+  it("protegge il marchio dal dark mode con un bgcolor bianco esplicito", () => {
     const html = render(base);
-    // In dark mode un marchio nero su fondo trasparente sparirebbe.
-    expect(html).toContain("/images/nav/logo-reglo-white.png");
-    expect(html).toContain('bgcolor="#111111"');
+    // Il marchio è nero su trasparente: senza fondo bianco dichiarato, un
+    // client che scurisce gli sfondi lo farebbe sparire.
+    expect(html).toContain("/images/nav/logo-reglo-tight.png");
+    expect(html).toContain('bgcolor="#ffffff" width="32"');
   });
 
   it("usa i colori del design system, non la vecchia palette slate", () => {
@@ -75,16 +76,22 @@ describe("HTML della mail", () => {
   });
 
   it("non colora niente per tipo di messaggio: la mail è in bianco e nero", () => {
-    const html = render({ ...base, eyebrow: "Guida annullata" });
+    const html = render(base);
     // Nessun verde/rosso/giallo: l'identità la fanno marchio e carattere.
     expect(html).not.toMatch(/#FACC15|#22C55E|#c13515|#A16207/i);
   });
 
-  it("mette il marchio due volte: in testata e nella firma", () => {
+  it("mette il marchio una volta sola, nella firma", () => {
     const html = render(base);
-    expect(html.match(/logo-reglo-white\.png/g)).toHaveLength(2);
+    expect(html.match(/logo-reglo/g)).toHaveLength(1);
     expect(html).toContain("La tua autoscuola, semplice.");
     expect(html).toContain("Ricevi questa email perché hai un account Reglo.");
+  });
+
+  it("apre con il titolo: niente etichetta di categoria sopra", () => {
+    const html = render({ ...base, subject: "Guida annullata" });
+    expect(html).toContain("Guida annullata");
+    expect(html).not.toMatch(/text-transform:uppercase[^>]*>(?!IL TUO)/);
   });
 
   it("scrive il preheader con la prima riga del corpo, non con la parola 'Reglo'", () => {
@@ -101,7 +108,7 @@ describe("HTML della mail", () => {
   });
 
   it("rende assoluti i link del logo anche se SERVER_URL finisce con /", () => {
-    expect(render(base)).toContain("https://app.reglo.it/images/nav/logo-reglo-white.png");
+    expect(render(base)).toContain("https://app.reglo.it/images/nav/logo-reglo-tight.png");
     expect(render(base)).not.toContain("https://app.reglo.it//images");
   });
 

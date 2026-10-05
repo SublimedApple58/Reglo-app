@@ -54,7 +54,6 @@ export const sendDynamicEmail = async ({
   bodyAfter,
   from,
   heading,
-  eyebrow,
   cta,
   fallbackLink,
   highlight,
@@ -70,8 +69,6 @@ export const sendDynamicEmail = async ({
   from?: string;
   /** Titolo nel corpo, quando deve dire altro rispetto all'oggetto. */
   heading?: string | null;
-  /** Sopra-riga, es. "Promemoria" o "Pagamenti". */
-  eyebrow?: string | null;
   cta?: EmailCta | null;
   fallbackLink?: EmailCta | null;
   highlight?: EmailHighlight | null;
@@ -83,7 +80,6 @@ export const sendDynamicEmail = async ({
     body,
     bodyAfter,
     heading,
-    eyebrow,
     cta,
     fallbackLink,
     highlight,
@@ -118,7 +114,6 @@ export const sendCompanyInviteEmail = async ({
     // Era "You have been invited to join X": l'unica mail del prodotto rimasta
     // in inglese, mandata a titolari e allievi italiani.
     subject: `Il tuo invito su Reglo — ${companyName}`,
-    eyebrow: "Invito",
     heading: `Benvenuto in ${companyName}`,
     body: [
       invitedByName

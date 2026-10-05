@@ -4697,7 +4697,6 @@ export async function broadcastWaitlistOffer({
           await sendDynamicEmail({
             to: student.user.email,
             subject: title,
-            eyebrow: "Posto libero",
             body: message,
           });
         }
@@ -4939,7 +4938,6 @@ export async function broadcastGroupLessonInvite({
         await sendDynamicEmail({
           to: student.user.email,
           subject: title,
-          eyebrow: "Guida di gruppo",
           body: message,
         });
       } catch (error) {

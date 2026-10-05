@@ -12,19 +12,19 @@
  * layout che regge ovunque. Lo stile è tutto inline per lo stesso motivo:
  * Gmail scarta i `<style>` nel `<head>` su buona parte dei client.
  *
- * ## Perché il logo sta dentro una pastiglia nera
- * Il marchio Reglo è nero su trasparente (`logo-reglo-tight.png`): in dark mode
- * i client che scuriscono gli sfondi lo farebbero sparire. Qui viaggia la
- * variante **bianca** dentro una cella `bgcolor="#111111"`, che si vede uguale
- * in chiaro e in scuro. È anche il lockup del sito pubblico: reglo.it usa il
- * marchio da solo, senza lettering, quindi lo seguiamo.
+ * ## Perché il logo compare una volta sola, in firma
+ * In testata e in calce sarebbe la stessa cosa detta due volte. Il marchio è
+ * quello nero su chiaro (`logo-reglo-tight.png`), dentro una cella con
+ * `bgcolor="#ffffff"` dichiarato: senza, un client in dark mode scurisce il
+ * fondo e un marchio nero su trasparente sparisce. Va da solo, senza
+ * lettering, come sul sito pubblico.
  *
- * ## Il tono
- * Il design system dice: superfici neutre, colore solo dove porta
- * informazione. Qui il colore è **uno solo per email** — la barra in alto, la
- * sopra-riga e l'eventuale riquadro — e dice che tipo di email è: promemoria,
- * conferma, annullamento. Il resto resta bianco/nero. È quello che rende il
- * messaggio vivo senza farlo sembrare una newsletter.
+ * ## Bianco e nero, nessuna cornice
+ * Niente colori per tipo di messaggio, niente etichette di categoria sopra il
+ * titolo, niente card arrotondata su sfondo grigio: tre giri di revisione li
+ * hanno bocciati tutti, e il motivo è sempre lo stesso — erano strati che non
+ * aggiungevano informazione. Che mail sia lo dice il titolo. L'identità la
+ * fanno il marchio in firma, il carattere e lo spazio.
  *
  * @see docs/features/email-template.md
  */
@@ -70,8 +70,6 @@ export type RegloEmailContent = {
   bodyAfter?: string | null;
   /** Titolo dentro la mail, quando deve dire qualcosa di diverso dall'oggetto. */
   heading?: string | null;
-  /** Sopra-riga: due parole che dicono di che si tratta ("Promemoria"). */
-  eyebrow?: string | null;
   cta?: EmailCta | null;
   /** Link di riserva sotto il bottone (es. "apri su web" quando la CTA apre l'app). */
   fallbackLink?: EmailCta | null;
@@ -173,17 +171,10 @@ export const renderRegloEmail = (
   const paragraphs = splitParagraphs(content.body);
   const preheader = (content.preheader ?? paragraphs[0] ?? heading).slice(0, 140);
 
-  const eyebrowRow = content.eyebrow
-    ? `
-              <tr>
-                <td style="padding:0; font-family:${FONT_STACK}; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:${COLORS.soft};">${escapeHtml(content.eyebrow)}</td>
-              </tr>`
-    : "";
-
   const headingRow = heading
     ? `
               <tr>
-                <td style="padding:${content.eyebrow ? "9px" : "0"} 0 0; font-family:${FONT_STACK}; font-size:23px; line-height:1.28; font-weight:600; letter-spacing:-0.3px; color:${COLORS.ink};">${escapeHtml(heading)}</td>
+                <td style="padding:0; font-family:${FONT_STACK}; font-size:23px; line-height:1.28; font-weight:600; letter-spacing:-0.3px; color:${COLORS.ink};">${escapeHtml(heading)}</td>
               </tr>`
     : "";
 
@@ -232,46 +223,31 @@ export const renderRegloEmail = (
                leggere. Le separazioni le fanno due fili grigi. -->
           <table role="presentation" width="580" cellpadding="0" cellspacing="0" border="0" align="center" style="width:100%; max-width:580px; text-align:left;">
 
-            <!-- Testata: marchio e nome, come la barra in alto della web app. -->
-            <tr>
-              <td style="padding:0 0 18px;">
-                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                  <tr>
-                    <td bgcolor="${COLORS.ink}" width="34" height="34" align="center" valign="middle" style="background:${COLORS.ink}; width:34px; height:34px; border-radius:10px; text-align:center;">
-                      <img src="${base}/images/nav/logo-reglo-white.png" width="19" height="19" alt="Reglo" style="display:block; margin:0 auto; width:19px; height:19px;" />
-                    </td>
-                    <td valign="middle" style="padding-left:12px; font-family:${FONT_STACK}; font-size:19px; font-weight:600; letter-spacing:-0.3px; color:${COLORS.ink}; line-height:34px;">Reglo</td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
             <tr>
               <td style="padding:0;">
-                <div style="height:1px; line-height:1px; font-size:0; background:${COLORS.hairline};">&nbsp;</div>
-              </td>
-            </tr>
-
-            <tr>
-              <td style="padding:30px 0 0;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${eyebrowRow}${headingRow}${bodyRows}${highlightRow}${afterRows}${ctaRow}
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${headingRow}${bodyRows}${highlightRow}${afterRows}${ctaRow}
                 </table>
               </td>
             </tr>
 
-            <!-- Firma: stessa colonna, separata da un filo. -->
+            <!-- Firma. È l'unico posto dove compaiono marchio e nome: in
+                 testata sarebbero la stessa cosa detta due volte.
+                 Il marchio è quello nero sul chiaro, dentro una cella con
+                 bgcolor bianco esplicito — senza, un client in dark mode
+                 scurisce il fondo e il marchio sparisce. -->
             <tr>
-              <td style="padding:36px 0 0;">
+              <td style="padding:40px 0 0;">
                 <div style="height:1px; line-height:1px; font-size:0; background:${COLORS.hairline};">&nbsp;</div>
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding:0;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                   <tr>
-                    <td style="padding:22px 0 0;">
+                    <td style="padding:24px 0 0;">
                       <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                         <tr>
-                          <td bgcolor="${COLORS.ink}" width="30" height="30" align="center" valign="middle" style="background:${COLORS.ink}; width:30px; height:30px; border-radius:9px; text-align:center;">
-                            <img src="${base}/images/nav/logo-reglo-white.png" width="17" height="17" alt="" style="display:block; margin:0 auto; width:17px; height:17px;" />
+                          <td bgcolor="#ffffff" width="32" height="32" align="center" valign="middle" style="background:#ffffff; width:32px; height:32px;">
+                            <img src="${base}/images/nav/logo-reglo-tight.png" width="32" height="32" alt="Reglo" style="display:block; width:32px; height:32px;" />
                           </td>
-                          <td valign="middle" style="padding-left:11px; font-family:${FONT_STACK}; line-height:1.45;">
-                            <div style="font-size:14px; font-weight:600; color:${COLORS.ink};">Reglo</div>
+                          <td valign="middle" style="padding-left:12px; font-family:${FONT_STACK}; line-height:1.4;">
+                            <div style="font-size:15px; font-weight:600; letter-spacing:-0.2px; color:${COLORS.ink};">Reglo</div>
                             <div style="font-size:12.5px; color:${COLORS.muted};">La tua autoscuola, semplice.</div>
                           </td>
                         </tr>
@@ -279,7 +255,7 @@ export const renderRegloEmail = (
                     </td>
                   </tr>
                   <tr>
-                    <td style="padding:16px 0 0; font-family:${FONT_STACK}; font-size:12.5px; font-weight:600;">
+                    <td style="padding:18px 0 0; font-family:${FONT_STACK}; font-size:12.5px; font-weight:600;">
                       <a href="${base}" style="color:${COLORS.text}; text-decoration:none;">Apri Reglo</a>
                       <span style="color:#c2c2c2; padding:0 6px;">·</span>
                       <a href="${SITE_URL}" style="color:${COLORS.text}; text-decoration:none;">reglo.it</a>

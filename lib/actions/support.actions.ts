@@ -198,7 +198,6 @@ export async function sendSupportMessage(input: z.infer<typeof sendMessageSchema
         await sendDynamicEmail({
           to: SUPPORT_NOTIFY_EMAILS,
           subject: `Assistenza — nuovo messaggio da ${companyName}`,
-          eyebrow: "Assistenza",
           cta: { label: "Apri il backoffice", url: `${SERVER_URL}/it/backoffice/support` },
           body: [
             `Nuovo messaggio nel centro assistenza da ${companyName}${senderName ? ` (${senderName})` : ""}:`,
@@ -254,7 +253,6 @@ export async function submitProductFeedback(input: z.infer<typeof feedbackSchema
         await sendDynamicEmail({
           to: GLOBAL_ADMIN_EMAIL,
           subject: `Feedback ${parsed.rating}★ da ${companyName}`,
-          eyebrow: "Feedback",
           cta: { label: "Tutti i feedback", url: `${SERVER_URL}/it/backoffice/feedback` },
           body: [
             `Nuovo feedback da ${companyName}${userName ? ` (${userName})` : ""}:`,
@@ -319,7 +317,6 @@ export async function submitNewsFeedback(input: z.infer<typeof newsFeedbackSchem
         await sendDynamicEmail({
           to: SUPPORT_NOTIFY_EMAILS,
           subject: `${kindLabel} da ${companyName}`,
-          eyebrow: "Novità",
           body: [
             `Nuovo${isRequest ? "a richiesta" : " consiglio"} dal dialog Novità di ${companyName}${userName ? ` (${userName})` : ""}:`,
             "",

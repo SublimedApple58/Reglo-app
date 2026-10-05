@@ -422,7 +422,6 @@ export async function createSwapOffer(
           await sendDynamicEmail({
             to: student.user.email,
             subject: title,
-            eyebrow: "Richiesta sostituzione",
             body: message,
           });
         } catch (error) {

@@ -436,7 +436,6 @@ const sendPaymentNotification = async ({
       await sendDynamicEmail({
         to: member.user.email,
         subject: title,
-        eyebrow: "Pagamenti",
         body,
       });
     } catch (error) {
