@@ -13,10 +13,7 @@
  * prototipo, quindi resta com'è.
  */
 
-import Link from "next/link";
-import { useLocale } from "next-intl";
-
-import { ATTIVA_REGLO_URL } from "./locked-features";
+import { ATTIVA_REGLO_URL, SITE_URLS } from "./locked-features";
 
 function Shell({
   background,
@@ -112,7 +109,6 @@ export function AllieviLockedCard({ onProva }: { onProva: () => void }) {
 }
 
 export function SegretariaLockedCard() {
-  const locale = useLocale();
   return (
     <Shell background="linear-gradient(180deg,#DCE9F7 0%,#EDF4FB 45%,#ffffff 100%)">
       <Panel>
@@ -133,9 +129,16 @@ export function SegretariaLockedCard() {
         title="La segretaria che risponde anche quando tu non puoi"
         description="Risponde 24/7 su orari, prezzi e documenti, raccoglie i numeri di chi vuole essere ricontattato e ti lascia qui le chiamate in sospeso."
       >
-        <Link href={`/${locale}`} className={ghostClass}>
+        {/* Prima puntava a `/${locale}`, cioè alla home dell'app: l'unico
+            "Scopri di più" che non usciva nemmeno dal prodotto (REG-579). */}
+        <a
+          href={SITE_URLS.segretaria}
+          target="_blank"
+          rel="noreferrer"
+          className={ghostClass}
+        >
           Scopri di più
-        </Link>
+        </a>
         <a href={ATTIVA_REGLO_URL} target="_blank" rel="noreferrer" className={ctaClass}>
           Attiva Reglo
         </a>

@@ -1,8 +1,11 @@
 import Image from "next/image";
 
+import { SITE_URLS } from "./locked/locked-features";
+
 /**
  * Teaser "Rinnovi" (feature in arrivo) — replica 1:1 della sezione del
- * prototipo redesign: hero 3D, titolo, paragrafo e CTA verso reglo.it.
+ * prototipo redesign: hero 3D, titolo, paragrafo e CTA verso la pagina
+ * Rinnovi del sito (REG-579: prima era la homepage).
  */
 export function AutoscuoleRinnoviTeaser() {
   return (
@@ -31,7 +34,7 @@ export function AutoscuoleRinnoviTeaser() {
         incassa il servizio senza gestire documenti, appuntamenti o imprevisti.
       </p>
       <a
-        href="https://reglo.it"
+        href={SITE_URLS.rinnovi}
         target="_blank"
         rel="noreferrer"
         className="mt-4 inline-flex items-center gap-2 rounded-[10px] bg-[#222222] px-[26px] py-[13px] text-sm font-semibold text-white transition-opacity hover:opacity-90"
