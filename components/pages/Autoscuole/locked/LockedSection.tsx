@@ -17,7 +17,7 @@
 import * as React from "react";
 import { Ban, BookOpen, Car, GraduationCap, Users } from "lucide-react";
 
-import { ATTIVA_REGLO_URL } from "./locked-features";
+import { ATTIVA_REGLO_URL, SITE_URLS } from "./locked-features";
 import { AutoscuoleAgendaPage } from "@/components/pages/Autoscuole/AutoscuoleAgendaPage";
 import { demoAgendaBootstrap, DEMO_PENDING_CALLS } from "./demo-agenda";
 
@@ -164,7 +164,16 @@ export function LockedBackdrop({
 }
 
 /** La card del lucchetto, da sola: serve anche a chi compone il proprio sfondo. */
-export function LockedCard({ title, description }: { title: string; description: string }) {
+export function LockedCard({
+  title,
+  description,
+  scopriUrl,
+}: {
+  title: string;
+  description: string;
+  /** Pagina del sito che apre "Scopri di più" (REG-579). */
+  scopriUrl: string;
+}) {
   return (
     <div className="w-full max-w-[420px] rounded-[24px] bg-white p-7 text-center shadow-[0_26px_70px_rgba(10,20,30,0.14)]">
       <div className="mx-auto mb-3.5 flex h-[46px] w-[46px] items-center justify-center rounded-[14px] bg-[#f2f2f2]">
@@ -179,7 +188,7 @@ export function LockedCard({ title, description }: { title: string; description:
       </p>
       <div className="flex items-center justify-center gap-2.5">
         <a
-          href="https://reglo.it"
+          href={scopriUrl}
           target="_blank"
           rel="noreferrer"
           className="rounded-[32px] border-[1.5px] border-[#dddddd] bg-white px-5 py-2.5 text-[14px] font-semibold text-foreground transition-colors hover:border-[#b5b5b5]"
@@ -202,14 +211,16 @@ export function LockedCard({ title, description }: { title: string; description:
 export function LockedSection({
   title,
   description,
+  scopriUrl,
   preview,
 }: {
   title: string;
   description: string;
+  scopriUrl: string;
   /** Cosa si intravede dietro la card. Assente = solo la card. */
   preview?: LockedPreview;
 }) {
-  const card = <LockedCard title={title} description={description} />;
+  const card = <LockedCard title={title} description={description} scopriUrl={scopriUrl} />;
   if (!preview) {
     return <div className="flex min-h-[60vh] items-center justify-center p-6">{card}</div>;
   }
@@ -220,23 +231,35 @@ export function LockedSection({
 }
 
 /** Copy delle sezioni bloccate — dal prototipo. */
+/**
+ * Ogni sezione dice anche dove manda il suo "Scopri di più" (REG-579): la url
+ * viaggia nello spread `{...LOCKED_SECTIONS.x}`, quindi arriva anche a chi usa
+ * `LockedCard` da solo (l'overlay dell'agenda affiliata).
+ */
 export const LOCKED_SECTIONS = {
   agenda: {
+    scopriUrl: SITE_URLS.funzioni,
     title: "L'agenda che si riempie da sola",
     description:
       "L'agenda si costruisce da sola sulle disponibilità: niente slot sbagliati, niente telefonate.",
   },
   students: {
+    // Ripiego: il sito non ha una pagina dedicata agli allievi.
+    scopriUrl: SITE_URLS.prezzi,
     title: "Promossi e bocciati in un tap",
     description:
       "Dopo ogni esame segni l'esito direttamente dall'app: registro e percorso dell'allievo si aggiornano da soli.",
   },
   voice: {
+    scopriUrl: SITE_URLS.segretaria,
     title: "La segretaria che risponde anche quando tu non puoi",
     description:
       "Risponde 24/7 su orari, prezzi e documenti, raccoglie i numeri di chi vuole essere ricontattato e ti lascia qui le chiamate in sospeso.",
   },
   oreGuida: {
+    // Ripiego: la sezione "Tutto sotto controllo" della pagina Istruttori è la
+    // cosa più vicina a un report delle ore.
+    scopriUrl: SITE_URLS.istruttori,
     title: "Questo report esiste già. Ti manca solo Reglo.",
     description:
       "Per le autoscuole con Reglo attivo le ore si calcolano da sole. Tu le stai ancora contando a mano.",

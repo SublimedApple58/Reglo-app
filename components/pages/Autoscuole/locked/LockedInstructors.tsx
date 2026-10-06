@@ -26,7 +26,7 @@ import Image from "next/image";
 import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
-import { ATTIVA_REGLO_URL, VIDEO_ISTRUTTORI_URL } from "./locked-features";
+import { ATTIVA_REGLO_URL, SITE_URLS, VIDEO_ISTRUTTORI_URL } from "./locked-features";
 
 const NERO = "#111111";
 
@@ -94,11 +94,17 @@ const Fascia = ({ from, to }: { from: string; to: string }) => (
   </div>
 );
 
-/** I due pulsanti. "Gestione autonoma" nel prototipo non li ha. */
+/**
+ * I due pulsanti. "Gestione autonoma" nel prototipo non li ha.
+ *
+ * Qui "Scopri di più" porta sempre alla pagina Istruttori del sito (REG-579):
+ * tutte e tre le schede parlano dell'istruttore — disponibilità, malattia,
+ * ferie — ed è la stessa pagina del video della quarta.
+ */
 const CtaRow = () => (
   <div className="flex items-center justify-center gap-2.5">
     <a
-      href="https://reglo.it"
+      href={SITE_URLS.istruttori}
       target="_blank"
       rel="noreferrer"
       className="rounded-[32px] border-[1.5px] border-[#dddddd] px-5 py-2.5 text-[14px] font-semibold text-[#222222] transition-colors hover:border-[#b5b5b5]"

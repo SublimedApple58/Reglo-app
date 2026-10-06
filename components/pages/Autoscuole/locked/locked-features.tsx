@@ -18,6 +18,36 @@ import Image from "next/image";
 export const ATTIVA_REGLO_URL = "https://cal.com/reglo/attivazione-reglo";
 
 /**
+ * Dominio canonico del sito pubblico. Con il `www`: senza, si prende un
+ * redirect in più su ogni click, e prima di REG-579 metà dei link lo omettevano.
+ */
+const SITO = "https://www.reglo.it";
+
+/**
+ * Le pagine del sito a cui puntano i "Scopri di più" dei cartelli bloccati
+ * (REG-579). Prima erano **tutti** sulla homepage nuda: chi cliccava da
+ * "Segretaria AI" atterrava dove atterrava chi cliccava da "Veicoli", e doveva
+ * ritrovarsi l'argomento da solo.
+ *
+ * Non è una mappa argomento→url: è l'elenco delle **pagine che esistono**. Quale
+ * pagina tocchi a ogni cartello sta accanto al cartello, in `LOCKED_PANE_CARDS`
+ * / `LOCKED_SECTIONS` / le schede istruttore — così un cartello nuovo nasce con
+ * la sua destinazione sotto gli occhi di chi lo scrive.
+ *
+ * Quattro argomenti non hanno una pagina dedicata sul sito (Veicoli, Aspetto,
+ * Allievi, Report ore guida): ripiegano sulla più vicina, scelta da Tiziano
+ * incrociando il contenuto reale della landing.
+ */
+export const SITE_URLS = {
+  funzioni: `${SITO}/funzioni`,
+  prezzi: `${SITO}/prezzi`,
+  segretaria: `${SITO}/segretaria-virtuale`,
+  istruttori: `${SITO}/istruttori`,
+  novita: `${SITO}/novita`,
+  rinnovi: `${SITO}/rinnovi-automatici`,
+} as const;
+
+/**
  * Dove porta un riquadro "Guarda il video" di un cartello bloccato.
  *
  * Il prototipo disegna il riquadro col play ma non linka niente: il video
@@ -33,7 +63,7 @@ export const ATTIVA_REGLO_URL = "https://cal.com/reglo/attivazione-reglo";
  * Sta qui e non nel componente perché il prossimo riquadro video di un
  * cartello deve nascere già linkato, senza ricordarselo.
  */
-export const VIDEO_ISTRUTTORI_URL = "https://www.reglo.it/istruttori#video-autonoma";
+export const VIDEO_ISTRUTTORI_URL = `${SITE_URLS.istruttori}#video-autonoma`;
 
 export type LockedFeatureKey =
   | "utenti"

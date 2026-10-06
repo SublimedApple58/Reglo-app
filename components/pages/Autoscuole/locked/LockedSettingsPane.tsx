@@ -34,7 +34,7 @@ import {
   DURATION_COLOR_ENTRIES,
   LICENSE_COLOR_ENTRIES,
 } from "@/lib/autoscuole/agenda-color-criterion";
-import { ATTIVA_REGLO_URL } from "./locked-features";
+import { ATTIVA_REGLO_URL, SITE_URLS } from "./locked-features";
 import { DEMO_SETTINGS_PREVIEWS } from "./demo-settings";
 import { LockedInstructors } from "./LockedInstructors";
 
@@ -373,6 +373,8 @@ const SwapBadge = () => (
 
 type LockedPaneCard = {
   title: string;
+  /** Pagina del sito che apre "Scopri di più" (REG-579). */
+  scopriUrl: string;
   /** Riga sotto il titolo, dove il prototipo la ha. */
   subtitle?: string;
   /** Mini-anteprima dentro il cartello. Assente = solo titolo e paragrafo. */
@@ -388,6 +390,7 @@ type LockedPaneCard = {
 export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
   /* ── Prenotazioni e allievi › Generali ────────────────────────────── */
   "bookings:generali": {
+    scopriUrl: SITE_URLS.funzioni,
     title: "Prenotazioni in autonomia",
     ruleTight: true,
     preview: (
@@ -431,6 +434,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
 
   /* ── Prenotazioni e allievi › Limiti ──────────────────────────────── */
   "bookings:limiti": {
+    scopriUrl: SITE_URLS.funzioni,
     title: "Limiti di prenotazione",
     ruleTight: true,
     preview: (
@@ -463,6 +467,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
 
   /* ── Prenotazioni e allievi › Guide ───────────────────────────────── */
   "bookings:guide": {
+    scopriUrl: SITE_URLS.funzioni,
     title: "Scambi tra allievi",
     subtitle:
       "Un imprevisto? Gli allievi si scambiano le guide da soli, senza passare dalla segreteria.",
@@ -498,6 +503,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
 
   /* ── Prenotazioni e allievi › App allievi ─────────────────────────── */
   "bookings:app": {
+    scopriUrl: SITE_URLS.funzioni,
     title: "App allievi",
     preview: (
       <>
@@ -535,6 +541,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
 
   /* ── Prenotazioni e allievi › Crediti e prezzi ────────────────────── */
   "bookings:crediti": {
+    scopriUrl: SITE_URLS.prezzi,
     title: "Crediti e prezzi",
     preview: (
       <>
@@ -568,6 +575,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
 
   /* ── Policy tipi guida ────────────────────────────────────────────── */
   policy: {
+    scopriUrl: SITE_URLS.funzioni,
     title: "Policy tipi guida",
     // Il prototipo qui stringe il cartello a 400px.
     width: 400,
@@ -600,6 +608,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
 
   /* ── Promemoria e notifiche ───────────────────────────────────────── */
   reminders: {
+    scopriUrl: SITE_URLS.funzioni,
     title: "Promemoria e notifiche",
     preview: (
       <>
@@ -669,6 +678,8 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
 
   /* ── Veicoli ──────────────────────────────────────────────────────── */
   vehicles: {
+    // Ripiego: il sito non ha una pagina dedicata a questo argomento.
+    scopriUrl: SITE_URLS.prezzi,
     title: "I tuoi veicoli",
     subtitle:
       "Aggiungi i veicoli alle guide per avere più dettagli: ogni guida ha il suo mezzo, sempre.",
@@ -708,6 +719,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
 
   /* ── Segretaria › Linea ───────────────────────────────────────────── */
   "voice:linea": {
+    scopriUrl: SITE_URLS.segretaria,
     title: "Linea telefonica",
     subtitle:
       "Un numero dedicato a cui la segretaria AI risponde 24/7, mentre tu resti sulle guide.",
@@ -737,6 +749,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
 
   /* ── Segretaria › Comportamento ed azioni ─────────────────────────── */
   "voice:comportamento": {
+    scopriUrl: SITE_URLS.segretaria,
     title: "Comportamento ed azioni",
     subtitle:
       "Decidi cosa può fare e come si presenta: saluto personalizzato, FAQ e prenotazioni vocali.",
@@ -763,6 +776,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
 
   /* ── Segretaria › Orari e registrazioni ───────────────────────────── */
   "voice:orari": {
+    scopriUrl: SITE_URLS.segretaria,
     title: "Orari e registrazioni",
     subtitle: "Scegli giorni e fasce orarie in cui risponde, e cosa registrare delle chiamate.",
     preview: (
@@ -790,6 +804,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
 
   /* ── Segretaria › Istruzioni ──────────────────────────────────────── */
   "voice:istruzioni": {
+    scopriUrl: SITE_URLS.segretaria,
     title: "Istruzioni",
     subtitle:
       "Dai alla segretaria le informazioni della tua autoscuola: risponde seguendo le tue regole.",
@@ -816,6 +831,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
 
   /* ── Sezioni che il prototipo non ha: stessa forma, senza anteprima ── */
   evaluation: {
+    scopriUrl: SITE_URLS.novita,
     title: "Pagellino di valutazione",
     /*
       A differenza degli altri mockup, che sono disegnati in markup, questo è
@@ -838,6 +854,8 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
       "Alla fine di ogni guida l'istruttore dà un voto sulle voci che decidi tu: l'allievo vede i suoi progressi e tu sai chi è pronto per l'esame.",
   },
   aspetto: {
+    // Ripiego: il sito non ha una pagina dedicata a questo argomento.
+    scopriUrl: SITE_URLS.funzioni,
     title: "Aspetto",
     preview: (
       <>
@@ -952,17 +970,25 @@ function LocationsEmptyState() {
         creare le prenotazioni, poi potrai gestire eventuali{" "}
         <b className="font-semibold text-foreground">luoghi extra</b>.
       </p>
-      <CtaRow />
+      {/* Sede: non è uno dei cartelli di LOCKED_PANE_CARDS, ma mostra gli stessi
+          due pulsanti. Nella mappatura di REG-579 era sfuggito. */}
+      <CtaRow scopriUrl={SITE_URLS.funzioni} />
     </div>
   );
 }
 
-/** I due pulsanti, identici in ogni cartello. Primario nero. */
-function CtaRow() {
+/**
+ * I due pulsanti, identici in ogni cartello. Primario nero.
+ *
+ * `scopriUrl` è obbligatorio di proposito (REG-579): prima era una costante
+ * dentro il componente e tutti i cartelli finivano sulla homepage. Chiedendolo
+ * al chiamante, un cartello nuovo non compila finché non si sceglie dove manda.
+ */
+function CtaRow({ scopriUrl }: { scopriUrl: string }) {
   return (
     <div className="flex items-center justify-center gap-2.5">
       <a
-        href="https://reglo.it"
+        href={scopriUrl}
         target="_blank"
         rel="noreferrer"
         className="rounded-[32px] border-[1.5px] border-[#dddddd] px-5 py-2.5 text-[14px] font-semibold text-[#222222] transition-colors hover:border-[#b5b5b5]"
@@ -1005,7 +1031,7 @@ function LockedCardBody({ card }: { card: LockedPaneCard }) {
       ) : (
         <div className="mb-4 mt-[18px]" />
       )}
-      <CtaRow />
+      <CtaRow scopriUrl={card.scopriUrl} />
     </>
   );
 }
