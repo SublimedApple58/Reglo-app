@@ -577,7 +577,11 @@ function InstructorList({ onOpen }: { onOpen: (key: string) => void }) {
           <button
             type="button"
             onClick={() => onOpen(item.key)}
-            className="shrink-0 cursor-pointer text-[13px] font-semibold text-[#444444] underline underline-offset-2 transition-colors hover:text-foreground"
+            // Hover standard dei link sottolineati del sito (lo stesso di
+            // "Gestisci" nella tab Istruttori vera): il filo passa da 1 a 2px e
+            // il testo va al nero. Qui prima c'era solo il cambio di colore,
+            // quindi la riga sembrava morta al passaggio del mouse.
+            className="shrink-0 cursor-pointer text-[13px] font-semibold text-[#222222] underline decoration-1 underline-offset-2 transition-all hover:text-black hover:decoration-2"
           >
             Scopri
           </button>
