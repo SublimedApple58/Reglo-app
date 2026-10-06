@@ -30,6 +30,10 @@ import * as React from "react";
 import Image from "next/image";
 
 import { cn } from "@/lib/utils";
+import {
+  DURATION_COLOR_ENTRIES,
+  LICENSE_COLOR_ENTRIES,
+} from "@/lib/autoscuole/agenda-color-criterion";
 import { ATTIVA_REGLO_URL } from "./locked-features";
 import { DEMO_SETTINGS_PREVIEWS } from "./demo-settings";
 import { LockedInstructors } from "./LockedInstructors";
@@ -157,6 +161,66 @@ const BoxChoice = ({
   >
     {checked ? "✓ " : ""}
     {children}
+    {cursor ? (
+      <svg width="17" height="20" viewBox="0 0 17 20" fill="none" className="absolute -bottom-3 -right-1.5" aria-hidden>
+        <path
+          d="M1.5 1.2v14.4l3.9-3.9 2.5 5.7 2.6-1.2-2.5-5.6h5.4L1.5 1.2z"
+          fill="#111118"
+          stroke="#ffffff"
+          strokeWidth="1.2"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ) : null}
+  </span>
+);
+
+/**
+ * Le due scelte del criterio colore (Aspetto), con sotto le pastiglie dei
+ * colori veri — gli stessi `DURATION_COLOR_ENTRIES` / `LICENSE_COLOR_ENTRIES`
+ * che l'agenda usa davvero: qui il colore **è** il contenuto, mostrarlo finto
+ * sarebbe una promessa diversa dal prodotto.
+ *
+ * Stessa grammatica di `BoxChoice` (bordo 1.5px, nero se scelto, puntatore
+ * disegnato) ma incolonnata: etichetta sopra, colori sotto.
+ */
+const CriterionChoice = ({
+  checked,
+  cursor,
+  label,
+  swatches,
+}: {
+  checked?: boolean;
+  cursor?: boolean;
+  label: string;
+  swatches: string[];
+}) => (
+  <span
+    className={cn(
+      "relative flex flex-col gap-2.5 rounded-[12px] border-[1.5px] px-3.5 py-3",
+      checked
+        ? "border-[#111111] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.12)]"
+        : "border-[#e4e4ea]",
+    )}
+  >
+    <span
+      className={cn(
+        "text-[13px]",
+        checked ? "font-semibold text-[#222222]" : "font-medium text-[#6a6a6a]",
+      )}
+    >
+      {checked ? "✓ " : ""}
+      {label}
+    </span>
+    <span className="flex items-center gap-1.5">
+      {swatches.map((hex) => (
+        <span
+          key={hex}
+          className="h-[9px] w-[26px] rounded-full"
+          style={{ backgroundColor: hex }}
+        />
+      ))}
+    </span>
     {cursor ? (
       <svg width="17" height="20" viewBox="0 0 17 20" fill="none" className="absolute -bottom-3 -right-1.5" aria-hidden>
         <path
@@ -775,8 +839,28 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
   },
   aspetto: {
     title: "Aspetto",
+    preview: (
+      <>
+        <MiniLabel className="mb-2.5">Colore dei blocchi in agenda</MiniLabel>
+        <div className="grid grid-cols-2 gap-2.5">
+          <CriterionChoice
+            checked
+            cursor
+            label="Durata guida"
+            swatches={DURATION_COLOR_ENTRIES.slice(0, 4).map((entry) => entry.bgHex)}
+          />
+          <CriterionChoice
+            label="Tipo patente"
+            swatches={["b", "autom", "am", "a"].map(
+              (key) =>
+                LICENSE_COLOR_ENTRIES.find((entry) => entry.key === key)?.bgHex ?? "#eeeeee",
+            )}
+          />
+        </div>
+      </>
+    ),
     description:
-      "Ordine delle colonne in agenda, colori e preferenze di visualizzazione della tua autoscuola.",
+      "Colora l'agenda per durata o patente, scegli come scrivere i nomi degli allievi e dai a ogni istruttore il suo colore.",
   },
 };
 
