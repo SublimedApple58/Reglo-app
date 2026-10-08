@@ -83,6 +83,7 @@ import {
 import { cn } from "@/lib/utils";
 import { FieldGroup } from "@/components/ui/field-group";
 import { TRANSMISSION_LABELS, isMotoLicenseCategory, vehicleServesLicense, type Transmission } from "@/lib/autoscuole/license";
+import { pathForDate } from "@/lib/autoscuole/license-paths";
 import { resolvePrefilledLocationId } from "@/lib/autoscuole/location-for-license";
 import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, motoLessonTypeLabel, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
 import { instructorTintStyles } from "@/lib/autoscuole/instructor-colors";
@@ -141,7 +142,7 @@ import {
 import { NeverAccessedNudge } from "@/components/pages/Autoscuole/NeverAccessedNudge";
 import { UserPhotoCircle } from "@/components/ui/user-photo";
 
-type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; lastVehicleId?: string | null; neverAccessed?: boolean; studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO"; examReady?: boolean; examReadyAt?: string | null; licenseNumber?: string | null; defaultLocationId?: string | null; consorzioSchoolId?: string | null; consorzioSchoolName?: string | null };
+type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; lastVehicleId?: string | null; neverAccessed?: boolean; studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO"; examReady?: boolean; examReadyAt?: string | null; licenseNumber?: string | null; defaultLocationId?: string | null; consorzioSchoolId?: string | null; consorzioSchoolName?: string | null; /** REG-458 — presente solo con piu' di un percorso alle spalle. */ licenseHistory?: { licenseCategory: string | null; transmission: string | null; startedAt: string }[] };
 type ResourceOption = {
   id: string;
   name: string;
@@ -3279,11 +3280,32 @@ export function AutoscuoleAgendaPage({
     }
     return map;
   }, [students]);
+  // REG-458 — chi ha piu' di un percorso alle spalle porta lo storico con se'
+  // (il backend lo manda solo in quel caso). Senza, la patente di una guida era
+  // quella CORRENTE dell'allievo: aprire la A dopo la B ricolorava di moto tutte
+  // le guide in auto gia' fatte, all'indietro.
+  const licenseHistoryById = React.useMemo(() => {
+    const map = new Map<string, NonNullable<StudentOption["licenseHistory"]>>();
+    for (const s of students) {
+      if (s.licenseHistory?.length) map.set(s.id, s.licenseHistory);
+    }
+    return map;
+  }, [students]);
+
   // Group lessons aggregate several students — no single license to show.
   const licenseTagFor = React.useCallback(
-    (item: AppointmentRow): string | null =>
-      item.type === "group_lesson" ? null : studentLicenseById.get(item.student.id) ?? null,
-    [studentLicenseById],
+    (item: AppointmentRow): string | null => {
+      if (item.type === "group_lesson") return null;
+      const history = licenseHistoryById.get(item.student.id);
+      if (history) {
+        const path = pathForDate(history, item.startsAt);
+        if (path?.licenseCategory) {
+          return `${path.licenseCategory}${path.transmission === "automatic" ? " autom." : ""}`;
+        }
+      }
+      return studentLicenseById.get(item.student.id) ?? null;
+    },
+    [licenseHistoryById, studentLicenseById],
   );
 
   // Allievi che non hanno mai aperto l'app (account creato dal titolare, mai

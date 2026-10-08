@@ -72,6 +72,7 @@ import {
   syncMemberMirror,
   updateOpenPath,
 } from "@/lib/autoscuole/license-path-writes";
+import { openPath, pathForDate } from "@/lib/autoscuole/license-paths";
 import { FOLLOW_CAR_CATEGORY, parseFollowCarRulesFromLimits, type FollowCarRules } from "@/lib/autoscuole/follow-car";
 import { MOTO_LESSON_TYPES } from "@/lib/autoscuole/moto-lesson-type";
 import {
@@ -851,6 +852,37 @@ const listDirectoryStudents = async (companyId: string) => {
     members.map((member) => member.user.id),
   );
 
+  // REG-458 — lo storico dei percorsi serve all'agenda per colorare una guida
+  // con la patente che l'allievo stava facendo ALLORA, invece che con quella di
+  // adesso (prima, cambiare percorso ricolorava all'indietro tutto lo storico).
+  //
+  // Viaggia **solo per chi ha piu' di un percorso**: l'agenda e' un percorso
+  // caldo, e per tutti gli altri — cioe' oggi per tutti — la patente corrente
+  // basta e il payload non cresce di un byte.
+  const allPaths = await prisma.autoscuolaLicensePath.findMany({
+    where: { companyId, studentId: { in: members.map((m) => m.userId) } },
+    select: {
+      studentId: true,
+      licenseCategory: true,
+      transmission: true,
+      startedAt: true,
+    },
+    orderBy: { startedAt: "asc" },
+  });
+  const historyByStudent = new Map<
+    string,
+    { licenseCategory: string | null; transmission: string | null; startedAt: string }[]
+  >();
+  for (const path of allPaths) {
+    const current = historyByStudent.get(path.studentId) ?? [];
+    current.push({
+      licenseCategory: path.licenseCategory,
+      transmission: path.transmission,
+      startedAt: path.startedAt.toISOString(),
+    });
+    historyByStudent.set(path.studentId, current);
+  }
+
   return members.map((member) => ({
     ...toStudentProfile(member.user, member.createdAt, neverAccessed),
     assignedInstructorId: member.assignedInstructorId ?? null,
@@ -871,6 +903,11 @@ const listDirectoryStudents = async (companyId: string) => {
     defaultLocationName: member.defaultLocation?.name ?? null,
     consorzioSchoolId: member.consorzioSchoolId ?? null,
     consorzioSchoolName: member.consorzioSchool?.name ?? null,
+    // Presente solo con piu' di un percorso alle spalle (vedi sopra).
+    licenseHistory:
+      (historyByStudent.get(member.userId)?.length ?? 0) > 1
+        ? historyByStudent.get(member.userId)
+        : undefined,
   }));
 };
 
@@ -1739,6 +1776,18 @@ type DrivingRegisterCaseRow = {
   updatedAt: Date;
 };
 
+type DrivingRegisterPathRow = {
+  id: string;
+  studentId: string;
+  licenseCategory: string | null;
+  transmission: string | null;
+  status: string;
+  startedAt: Date;
+  closedAt: Date | null;
+  obtainedAt: Date | null;
+  licenseNumber: string | null;
+};
+
 type DrivingRegisterLessonRow = {
   id: string;
   studentId: string;
@@ -1774,9 +1823,12 @@ function isCompanyManualMode(config: {
 const buildDrivingRegisterData = ({
   cases,
   lessons,
+  paths = [],
 }: {
   cases: DrivingRegisterCaseRow[];
   lessons: DrivingRegisterLessonRow[];
+  /** REG-458 — i percorsi patente dell'allievo. Vuoto = comportamento storico. */
+  paths?: DrivingRegisterPathRow[];
 }) => {
   const activeCase =
     [...cases]
@@ -1812,7 +1864,20 @@ const buildDrivingRegisterData = ({
   // Obbligo: contano SOLO le guide da 60 minuti (stesso criterio dei flag
   // dell'agenda). `byLessonType` qui sopra continua invece a contare tutte le
   // guide completate: è un riepilogo dei tipi svolti, non dell'obbligo.
-  const summaryCount = completedLessons.filter(isMandatoryLessonDuration).length;
+  //
+  // REG-458 — e contano solo quelle del percorso IN CORSO. Prima si contava
+  // tutta la vita dell'allievo in autoscuola: chi apriva un secondo percorso se
+  // lo trovava gia' a "Obbligo completato" il primo giorno. Senza percorso
+  // aperto (allievo patentato, o nato prima che il percorso esistesse) resta il
+  // conteggio di sempre: niente cambia per nessuno il giorno del rilascio,
+  // perche' dopo il backfill ogni allievo ha un percorso solo e lo copre tutto.
+  const activePath = openPath(paths);
+  const mandatoryLessons = completedLessons.filter(isMandatoryLessonDuration);
+  const summaryCount = activePath
+    ? mandatoryLessons.filter(
+        (lesson) => pathForDate(paths, lesson.startsAt)?.id === activePath.id,
+      ).length
+    : mandatoryLessons.length;
 
   return {
     activeCase: activeCase
@@ -1822,6 +1887,21 @@ const buildDrivingRegisterData = ({
           category: activeCase.category,
         }
       : null,
+    /// REG-458 — percorsi patente, dal piu' vecchio al piu' recente. Alimentano
+    /// la sezione "Patenti conseguite" del dettaglio allievo e il
+    /// raggruppamento del tab Guide.
+    licensePaths: [...paths]
+      .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime())
+      .map((p) => ({
+        id: p.id,
+        licenseCategory: p.licenseCategory,
+        transmission: p.transmission,
+        status: p.status,
+        startedAt: p.startedAt.toISOString(),
+        closedAt: p.closedAt ? p.closedAt.toISOString() : null,
+        obtainedAt: p.obtainedAt ? p.obtainedAt.toISOString() : null,
+        licenseNumber: p.licenseNumber,
+      })),
     summary: {
       completedLessons: summaryCount,
       requiredLessons: REQUIRED_LESSONS_COUNT,
@@ -1916,7 +1996,7 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
 
     const studentIds = students.map((student) => student.id);
 
-    const [cases, lessons] = await Promise.all([
+    const [cases, lessons, licensePaths] = await Promise.all([
       prisma.autoscuolaCase.findMany({
         where: {
           companyId,
@@ -1952,6 +2032,23 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
         },
         take: 5000,
       }),
+      // REG-458 — servono a contare l'obbligo sul percorso in corso invece che
+      // su tutta la vita dell'allievo.
+      prisma.autoscuolaLicensePath.findMany({
+        where: { companyId, studentId: { in: studentIds } },
+        select: {
+          id: true,
+          studentId: true,
+          licenseCategory: true,
+          transmission: true,
+          status: true,
+          startedAt: true,
+          closedAt: true,
+          obtainedAt: true,
+          licenseNumber: true,
+        },
+        take: 5000,
+      }),
     ]);
 
     const manualMode = isCompanyManualMode(
@@ -1963,6 +2060,13 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
       const current = casesByStudent.get(item.studentId) ?? [];
       current.push(item);
       casesByStudent.set(item.studentId, current);
+    }
+
+    const pathsByStudent = new Map<string, DrivingRegisterPathRow[]>();
+    for (const item of licensePaths) {
+      const current = pathsByStudent.get(item.studentId) ?? [];
+      current.push(item);
+      pathsByStudent.set(item.studentId, current);
     }
 
     const lessonsByStudent = new Map<string, DrivingRegisterLessonRow[]>();
@@ -1983,6 +2087,7 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
         const register = buildDrivingRegisterData({
           cases: studentCases,
           lessons: lessonsByStudent.get(student.id) ?? [],
+          paths: pathsByStudent.get(student.id) ?? [],
         });
         const studentLessons = lessonsByStudent.get(student.id) ?? [];
         const manualUnpaid = studentLessons.filter((l) => isLessonUnpaid(l, manualMode)).length;
@@ -2122,7 +2227,7 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
       return { success: false, message: "Allievo non trovato." };
     }
 
-    const [cases, lessons] = await Promise.all([
+    const [cases, lessons, licensePaths] = await Promise.all([
       prisma.autoscuolaCase.findMany({
         where: { companyId, studentId },
         select: {
@@ -2189,6 +2294,22 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
         },
         orderBy: { startsAt: "desc" },
       }),
+      // REG-458 — i percorsi patente alimentano sia il conteggio dell'obbligo
+      // sul percorso in corso sia la sezione "Patenti conseguite" del drawer.
+      prisma.autoscuolaLicensePath.findMany({
+        where: { companyId, studentId },
+        select: {
+          id: true,
+          studentId: true,
+          licenseCategory: true,
+          transmission: true,
+          status: true,
+          startedAt: true,
+          closedAt: true,
+          obtainedAt: true,
+          licenseNumber: true,
+        },
+      }),
     ]);
 
     // Group-lesson fill (N/M) + kind, so the student history can flag which
@@ -2200,7 +2321,11 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
     const lessonRows = lessons.filter(
       (l): l is (typeof lessons)[number] & { studentId: string } => l.studentId != null,
     );
-    const register = buildDrivingRegisterData({ cases, lessons: lessonRows });
+    const register = buildDrivingRegisterData({
+      cases,
+      lessons: lessonRows,
+      paths: licensePaths,
+    });
     const student = toStudentProfile(studentMembership.user, studentMembership.createdAt);
 
     // Exam priority info
