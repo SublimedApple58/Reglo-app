@@ -8938,6 +8938,34 @@ const notifyExamStudents = async ({
   );
 };
 
+/**
+ * «🎓 Esame fissato» — pubblica perché serve anche alla rotta mobile, dove il
+ * ramo **istruttore** di `POST /api/autoscuole/exam` chiama
+ * `materializeExamSlot` direttamente invece di passare da `createExamEvent`.
+ * Senza questa, un esame creato dall'istruttore sarebbe rimasto muto mentre
+ * quello creato dal titolare avvisava.
+ */
+export const notifyExamStudentsOnCreate = async ({
+  companyId,
+  studentIds,
+  startsAt,
+  endsAt,
+}: {
+  companyId: string;
+  studentIds: string[];
+  startsAt: Date;
+  endsAt: Date | null;
+}) =>
+  notifyExamStudents({
+    companyId,
+    studentIds,
+    startsAt,
+    endsAt,
+    kind: "exam_scheduled",
+    reason: "created",
+    text: examCreatedText({ type: "esame", startsAt, endsAt }),
+  });
+
 const createExamEventSchema = z.object({
   studentIds: z.array(z.string().uuid()),
   startsAt: z.string(),
@@ -9085,14 +9113,11 @@ export async function createExamEvent(
     if (payload.studentIds.length) {
       const examStudentIds = payload.studentIds;
       after(() =>
-        notifyExamStudents({
+        notifyExamStudentsOnCreate({
           companyId,
           studentIds: examStudentIds,
           startsAt,
           endsAt,
-          kind: "exam_scheduled",
-          reason: "created",
-          text: examCreatedText({ type: "esame", startsAt, endsAt }),
         }),
       );
     }
@@ -9155,14 +9180,11 @@ export async function addExamStudent(
     const addedEndsAt = payload.endsAt ? new Date(payload.endsAt) : null;
     const addedStudentId = payload.studentId;
     after(() =>
-      notifyExamStudents({
+      notifyExamStudentsOnCreate({
         companyId,
         studentIds: [addedStudentId],
         startsAt: addedStartsAt,
         endsAt: addedEndsAt,
-        kind: "exam_scheduled",
-        reason: "created",
-        text: examCreatedText({ type: "esame", startsAt: addedStartsAt, endsAt: addedEndsAt }),
       }),
     );
 
