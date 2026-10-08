@@ -20,7 +20,7 @@ export async function GET() {
     // quizSeatGrantedAt, licenseCategory, transmission — are already in hand. No
     // need to re-query CompanyMember. The two remaining reads (service config +
     // latest case) are independent → one parallel wave instead of two awaits.
-    const [limits, latestCase] = await Promise.all([
+    const [limits, latestCase, obtainedPaths] = await Promise.all([
       // Per-company configuration: which phases are active and whether
       // auto-assign on signup is enabled. Read through the Redis SETTINGS cache
       // (5min TTL) — same limits object slots/booking already share — instead of
@@ -33,6 +33,19 @@ export async function GET() {
         },
         orderBy: { createdAt: "desc" },
         select: { theoryExamAt: true, drivingExamAt: true },
+      }),
+      // REG-458 — le patenti che l'allievo ha GIÀ conseguito. Senza, l'app gli
+      // direbbe che sta ricominciando da capo: la timeline del percorso
+      // tornerebbe a "Foglio rosa" come se la prima patente non fosse mai
+      // successa, e la schermata di fine percorso non saprebbe dire quale.
+      prisma.autoscuolaLicensePath.findMany({
+        where: {
+          companyId: membership.companyId,
+          studentId: membership.userId,
+          status: "obtained",
+        },
+        select: { licenseCategory: true, obtainedAt: true, closedAt: true },
+        orderBy: { closedAt: "desc" },
       }),
     ]);
     const phasesEnabled: ("TEORIA" | "PRATICA")[] = Array.isArray(limits.phasesEnabled)
@@ -67,6 +80,11 @@ export async function GET() {
         licenseCategory: membership.licenseCategory ?? null,
         transmission: membership.transmission ?? null,
         needsLicensePath,
+        /// Dalla più recente. Vuoto per chi è al primo percorso, cioè quasi tutti.
+        obtainedLicenses: obtainedPaths.map((path) => ({
+          licenseCategory: path.licenseCategory,
+          obtainedAt: (path.obtainedAt ?? path.closedAt)?.toISOString() ?? null,
+        })),
       },
     });
   } catch (error) {
