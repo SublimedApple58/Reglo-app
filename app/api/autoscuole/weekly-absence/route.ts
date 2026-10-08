@@ -7,7 +7,7 @@ import {
   parseInstructorSettings,
   buildCompanyBookingDefaults,
 } from "@/lib/autoscuole/instructor-clusters";
-import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
+import { notifyAutoscuolaUser, PUSH_ONLY } from "@/lib/autoscuole/notify";
 import { isInstructor } from "@/lib/autoscuole/roles";
 
 const postSchema = z.object({
@@ -85,22 +85,20 @@ export async function POST(request: Request) {
     // Notify instructor
     if (member.assignedInstructor.userId) {
       const studentName = member.user?.name ?? "Un allievo";
-      try {
-        await sendAutoscuolaPushToUsers({
-          companyId: membership.companyId,
-          userIds: [member.assignedInstructor.userId],
-          title: "Assenza settimanale",
-          body: `${studentName} ha dichiarato assenza per la settimana del ${payload.weekStart}.`,
-          data: {
-            kind: "weekly_absence",
-            studentId: membership.userId,
-            studentName: studentName,
-            weekStart: payload.weekStart,
-          },
-        });
-      } catch (error) {
-        console.error("Weekly absence push error", error);
-      }
+      await notifyAutoscuolaUser({
+        companyId: membership.companyId,
+        kind: "weekly_absence",
+        audience: "instructor",
+        recipient: { userId: member.assignedInstructor.userId },
+        supports: PUSH_ONLY,
+        title: "Assenza settimanale",
+        body: `${studentName} ha dichiarato assenza per la settimana del ${payload.weekStart}.`,
+        data: {
+          studentId: membership.userId,
+          studentName: studentName,
+          weekStart: payload.weekStart,
+        },
+      });
     }
 
     return NextResponse.json({ success: true, data: absence });

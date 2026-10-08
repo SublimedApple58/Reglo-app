@@ -1,4 +1,5 @@
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
+import { notifyAutoscuolaUser, PUSH_ONLY } from "@/lib/autoscuole/notify";
 
 export type StudentPhase = "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
 
@@ -65,19 +66,14 @@ export async function notifyStudentPhaseChange({
   const copy = copyFor(fromPhase, toPhase);
   if (!copy) return;
 
-  try {
-    await sendAutoscuolaPushToUsers({
-      companyId,
-      userIds: [studentUserId],
-      title: copy.title,
-      body: copy.body,
-      data: {
-        kind: "student_phase_change",
-        fromPhase,
-        toPhase,
-      },
-    });
-  } catch (error) {
-    console.error("[student-phase-notifications] push failed", error);
-  }
+  await notifyAutoscuolaUser({
+    companyId,
+    kind: "student_phase_change",
+    audience: "student",
+    recipient: { userId: studentUserId },
+    supports: PUSH_ONLY,
+    title: copy.title,
+    body: copy.body,
+    data: { fromPhase, toPhase },
+  });
 }

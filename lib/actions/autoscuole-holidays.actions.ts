@@ -6,6 +6,8 @@ import { sendDynamicEmail } from "@/email";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
+// REG-604: un solo punto di invio, che rispetta i canali dell'autoscuola.
+import { notifyAutoscuolaUser, notifyAutoscuolaUsers, PUSH_ONLY } from "@/lib/autoscuole/notify";
 import { refundLessonCreditIfEligible } from "@/lib/autoscuole/payments";
 import { isOwner } from "@/lib/autoscuole/roles";
 import {
@@ -200,39 +202,23 @@ export async function createHoliday(
             ? `L'autoscuola sarà chiusa il ${dateLabel}. La tua guida è stata cancellata.`
             : `L'autoscuola sarà chiusa il ${dateLabel}. Le tue ${count} guide sono state cancellate.`;
 
-        try {
-          await sendAutoscuolaPushToUsers({
-            companyId: membership.companyId,
-            userIds: [studentId],
-            title,
-            body,
-            data: {
-              kind: "holiday_declared",
-              date: date.toISOString(),
-              appointmentsCancelled: true,
-              cancelledCount: count,
-            },
-          });
-        } catch (error) {
-          console.error("Holiday push notification error", error);
-        }
-
-        // Send email
-        try {
-          const studentUser = await prisma.user.findUnique({
-            where: { id: studentId },
-            select: { email: true },
-          });
-          if (studentUser?.email) {
-            await sendDynamicEmail({
-              to: studentUser.email,
-              subject: title,
-              body,
-            });
-          }
-        } catch (error) {
-          console.error("Holiday email error", error);
-        }
+        const studentUser = await prisma.user.findUnique({
+          where: { id: studentId },
+          select: { email: true, phone: true },
+        });
+        await notifyAutoscuolaUser({
+          companyId: membership.companyId,
+          kind: "holiday_declared",
+          audience: "student",
+          recipient: { userId: studentId, email: studentUser?.email, phone: studentUser?.phone },
+          title,
+          body,
+          data: {
+            date: date.toISOString(),
+            appointmentsCancelled: true,
+            cancelledCount: count,
+          },
+        });
       }
     } else {
       // Notify all students with appointments that day (without cancellation)
@@ -257,21 +243,18 @@ export async function createHoliday(
         const title = "🏖️ Giorno festivo";
         const body = `L'autoscuola sarà chiusa il ${dateLabel}.`;
 
-        try {
-          await sendAutoscuolaPushToUsers({
+        await notifyAutoscuolaUsers(
+          uniqueStudentIds.map((userId) => ({ userId })),
+          {
             companyId: membership.companyId,
-            userIds: uniqueStudentIds,
+            kind: "holiday_declared",
+            audience: "student",
+            supports: PUSH_ONLY,
             title,
             body,
-            data: {
-              kind: "holiday_declared",
-              date: date.toISOString(),
-              appointmentsCancelled: false,
-            },
-          });
-        } catch (error) {
-          console.error("Holiday push notification error", error);
-        }
+            data: { date: date.toISOString(), appointmentsCancelled: false },
+          },
+        );
       }
     }
 
@@ -393,37 +376,23 @@ export async function createHolidayRange(
           count === 1
             ? `L'autoscuola sarà chiusa ${when}. La tua guida è stata cancellata.`
             : `L'autoscuola sarà chiusa ${when}. Le tue ${count} guide sono state cancellate.`;
-        try {
-          await sendAutoscuolaPushToUsers({
-            companyId: membership.companyId,
-            userIds: [studentId],
-            title,
-            body,
-            data: {
-              kind: "holiday_declared",
-              date: start.toISOString(),
-              appointmentsCancelled: true,
-              cancelledCount: count,
-            },
-          });
-        } catch (error) {
-          console.error("Holiday push notification error", error);
-        }
-        try {
-          const studentUser = await prisma.user.findUnique({
-            where: { id: studentId },
-            select: { email: true },
-          });
-          if (studentUser?.email) {
-            await sendDynamicEmail({
-              to: studentUser.email,
-              subject: title,
-              body,
-            });
-          }
-        } catch (error) {
-          console.error("Holiday email error", error);
-        }
+        const studentUser = await prisma.user.findUnique({
+          where: { id: studentId },
+          select: { email: true, phone: true },
+        });
+        await notifyAutoscuolaUser({
+          companyId: membership.companyId,
+          kind: "holiday_declared",
+          audience: "student",
+          recipient: { userId: studentId, email: studentUser?.email, phone: studentUser?.phone },
+          title,
+          body,
+          data: {
+            date: start.toISOString(),
+            appointmentsCancelled: true,
+            cancelledCount: count,
+          },
+        });
       }
     } else {
       // Nessuna cancellazione: avvisa una volta gli allievi con guide nel periodo.
@@ -440,21 +409,18 @@ export async function createHolidayRange(
       ];
       if (uniqueStudentIds.length > 0) {
         const body = `L'autoscuola sarà chiusa ${when}.`;
-        try {
-          await sendAutoscuolaPushToUsers({
+        await notifyAutoscuolaUsers(
+          uniqueStudentIds.map((userId) => ({ userId })),
+          {
             companyId: membership.companyId,
-            userIds: uniqueStudentIds,
+            kind: "holiday_declared",
+            audience: "student",
+            supports: PUSH_ONLY,
             title,
             body,
-            data: {
-              kind: "holiday_declared",
-              date: start.toISOString(),
-              appointmentsCancelled: false,
-            },
-          });
-        } catch (error) {
-          console.error("Holiday push notification error", error);
-        }
+            data: { date: start.toISOString(), appointmentsCancelled: false },
+          },
+        );
       }
     }
 

@@ -1,5 +1,17 @@
 # Communications
 
+> **REG-604 — i canali non sono più solo dei promemoria.**
+> `parseReminderChannels` e il default dei canali vivono ora in
+> `lib/autoscuole/reminder-channels.ts`, condivisi con tutte le altre
+> comunicazioni del prodotto (`lib/autoscuole/notify.ts`). Qui dentro non
+> cambia niente: la cascata dei promemoria resta la sua, perché ci sono dentro
+> il motore delle regole e i template Meta. Due modifiche al comportamento:
+> l'**esame senza orario** è escluso dal promemoria «N minuti prima» (allievo e
+> istruttore: altrimenti il push partiva alle 23:00 della sera prima), e il
+> promemoria **all'istruttore** dice «esame» quando è un esame, non «guida».
+> Via anche l'anglicismo «Reminder guida» dai titoli push.
+> Vedi [notifications.md](notifications.md).
+
 > **Veste delle email**: il contenitore è unico, in `email/template.ts` — vedi
 > [email-template.md](email-template.md). Qui si decide *cosa* dice il messaggio
 > (e che canali usa), lì *com'è fatta* la mail.

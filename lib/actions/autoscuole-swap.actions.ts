@@ -6,6 +6,8 @@ import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { sendDynamicEmail } from "@/email";
 import { deliverWhatsApp } from "@/lib/autoscuole/whatsapp-delivery";
+// REG-604: punto di invio unico. Le offerte conservano `slotFillChannels`.
+import { notifyAutoscuolaUser, notifyAutoscuolaUsers, PUSH_ONLY } from "@/lib/autoscuole/notify";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import { adjustStudentLessonCredits } from "@/lib/autoscuole/payments";
 import {
@@ -394,58 +396,31 @@ export async function createSwapOffer(
     const title = "🔁 Richiesta sostituzione";
     const message = `${requesterName} sta cercando un sostituto per la guida di ${formattedDate} alle ${formattedTime}. Apri Reglo per accettare o rifiutare.`;
 
-    if (channels.includes("push")) {
-      const userIds = Array.from(new Set(eligibleStudents.map((s) => s.user.id)));
-      if (userIds.length) {
-        try {
-          await sendAutoscuolaPushToUsers({
-            companyId: membership.companyId,
-            userIds,
-            title,
-            body: message,
-            data: {
-              kind: "swap_offer",
-              offerId: offer.id,
-              appointmentId: appointment.id,
-              startsAt: appointment.startsAt.toISOString(),
-            },
-          });
-        } catch (error) {
-          console.error("Swap push error", error);
-        }
-      }
-    }
-
-    for (const student of eligibleStudents) {
-      if (channels.includes("email") && student.user.email) {
-        try {
-          await sendDynamicEmail({
-            to: student.user.email,
-            subject: title,
-            body: message,
-          });
-        } catch (error) {
-          console.error("Swap email error", error);
-        }
-      }
-
-      if (channels.includes("whatsapp") && student.user.phone) {
-        // Testo libero: senza un template approvato Meta non lo accetta fuori
-        // dalle 24 ore. Il cancello unico lo registra come `skipped` col motivo
-        // invece di sbattere contro il fornitore (REG-500).
-        await deliverWhatsApp(
-          {
-            companyId: membership.companyId,
-            kind: "swap_offer_student",
-            recipient: student.user.phone,
-            studentId: student.user.id,
-            body: message,
-          },
-          { values: {} },
-        );
-      }
-    }
-
+    // REG-604: canali di `slotFillChannels`, invariati — `swap_offer` è
+    // un'offerta, non un impegno preso, e ha la sua economia di canale.
+    await notifyAutoscuolaUsers(
+      eligibleStudents.map((student) => ({
+        userId: student.user.id,
+        email: student.user.email,
+        phone: student.user.phone,
+      })),
+      {
+        companyId: membership.companyId,
+        kind: "swap_offer",
+        audience: "student",
+        channels,
+        supports: ["push", "email", "whatsapp"],
+        whatsapp: { logKind: "swap_offer_student", values: {} },
+        title,
+        body: message,
+        appointmentId: appointment.id,
+        data: {
+          offerId: offer.id,
+          appointmentId: appointment.id,
+          startsAt: appointment.startsAt.toISOString(),
+        },
+      },
+    );
     return { success: true, data: offer };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -868,14 +843,16 @@ export async function respondSwapOffer(
     const formattedTime = formatItalianTime(offer.appointment.startsAt);
 
     // Notify original student
-    try {
-      await sendAutoscuolaPushToUsers({
-        companyId: membership.companyId,
-        userIds: [offer.requestingStudentId],
-        title: "🤝 Affare fatto!",
-        body: `${newStudentName} ti sostituirà per la guida di ${formattedDate} alle ${formattedTime}.`,
-        data: {
-          kind: "swap_accepted",
+    await notifyAutoscuolaUser({
+      companyId: membership.companyId,
+      kind: "swap_accepted",
+      audience: "student",
+      recipient: { userId: offer.requestingStudentId },
+      supports: PUSH_ONLY,
+      title: "🤝 Affare fatto!",
+      body: `${newStudentName} ti sostituirà per la guida di ${formattedDate} alle ${formattedTime}.`,
+      appointmentId: offer.appointmentId,
+      data: {
           acceptedByName: newStudentName,
           appointmentDate: formattedDate,
           appointmentTime: formattedTime,
@@ -884,26 +861,22 @@ export async function respondSwapOffer(
             where: { id: offer.appointmentId },
             include: { vehicle: { select: { name: true } } },
           }))?.vehicle?.name ?? "",
-          appointmentType: offer.appointment.type,
-        },
-      });
-    } catch (error) {
-      console.error("Swap accept push (requester) error", error);
-    }
+        appointmentType: offer.appointment.type,
+      },
+    });
 
     // Notify instructor
     if (offer.appointment.instructor?.userId) {
-      try {
-        await sendAutoscuolaPushToUsers({
-          companyId: membership.companyId,
-          userIds: [offer.appointment.instructor.userId],
-          title: "🔁 Sostituzione allievo",
-          body: `${newStudentName} ha sostituito ${oldStudentName} per la guida di ${formattedDate} alle ${formattedTime}.`,
-          data: { kind: "swap_instructor_notify" },
-        });
-      } catch (error) {
-        console.error("Swap accept push (instructor) error", error);
-      }
+      await notifyAutoscuolaUser({
+        companyId: membership.companyId,
+        kind: "swap_instructor_notify",
+        audience: "instructor",
+        recipient: { userId: offer.appointment.instructor.userId },
+        supports: PUSH_ONLY,
+        title: "🔁 Sostituzione allievo",
+        body: `${newStudentName} ha sostituito ${oldStudentName} per la guida di ${formattedDate} alle ${formattedTime}.`,
+        appointmentId: offer.appointmentId,
+      });
     }
 
     // Invalidate caches
@@ -1267,21 +1240,29 @@ export async function instructorSwapAppointments(
     const formatDate = (d: Date) =>
       d.toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
 
-    sendAutoscuolaPushToUsers({
+    await notifyAutoscuolaUser({
       companyId,
-      userIds: [apptA.studentId],
+      kind: "appointment_rescheduled",
+      audience: "student",
+      recipient: { userId: apptA.studentId },
+      supports: PUSH_ONLY,
       title: "🔄 Scambio guida",
       body: `La tua guida del ${formatDate(apptA.startsAt)} è stata spostata al ${formatDate(apptB.startsAt)}.`,
-      data: { kind: "appointment_rescheduled", appointmentId: apptB.id, startsAt: apptB.startsAt.toISOString() },
-    }).catch(() => {});
+      appointmentId: apptB.id,
+      data: { appointmentId: apptB.id, startsAt: apptB.startsAt.toISOString() },
+    });
 
-    sendAutoscuolaPushToUsers({
+    await notifyAutoscuolaUser({
       companyId,
-      userIds: [apptB.studentId],
+      kind: "appointment_rescheduled",
+      audience: "student",
+      recipient: { userId: apptB.studentId },
+      supports: PUSH_ONLY,
       title: "🔄 Scambio guida",
       body: `La tua guida del ${formatDate(apptB.startsAt)} è stata spostata al ${formatDate(apptA.startsAt)}.`,
-      data: { kind: "appointment_rescheduled", appointmentId: apptA.id, startsAt: apptA.startsAt.toISOString() },
-    }).catch(() => {});
+      appointmentId: apptA.id,
+      data: { appointmentId: apptA.id, startsAt: apptA.startsAt.toISOString() },
+    });
 
     return {
       success: true,

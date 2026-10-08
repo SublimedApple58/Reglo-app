@@ -8,6 +8,8 @@ import { sendDynamicEmail } from "@/email";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { deliverWhatsApp } from "@/lib/autoscuole/whatsapp-delivery";
+// REG-604: punto di invio unico. Le offerte conservano `slotFillChannels`.
+import { notifyAutoscuolaUser, notifyAutoscuolaUsers, PUSH_ONLY } from "@/lib/autoscuole/notify";
 import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
@@ -4665,61 +4667,31 @@ export async function broadcastWaitlistOffer({
   const message = `Si è liberato un posto per una guida il ${formattedDate} alle ${formattedTime}. Apri Reglo per accettare o lasciarlo a un altro allievo.`;
   const title = "⏰ Slot guida disponibile";
 
-  if (channels.includes("push")) {
-    const studentUserIds = Array.from(
-      new Set(availableStudents.map((student) => student.user.id)),
-    );
-
-    if (studentUserIds.length) {
-      try {
-        await sendAutoscuolaPushToUsers({
-          companyId,
-          userIds: studentUserIds,
-          title,
-          body: message,
-          data: {
-            kind: "slot_fill_offer",
-            offerId: offer.id,
-            slotId: slot.id,
-            startsAt: slot.startsAt.toISOString(),
-          },
-        });
-      } catch (error) {
-        console.error("Waitlist push error", error);
-      }
-    }
-  }
-
-  for (const student of availableStudents) {
-    if (channels.includes("email")) {
-      try {
-        if (student.user.email) {
-          await sendDynamicEmail({
-            to: student.user.email,
-            subject: title,
-            body: message,
-          });
-        }
-      } catch (error) {
-        console.error("Waitlist email error", error);
-      }
-    }
-
-    if (channels.includes("whatsapp")) {
-      if (student.user.phone) {
-        await deliverWhatsApp(
-          {
-            companyId,
-            kind: "waitlist_slot_student",
-            recipient: student.user.phone,
-            studentId: student.user.id,
-            body: message,
-          },
-          { values: {} },
-        );
-      }
-    }
-  }
+  // REG-604: i canali qui restano quelli di `slotFillChannels`, impostazione
+  // propria delle offerte — passiamo dalla struttura comune solo per avere un
+  // percorso d'invio e un registro, non per cambiare canale.
+  await notifyAutoscuolaUsers(
+    availableStudents.map((student) => ({
+      userId: student.user.id,
+      email: student.user.email,
+      phone: student.user.phone,
+    })),
+    {
+      companyId,
+      kind: "slot_fill_offer",
+      audience: "student",
+      channels,
+      supports: ["push", "email", "whatsapp"],
+      whatsapp: { logKind: "waitlist_slot_student", values: {} },
+      title,
+      body: message,
+      data: {
+        offerId: offer.id,
+        slotId: slot.id,
+        startsAt: slot.startsAt.toISOString(),
+      },
+    },
+  );
 
   return offer;
 }
@@ -4911,52 +4883,30 @@ export async function broadcastGroupLessonInvite({
   const title = "👥 Guida di gruppo disponibile";
   const message = `C'è posto in una guida di gruppo il ${formattedDate} alle ${formattedTime}. Apri Reglo per iscriverti.`;
 
-  if (channels.includes("push")) {
-    const userIds = Array.from(new Set(eligible.map((s) => s.user.id)));
-    if (userIds.length) {
-      try {
-        await sendAutoscuolaPushToUsers({
-          companyId,
-          userIds,
-          title,
-          body: message,
-          data: {
-            kind: "group_lesson_invite",
-            inviteId: invite.id,
-            groupLessonId: gl.id,
-            startsAt: gl.startsAt.toISOString(),
-          },
-        });
-      } catch (error) {
-        console.error("Group lesson invite push error", error);
-      }
-    }
-  }
-  for (const student of eligible) {
-    if (channels.includes("email") && student.user.email) {
-      try {
-        await sendDynamicEmail({
-          to: student.user.email,
-          subject: title,
-          body: message,
-        });
-      } catch (error) {
-        console.error("Group lesson invite email error", error);
-      }
-    }
-    if (channels.includes("whatsapp") && student.user.phone) {
-      await deliverWhatsApp(
-        {
-          companyId,
-          kind: "group_lesson_invite_student",
-          recipient: student.user.phone,
-          studentId: student.user.id,
-          body: message,
-        },
-        { values: {} },
-      );
-    }
-  }
+  // REG-604: canali di `slotFillChannels`, invariati. `group_lesson_invite` è
+  // anche in `PUSH_ONLY_KINDS`, quindi WhatsApp lo esclude la struttura.
+  await notifyAutoscuolaUsers(
+    eligible.map((student) => ({
+      userId: student.user.id,
+      email: student.user.email,
+      phone: student.user.phone,
+    })),
+    {
+      companyId,
+      kind: "group_lesson_invite",
+      audience: "student",
+      channels,
+      supports: ["push", "email", "whatsapp"],
+      whatsapp: { logKind: "group_lesson_invite_student", values: {} },
+      title,
+      body: message,
+      data: {
+        inviteId: invite.id,
+        groupLessonId: gl.id,
+        startsAt: gl.startsAt.toISOString(),
+      },
+    },
+  );
 
   return invite;
 }
@@ -5401,21 +5351,17 @@ export async function cancelGroupLessonParticipantAppointment({
         where: { id: appt.studentId! },
         select: { name: true },
       });
-      try {
-        await sendAutoscuolaPushToUsers({
-          companyId,
-          userIds: [gl.instructor.userId],
-          title: "Ritiro guida di gruppo",
-          body: `${student?.name ?? "Un allievo"} si è ritirato dalla guida di gruppo di ${dateLabel} alle ${timeLabel}.`,
-          data: {
-            kind: "appointment_cancelled",
-            appointmentId: appt.id,
-            startsAt: gl.startsAt.toISOString(),
-          },
-        });
-      } catch (error) {
-        console.error("Group lesson withdrawal push error", error);
-      }
+      await notifyAutoscuolaUser({
+        companyId,
+        kind: "appointment_cancelled",
+        audience: "instructor",
+        recipient: { userId: gl.instructor.userId },
+        supports: PUSH_ONLY,
+        title: "Ritiro guida di gruppo",
+        body: `${student?.name ?? "Un allievo"} si è ritirato dalla guida di gruppo di ${dateLabel} alle ${timeLabel}.`,
+        appointmentId: appt.id,
+        data: { appointmentId: appt.id, startsAt: gl.startsAt.toISOString() },
+      });
     }
   }
 
@@ -5997,18 +5943,22 @@ export async function publishInstructorWeek(input: z.infer<typeof publishWeekSch
         month: "long",
         timeZone: "Europe/Rome",
       });
-      await sendAutoscuolaPushToUsers({
-        companyId,
-        userIds: studentUserIds,
-        title: "📅 Nuove disponibilità",
-        body: `Il tuo istruttore ha pubblicato la disponibilità per la settimana del ${weekLabel}. Prenota la tua guida!`,
-        data: {
+      await notifyAutoscuolaUsers(
+        studentUserIds.map((userId) => ({ userId })),
+        {
+          companyId,
           kind: "availability_published",
-          instructorId,
-          instructorName: instructor.name,
-          weekStart: payload.weekStart,
+          audience: "student",
+          supports: PUSH_ONLY,
+          title: "📅 Nuove disponibilità",
+          body: `Il tuo istruttore ha pubblicato la disponibilità per la settimana del ${weekLabel}. Prenota la tua guida!`,
+          data: {
+            instructorId,
+            instructorName: instructor.name,
+            weekStart: payload.weekStart,
+          },
         },
-      });
+      );
     }
 
     await invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA] });
