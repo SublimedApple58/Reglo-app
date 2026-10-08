@@ -1,5 +1,6 @@
 import { prisma as defaultPrisma } from "@/db/prisma";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
+import { notifyAutoscuolaUser, PUSH_ONLY } from "@/lib/autoscuole/notify";
 
 type PrismaClientLike = typeof defaultPrisma;
 
@@ -97,21 +98,19 @@ export const processAutoscuolaTheoryReminders = async ({
           offsetDays === 1
             ? `Domani è il tuo esame (${examLabel}). Fai un ultimo ripasso degli errori.`
             : `Mancano ${offsetDays} giorni all'esame teoria (${examLabel}). Continua a esercitarti.`;
-        try {
-          await sendAutoscuolaPushToUsers({
-            companyId: item.companyId,
-            userIds: [item.studentId],
-            title,
-            body,
-            data: {
-              kind: "theory_exam_countdown",
-              offsetDays,
-              theoryExamAt: item.theoryExamAt?.toISOString() ?? null,
-            },
-          });
-        } catch (error) {
-          console.error("[theory-reminders] countdown push failed", error);
-        }
+        await notifyAutoscuolaUser({
+          companyId: item.companyId,
+          kind: "theory_exam_countdown",
+          audience: "student",
+          recipient: { userId: item.studentId },
+          supports: PUSH_ONLY,
+          title,
+          body,
+          data: {
+            offsetDays,
+            theoryExamAt: item.theoryExamAt?.toISOString() ?? null,
+          },
+        });
       }
     }
   }
@@ -131,15 +130,15 @@ export const processAutoscuolaTheoryReminders = async ({
     for (const member of teoriaMembers) {
       if (activeStudents.has(member.userId)) continue;
       try {
-        await sendAutoscuolaPushToUsers({
+        await notifyAutoscuolaUser({
           companyId: member.companyId,
-          userIds: [member.userId],
+          kind: "theory_quiz_inactivity",
+          audience: "student",
+          recipient: { userId: member.userId },
+          supports: PUSH_ONLY,
           title: "È ora di riprendere lo studio",
           body: `Non fai un quiz da almeno ${INACTIVITY_DAYS} giorni. Bastano 10 minuti al giorno.`,
-          data: {
-            kind: "theory_quiz_inactivity",
-            inactiveDays: INACTIVITY_DAYS,
-          },
+          data: { inactiveDays: INACTIVITY_DAYS },
         });
       } catch (error) {
         console.error("[theory-reminders] nudge push failed", error);

@@ -129,6 +129,9 @@ export async function GET(request: Request) {
             startsAt: appt.startsAt.toISOString(),
             instructorName: appt.instructor?.name ?? "",
             cancellationKind: appt.cancellationKind ?? "manual_cancel",
+            // REG-604: l'inbox rende l'orario solo se c'è.
+            isExam: appt.type === "esame",
+            timeSet: appt.endsAt !== null,
           },
           createdAt: (appt.cancelledAt ?? appt.updatedAt).toISOString(),
         });
@@ -300,8 +303,41 @@ export async function GET(request: Request) {
             appointmentId: appt.id,
             startsAt: appt.startsAt.toISOString(),
             oldStartsAt: appt.rescheduledFromStartsAt?.toISOString() ?? "",
+            // REG-604: senza questi due l'inbox scrive "00:00" su un esame
+            // senza orario. Li manda anche la push, questa è la via di recupero.
+            isExam: appt.type === "esame",
+            timeSet: appt.endsAt !== null,
           },
           createdAt: appt.rescheduledAt!.toISOString(),
+        });
+      }
+
+      // 7-bis. REG-604: esami fissati o con l'orario appena definito.
+      // Prima non esisteva: un esame prenotato non lasciava traccia in posta.
+      const scheduledExams = await prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId,
+          studentId: userId,
+          type: "esame",
+          status: { notIn: ["cancelled"] },
+          startsAt: { gte: new Date() },
+          createdAt: { gte: since },
+        },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+      });
+      for (const exam of scheduledExams) {
+        notifications.push({
+          id: `exam_scheduled_${exam.id}`,
+          kind: "exam_scheduled",
+          data: {
+            appointmentId: exam.id,
+            startsAt: exam.startsAt.toISOString(),
+            isExam: true,
+            timeSet: exam.endsAt !== null,
+            reason: "created",
+          },
+          createdAt: exam.createdAt.toISOString(),
         });
       }
 

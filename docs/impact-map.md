@@ -96,7 +96,9 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - ← **Trigger.dev**: cron giornaliero `autoscuole-national-holidays` (rolling window annuale del preset)
 
 ### Notifications
-- → **ALL features**: every feature sends push via `sendAutoscuolaPushToUsers()`
+- → **ALL features**: ogni comunicazione passa da **`notifyAutoscuolaUser()`** (`lib/autoscuole/notify.ts`, REG-604), non più da `sendAutoscuolaPushToUsers()` + `sendDynamicEmail()` scritti a mano. Chi invia **non sceglie i canali**: li chiede a `reminder-channels.ts`. Un test (`tests/unit/autoscuole/notify-guard.test.ts`) fallisce se i due invii diretti ricompaiono fuori dalla lista bianca
+- ← **Canali configurati**: `studentReminderChannels` / `instructorReminderChannels` valgono ora per **tutte** le comunicazioni, non solo per i promemoria. `slotFillChannels` (offerte) e `paymentNotificationChannels` (pagamenti) restano impostazioni proprie e passano `channels` già risolti
+- → **Esami**: `exam-notifications.ts` è l'unico posto che decide nome e orario di un messaggio su guide ed esami. **L'orario si scrive solo se `endsAt` è valorizzato** — un esame senza orario ha `startsAt` a mezzanotte, e chi lo formatta senza guardare `endsAt` scrive «00:00». `data.isExam`/`data.timeSet` viaggiano nel payload perché l'inbox mobile rende il sottotitolo da lì
 - → **Mobile (full checklist for new kind)**: `NotificationOverlay`, `NotificationInboxScreen`, `notifications.ts` types, `notificationStore.ts`
 - → **Recovery endpoint**: `app/api/autoscuole/notifications/route.ts` — queries DB fields per kind
 - → **Web Settings**: pane "Promemoria e notifiche" (`tabs/SettingsTab.tsx` sezione reminders) — preavvisi, canali e card "Notifica slot vuoti" (`emptySlotNotification*`, spostata da Prenotazioni e allievi il 2026-07-12)

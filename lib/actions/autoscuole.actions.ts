@@ -14,6 +14,18 @@ import { notifyAutoscuolaCaseStatusChange } from "@/lib/autoscuole/communication
 import { BOOKING_SOURCE, staffBookingSource } from "@/lib/autoscuole/booking-source";
 import { broadcastWaitlistOffer, buildAvailabilityResolver, getStudentBookingBlockStatus, cancelGroupLessonParticipantAppointment } from "@/lib/actions/autoscuole-availability.actions";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
+// REG-604: i testi di guide ed esami e l'unico punto di invio multicanale.
+import {
+  cancelledText,
+  describeWhen,
+  hasDefinedTime,
+  isExamType,
+  locationChangedText,
+  movedText,
+  examCreatedText,
+  examTimeSetText,
+} from "@/lib/autoscuole/exam-notifications";
+import { notifyAutoscuolaUser, notifyAutoscuolaUsers, PUSH_ONLY } from "@/lib/autoscuole/notify";
 import { appointmentBusyInstructorIds } from "@/lib/autoscuole/appointment-busy";
 import { fetchGroupLessonBusyRows } from "@/lib/autoscuole/group-lesson-busy";
 import { resolveGroupLessonLocationId } from "@/lib/autoscuole/locations";
@@ -515,6 +527,10 @@ const notifyStudentAppointmentCancelled = async ({
     id: string;
     studentId: string;
     startsAt: Date;
+    /** REG-604: senza questo il testo non sa se può scrivere l'orario. */
+    endsAt: Date | null;
+    /** REG-604: "guida" o "esame" cambia nome, titolo e riga finale. */
+    type: string | null;
     instructorId: string | null;
   };
   cancellationKind: "manual_cancel" | "permanent_cancel";
@@ -525,7 +541,7 @@ const notifyStudentAppointmentCancelled = async ({
   const [studentUser, instructor] = await Promise.all([
     prisma.user.findUnique({
       where: { id: appointment.studentId },
-      select: { email: true },
+      select: { email: true, phone: true },
     }),
     appointment.instructorId
       ? prisma.autoscuolaInstructor.findFirst({
@@ -535,73 +551,47 @@ const notifyStudentAppointmentCancelled = async ({
       : Promise.resolve(null),
   ]);
 
-  const dateLabel = appointment.startsAt.toLocaleDateString("it-IT", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    timeZone: "Europe/Rome",
-  });
-  const timeLabel = appointment.startsAt.toLocaleTimeString("it-IT", {
-    timeZone: "Europe/Rome",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const slotLabel = `${dateLabel} alle ${timeLabel}`;
-  const instrLabel = instructor?.name ? ` con ${instructor.name}` : "";
-
   // Students in manual_full clusters cannot book from the app — omit the CTA.
-  const { isStudentInManualFullCluster } = await import("@/lib/autoscuole/instructor-clusters");
-  const manualFull = await isStudentInManualFullCluster(companyId, appointment.studentId);
-  const cta = manualFull
-    ? "L'istruttore ti contatterà per riprogrammarla."
-    : "Prenota una nuova guida dall'app quando vuoi.";
-
-  let title: string;
-  let body: string;
-
-  if (cancellationKind === "permanent_cancel") {
-    title = "❌ Guida annullata definitivamente";
-    if (actorRole === "instructor") {
-      body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dall'istruttore. ${cta}`;
-    } else {
-      body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dalla segreteria. ${cta}`;
-    }
-  } else {
-    title = "❌ Guida annullata";
-    if (actorRole === "instructor") {
-      body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dall'istruttore. ${cta}`;
-    } else {
-      body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dalla segreteria. ${cta}`;
-    }
+  // Sugli esami la CTA non si calcola nemmeno: l'esame non se lo prenota
+  // l'allievo, qualunque sia il cluster.
+  const isExam = isExamType(appointment.type);
+  let guideCta: string | undefined;
+  if (!isExam) {
+    const { isStudentInManualFullCluster } = await import("@/lib/autoscuole/instructor-clusters");
+    const manualFull = await isStudentInManualFullCluster(companyId, appointment.studentId);
+    guideCta = manualFull
+      ? "L'istruttore ti contatterà per riprogrammarla."
+      : "Prenota una nuova guida dall'app quando vuoi.";
   }
 
-  try {
-    await sendAutoscuolaPushToUsers({
-      companyId,
-      userIds: [appointment.studentId],
-      title,
-      body,
-      data: {
-        kind: "appointment_cancelled",
-        appointmentId: appointment.id,
-        startsAt: appointment.startsAt.toISOString(),
-      },
-    });
-  } catch (error) {
-    console.error("Appointment cancellation push error", error);
-  }
+  const { title, body } = cancelledText(appointment, {
+    actorRole,
+    instructorName: instructor?.name ?? null,
+    guideCta,
+    permanent: cancellationKind === "permanent_cancel",
+  });
 
-  if (studentUser?.email) {
-    try {
-      await sendDynamicEmail({
-        to: studentUser.email,
-        subject: title,
-        body,
-      });
-    } catch (error) {
-      console.error("Appointment cancellation email error", error);
-    }
-  }
+  await notifyAutoscuolaUser({
+    companyId,
+    kind: "appointment_cancelled",
+    audience: "student",
+    recipient: {
+      userId: appointment.studentId,
+      email: studentUser?.email,
+      phone: studentUser?.phone,
+    },
+    title,
+    body,
+    appointmentId: appointment.id,
+    data: {
+      appointmentId: appointment.id,
+      startsAt: appointment.startsAt.toISOString(),
+      // REG-604: l'inbox mobile ricostruisce il sottotitolo da qui, non dal
+      // testo. Senza questi due campi renderizzerebbe "00:00".
+      isExam,
+      timeSet: hasDefinedTime(appointment),
+    },
+  });
 };
 
 const formatAutoscuolaSlotLabel = (when: Date) => {
@@ -625,6 +615,7 @@ const notifyAppointmentRescheduled = async ({
   actorRole,
   appointment,
   oldStartsAt,
+  oldEndsAt,
 }: {
   companyId: string;
   actorUserId: string;
@@ -634,17 +625,17 @@ const notifyAppointmentRescheduled = async ({
     studentId: string;
     startsAt: Date;
     endsAt: Date | null;
+    type: string | null;
     instructorId: string | null;
   };
   oldStartsAt: Date;
+  /** REG-604: serve a distinguere "spostato" da "orario appena definito". */
+  oldEndsAt: Date | null;
 }) => {
-  const oldLabel = formatAutoscuolaSlotLabel(oldStartsAt);
-  const newLabel = formatAutoscuolaSlotLabel(appointment.startsAt);
-
   const [studentUser, instructor] = await Promise.all([
     prisma.user.findUnique({
       where: { id: appointment.studentId },
-      select: { email: true },
+      select: { email: true, phone: true },
     }),
     appointment.instructorId
       ? prisma.autoscuolaInstructor.findFirst({
@@ -654,68 +645,69 @@ const notifyAppointmentRescheduled = async ({
       : Promise.resolve(null),
   ]);
 
-  const instrLabel = instructor?.name ? ` con ${instructor.name}` : "";
-  const title = "🔄 Guida spostata";
-  const actorSuffix = actorRole === "instructor" ? "dall'istruttore" : "dalla segreteria";
-  const body = `La tua guida del ${oldLabel}${instrLabel} è stata spostata ${actorSuffix} al ${newLabel}.`;
+  const text = movedText(
+    { type: appointment.type, startsAt: oldStartsAt, endsAt: oldEndsAt },
+    appointment,
+    { actorRole, instructorName: instructor?.name ?? null },
+  );
 
   // Reschedule is informational (not a booking invitation), so we always
   // notify the student — even in manual_full clusters.
   const shouldNotifyStudent = actorUserId !== appointment.studentId;
 
-  if (shouldNotifyStudent) {
-    try {
-      await sendAutoscuolaPushToUsers({
-        companyId,
-        userIds: [appointment.studentId],
-        title,
-        body,
-        data: {
-          kind: "appointment_rescheduled",
-          appointmentId: appointment.id,
-          startsAt: appointment.startsAt.toISOString(),
-          oldStartsAt: oldStartsAt.toISOString(),
-        },
-      });
-    } catch (error) {
-      console.error("Appointment reschedule push error", error);
-    }
-
-    if (studentUser?.email) {
-      try {
-        await sendDynamicEmail({
-          to: studentUser.email,
-          subject: title,
-          body,
-        });
-      } catch (error) {
-        console.error("Appointment reschedule email error", error);
-      }
-    }
+  // `null` = le due etichette coincidono (cambiata solo la durata, o esame
+  // senza orario rimasto nello stesso giorno): mandare "spostato dal 14 al 14"
+  // sarebbe peggio del silenzio.
+  if (shouldNotifyStudent && text) {
+    await notifyAutoscuolaUser({
+      companyId,
+      kind: "appointment_rescheduled",
+      audience: "student",
+      recipient: {
+        userId: appointment.studentId,
+        email: studentUser?.email,
+        phone: studentUser?.phone,
+      },
+      title: text.title,
+      body: text.body,
+      appointmentId: appointment.id,
+      data: {
+        appointmentId: appointment.id,
+        startsAt: appointment.startsAt.toISOString(),
+        oldStartsAt: oldStartsAt.toISOString(),
+        isExam: isExamType(appointment.type),
+        timeSet: hasDefinedTime(appointment),
+      },
+    });
   }
 
   // Notify the instructor only when the segreteria/owner moved the lesson.
   if (
     (actorRole === "owner" || actorRole === "admin") &&
     instructor?.userId &&
-    instructor.userId !== actorUserId
+    instructor.userId !== actorUserId &&
+    text
   ) {
-    try {
-      await sendAutoscuolaPushToUsers({
-        companyId,
-        userIds: [instructor.userId],
-        title: "🔄 Guida spostata",
-        body: `Una guida è stata spostata dal ${oldLabel} al ${newLabel}.`,
-        data: {
-          kind: "appointment_rescheduled",
-          appointmentId: appointment.id,
-          startsAt: appointment.startsAt.toISOString(),
-          oldStartsAt: oldStartsAt.toISOString(),
-        },
-      });
-    } catch (error) {
-      console.error("Appointment reschedule instructor push error", error);
-    }
+    const which = isExamType(appointment.type) ? "Un esame" : "Una guida";
+    const from = describeWhen({ type: appointment.type, startsAt: oldStartsAt, endsAt: oldEndsAt });
+    const to = describeWhen(appointment);
+    await notifyAutoscuolaUser({
+      companyId,
+      kind: "appointment_rescheduled",
+      audience: "instructor",
+      recipient: { userId: instructor.userId },
+      supports: PUSH_ONLY,
+      title: text.title,
+      body: `${which} è stato spostato dal ${from.when} al ${to.when}.`,
+      appointmentId: appointment.id,
+      data: {
+        appointmentId: appointment.id,
+        startsAt: appointment.startsAt.toISOString(),
+        oldStartsAt: oldStartsAt.toISOString(),
+        isExam: isExamType(appointment.type),
+        timeSet: hasDefinedTime(appointment),
+      },
+    });
   }
 };
 
@@ -4253,6 +4245,8 @@ export async function cancelAutoscuolaAppointment(
         // exam placeholders are studentless.
         studentId: appointment.studentId!,
         startsAt: appointment.startsAt,
+        endsAt: appointment.endsAt,
+        type: appointment.type,
         instructorId: appointment.instructorId,
       },
       cancellationKind: "manual_cancel",
@@ -4393,6 +4387,8 @@ export async function permanentlyCancelAutoscuolaAppointment(
             id: appointment.id,
             studentId: cancelNotifyStudentId,
             startsAt: appointment.startsAt,
+            endsAt: appointment.endsAt,
+            type: appointment.type,
             instructorId: appointment.instructorId,
           },
           cancellationKind: "permanent_cancel",
@@ -4608,6 +4604,13 @@ export async function rescheduleAutoscuolaAppointment(
     }
 
     const oldStartsAt = appointment.startsAt;
+    /**
+     * REG-604: `oldEndsAt` qui sotto è **defaultato** a mezz'ora per calcolare
+     * la durata, quindi non distingue più «guida da 30 minuti» da «esame senza
+     * orario». Il valore vero serve al testo della notifica: senza, un esame
+     * senza orario sembrerebbe averlo e il messaggio scriverebbe «00:00».
+     */
+    const oldEndsAtRaw = appointment.endsAt;
     const oldEndsAt =
       appointment.endsAt ?? new Date(oldStartsAt.getTime() + 30 * 60 * 1000);
     const oldDurationMs = oldEndsAt.getTime() - oldStartsAt.getTime();
@@ -5012,9 +5015,11 @@ export async function rescheduleAutoscuolaAppointment(
         studentId: reschedNotifyStudentId,
         startsAt: updated.startsAt,
         endsAt: updated.endsAt,
+        type: updated.type,
         instructorId: updated.instructorId,
       },
       oldStartsAt,
+      oldEndsAt: oldEndsAtRaw,
     });
 
     const serializedAppointment = {
@@ -5424,6 +5429,8 @@ export async function updateAutoscuolaAppointmentStatus(
             id: updated.id,
             studentId: manualCancelNotifyStudentId,
             startsAt: updated.startsAt,
+            endsAt: updated.endsAt,
+            type: updated.type,
             instructorId: updated.instructorId ?? null,
           },
           cancellationKind: "manual_cancel",
@@ -6028,31 +6035,31 @@ export async function updateAutoscuolaAppointmentDetails(
       appointment.startsAt.getTime() > Date.now() &&
       appointment.studentId !== membership.userId
     ) {
-      try {
-        const when = appointment.startsAt.toLocaleString("it-IT", {
-          day: "2-digit",
-          month: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-          timeZone: "Europe/Rome",
-        });
-        const newName = locationChangedTo?.name ?? "Sede dell'autoscuola";
-        const oldName = locationChangedFrom?.name ?? "Sede dell'autoscuola";
-        await sendAutoscuolaPushToUsers({
+      const newName = locationChangedTo?.name ?? "Sede dell'autoscuola";
+      const oldName = locationChangedFrom?.name ?? "Sede dell'autoscuola";
+      // REG-604: questo punto non aveva alcun guard sugli esami — diceva «la
+      // tua guida» e stampava data **e ora**. Ed è proprio il luogo la cosa
+      // che l'autoscuola comunica a voce il giorno prima.
+      const text = locationChangedText(appointment, newName);
+      if (appointment.studentId) {
+        await notifyAutoscuolaUser({
           companyId: membership.companyId,
-          userIds: appointment.studentId ? [appointment.studentId] : [],
-          title: "📍 Luogo guida aggiornato",
-          body: `Il luogo della tua guida del ${when} è cambiato: ${newName}.`,
+          kind: "appointment_location_changed",
+          audience: "student",
+          recipient: { userId: appointment.studentId },
+          supports: PUSH_ONLY,
+          title: text.title,
+          body: text.body,
+          appointmentId: appointment.id,
           data: {
-            kind: "appointment_location_changed",
             appointmentId: appointment.id,
             startsAt: appointment.startsAt.toISOString(),
             oldLocationName: oldName,
             newLocationName: newName,
+            isExam: isExamType(appointment.type),
+            timeSet: hasDefinedTime(appointment),
           },
         });
-      } catch (error) {
-        console.error("Appointment location change push error", error);
       }
     }
 
@@ -8875,6 +8882,90 @@ export async function materializeExamSlot(params: {
   return studentIds.length;
 }
 
+/**
+ * REG-604: le notifiche del ciclo di vita dell'esame.
+ *
+ * Prima non esisteva niente: prenotare, ri-orarare, annullare un esame era
+ * **muto** su tutti i canali. L'unica cosa che l'allievo riceveva erano i tre
+ * promemoria, e l'orario lo leggeva nell'app — che è esattamente la
+ * segnalazione di Macchiavello.
+ *
+ * Sta `after()` per lo stesso motivo dell'annullamento definitivo: un esame con
+ * dieci candidati fa dieci invii su due canali, e il client mobile chiude a 15
+ * secondi. L'operazione è già committata, la notifica non deve pesarci sopra.
+ */
+const notifyExamStudents = async ({
+  companyId,
+  studentIds,
+  appointmentId,
+  startsAt,
+  endsAt,
+  text,
+  kind,
+  reason,
+}: {
+  companyId: string;
+  studentIds: string[];
+  appointmentId?: string | null;
+  startsAt: Date;
+  endsAt: Date | null;
+  text: { title: string; body: string };
+  kind: "exam_scheduled" | "appointment_cancelled" | "appointment_rescheduled";
+  reason?: "created" | "time_set" | "time_cleared";
+}) => {
+  if (!studentIds.length) return;
+  const users = await prisma.user.findMany({
+    where: { id: { in: studentIds } },
+    select: { id: true, email: true, phone: true },
+  });
+  await notifyAutoscuolaUsers(
+    users.map((user) => ({ userId: user.id, email: user.email, phone: user.phone })),
+    {
+      companyId,
+      kind,
+      audience: "student",
+      title: text.title,
+      body: text.body,
+      appointmentId: appointmentId ?? null,
+      data: {
+        startsAt: startsAt.toISOString(),
+        isExam: true,
+        timeSet: endsAt !== null,
+        ...(reason ? { reason } : {}),
+        ...(appointmentId ? { appointmentId } : {}),
+      },
+    },
+  );
+};
+
+/**
+ * «🎓 Esame fissato» — pubblica perché serve anche alla rotta mobile, dove il
+ * ramo **istruttore** di `POST /api/autoscuole/exam` chiama
+ * `materializeExamSlot` direttamente invece di passare da `createExamEvent`.
+ * Senza questa, un esame creato dall'istruttore sarebbe rimasto muto mentre
+ * quello creato dal titolare avvisava.
+ */
+export const notifyExamStudentsOnCreate = async ({
+  companyId,
+  studentIds,
+  startsAt,
+  endsAt,
+}: {
+  companyId: string;
+  studentIds: string[];
+  startsAt: Date;
+  endsAt: Date | null;
+}) =>
+  notifyExamStudents({
+    companyId,
+    studentIds,
+    startsAt,
+    endsAt,
+    kind: "exam_scheduled",
+    reason: "created",
+    text: examCreatedText({ type: "esame", startsAt, endsAt }),
+  });
+
 const createExamEventSchema = z.object({
   studentIds: z.array(z.string().uuid()),
   startsAt: z.string(),
@@ -9017,6 +9108,20 @@ export async function createExamEvent(
 
     await invalidateAgendaAndPaymentsCache(companyId);
 
+    // REG-604: «🎓 Esame fissato». Prima di questo, prenotare un esame non
+    // mandava niente a nessuno.
+    if (payload.studentIds.length) {
+      const examStudentIds = payload.studentIds;
+      after(() =>
+        notifyExamStudentsOnCreate({
+          companyId,
+          studentIds: examStudentIds,
+          startsAt,
+          endsAt,
+        }),
+      );
+    }
+
     return { success: true as const, data: { count } };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
@@ -9068,6 +9173,21 @@ export async function addExamStudent(
     });
 
     await invalidateAgendaAndPaymentsCache(companyId);
+
+    // REG-604: un allievo aggiunto a un esame già in agenda riceve lo stesso
+    // «Esame fissato» di chi c'era dall'inizio — per lui la notizia è nuova.
+    const addedStartsAt = new Date(payload.startsAt);
+    const addedEndsAt = payload.endsAt ? new Date(payload.endsAt) : null;
+    const addedStudentId = payload.studentId;
+    after(() =>
+      notifyExamStudentsOnCreate({
+        companyId,
+        studentIds: [addedStudentId],
+        startsAt: addedStartsAt,
+        endsAt: addedEndsAt,
+      }),
+    );
+
     return { success: true as const };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
@@ -9083,12 +9203,30 @@ export async function removeExamStudent(appointmentId: string) {
 
     const appt = await prisma.autoscuolaAppointment.findFirst({
       where: { id: appointmentId, companyId: membership.companyId, type: "esame" },
-      select: { id: true },
+      select: { id: true, studentId: true, startsAt: true, endsAt: true, type: true },
     });
     if (!appt) return { success: false as const, message: "Appuntamento esame non trovato." };
 
     await prisma.autoscuolaAppointment.delete({ where: { id: appointmentId } });
     await invalidateAgendaAndPaymentsCache(membership.companyId);
+
+    // REG-604: la riga viene cancellata davvero (hard delete), e prima di oggi
+    // l'allievo non lo sapeva. Dal suo punto di vista l'esame è annullato.
+    const removedStudentId = appt.studentId;
+    if (removedStudentId && appt.startsAt.getTime() > Date.now()) {
+      const companyId = membership.companyId;
+      after(() =>
+        notifyExamStudents({
+          companyId,
+          studentIds: [removedStudentId],
+          startsAt: appt.startsAt,
+          endsAt: appt.endsAt,
+          kind: "appointment_cancelled",
+          text: cancelledText(appt),
+        }),
+      );
+    }
+
     return { success: true as const };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
@@ -9250,12 +9388,63 @@ export async function updateExamTime(
       return { success: false as const, message: "Orario non valido." };
     }
 
+    /**
+     * REG-604: le righe PRIMA dell'update.
+     *
+     * Era un `updateMany` cieco: non sapeva chi stesse spostando né da quale
+     * orario, quindi non poteva avvisare nessuno. È questa la via che usa il
+     * pannello esame del web (e `regloApi.updateExamTime` sul mobile) quando
+     * l'autoscuola corregge l'orario — cioè il gesto che Macchiavello fa il
+     * giorno prima, ogni volta.
+     */
+    const before = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        id: { in: payload.appointmentIds },
+        companyId: membership.companyId,
+        type: "esame",
+      },
+      select: { id: true, studentId: true, startsAt: true, endsAt: true, type: true },
+    });
+
     await prisma.autoscuolaAppointment.updateMany({
       where: { id: { in: payload.appointmentIds }, companyId: membership.companyId, type: "esame" },
       data: { startsAt, endsAt },
     });
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
+
+    const companyId = membership.companyId;
+    const changed = before.filter(
+      (row) =>
+        row.studentId &&
+        startsAt.getTime() > Date.now() &&
+        (row.startsAt.getTime() !== startsAt.getTime() ||
+          (row.endsAt?.getTime() ?? null) !== (endsAt?.getTime() ?? null)),
+    );
+    if (changed.length) {
+      after(async () => {
+        for (const row of changed) {
+          // `movedText` decide da sé quale dei tre casi è: orario appena
+          // definito, orario ritirato, o spostamento vero. E restituisce
+          // `null` quando le due etichette coincidono — cambiata solo la
+          // durata, o esame senza orario rimasto nello stesso giorno.
+          const text = movedText(row, { type: "esame", startsAt, endsAt });
+          if (!text) continue;
+          const wasTimeless = row.endsAt === null;
+          await notifyExamStudents({
+            companyId,
+            studentIds: [row.studentId!],
+            appointmentId: row.id,
+            startsAt,
+            endsAt,
+            kind: wasTimeless && endsAt ? "exam_scheduled" : "appointment_rescheduled",
+            reason: wasTimeless && endsAt ? "time_set" : undefined,
+            text,
+          });
+        }
+      });
+    }
+
     return { success: true as const };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
@@ -9301,12 +9490,48 @@ export async function cancelExamEvent(appointmentIds: string[]) {
       return { success: false as const, message: "Operazione non consentita." };
     }
 
+    // REG-604: le righe servono PRIMA dell'update, per sapere chi avvisare e
+    // con quale orario. L'updateMany cieco era anche il motivo per cui questo
+    // annullamento non diceva niente a nessuno.
+    const rows = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        id: { in: appointmentIds },
+        companyId: membership.companyId,
+        type: "esame",
+        status: { not: "cancelled" },
+      },
+      select: { id: true, studentId: true, startsAt: true, endsAt: true, type: true },
+    });
+
     await prisma.autoscuolaAppointment.updateMany({
       where: { id: { in: appointmentIds }, companyId: membership.companyId, type: "esame" },
       data: { status: "cancelled", cancelledAt: new Date(), cancelledByUserId: membership.userId },
     });
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
+
+    // Solo gli esami futuri: annullare a posteriori un esame già svolto è una
+    // correzione di registro, e avvisare l'allievo lo confonderebbe.
+    const toNotify = rows.filter(
+      (row) => row.studentId && row.startsAt.getTime() > Date.now(),
+    );
+    if (toNotify.length) {
+      const companyId = membership.companyId;
+      after(async () => {
+        for (const row of toNotify) {
+          await notifyExamStudents({
+            companyId,
+            studentIds: [row.studentId!],
+            appointmentId: row.id,
+            startsAt: row.startsAt,
+            endsAt: row.endsAt,
+            kind: "appointment_cancelled",
+            text: cancelledText(row),
+          });
+        }
+      });
+    }
+
     return { success: true as const };
   } catch (error) {
     return { success: false as const, message: formatError(error) };

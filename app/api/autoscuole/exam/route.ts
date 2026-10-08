@@ -3,7 +3,8 @@ import { z } from "zod";
 import { prisma } from "@/db/prisma";
 import { requireServiceAccess } from "@/lib/service-access";
 import { formatError } from "@/lib/utils";
-import { createExamEvent, updateExamTime, updateExamInstructor, materializeExamSlot } from "@/lib/actions/autoscuole.actions";
+import { createExamEvent, updateExamTime, updateExamInstructor, materializeExamSlot, notifyExamStudentsOnCreate } from "@/lib/actions/autoscuole.actions";
+import { after } from "next/server";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
@@ -175,6 +176,22 @@ export async function POST(request: Request) {
         companyId,
         segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA, AUTOSCUOLE_CACHE_SEGMENTS.PAYMENTS],
       });
+
+      // REG-604: questo ramo (istruttore da mobile) chiama `materializeExamSlot`
+      // direttamente, non `createExamEvent` — quindi la notifica va mandata
+      // anche qui, altrimenti un esame creato dall'istruttore resta muto
+      // mentre quello creato dal titolare avvisa.
+      if (payload.studentIds.length) {
+        const examStudentIds = payload.studentIds;
+        after(() =>
+          notifyExamStudentsOnCreate({
+            companyId,
+            studentIds: examStudentIds,
+            startsAt,
+            endsAt,
+          }),
+        );
+      }
 
       return NextResponse.json({
         success: true,

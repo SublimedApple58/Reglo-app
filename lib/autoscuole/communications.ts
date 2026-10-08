@@ -4,6 +4,8 @@ import { tokenRegex } from "@/components/shared/token-input/token-utils";
 import { sendDynamicEmail } from "@/email";
 import { prisma as defaultPrisma } from "@/db/prisma";
 import { deliverWhatsApp } from "@/lib/autoscuole/whatsapp-delivery";
+// REG-604: i canali li decide un solo modulo, condiviso con i messaggi-evento.
+import { parseReminderChannels } from "@/lib/autoscuole/reminder-channels";
 import { deliverAndLog } from "@/lib/autoscuole/delivery-log";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
@@ -94,8 +96,6 @@ const DEADLINE_LABELS: Record<string, string> = {
 };
 const REMINDER_MINUTES = [120, 60, 30, 20, 15] as const;
 const DEFAULT_REMINDER_MINUTES = 60;
-const DEFAULT_REMINDER_CHANNELS = ["push", "whatsapp", "email"] as const;
-
 const renderTemplate = (template: string, context: AutoscuolaContext) => {
   const safe = (template ?? "").replace(/\\n/g, "\n");
   return safe.replace(tokenRegex, (_, token: string) => {
@@ -121,15 +121,6 @@ const parseReminderMinutes = (value: unknown) => {
     : DEFAULT_REMINDER_MINUTES;
 };
 
-const parseReminderChannels = (value: unknown) => {
-  if (!Array.isArray(value)) return [...DEFAULT_REMINDER_CHANNELS];
-  const channels = value.filter(
-    (item): item is "push" | "whatsapp" | "email" =>
-      item === "push" || item === "whatsapp" || item === "email",
-  );
-  const unique = Array.from(new Set(channels));
-  return unique.length ? unique : [...DEFAULT_REMINDER_CHANNELS];
-};
 
 const normalizeText = (value: string | null | undefined) => (value ?? "").trim();
 const normalizeEmail = (value: string | null | undefined) =>
@@ -741,6 +732,17 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
 
     for (const appointment of studentAppointments) {
       if (!appointment.student) continue; // studentless exam placeholder — nobody to message
+      /**
+       * REG-604: esame senza orario → fuori da questo promemoria.
+       *
+       * Qui la programmazione si calcola su `startsAt`, che per un esame senza
+       * orario è la **mezzanotte** segnaposto. Col default di 60 minuti il
+       * promemoria partirebbe alle 23:00 della sera prima. Non ha ancora morso
+       * nessuno solo perché nessuna autoscuola usa la funzione — comincerebbe
+       * il giorno in cui la adotta, cioè adesso. Il promemoria mattutino e
+       * quello del giorno prima partono a ora fissa e restano.
+       */
+      if (appointment.type === "esame" && !appointment.endsAt) continue;
       const studentProfile = mapStudentFromUser(appointment.student);
       const startsAtLabel = formatAutoscuolaDateTime(appointment.startsAt);
       const durationMinutes = Math.max(
@@ -818,7 +820,7 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
             (to) => sendAutoscuolaPushToUsers({
                 companyId: service.companyId,
                 userIds: [to],
-                title: isExam ? "Promemoria esame" : "Reminder guida",
+                title: isExam ? "Promemoria esame" : "Promemoria guida",
                 body,
                 data: {
                   kind: "appointment_reminder_student",
@@ -834,6 +836,8 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
       const instructor = appointment.instructor;
       if (!instructor) continue;
       if (!appointment.student) continue; // studentless exam placeholder — nobody to message
+      // REG-604: stessa esclusione dell'allievo, stesso motivo (push alle 23:00).
+      if (appointment.type === "esame" && !appointment.endsAt) continue;
       const studentProfile = mapStudentFromUser(appointment.student);
       const startsAtLabel = formatAutoscuolaDateTime(appointment.startsAt);
       const durationMinutes = Math.max(
@@ -846,7 +850,12 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
         ),
       );
       const studentName = `${studentProfile.firstName} ${studentProfile.lastName}`.trim();
-      const body = `Promemoria guida con ${studentName} il ${startsAtLabel}. Durata ${durationMinutes} minuti.`;
+      // REG-604: anche all'istruttore diceva "guida" su un esame. L'orario a
+      // lui si può dire — è lui che deve esserci — ma il nome va giusto.
+      const instrIsExam = appointment.type === "esame";
+      const body = instrIsExam
+        ? `Promemoria esame con ${studentName} il ${startsAtLabel}.`
+        : `Promemoria guida con ${studentName} il ${startsAtLabel}. Durata ${durationMinutes} minuti.`;
       if (instructorChannels.includes("email") && instructor.user?.email) {
         await deliverAndLog(
           {
@@ -860,7 +869,7 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
           },
           (to) => sendDynamicEmail({
               to,
-              subject: "Promemoria guida — Reglo",
+              subject: instrIsExam ? "Promemoria esame — Reglo" : "Promemoria guida — Reglo",
               body,
             }),
         );
@@ -899,7 +908,7 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
           (to) => sendAutoscuolaPushToUsers({
               companyId: service.companyId,
               userIds: [to],
-              title: "Reminder guida",
+              title: instrIsExam ? "Promemoria esame" : "Promemoria guida",
               body,
               data: {
                 kind: "appointment_reminder_instructor",

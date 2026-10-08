@@ -5,6 +5,8 @@ import { prisma as defaultPrisma } from "@/db/prisma";
 import { sendDynamicEmail } from "@/email";
 import { getFicConnection } from "@/lib/integrations/fatture-in-cloud";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
+// REG-604: punto di invio unico (i canali restano paymentNotificationChannels).
+import { notifyAutoscuolaUser } from "@/lib/autoscuole/notify";
 import { getAutoscuolaStripeDestinationAccountId } from "@/lib/autoscuole/stripe-connect";
 import { generateAndUploadReceipt } from "@/lib/autoscuole/receipt";
 
@@ -431,35 +433,20 @@ const sendPaymentNotification = async ({
 
   if (!member) return;
 
-  if (channels.includes("email") && member.user.email) {
-    try {
-      await sendDynamicEmail({
-        to: member.user.email,
-        subject: title,
-        body,
-      });
-    } catch (error) {
-      console.error("Autoscuola payment email error", error);
-    }
-  }
-
-  if (channels.includes("push")) {
-    try {
-      const payloadData: Record<string, string> = { kind };
-      if (appointmentId) {
-        payloadData.appointmentId = appointmentId;
-      }
-      await sendAutoscuolaPushToUsers({
-        companyId,
-        userIds: [studentId],
-        title,
-        body,
-        data: payloadData,
-      });
-    } catch (error) {
-      console.error("Autoscuola payment push error", error);
-    }
-  }
+  // REG-604: i canali qui restano quelli di `paymentNotificationChannels`,
+  // impostazione propria dei pagamenti e già rispettata da prima. Passiamo
+  // dalla struttura comune per avere un solo percorso d'invio e il registro.
+  await notifyAutoscuolaUser({
+    companyId,
+    kind,
+    audience: "student",
+    recipient: { userId: studentId, email: member.user.email },
+    channels,
+    title,
+    body,
+    appointmentId: appointmentId ?? null,
+    data: appointmentId ? { appointmentId } : undefined,
+  });
 };
 
 const ficFetch = async (

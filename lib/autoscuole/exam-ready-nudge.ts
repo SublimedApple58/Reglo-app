@@ -1,5 +1,6 @@
 import { prisma as defaultPrisma } from "@/db/prisma";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
+import { notifyAutoscuolaUsers, PUSH_ONLY } from "@/lib/autoscuole/notify";
 
 type PrismaClientLike = typeof defaultPrisma;
 
@@ -132,22 +133,21 @@ export const processExamReadyNudge = async ({
     if (!owners.length) continue;
 
     const label = count === 1 ? "1 allievo pronto" : `${count} allievi pronti`;
-    try {
-      await sendAutoscuolaPushToUsers({
-        prisma,
+    // REG-604: `audience: "owner"` non filtra — un'impostazione canali per il
+    // titolare non esiste. Passa comunque da qui: il giorno in cui nasce, il
+    // gancio c'è già e questo punto non va ritoccato.
+    await notifyAutoscuolaUsers(
+      owners.map((o) => ({ userId: o.userId })),
+      {
         companyId,
-        userIds: owners.map((o) => o.userId),
+        kind: EXAM_READY_NUDGE_KIND,
+        audience: "owner",
+        supports: PUSH_ONLY,
         title: "Allievi pronti per l'esame",
         body: `${label} da oltre 2 settimane, esame non ancora in agenda. Valuta se prenotarlo.`,
-        data: {
-          kind: EXAM_READY_NUDGE_KIND,
-          count,
-          // companyId → id stabile lato mobile: dedup tra push e recovery.
-          companyId,
-        },
-      });
-    } catch (error) {
-      console.error("[exam-ready-nudge] push failed", error);
-    }
+        // companyId → id stabile lato mobile: dedup tra push e recovery.
+        data: { count, companyId },
+      },
+    );
   }
 };

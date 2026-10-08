@@ -2,7 +2,9 @@
 
 import { prisma as defaultPrisma } from "@/db/prisma";
 import { sendDynamicEmail } from "@/email";
-import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
+// REG-604: nome, orario e punto di invio unico.
+import { describeWhen, isExamType } from "@/lib/autoscuole/exam-notifications";
+import { notifyAutoscuolaUser } from "@/lib/autoscuole/notify";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
@@ -54,29 +56,59 @@ const formatCancellationTitle = (value: string) => {
   }
 };
 
-const formatCancellationBody = (value: string, slotLabel: string, instrLabel: string) => {
-  const tail = "Contatta la segreteria per riprenotarla.";
+/**
+ * REG-604: lo stesso titolo per un esame. Questa via ci arriva davvero — la
+ * bonifica dell'istruttore disattivato (`directory_instructor_removed`) ha
+ * annullato esami veri, dicendo «la guida … alle 16:00».
+ */
+const formatExamCancellationTitle = (value: string) => {
+  switch ((value ?? "").trim()) {
+    case "instructor_sick":
+      return "🤒 Esame annullato — istruttore in malattia";
+    case "instructor_vacation":
+      return "🌴 Esame annullato — istruttore in ferie";
+    default:
+      return "❌ Esame annullato";
+  }
+};
+
+/**
+ * REG-604: `noun` e `tail` arrivano da fuori. Prima erano "guida" e "contatta
+ * la segreteria per riprenotarla" fissi, e su un esame erano entrambi
+ * sbagliati: l'esame non si riprenota, e l'orario stampato qui è quello che
+ * l'autoscuola non voleva far uscire.
+ */
+const formatCancellationBody = (
+  value: string,
+  slotLabel: string,
+  instrLabel: string,
+  noun = "La guida",
+  /** «è stata annullata» per la guida, «è stato annullato» per l'esame. */
+  cancelled = "è stata annullata",
+  tailOverride?: string,
+) => {
+  const tail = tailOverride ?? "Contatta la segreteria per riprenotarla.";
   switch ((value ?? "").trim()) {
     case "instructor_cancel":
-      return `La guida di ${slotLabel}${instrLabel} è stata annullata dall'istruttore. ${tail}`;
+      return `${noun} di ${slotLabel}${instrLabel} ${cancelled} dall'istruttore. ${tail}`;
     case "school_fault":
-      return `La guida di ${slotLabel}${instrLabel} è stata annullata per un imprevisto dell'autoscuola. Nessuna penale a tuo carico. ${tail}`;
+      return `${noun} di ${slotLabel}${instrLabel} ${cancelled} per un imprevisto dell'autoscuola. Nessuna penale a tuo carico. ${tail}`;
     case "vehicle_inactive":
-      return `La guida di ${slotLabel}${instrLabel} è stata annullata perché il veicolo non è più disponibile. ${tail}`;
+      return `${noun} di ${slotLabel}${instrLabel} ${cancelled} perché il veicolo non è più disponibile. ${tail}`;
     case "instructor_inactive":
-      return `La guida di ${slotLabel}${instrLabel} è stata annullata perché l'istruttore non è al momento disponibile. ${tail}`;
+      return `${noun} di ${slotLabel}${instrLabel} ${cancelled} perché l'istruttore non è al momento disponibile. ${tail}`;
     case "availability_changed":
-      return `La guida di ${slotLabel}${instrLabel} è stata annullata per una variazione di disponibilità. ${tail}`;
+      return `${noun} di ${slotLabel}${instrLabel} ${cancelled} per una variazione di disponibilità. ${tail}`;
     case "owner_delete":
-      return `La guida di ${slotLabel}${instrLabel} è stata annullata dalla segreteria. ${tail}`;
+      return `${noun} di ${slotLabel}${instrLabel} ${cancelled} dalla segreteria. ${tail}`;
     case "directory_instructor_removed":
-      return `La guida di ${slotLabel}${instrLabel} è stata annullata per un cambio istruttore. ${tail}`;
+      return `${noun} di ${slotLabel}${instrLabel} ${cancelled} per un cambio istruttore. ${tail}`;
     case "instructor_sick":
-      return `🤒 La guida di ${slotLabel}${instrLabel} è stata annullata perché l'istruttore è in malattia. ${tail}`;
+      return `🤒 ${noun} di ${slotLabel}${instrLabel} ${cancelled} perché l'istruttore è in malattia. ${tail}`;
     case "instructor_vacation":
-      return `🌴 La guida di ${slotLabel}${instrLabel} è stata annullata perché l'istruttore è in ferie. ${tail}`;
+      return `🌴 ${noun} di ${slotLabel}${instrLabel} ${cancelled} perché l'istruttore è in ferie. ${tail}`;
     default:
-      return `La guida di ${slotLabel}${instrLabel} è stata annullata per motivi organizzativi. ${tail}`;
+      return `${noun} di ${slotLabel}${instrLabel} ${cancelled} per motivi organizzativi. ${tail}`;
   }
 };
 
@@ -143,6 +175,8 @@ const notifyOperationalCancellation = async ({
   companyId,
   studentId,
   startsAt,
+  endsAt,
+  type,
   reason,
   instructorId,
 }: {
@@ -150,6 +184,10 @@ const notifyOperationalCancellation = async ({
   // Null only for studentless exam placeholders — nobody to notify.
   studentId: string | null;
   startsAt: Date;
+  /** REG-604: null su un esame senza orario → l'orario non si scrive. */
+  endsAt?: Date | null;
+  /** REG-604: "esame" cambia nome, participio, titolo e riga finale. */
+  type?: string | null;
   reason: string;
   instructorId?: string | null;
 }) => {
@@ -157,7 +195,7 @@ const notifyOperationalCancellation = async ({
   const [studentUser, instructor] = await Promise.all([
     defaultPrisma.user.findUnique({
       where: { id: studentId },
-      select: { email: true },
+      select: { email: true, phone: true },
     }),
     instructorId
       ? defaultPrisma.autoscuolaInstructor.findFirst({
@@ -167,49 +205,35 @@ const notifyOperationalCancellation = async ({
       : Promise.resolve(null),
   ]);
 
-  const dateLabel = startsAt.toLocaleDateString("it-IT", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    timeZone: AUTOSCUOLA_TIMEZONE,
-  });
-  const timeLabel = startsAt.toLocaleTimeString("it-IT", {
-    timeZone: AUTOSCUOLA_TIMEZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const slotLabel = `${dateLabel} alle ${timeLabel}`;
+  const isExam = isExamType(type);
+  const { when } = describeWhen({ type: type ?? null, startsAt, endsAt: endsAt ?? null });
   const instrLabel = instructor?.name ? ` con ${instructor.name}` : "";
 
-  const title = formatCancellationTitle(reason);
-  const body = formatCancellationBody(reason, slotLabel, instrLabel);
+  const title = isExam
+    ? formatExamCancellationTitle(reason)
+    : formatCancellationTitle(reason);
+  const body = formatCancellationBody(
+    reason,
+    when,
+    instrLabel,
+    isExam ? "Il tuo esame di guida" : "La guida",
+    isExam ? "è stato annullato" : "è stata annullata",
+    isExam ? "Per la nuova data ti contatterà l'autoscuola." : undefined,
+  );
 
-  try {
-    await sendAutoscuolaPushToUsers({
-      companyId,
-      userIds: [studentId],
-      title,
-      body,
-      data: {
-        kind: "appointment_cancelled",
-        startsAt: startsAt.toISOString(),
-      },
-    });
-  } catch (error) {
-    console.error("Operational cancellation push error", error);
-  }
-
-  if (studentUser?.email) {
-    try {
-      await sendDynamicEmail({
-        to: studentUser.email,
-        subject: title,
-        body,
-      });
-    } catch (error) {
-      console.error("Operational cancellation email error", error);
-    }
-  }
+  await notifyAutoscuolaUser({
+    companyId,
+    kind: "appointment_cancelled",
+    audience: "student",
+    recipient: { userId: studentId, email: studentUser?.email, phone: studentUser?.phone },
+    title,
+    body,
+    data: {
+      startsAt: startsAt.toISOString(),
+      isExam,
+      timeSet: (endsAt ?? null) !== null,
+    },
+  });
 };
 
 /**
@@ -244,6 +268,8 @@ export async function operationallyCancelAppointment({
       startsAt: true,
       endsAt: true,
       status: true,
+      // REG-604: serve al testo della notifica (guida o esame).
+      type: true,
       instructorId: true,
       vehicleId: true,
       paymentRequired: true,
@@ -300,6 +326,8 @@ export async function operationallyCancelAppointment({
       companyId,
       studentId: appointment.studentId,
       startsAt: appointment.startsAt,
+      endsAt: appointment.endsAt,
+      type: appointment.type,
       reason,
       instructorId: appointment.instructorId,
     });
@@ -617,6 +645,8 @@ export async function annulFutureAppointment({
     companyId,
     studentId: appointment.studentId,
     startsAt: appointment.startsAt,
+    endsAt: appointment.endsAt,
+    type: appointment.type,
     reason: schoolFault ? "school_fault" : "owner_delete",
     instructorId: appointment.instructorId,
   });
