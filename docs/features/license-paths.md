@@ -128,6 +128,33 @@ Il backfill dà a ogni allievo **un** percorso ricavato dai campi che ha già
 copre tutte le guide e i colori restano quelli di prima. Il valore si vede dal
 secondo percorso in poi.
 
+## Il filtro del tab Guide
+
+Le guide non hanno una colonna percorso, quindi il tab Guide puo' mostrarle
+tutte insieme. La regola di cosa far vedere sta in `lessonsPathFilterId()`
+(`lib/autoscuole/license-paths.ts`), non nel componente, ed e' coperta dai test:
+
+1. **Con meno di due percorsi non si filtra, e il banner non esiste.** «Solo le
+   guide del percorso B» e' una precisazione inutile quando B e' l'unico
+   percorso che esiste — cioe' per quasi tutti gli allievi.
+2. **Il default e' il percorso corrente** (`currentPath()`: quello aperto, o
+   l'ultimo chiuso per un patentato), non il piu' vecchio.
+3. Una scelta che **non esiste piu'** ricade sul default, invece di mostrare
+   zero guide senza spiegazione.
+
+Il banner ha **due stati** e in entrambi offre l'azione opposta — «Mostra
+tutte» quando e' filtrato, «Solo il percorso X» quando non lo e'. Serve perche'
+i conti dei sotto-filtri (Tutte/Future/…) seguono il filtro: se il percorso
+corrente e' nuovo e non ha ancora guide, senza il banner sembrerebbe che il
+prodotto abbia perso lo storico.
+
+> Bug del 2026-10-09, il giorno dopo il rilascio: il tab si apriva etichettato
+> sul percorso **vecchio** e il banner compariva anche con un percorso solo.
+> Trovato in QA su produzione su `marco@reglo.it` (Autoscuola Maltese: A2
+> conseguita, B appena avviata). Fix + test in
+> `tests/unit/autoscuole/license-paths.test.ts` e
+> `tests/e2e/reg458-filtro-guide.auth.spec.ts`.
+
 ## Connessioni
 
 - → **Student Phase**: `startNewLicensePath` riporta la fase a PRATICA/TEORIA e

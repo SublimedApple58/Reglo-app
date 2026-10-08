@@ -7,6 +7,9 @@ import {
   openPath,
   pathForDate,
   pathLabel,
+  currentPath,
+  lessonsPathFilterId,
+  ALL_LESSON_PATHS,
 } from "@/lib/autoscuole/license-paths";
 
 /**
@@ -174,5 +177,116 @@ describe("a quale percorso appartiene una guida", () => {
     for (const quando of ["2020-01-01", "2026-03-15", "2030-12-31"]) {
       expect(pathForDate([b], quando)?.licenseCategory).toBe("B");
     }
+  });
+});
+
+/**
+ * Il filtro del tab Guide. Nasce da un bug vero trovato in QA su produzione il
+ * 9 ottobre, il giorno dopo il rilascio: su un allievo con A2 conseguita e B
+ * appena avviata, il tab Guide si presentava etichettato sul percorso VECCHIO
+ * (A2) invece che su quello in corso, e «Mostra tutte» sembrava non fare niente
+ * perche' tutte le guide erano comunque dell'A2.
+ */
+/** Come `percorso`, ma con l'id: il filtro ragiona sugli id. */
+const percorsoConId = (
+  id: string,
+  over: Partial<Parameters<typeof percorso>[0]> = {},
+): ReturnType<typeof percorso> & { id: string } => ({ id, ...percorso(over) });
+
+describe("lessonsPathFilterId", () => {
+  const a2 = percorsoConId("a2", {
+    licenseCategory: "A2",
+    status: "obtained",
+    startedAt: "2026-08-28T13:49:19.000Z",
+    closedAt: "2026-09-11T09:47:44.000Z",
+  });
+  const b = percorsoConId("b", {
+    licenseCategory: "B",
+    status: "active",
+    startedAt: "2026-10-08T23:22:05.000Z",
+    closedAt: null,
+    obtainedAt: null,
+  });
+
+  it("con un percorso solo non filtra: niente banner per quasi tutti gli allievi", () => {
+    expect(lessonsPathFilterId([b], null)).toBeNull();
+    // e nemmeno se qualcuno avesse una scelta appiccicata addosso
+    expect(lessonsPathFilterId([b], "b")).toBeNull();
+    expect(lessonsPathFilterId([], null)).toBeNull();
+  });
+
+  it("il default e' il percorso IN CORSO, non quello vecchio chiuso", () => {
+    // Il bug del 9 ottobre: qui tornava "a2".
+    expect(lessonsPathFilterId([a2, b], null)).toBe("b");
+    expect(lessonsPathFilterId([b, a2], null)).toBe("b");
+  });
+
+  it("«Mostra tutte» non filtra, e non viene ri-filtrato dal default", () => {
+    expect(lessonsPathFilterId([a2, b], ALL_LESSON_PATHS)).toBeNull();
+  });
+
+  it("«Vedi guide» su un percorso chiuso lo rispetta", () => {
+    expect(lessonsPathFilterId([a2, b], "a2")).toBe("a2");
+  });
+
+  it("una scelta che non esiste piu' ricade sul percorso corrente", () => {
+    // Register ricaricato, percorso spostato: meglio il default che zero guide
+    // senza spiegazione.
+    expect(lessonsPathFilterId([a2, b], "percorso-fantasma")).toBe("b");
+  });
+
+  it("su un patentato senza percorsi aperti il corrente e' l'ultimo chiuso", () => {
+    const vecchia = percorsoConId("am", {
+      licenseCategory: "AM",
+      status: "abandoned",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      closedAt: "2026-02-01T00:00:00.000Z",
+    });
+    expect(currentPath([vecchia, a2])?.licenseCategory).toBe("A2");
+    expect(lessonsPathFilterId([vecchia, a2], null)).toBe("a2");
+  });
+
+  it("currentPath preferisce sempre il percorso aperto", () => {
+    expect(currentPath([a2, b])?.licenseCategory).toBe("B");
+    expect(currentPath([])).toBeNull();
+  });
+});
+
+/**
+ * Il caso di Marco Reglo (Autoscuola Maltese) esattamente come sta in
+ * produzione: due guide di settembre, A2 chiusa l'11 settembre, B avviata l'8
+ * ottobre. Entrambe le guide sono dell'A2 — la B e' nuova e non ne ha ancora
+ * nessuna. E' il motivo per cui «Mostra tutte» sembrava rotto: filtrando per A2
+ * o non filtrando si vedevano le stesse due righe.
+ */
+describe("il caso Marco Reglo, dal dato di produzione", () => {
+  const a2 = percorsoConId("e0682100", {
+    licenseCategory: "A2",
+    status: "obtained",
+    startedAt: "2026-08-28T13:49:19.000Z",
+    closedAt: "2026-09-11T09:47:44.000Z",
+  });
+  const b = percorsoConId("b4c12985", {
+    licenseCategory: "B",
+    status: "active",
+    startedAt: "2026-10-08T23:22:05.000Z",
+    closedAt: null,
+    obtainedAt: null,
+  });
+  const guide = ["2026-09-02T14:00:00.000Z", "2026-09-24T09:00:00.000Z"];
+
+  it("il tab Guide si apre sul percorso B, quello in corso", () => {
+    expect(lessonsPathFilterId([a2, b], null)).toBe("b4c12985");
+  });
+
+  it("entrambe le guide restano attribuite all'A2, anche quella nel buco fra i due percorsi", () => {
+    // La guida del 24/09 cade dopo la chiusura dell'A2 e prima dell'avvio della
+    // B: pathForDate la da' all'A2, cioe' all'ultimo percorso iniziato prima.
+    expect(guide.map((g) => pathForDate([a2, b], g)?.id)).toEqual(["e0682100", "e0682100"]);
+  });
+
+  it("quindi il percorso B mostra zero guide, e lo dice", () => {
+    const filtro = lessonsPathFilterId([a2, b], null);
+    expect(guide.filter((g) => pathForDate([a2, b], g)?.id === filtro)).toHaveLength(0);
   });
 });

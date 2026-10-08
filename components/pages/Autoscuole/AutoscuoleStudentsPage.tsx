@@ -103,6 +103,9 @@ import {
   isQualification,
   openPath,
   pathForDate,
+  currentPath,
+  lessonsPathFilterId,
+  ALL_LESSON_PATHS,
 } from "@/lib/autoscuole/license-paths";
 import type { StudentLicensePathDto } from "@/lib/actions/autoscuole-license-paths.actions";
 import { InviteCodeDialog } from "@/components/pages/Autoscuole/dialogs/InviteCodeDialog";
@@ -853,8 +856,15 @@ export function AutoscuoleStudentsPage({
   const [panelOpen, setPanelOpen] = React.useState(false);
   const [selectedStudentId, setSelectedStudentId] = React.useState<string | null>(null);
   const [register, setRegister] = React.useState<StudentRegister | null>(null);
-  /** REG-458 — tab Guide ristretto a un percorso (da «Vedi guide» nello storico). */
-  const [lessonsPathFilter, setLessonsPathFilter] = React.useState<string | null>(null);
+  /**
+   * REG-458 — quale percorso si sta guardando nel tab Guide. `null` = nessuna
+   * scelta fatta, quindi vale il default (il percorso corrente);
+   * `ALL_LESSON_PATHS` = l'utente ha chiesto di vedere tutto; altrimenti l'id
+   * del percorso scelto. I tre valori servono distinti: con un semplice
+   * `string | null` il default si riapplicherebbe subito dopo «Mostra tutte»,
+   * rendendo quel pulsante apparentemente rotto.
+   */
+  const [lessonsPathChoice, setLessonsPathChoice] = React.useState<string | null>(null);
   /** Voci attive del pagellino: danno l'ordine alla media per voce e dicono
    *  quante voci non sono mai state valutate. Company-level → una fetch sola. */
   const [evalSheetItems, setEvalSheetItems] = React.useState<
@@ -1708,9 +1718,30 @@ export function AutoscuoleStudentsPage({
       ).length,
     [register, pathIdForLesson],
   );
-  /** Il filtro per percorso decade quando si cambia allievo. */
+  /**
+   * Il percorso «corrente»: quello in corso, oppure — se l'allievo e'
+   * patentato e non ha ancora ripreso — l'ultimo chiuso. E' il default del
+   * tab Guide: chi apre un allievo vuole vedere dove sta adesso, non dove
+   * stava due patenti fa.
+   */
+  const currentLicensePath = React.useMemo(
+    () => currentPath(licensePaths),
+    [licensePaths],
+  );
+  /**
+   * Il filtro vero del tab Guide, derivato dalla scelta.
+   *
+   * Con **un solo percorso non filtra e non si vede**: «solo le guide del
+   * percorso B» e' una precisazione inutile quando B e' l'unico percorso che
+   * esiste, ed e' il caso di quasi tutti gli allievi.
+   */
+  const lessonsPathFilter = React.useMemo(
+    () => lessonsPathFilterId(licensePaths, lessonsPathChoice),
+    [licensePaths, lessonsPathChoice],
+  );
+  /** La scelta decade quando si cambia allievo: torna a valere il default. */
   React.useEffect(() => {
-    setLessonsPathFilter(null);
+    setLessonsPathChoice(null);
   }, [selectedStudentId]);
 
   const drawerTabs = React.useMemo(() => {
@@ -3034,7 +3065,7 @@ export function AutoscuoleStudentsPage({
                       type="button"
                       className={blueLinkClass}
                       onClick={() => {
-                        setLessonsPathFilter(path.id);
+                        setLessonsPathChoice(path.id);
                         setDrawerTab("lessons");
                       }}
                     >
@@ -3254,21 +3285,44 @@ export function AutoscuoleStudentsPage({
     const filteredPath = lessonsPathFilter
       ? licensePaths.find((p) => p.id === lessonsPathFilter) ?? null
       : null;
+    // Il banner compare SOLO con piu' di un percorso: e' l'unico caso in cui
+    // «quali guide sto guardando» sia una domanda vera. Con un percorso solo
+    // non c'e' banner, non c'e' pulsante e non c'e' filtro.
+    const showPathBanner = licensePaths.length > 1;
 
     return (
       <div>
-        {filteredPath && (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-[12px] bg-[#f7f7f7] px-4 py-3">
+        {showPathBanner && (
+          <div
+            data-testid="lessons-path-banner"
+            className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-[12px] bg-[#f7f7f7] px-4 py-3"
+          >
             <p className="text-[13px] font-medium text-foreground">
-              Solo le guide del percorso{" "}
-              <span className="font-semibold">{filteredPath.licenseCategory ?? "—"}</span>
+              {filteredPath ? (
+                <>
+                  Solo le guide del percorso{" "}
+                  <span className="font-semibold">
+                    {filteredPath.licenseCategory ?? "—"}
+                  </span>
+                </>
+              ) : (
+                "Tutte le guide, di tutti i percorsi"
+              )}
             </p>
             <button
               type="button"
               className={blueLinkClass}
-              onClick={() => setLessonsPathFilter(null)}
+              onClick={() =>
+                setLessonsPathChoice(
+                  filteredPath
+                    ? ALL_LESSON_PATHS
+                    : currentLicensePath?.id ?? ALL_LESSON_PATHS,
+                )
+              }
             >
-              Mostra tutte
+              {filteredPath
+                ? "Mostra tutte"
+                : `Solo il percorso ${currentLicensePath?.licenseCategory ?? "attuale"}`}
             </button>
           </div>
         )}
@@ -3285,7 +3339,11 @@ export function AutoscuoleStudentsPage({
         </div>
         {filteredLessons.length === 0 ? (
           <div className="pt-8 text-center">
-            <p className="text-[13px] font-medium text-[#929292]">Nessuna guida per questo filtro.</p>
+            <p className="text-[13px] font-medium text-[#929292]">
+              {filteredPath && pathFiltered.length === 0 && sortedLessons.length > 0
+                ? "Nessuna guida in questo percorso. Le altre sono sotto «Mostra tutte»."
+                : "Nessuna guida per questo filtro."}
+            </p>
           </div>
         ) : (
           filteredLessons.map((lesson) => {

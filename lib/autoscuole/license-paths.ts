@@ -115,6 +115,47 @@ export function closedPathsNewestFirst<T extends LicensePathLike>(paths: T[]): T
 export const openPath = <T extends LicensePathLike>(paths: T[]): T | null =>
   paths.find(isPathOpen) ?? null;
 
+/**
+ * Il percorso «corrente» di un allievo: quello in corso, oppure — se e'
+ * patentato e non ha ancora ripreso — l'ultimo chiuso. Non e' sempre
+ * `openPath`: un patentato non ha percorsi aperti, ma ha comunque un percorso
+ * di cui si parla.
+ */
+export function currentPath<T extends LicensePathLike>(paths: T[]): T | null {
+  return openPath(paths) ?? closedPathsNewestFirst(paths)[0] ?? null;
+}
+
+/**
+ * REG-458 — «vedi tutte le guide, di tutti i percorsi». Un id di percorso e' un
+ * uuid, quindi non puo' collidere con questo valore.
+ */
+export const ALL_LESSON_PATHS = "all";
+
+/**
+ * Su quale percorso va ristretto il tab Guide, data la scelta di chi guarda
+ * (`null` = non ha scelto, vale il default).
+ *
+ * Tre regole, tutte volute:
+ * 1. **Con meno di due percorsi non si filtra**, e di conseguenza il banner non
+ *    si vede: «solo le guide del percorso B» e' una precisazione inutile quando
+ *    B e' l'unico percorso che esiste — ed e' il caso di quasi tutti gli
+ *    allievi.
+ * 2. **Il default e' il percorso corrente**, non il piu' vecchio: chi apre un
+ *    allievo vuole sapere dove sta adesso.
+ * 3. Una scelta che **non esiste piu'** (il register si e' ricaricato, il
+ *    percorso e' cambiato) ricade sul default invece di mostrare zero guide
+ *    senza spiegazione.
+ */
+export function lessonsPathFilterId<T extends LicensePathLike & { id: string }>(
+  paths: T[],
+  choice: string | null,
+): string | null {
+  if (paths.length < 2) return null;
+  if (choice === ALL_LESSON_PATHS) return null;
+  if (choice && paths.some((path) => path.id === choice)) return choice;
+  return currentPath(paths)?.id ?? null;
+}
+
 const startedAtMs = (path: LicensePathLike): number => {
   const raw = path.startedAt;
   if (!raw) return 0;
