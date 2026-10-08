@@ -140,6 +140,11 @@ Client mobile vecchi che non leggono i campi nuovi continuano a funzionare; il f
 - → **Communications**: cron `autoscuole-reminders.ts` invariato.
 - → **Notifications**: kinds `theory_exam_countdown`, `theory_quiz_inactivity` (mobile inbox-only).
 - → **Mobile**: 4 home screen condizionali. Vedi `reglo-mobile/docs/features/student-phase.md`.
+- → **Percorsi patente (REG-458)**: `startNewLicensePath` riporta la fase a
+  PRATICA (o TEORIA) chiudendo il percorso precedente, e azzera `examReady`. Il
+  push del riavvio è `license_path_started`, NON `student_phase_change`: quello
+  direbbe «Hai il foglio rosa! prenota le tue **prime** guide» a chi una patente
+  ce l'ha già. Vedi [license-paths.md](license-paths.md).
 - → **Backoffice**: card "Fasi attive del percorso" + card "Quiz Teoria — Gestione licenze" + dialog di risoluzione.
 
 ## Migrazione studenti esistenti

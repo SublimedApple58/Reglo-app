@@ -27,6 +27,13 @@ import {
 } from "@/components/pages/Autoscuole/student-detail-ui";
 import { updateStudentPhone } from "@/lib/actions/autoscuole.actions";
 import { TRANSMISSION_LABELS, type Transmission } from "@/lib/autoscuole/license";
+import {
+  closedPathsNewestFirst,
+  historySectionTitle,
+  isQualification,
+  openPath,
+} from "@/lib/autoscuole/license-paths";
+import { StartNewLicensePathDialog } from "@/components/pages/Autoscuole/dialogs/StartNewLicensePathDialog";
 import { cn } from "@/lib/utils";
 import {
   getConsorzioStudentDetail,
@@ -138,6 +145,14 @@ export function ConsorzioStudentDrawer({
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [licenseDialogOpen, setLicenseDialogOpen] = React.useState(false);
+  const [newPathDialogOpen, setNewPathDialogOpen] = React.useState(false);
+
+  /** «14 giugno 2026» — le date dello storico percorsi. */
+  const formatPathDate = (iso: string): string => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
+  };
   const [phaseDialogOpen, setPhaseDialogOpen] = React.useState(false);
   // Esame di cui si sta registrando l'esito: stessa modalina di agenda e
   // dettaglio allievo delle autoscuole.
@@ -204,7 +219,10 @@ export function ConsorzioStudentDrawer({
       )
     : 0;
 
-  const renderSummary = (data: ConsorzioStudentDetail) => (
+  const renderSummary = (data: ConsorzioStudentDetail) => {
+    const activePath = openPath(data.licensePaths ?? []);
+    const closedPaths = closedPathsNewestFirst(data.licensePaths ?? []);
+    return (
     <>
       {/* Anagrafica */}
       <section className="border-b border-[#f2f2f2] pb-7">
@@ -276,7 +294,7 @@ export function ConsorzioStudentDrawer({
             </p>
           </Field>
           <Field label="Percorso patente">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-medium text-foreground">
                 {data.licenseCategory
                   ? `${data.licenseCategory} · ${
@@ -286,12 +304,23 @@ export function ConsorzioStudentDrawer({
                     }`
                   : "—"}
               </p>
+              {activePath && <Pill tone="blue">In corso</Pill>}
               <button
                 type="button"
                 className={blueLinkClass}
                 onClick={() => setLicenseDialogOpen(true)}
               >
                 Modifica
+              </button>
+              <span aria-hidden className="text-[#dddddd]">·</span>
+              {/* REG-458 — la scala C → CE → CQC qui è la norma, non l'eccezione:
+                  prima si rimediava registrando due volte la stessa persona. */}
+              <button
+                type="button"
+                className={blueLinkClass}
+                onClick={() => setNewPathDialogOpen(true)}
+              >
+                Avvia nuovo percorso
               </button>
             </div>
           </Field>
@@ -316,6 +345,60 @@ export function ConsorzioStudentDrawer({
           </Field>
         </div>
       </section>
+
+      {/* REG-458 — percorsi già chiusi. Il titolo evita la parola «patenti»:
+          CQC e ADR sono qualificazioni, non patenti. */}
+      {closedPaths.length > 0 && (
+        <section className="border-b border-[#f2f2f2] py-7">
+          <p className={cn(sectionLabelClass, "mb-3")}>{historySectionTitle(closedPaths)}</p>
+          <div className="overflow-hidden rounded-[12px] border border-[#ececec]">
+            {closedPaths.map((path, index) => {
+              const conseguita = path.status === "obtained";
+              const quando = conseguita ? path.obtainedAt ?? path.closedAt : path.closedAt;
+              return (
+                <div
+                  key={path.id}
+                  className={cn(
+                    "flex items-center gap-4 px-4 py-3.5",
+                    index > 0 && "border-t border-[#f2f2f2]",
+                  )}
+                >
+                  <Pill tone={conseguita ? "green" : "gray"}>
+                    {path.licenseCategory ?? "—"}
+                  </Pill>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13.5px] font-medium text-foreground">
+                      {[
+                        path.transmission && !isQualification(path.licenseCategory)
+                          ? TRANSMISSION_LABELS[path.transmission as Transmission] ??
+                            path.transmission
+                          : null,
+                        `${conseguita ? "conseguita" : "abbandonato"}${
+                          quando ? ` il ${formatPathDate(quando)}` : ""
+                        }`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                    <p className="mt-0.5 text-[12.5px] text-[#929292]">
+                      {path.licenseNumber ? (
+                        <>
+                          Patente{" "}
+                          <span className="font-semibold tabular-nums text-foreground">
+                            {path.licenseNumber}
+                          </span>
+                        </>
+                      ) : (
+                        "Nessun numero registrato"
+                      )}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Codici contabili — la parte consorzio-only */}
       <section className="border-b border-[#f2f2f2] py-7">
@@ -418,7 +501,8 @@ export function ConsorzioStudentDrawer({
         </div>
       </section>
     </>
-  );
+    );
+  };
 
   const renderLessons = (data: ConsorzioStudentDetail) => {
     const rows = [
@@ -688,6 +772,32 @@ export function ConsorzioStudentDrawer({
                   }
                 : prev,
             );
+            void refresh();
+            onChanged?.();
+          }}
+        />
+      )}
+
+      {detail && (
+        <StartNewLicensePathDialog
+          open={newPathDialogOpen}
+          onOpenChange={setNewPathDialogOpen}
+          studentId={detail.userId}
+          studentName={formatStoredName(detail.name, nameOrder)}
+          currentPath={(() => {
+            const open = openPath(detail.licensePaths ?? []);
+            return open
+              ? {
+                  licenseCategory: open.licenseCategory,
+                  transmission: open.transmission,
+                  startedAt: open.startedAt,
+                  licenseNumber: open.licenseNumber,
+                }
+              : null;
+          })()}
+          theoryPhaseEnabled={detail.phasesEnabled.includes("TEORIA")}
+          onSuccess={() => {
+            // Percorso, fase, storico e obbligo cambiano insieme: si ricarica.
             void refresh();
             onChanged?.();
           }}

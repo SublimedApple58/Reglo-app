@@ -96,6 +96,15 @@ import {
 } from "@/components/pages/Autoscuole/ExamOutcomePanel";
 import { asExamOutcome, canRecordExamOutcome } from "@/lib/autoscuole/exam-outcome";
 import { EditStudentLicenseDialog } from "@/components/pages/Autoscuole/dialogs/EditStudentLicenseDialog";
+import { StartNewLicensePathDialog } from "@/components/pages/Autoscuole/dialogs/StartNewLicensePathDialog";
+import {
+  closedPathsNewestFirst,
+  historySectionTitle,
+  isQualification,
+  openPath,
+  pathForDate,
+} from "@/lib/autoscuole/license-paths";
+import type { StudentLicensePathDto } from "@/lib/actions/autoscuole-license-paths.actions";
 import { InviteCodeDialog } from "@/components/pages/Autoscuole/dialogs/InviteCodeDialog";
 import { ToolbarFilters } from "@/components/pages/Autoscuole/filters/ToolbarFilters";
 import {
@@ -213,6 +222,8 @@ type Student = StudentProfile & {
     status: string;
     category: string | null;
   } | null;
+  /** REG-458 — percorsi patente, dal più vecchio al più recente. */
+  licensePaths?: StudentLicensePathDto[];
   summary: {
     completedLessons: number;
     requiredLessons: number;
@@ -428,6 +439,13 @@ type LessonEntry = {
 /** Filtri client-side del tab Guide del drawer allievo. */
 type LessonFilter = "all" | "upcoming" | "unpaid" | "completed" | "cancelled";
 
+/** «14 giugno 2026» — le date dello storico percorsi. */
+const formatPathDate = (iso: string): string => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
+};
+
 type StudentRegister = {
   student: StudentProfile;
   bookingBlocked?: boolean;
@@ -450,6 +468,8 @@ type StudentRegister = {
     status: string;
     category: string | null;
   } | null;
+  /** REG-458 — percorsi patente, dal più vecchio al più recente. */
+  licensePaths?: StudentLicensePathDto[];
   summary: {
     completedLessons: number;
     requiredLessons: number;
@@ -833,6 +853,8 @@ export function AutoscuoleStudentsPage({
   const [panelOpen, setPanelOpen] = React.useState(false);
   const [selectedStudentId, setSelectedStudentId] = React.useState<string | null>(null);
   const [register, setRegister] = React.useState<StudentRegister | null>(null);
+  /** REG-458 — tab Guide ristretto a un percorso (da «Vedi guide» nello storico). */
+  const [lessonsPathFilter, setLessonsPathFilter] = React.useState<string | null>(null);
   /** Voci attive del pagellino: danno l'ordine alla media per voce e dicono
    *  quante voci non sono mai state valutate. Company-level → una fetch sola. */
   const [evalSheetItems, setEvalSheetItems] = React.useState<
@@ -946,6 +968,7 @@ export function AutoscuoleStudentsPage({
 
   // Phase change dialog
   const [phaseDialogOpen, setPhaseDialogOpen] = React.useState(false);
+  const [newPathDialogOpen, setNewPathDialogOpen] = React.useState(false);
   const [licenseDialogOpen, setLicenseDialogOpen] = React.useState(false);
 
   // Inline edit del telefono allievo (Anagrafica)
@@ -1656,6 +1679,40 @@ export function AutoscuoleStudentsPage({
    * - PRATICA/PATENTATO (dal foglio rosa in poi): Quiz resta e si AGGIUNGONO
    *   guide e note, quindi convivono.
    */
+  // REG-458 — i percorsi patente dell'allievo aperto nel drawer.
+  const licensePaths = React.useMemo<StudentLicensePathDto[]>(
+    () => register?.licensePaths ?? [],
+    [register],
+  );
+  const activeLicensePath = React.useMemo(
+    () => openPath(licensePaths),
+    [licensePaths],
+  );
+  const closedLicensePaths = React.useMemo(
+    () => closedPathsNewestFirst(licensePaths),
+    [licensePaths],
+  );
+  /**
+   * A quale percorso appartiene una guida: dalla sua data, non da una colonna.
+   * Con un percorso solo — cioè oggi, per tutti — la risposta è sempre quello.
+   */
+  const pathIdForLesson = React.useCallback(
+    (startsAt: string | Date): string | null =>
+      licensePaths.length ? pathForDate(licensePaths, startsAt)?.id ?? null : null,
+    [licensePaths],
+  );
+  const lessonsCountForPath = React.useCallback(
+    (pathId: string): number =>
+      (register?.lessons ?? []).filter(
+        (lesson) => pathIdForLesson(lesson.startsAt) === pathId,
+      ).length,
+    [register, pathIdForLesson],
+  );
+  /** Il filtro per percorso decade quando si cambia allievo. */
+  React.useEffect(() => {
+    setLessonsPathFilter(null);
+  }, [selectedStudentId]);
+
   const drawerTabs = React.useMemo(() => {
     // Vista ridotta: Quiz, Guide e Note sono del servizio attivo. Resta il
     // riepilogo, cioè l'anagrafica — l'unica cosa che questa scuola possiede.
@@ -2477,19 +2534,13 @@ export function AutoscuoleStudentsPage({
                 </div>
               )}
             </div>
-            {!affiliate && (
-              <div>
-                <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Case attiva</p>
-                <p className="text-sm font-medium text-foreground">
-                  {register.activeCase
-                    ? `${register.activeCase.status}${register.activeCase.category ? ` · ${register.activeCase.category}` : ""}`
-                    : "Nessuna"}
-                </p>
-              </div>
-            )}
+            {/* REG-458 — qui stava «Case attiva», che per il 99% degli allievi
+                stampava la parola «iscritto»: il guscio di un modello mai
+                adottato. Il percorso vero sta nel campo qui sotto e nello
+                storico in fondo al riepilogo. */}
             <div>
               <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Percorso patente</p>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-medium text-foreground">
                   {register.licenseCategory
                     ? `${register.licenseCategory} · ${
@@ -2497,9 +2548,27 @@ export function AutoscuoleStudentsPage({
                       }`
                     : "—"}
                 </p>
+                {activeLicensePath && <Pill tone="blue">In corso</Pill>}
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
                 <button type="button" className={blueLinkClass} onClick={() => setLicenseDialogOpen(true)}>
                   Modifica
                 </button>
+                {!affiliate && (
+                  <>
+                    <span aria-hidden className="text-[#dddddd]">·</span>
+                    {/* Correggere e ricominciare sono due gesti diversi: averli
+                        confusi in uno solo e' cio' che faceva perdere la patente
+                        precedente. */}
+                    <button
+                      type="button"
+                      className={blueLinkClass}
+                      onClick={() => setNewPathDialogOpen(true)}
+                    >
+                      Avvia nuovo percorso
+                    </button>
+                  </>
+                )}
               </div>
             </div>
             <div>
@@ -2903,6 +2972,81 @@ export function AutoscuoleStudentsPage({
           </p>
         </section>
 
+        {/* REG-458 — storico dei percorsi chiusi. Esiste SOLO se ce n'è almeno
+            uno: su un allievo al primo percorso una sezione vuota sarebbe
+            peggio di una sezione assente. */}
+        {closedLicensePaths.length > 0 && (
+          <section className="border-b border-[#f2f2f2] py-7">
+            <p className={cn(sectionLabelClass, "mb-3")}>
+              {historySectionTitle(closedLicensePaths)}
+            </p>
+            <div className="overflow-hidden rounded-[12px] border border-[#ececec]">
+              {closedLicensePaths.map((path, index) => {
+                const conseguita = path.status === "obtained";
+                const quando = conseguita ? path.obtainedAt ?? path.closedAt : path.closedAt;
+                const guide = lessonsCountForPath(path.id);
+                return (
+                  <div
+                    key={path.id}
+                    className={cn(
+                      "flex items-center gap-4 px-4 py-3.5",
+                      index > 0 && "border-t border-[#f2f2f2]",
+                    )}
+                  >
+                    <Pill tone={conseguita ? "green" : "gray"}>
+                      {path.licenseCategory ?? "—"}
+                    </Pill>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13.5px] font-medium text-foreground">
+                        {[
+                          // Su una qualificazione il cambio non vuol dire niente.
+                          path.transmission && !isQualification(path.licenseCategory)
+                            ? TRANSMISSION_LABELS[path.transmission as Transmission] ??
+                              path.transmission
+                            : null,
+                          `${conseguita ? "conseguita" : "abbandonato"}${
+                            quando ? ` il ${formatPathDate(quando)}` : ""
+                          }`,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                      <p className="mt-0.5 text-[12.5px] text-[#929292]">
+                        {path.licenseNumber ? (
+                          <>
+                            Patente{" "}
+                            <span className="font-semibold tabular-nums text-foreground">
+                              {path.licenseNumber}
+                            </span>
+                          </>
+                        ) : (
+                          "Nessun numero registrato"
+                        )}
+                        {" · "}
+                        {guide === 0
+                          ? "nessuna guida"
+                          : guide === 1
+                            ? "1 guida"
+                            : `${guide} guide`}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className={blueLinkClass}
+                      onClick={() => {
+                        setLessonsPathFilter(path.id);
+                        setDrawerTab("lessons");
+                      }}
+                    >
+                      Vedi guide
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         {/* Esame teorico — solo fase teoria */}
         {register.studentPhase === "TEORIA" && (
           <section className="border-b border-[#f2f2f2] py-7">
@@ -3101,10 +3245,33 @@ export function AutoscuoleStudentsPage({
       { value: "cancelled", label: "Annullate" },
     ];
     const activeFilter = filterDefs.some((f) => f.value === lessonFilter) ? lessonFilter : "all";
-    const filteredLessons = sortedLessons.filter(predicates[activeFilter]);
+    // REG-458 — «Vedi guide» dallo storico restringe la lista a quel percorso.
+    // Il percorso di una guida si ricava dalla sua data, non da una colonna.
+    const pathFiltered = lessonsPathFilter
+      ? sortedLessons.filter((lesson) => pathIdForLesson(lesson.startsAt) === lessonsPathFilter)
+      : sortedLessons;
+    const filteredLessons = pathFiltered.filter(predicates[activeFilter]);
+    const filteredPath = lessonsPathFilter
+      ? licensePaths.find((p) => p.id === lessonsPathFilter) ?? null
+      : null;
 
     return (
       <div>
+        {filteredPath && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-[12px] bg-[#f7f7f7] px-4 py-3">
+            <p className="text-[13px] font-medium text-foreground">
+              Solo le guide del percorso{" "}
+              <span className="font-semibold">{filteredPath.licenseCategory ?? "—"}</span>
+            </p>
+            <button
+              type="button"
+              className={blueLinkClass}
+              onClick={() => setLessonsPathFilter(null)}
+            >
+              Mostra tutte
+            </button>
+          </div>
+        )}
         <div className="mb-4 flex justify-center overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <SegmentedControl
             value={activeFilter}
@@ -3112,7 +3279,7 @@ export function AutoscuoleStudentsPage({
             options={filterDefs.map((f) => ({
               value: f.value,
               label: f.label,
-              count: register.lessons.filter(predicates[f.value]).length,
+              count: pathFiltered.filter(predicates[f.value]).length,
             }))}
           />
         </div>
@@ -4357,6 +4524,34 @@ export function AutoscuoleStudentsPage({
                   : s,
               ),
             );
+          }}
+        />
+      )}
+
+      {/* REG-458 — «Avvia nuovo percorso». Non è disponibile nella vista ridotta
+          della consorziata: lì l'allievo vive nella company del consorzio. */}
+      {!affiliate && selectedStudentId && register && (
+        <StartNewLicensePathDialog
+          open={newPathDialogOpen}
+          onOpenChange={setNewPathDialogOpen}
+          studentId={selectedStudentId}
+          studentName={formatStudentName(register.student, studentNameOrder)}
+          currentPath={
+            activeLicensePath
+              ? {
+                  licenseCategory: activeLicensePath.licenseCategory,
+                  transmission: activeLicensePath.transmission,
+                  startedAt: activeLicensePath.startedAt,
+                  licenseNumber: activeLicensePath.licenseNumber,
+                }
+              : null
+          }
+          theoryPhaseEnabled={theoryPhaseEnabled}
+          onSuccess={() => {
+            // Cambia troppo in una volta (percorso, fase, obbligo, storico):
+            // si ricarica dal backend invece di indovinare lo stato nuovo.
+            void loadRegister(selectedStudentId);
+            void load();
           }}
         />
       )}

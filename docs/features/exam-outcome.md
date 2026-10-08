@@ -16,7 +16,8 @@ entrava dalla porta e non veniva registrata da nessuna parte.
 | Dove | Campo |
 |---|---|
 | `AutoscuolaAppointment` | `examOutcome` (`"idoneo" \| "respinto" \| null`), `examOutcomeAt`, `examOutcomeByUserId` |
-| `CompanyMember` | `licenseNumber`, `licenseObtainedAt` |
+| `CompanyMember` | `licenseNumber`, `licenseObtainedAt` — dal 2026-10-08 **specchio** del percorso, non più la fonte |
+| `AutoscuolaLicensePath` | la fonte vera di numero e data (REG-458): con due percorsi, due numeri |
 
 Migrazione `20260923150000_exam_outcome`.
 
@@ -97,3 +98,22 @@ esplicita di Tiziano (opzione "a"), fuori scope.
 
 L'istruttore registrerà l'esito dall'app: previsto **dopo** il rilascio web,
 via OTA, senza anteprime separate.
+
+
+## REG-458 — un idoneo chiude il percorso
+
+Dal 2026-10-08 `setExamOutcome`, su un **idoneo**, non si limita a portare
+l'allievo a PATENTATO: chiude il **percorso patente** aperto
+(`closeActivePath` → `status: "obtained"`, `obtainedAt`, `licenseNumber` sulla
+riga del percorso) e da lì riallinea lo specchio su `CompanyMember`. È ciò che
+permette a chi prenderà una seconda patente di non perdere la prima.
+
+La semantica di `licenseNumber` resta identica: assente = non toccare quello già
+registrato (un idoneo scelto senza digitare niente non cancella il numero
+inserito prima), stringa vuota = cancellarlo.
+
+Su un **respinto** o con l'esito rimosso il percorso resta aperto; se il
+chiamante manda comunque un numero, viene scritto (o ripulito) sulla riga del
+percorso, non sull'allievo.
+
+Vedi [license-paths.md](license-paths.md).

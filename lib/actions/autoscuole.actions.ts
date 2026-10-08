@@ -2119,6 +2119,7 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
               ? blockUntilMap.get(student.id)?.toISOString() ?? null
               : null,
           activeCase: register.activeCase,
+          licensePaths: register.licensePaths,
           summary: register.summary,
           manualUnpaid,
           theoryExamAt: theoryExamAt ? theoryExamAt.toISOString() : null,
@@ -2410,6 +2411,7 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
           ? latestCaseTheoryExamAt.toISOString()
           : null,
         activeCase: register.activeCase,
+        licensePaths: register.licensePaths,
         summary: register.summary,
         extendedSummary: { booked, completed, cancelled, upcoming, manualUnpaid },
         byLessonType: register.byLessonType,

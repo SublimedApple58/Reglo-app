@@ -282,6 +282,16 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Cache**: segmento QUIZ condiviso — l'invalidazione esistente su risposta/completamento copre anche questa vista.
 - → **Mobile**: nessuna modifica. La % simulazioni superate (REG-446) era già in `QuizHomeScreen` via `getQuizStudentStats`.
 
+### Percorsi patente multipli (REG-458)
+- **Il percorso è una riga** (`AutoscuolaLicensePath`), non più due campi sull'allievo. `CompanyMember.licenseCategory`/`transmission`/`licenseNumber`/`licenseObtainedAt` restano come **specchio dell'ultimo percorso** (+ `activeLicensePathId`): è ciò che lascia intatte le **563 letture** di `licenseCategory` sparse su ~40 file. **Chi scrive quei campi passa SOLO da `lib/autoscuole/license-path-writes.ts`**, che muove riga e specchio nella stessa transazione — `tests/unit/autoscuole/license-path-guard.test.ts` legge i sorgenti e fallisce se qualcuno li scrive altrove (unica eccezione motivata: il seed massivo REG-424 in `autoscuole-settings.actions.ts`).
+- → **Esito esame**: un **idoneo** chiude il percorso (`closeActivePath`), non solo la fase. Numero e data finiscono sulla riga del percorso.
+- → **Student Phase**: `startNewLicensePath` riporta la fase a PRATICA/TEORIA, azzera `examReady`, e manda `license_path_started` invece di `student_phase_change` (quello direbbe «le tue **prime** guide» a un patentato).
+- → **Obbligo guide**: `getAutoscuolaStudentDrivingRegister` conta solo le guide del percorso in corso. Senza percorso aperto resta il conteggio storico.
+- → **Agenda**: `licenseTagFor` legge la patente del percorso **alla data della guida**; lo storico viaggia nel bootstrap **solo per chi ha più di un percorso** (percorso caldo).
+- ⚠️ **Le guide non hanno un `licensePathId`**, ed è deliberato: 13 punti creano appuntamenti e una colonna da allineare su tutti e 13 si disallinea in silenzio. Si usa `pathForDate()` — *l'ultimo percorso iniziato non dopo quella data*.
+- ⚠️ **L'indice unico parziale** «un solo percorso aperto» vive in SQL grezzo nella migrazione: Prisma non lo gestisce e va preservato a mano.
+- → **Cases & Deadlines**: `AutoscuolaCase` è **deprecato** (1071 righe su 1073 vuote, 0 appuntamenti collegati, Pratiche e Scadenze spente). Non toccarlo e non confonderlo col percorso.
+
 ### Student Phase + Quiz Seats
 - → **Booking Engine**: `ensureStudentCanBookFromApp` rifiuta se phase = AWAITING o TEORIA (messaggi distinti). Anche `getAllAvailableSlots` e `getDateAvailabilityMap` ereditano il blocco.
 - → **Disponibilità / doppia prenotazione (REG-591)**: chi aggiunge un modo nuovo di impegnare qualcuno su un appuntamento (un ruolo, un veicolo) lo aggiunge in `lib/autoscuole/appointment-busy.ts` — funzione **e** `APPOINTMENT_BUSY_SELECT` — e lo prendono tutti e cinque i costruttori di intervalli (`slot-matcher`, `slot-assignment`, i tre in `autoscuole-availability.actions.ts`). Prima erano cinque copie a mano: i co-istruttori di REG-585 ne erano fuori, e il secondo istruttore risultava libero mentre accompagnava.

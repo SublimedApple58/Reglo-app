@@ -871,6 +871,17 @@ export type ConsorzioStudentDetail = {
   licenseNumber: string | null;
   /** Fasi che il server accetterebbe per questa company (vedi readPhasesEnabled). */
   phasesEnabled: Array<"TEORIA" | "PRATICA">;
+  /** REG-458 — percorsi patente (qui spesso qualificazioni: C → CQC). */
+  licensePaths: Array<{
+    id: string;
+    licenseCategory: string | null;
+    transmission: string | null;
+    status: string;
+    startedAt: string;
+    closedAt: string | null;
+    obtainedAt: string | null;
+    licenseNumber: string | null;
+  }>;
   transmission: string | null;
   lessonsCount: number;
   certifiedMinutes: number;
@@ -932,6 +943,21 @@ export async function getConsorzioStudentDetail(userId: string) {
     if (!member) {
       return { success: false as const, message: "Allievo non trovato." };
     }
+
+    const licensePaths = await prisma.autoscuolaLicensePath.findMany({
+      where: { companyId, studentId: userId },
+      select: {
+        id: true,
+        licenseCategory: true,
+        transmission: true,
+        status: true,
+        startedAt: true,
+        closedAt: true,
+        obtainedAt: true,
+        licenseNumber: true,
+      },
+      orderBy: { startedAt: "asc" },
+    });
 
     const [appointments, allCodes, courseRows] = await Promise.all([
       prisma.autoscuolaAppointment.findMany({
@@ -1046,6 +1072,16 @@ export async function getConsorzioStudentDetail(userId: string) {
       studentPhase: member.studentPhase,
       licenseNumber: member.licenseNumber,
       phasesEnabled: readPhasesEnabled(company),
+      licensePaths: licensePaths.map((path) => ({
+        id: path.id,
+        licenseCategory: path.licenseCategory,
+        transmission: path.transmission,
+        status: path.status,
+        startedAt: path.startedAt.toISOString(),
+        closedAt: path.closedAt ? path.closedAt.toISOString() : null,
+        obtainedAt: path.obtainedAt ? path.obtainedAt.toISOString() : null,
+        licenseNumber: path.licenseNumber,
+      })),
       transmission: member.transmission,
       lessonsCount: guideAppointments.length - absencesCount,
       certifiedMinutes,
