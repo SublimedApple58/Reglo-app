@@ -1698,18 +1698,48 @@ export async function updateAutoscuolaSettings(
     // null), so no stale mobile gate lingers and they can book right away. New
     // self-registrations get the default seeded at signup (student-register).
     if (switchedToFixedDefault) {
-      await prisma.companyMember.updateMany({
+      // REG-458 — e' l'unica scrittura MASSIVA del percorso patente, quindi non
+      // passa da `updateOpenPath` (che lavora su un allievo per volta): scrive
+      // allievi e percorsi aperti con gli stessi valori, nella stessa
+      // transazione. Chi non ha ancora una riga di percorso (allievo nato dopo
+      // la migrazione) se la vedra' creare da `ensureActivePath` alla prima
+      // operazione che ne ha bisogno, gia' con questi valori addosso.
+      const targets = await prisma.companyMember.findMany({
         where: {
           companyId: membership.companyId,
           autoscuolaRole: "STUDENT",
           selfRegistered: true,
           licenseCategory: null,
         },
-        data: {
-          licenseCategory: nextDefaultLicenseCategory,
-          transmission: nextDefaultTransmission,
-        },
+        select: { userId: true },
       });
+      if (targets.length) {
+        const studentIds = targets.map((t) => t.userId);
+        await prisma.$transaction(async (tx) => {
+          await tx.companyMember.updateMany({
+            where: {
+              companyId: membership.companyId,
+              userId: { in: studentIds },
+              autoscuolaRole: "STUDENT",
+            },
+            data: {
+              licenseCategory: nextDefaultLicenseCategory,
+              transmission: nextDefaultTransmission,
+            },
+          });
+          await tx.autoscuolaLicensePath.updateMany({
+            where: {
+              companyId: membership.companyId,
+              studentId: { in: studentIds },
+              status: "active",
+            },
+            data: {
+              licenseCategory: nextDefaultLicenseCategory,
+              transmission: nextDefaultTransmission,
+            },
+          });
+        });
+      }
     }
 
     // Festività nazionali: materializza/riallinea le righe AutoscuolaHoliday

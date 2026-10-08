@@ -22,6 +22,7 @@
 import { z } from "zod";
 
 import { prisma } from "@/db/prisma";
+import { updateOpenPath } from "@/lib/autoscuole/license-path-writes";
 import { requireAffiliateSchool } from "@/lib/service-access";
 import { buildPlaceholderEmail, displayEmail } from "@/lib/users/placeholder-email";
 import { isLicenseCategory, isTransmission } from "@/lib/autoscuole/license";
@@ -887,18 +888,17 @@ export async function setAffiliateStudentLicense(input: z.infer<typeof licenseSc
     });
     if (!member) throw new Error("Allievo non trovato.");
 
-    await prisma.companyMember.updateMany({
-      where: {
+    // REG-458 — il percorso patente e' una riga, non due campi sull'allievo:
+    // si scrive quella e lo specchio si riallinea da solo. Stessa porta che usa
+    // il titolare dalla sua `updateStudentLicensePath`.
+    await prisma.$transaction(async (tx) =>
+      updateOpenPath(tx, {
         companyId: consorzioCompanyId,
-        userId: payload.userId,
-        consorzioSchoolId: schoolId,
-        autoscuolaRole: "STUDENT",
-      },
-      data: {
+        studentId: payload.userId,
         licenseCategory: payload.licenseCategory,
         transmission: payload.transmission,
-      },
-    });
+      }),
+    );
 
     return { success: true as const, message: "Percorso patente aggiornato." };
   } catch (error) {

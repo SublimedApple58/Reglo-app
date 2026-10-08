@@ -66,6 +66,12 @@ import {
   normalizeLicenseNumber,
   phaseAfterExamOutcome,
 } from "@/lib/autoscuole/exam-outcome";
+import {
+  closeActivePath,
+  ensureActivePath,
+  syncMemberMirror,
+  updateOpenPath,
+} from "@/lib/autoscuole/license-path-writes";
 import { FOLLOW_CAR_CATEGORY, parseFollowCarRulesFromLimits, type FollowCarRules } from "@/lib/autoscuole/follow-car";
 import { MOTO_LESSON_TYPES } from "@/lib/autoscuole/moto-lesson-type";
 import {
@@ -8584,29 +8590,62 @@ export async function setExamOutcome(input: z.infer<typeof setExamOutcomeSchema>
       });
       if (student) {
         promoted = Boolean(nextPhase) && student.studentPhase !== nextPhase;
-        await prisma.companyMember.updateMany({
-          where: {
-            companyId: membership.companyId,
-            userId: studentId,
-            autoscuolaRole: "STUDENT",
-          },
-          data: {
-            ...(nextPhase && {
-              studentPhase: nextPhase,
-              phaseClassifiedAt: now,
-              // "Pronto per l'esame" non ha più senso: l'esame è stato dato.
-              examReady: false,
-              examReadyAt: null,
-              examReadyBy: null,
-            }),
-            // Il numero si tocca solo quando il chiamante lo manda davvero:
-            // un idoneo scelto senza digitare niente non cancella quello
-            // inserito prima, ma svuotare il campo sì.
-            ...(touchesNumber && {
-              licenseNumber,
-              licenseObtainedAt: licenseNumber ? now : null,
-            }),
-          },
+        await prisma.$transaction(async (tx) => {
+          if (nextPhase) {
+            await tx.companyMember.updateMany({
+              where: {
+                companyId: membership.companyId,
+                userId: studentId,
+                autoscuolaRole: "STUDENT",
+              },
+              data: {
+                studentPhase: nextPhase,
+                phaseClassifiedAt: now,
+                // "Pronto per l'esame" non ha più senso: l'esame è stato dato.
+                examReady: false,
+                examReadyAt: null,
+                examReadyBy: null,
+              },
+            });
+          }
+
+          // REG-458: un idoneo chiude il PERCORSO, non solo la fase. Numero e
+          // data di conseguimento vanno sulla riga del percorso — e' li' che
+          // restano quando l'allievo ne aprira' un secondo — e da li'
+          // `closeActivePath` riallinea lo specchio su `CompanyMember`, che e'
+          // quello che legge tutto il resto del prodotto.
+          //
+          // `licenseNumber` assente (`touchesNumber` falso) = non toccare quello
+          // gia' registrato: un idoneo scelto senza digitare niente non cancella
+          // il numero inserito prima, svuotare il campo si'.
+          if (payload.outcome === "idoneo") {
+            await ensureActivePath(tx, {
+              companyId: membership.companyId,
+              studentId,
+            });
+            await closeActivePath(tx, {
+              companyId: membership.companyId,
+              studentId,
+              outcome: "obtained",
+              licenseNumber: touchesNumber ? licenseNumber : undefined,
+              at: now,
+            });
+          } else if (touchesNumber) {
+            // Respinto o esito rimosso: il percorso resta aperto, ma il numero
+            // digitato per errore va comunque ripulito dove vive davvero.
+            const open = await ensureActivePath(tx, {
+              companyId: membership.companyId,
+              studentId,
+            });
+            await tx.autoscuolaLicensePath.update({
+              where: { id: open.id },
+              data: { licenseNumber, obtainedAt: licenseNumber ? now : null },
+            });
+            await syncMemberMirror(tx, {
+              companyId: membership.companyId,
+              studentId,
+            });
+          }
         });
         if (promoted && nextPhase) {
           void notifyStudentPhaseChange({
@@ -8663,20 +8702,29 @@ export async function updateStudentLicensePath(
     }
     const payload = updateStudentLicensePathSchema.parse(input);
 
-    const updated = await prisma.companyMember.updateMany({
+    const exists = await prisma.companyMember.count({
       where: {
         companyId: membership.companyId,
         userId: payload.studentId,
         autoscuolaRole: "STUDENT",
       },
-      data: {
-        licenseCategory: payload.licenseCategory,
-        transmission: payload.transmission,
-      },
     });
-    if (!updated.count) {
+    if (!exists) {
       return { success: false, message: "Allievo non valido per questa company." };
     }
+
+    // REG-458 — questa e' la CORREZIONE del percorso in corso (categoria sbagliata,
+    // cambio sbagliato), non l'inizio di uno nuovo: quello e' `startNewLicensePath`
+    // e passa per un dialogo suo. Qui si riscrive la riga del percorso aperto e lo
+    // specchio sull'allievo, nella stessa transazione.
+    await prisma.$transaction(async (tx) =>
+      updateOpenPath(tx, {
+        companyId: membership.companyId,
+        studentId: payload.studentId,
+        licenseCategory: payload.licenseCategory,
+        transmission: payload.transmission,
+      }),
+    );
 
     return {
       success: true,

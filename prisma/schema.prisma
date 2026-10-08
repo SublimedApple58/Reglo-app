@@ -77,6 +77,7 @@ model User {
   pushDevices                          MobilePushDevice[]
   autoscuolaInstructors                AutoscuolaInstructor[]
   autoscuolaCases                      AutoscuolaCase[]
+  autoscuolaLicensePaths               AutoscuolaLicensePath[]
   autoscuolaAppointments               AutoscuolaAppointment[]
   autoscuolaBookingRequests            AutoscuolaBookingRequest[]
   autoscuolaWaitlistResponses          AutoscuolaWaitlistResponse[]
@@ -210,6 +211,7 @@ model Company {
   invites                              CompanyInvite[]
   integrationConnections               IntegrationConnection[]
   autoscuolaCases                      AutoscuolaCase[]
+  autoscuolaLicensePaths               AutoscuolaLicensePath[]
   autoscuolaAppointments               AutoscuolaAppointment[]
   autoscuolaInstructors                AutoscuolaInstructor[]
   autoscuolaInstructorBlocks           AutoscuolaInstructorBlock[]
@@ -382,6 +384,15 @@ model CompanyMember {
   /// Solo membri di una company consorzio: l'autoscuola consorziata di
   /// appartenenza dell'allievo. Null su tutte le autoscuole normali.
   consorzioSchoolId         String?                @db.Uuid
+  /// Percorso patente **aperto** dell'allievo (REG-458). Null = nessun percorso in
+  /// corso: o non e' ancora stato aperto, o l'ultimo si e' chiuso (patente presa o
+  /// percorso abbandonato). I campi `licenseCategory`, `transmission`,
+  /// `licenseNumber` e `licenseObtainedAt` qui sopra restano lo **specchio
+  /// dell'ultimo percorso** (aperto o chiuso che sia): e' cio' che permette alle
+  /// ~560 letture sparse per il prodotto di non cambiare di una riga.
+  /// Chi scrive passa SEMPRE da `lib/actions/autoscuole-license-paths.actions.ts`,
+  /// che aggiorna riga e specchio nella stessa transazione.
+  activeLicensePathId       String?                @db.Uuid
   createdAt                 DateTime               @default(now()) @db.Timestamp(6)
   updatedAt                 DateTime               @updatedAt
 
@@ -390,6 +401,7 @@ model CompanyMember {
   assignedInstructor       AutoscuolaInstructor?           @relation("InstructorAssignedStudents", fields: [assignedInstructorId], references: [id], onDelete: SetNull)
   defaultLocation          AutoscuolaLocation?             @relation("MemberDefaultLocation", fields: [defaultLocationId], references: [id], onDelete: SetNull)
   consorzioSchool          ConsorzioSchool?                @relation(fields: [consorzioSchoolId], references: [id], onDelete: SetNull)
+  activeLicensePath        AutoscuolaLicensePath?          @relation("MemberActiveLicensePath", fields: [activeLicensePathId], references: [id], onDelete: SetNull)
   consorzioAccountingCodes ConsorzioMemberAccountingCode[]
 
   @@id([companyId, userId])
@@ -447,6 +459,17 @@ model IntegrationConnection {
   @@index([provider])
 }
 
+/// DEPRECATO (REG-458). Nato come "pratica" dell'allievo, non e' mai stato
+/// adottato: in produzione 1071 righe su 1073 sono `category: null,
+/// status: "iscritto"` senza una sola scadenza valorizzata, e **nessun**
+/// appuntamento ha mai avuto `caseId` (0 su 13.610). Le pagine che lo
+/// governavano — Pratiche e Scadenze — sono spente (le route fanno `notFound()`).
+/// Il percorso patente vero e' `AutoscuolaLicensePath` qui sotto.
+///
+/// Resta in piedi perche' sei punti vivi lo leggono ancora (`exam-priority.ts`,
+/// `theory-reminders.ts`, `lesson-policy.ts`, `processAutoscuolaCaseDeadlines`,
+/// `/api/autoscuole/me`, `student-register`) e perche' `theoryExamAt` e' l'unico
+/// posto dove sta la data dell'esame di teoria. Non aggiungerci niente.
 model AutoscuolaCase {
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId          String    @db.Uuid
@@ -470,6 +493,68 @@ model AutoscuolaCase {
   @@index([status])
   @@index([companyId, pinkSheetExpiresAt])
   @@index([companyId, medicalExpiresAt])
+}
+
+/// Percorso patente di un allievo (REG-458).
+///
+/// Una riga per percorso: chi prende la B e poi vuole la A ha due righe, non un
+/// campo sovrascritto. Prima di REG-458 il percorso **era** l'allievo — categoria,
+/// numero e data vivevano su `CompanyMember` e si sovrascrivevano al secondo giro,
+/// tanto che in produzione quattro persone del consorzio erano state **registrate
+/// due volte** per aggirare il problema (C+CQC, D+DE).
+///
+/// `status`:
+///   - `active`    — in corso. **Al massimo uno per allievo** (vedi indice sotto).
+///   - `obtained`  — patente presa / qualificazione conseguita.
+///   - `abandoned` — lasciato a meta'.
+///
+/// Il vincolo "un solo percorso attivo" e' un **indice unico parziale** creato in
+/// SQL grezzo nella migrazione: Prisma non sa esprimerlo nello schema. Stessa
+/// tecnica gia' usata per `AutoscuolaLocation_companyId_isDefault_key` e
+/// `QuizScheda_exam_schedaNumber_key` — se tocchi questo modello, l'indice NON e'
+/// gestito da Prisma e va preservato a mano.
+///
+/// `licenseNumber` sta qui e non solo sull'allievo perche' e' l'attributo della
+/// **patente conseguita**, non della persona: con due percorsi, due numeri.
+///
+/// Le guide **non** portano un `licensePathId`, ed e' deliberato: in prodotto ci
+/// sono 13 punti che creano appuntamenti, e una colonna da tenere allineata su
+/// tutti e 13 si disallinea in silenzio appena ne sfugge uno. Il percorso di una
+/// guida si ricava dalla sua data — `pathForDate()` in
+/// `lib/autoscuole/license-paths.ts` — che e' sempre definito e non puo'
+/// divergere dal dato.
+model AutoscuolaLicensePath {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId       String    @db.Uuid
+  studentId       String    @db.Uuid
+  /// Categoria perseguita: stessa tassonomia di `lib/autoscuole/license.ts`.
+  /// CQC e ADR non sono patenti ma qualificazioni: `isQualification()` lo sa, e
+  /// serve a scegliere le parole giuste ("Percorsi conclusi" invece di "Patenti
+  /// conseguite" sugli account consorzio).
+  ///
+  /// Nullable come lo specchio su `CompanyMember`: 95 allievi in produzione non
+  /// hanno una categoria (tipicamente self-registered fermi al gate di REG-410).
+  /// Meglio un percorso senza categoria che una "B" inventata dal backfill.
+  licenseCategory String?
+  transmission    String?
+  status          String    @default("active")
+  startedAt       DateTime  @default(now()) @db.Timestamp(6)
+  /// Quando il percorso si e' chiuso, in un senso o nell'altro. Null = aperto.
+  closedAt        DateTime? @db.Timestamp(6)
+  /// Data del conseguimento. Puo' restare null anche su un percorso `obtained`:
+  /// in produzione 67 patentati su 72 non hanno mai avuto ne' numero ne' data, e
+  /// pretenderli avrebbe solo spinto le segreterie ad aggirare il flusso.
+  obtainedAt      DateTime? @db.Timestamp(6)
+  licenseNumber   String?
+  createdAt       DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt       DateTime  @updatedAt
+
+  company   Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  student   User            @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  activeFor CompanyMember[] @relation("MemberActiveLicensePath")
+
+  @@index([companyId, studentId])
+  @@index([companyId, studentId, status])
 }
 
 model AutoscuolaAppointment {

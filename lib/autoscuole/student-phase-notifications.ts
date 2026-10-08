@@ -77,3 +77,33 @@ export async function notifyStudentPhaseChange({
     data: { fromPhase, toPhase },
   });
 }
+
+/**
+ * Un percorso patente nuovo che riparte (REG-458).
+ *
+ * Non passa da `notifyStudentPhaseChange` di proposito. Quella, su una
+ * transizione verso PRATICA, direbbe «🚗 Hai il foglio rosa! Ora puoi prenotare
+ * le tue **prime** guide»: a uno che la patente ce l'ha gia' e sta cominciando
+ * la A dopo la B e' semplicemente falso. Il messaggio nomina la patente nuova,
+ * che e' l'unica informazione che gli serve.
+ */
+export async function notifyNewLicensePath({
+  companyId,
+  studentUserId,
+  licenseCategory,
+}: {
+  companyId: string;
+  studentUserId: string;
+  licenseCategory: string;
+}): Promise<void> {
+  await notifyAutoscuolaUser({
+    companyId,
+    kind: "license_path_started",
+    audience: "student",
+    recipient: { userId: studentUserId },
+    supports: PUSH_ONLY,
+    title: `🚗 Nuovo percorso: patente ${licenseCategory}`,
+    body: "L'autoscuola ha avviato il tuo nuovo percorso. Puoi prenotare le guide.",
+    data: { licenseCategory },
+  });
+}

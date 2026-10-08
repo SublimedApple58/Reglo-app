@@ -6,6 +6,7 @@ import {
   STUDENT_LICENSE_CATEGORIES,
   TRANSMISSIONS,
 } from "@/lib/autoscuole/license";
+import { updateOpenPath } from "@/lib/autoscuole/license-path-writes";
 import { formatError } from "@/lib/utils";
 
 /**
@@ -60,17 +61,17 @@ export async function PATCH(request: Request) {
       });
     }
 
-    await prisma.companyMember.updateMany({
-      where: {
+    // REG-458 — scrive il percorso aperto (creandolo se l'allievo e' nato dopo
+    // la migrazione) e da li' riallinea lo specchio sull'allievo. E' la stessa
+    // porta del lato titolare: il gate dell'allievo non e' un'eccezione.
+    await prisma.$transaction(async (tx) =>
+      updateOpenPath(tx, {
         companyId: membership.companyId,
-        userId: membership.userId,
-        autoscuolaRole: "STUDENT",
-      },
-      data: {
+        studentId: membership.userId,
         licenseCategory,
         transmission: finalTransmission,
-      },
-    });
+      }),
+    );
 
     return NextResponse.json({
       success: true,
