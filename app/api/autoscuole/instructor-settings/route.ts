@@ -112,32 +112,6 @@ export async function GET() {
       }),
     ]);
 
-    // REG-458 — l'ultima patente già conseguita, per gli allievi che ne hanno
-    // una. Serve all'istruttore per sapere che chi ha in auto guida già: cambia
-    // come gli parla. Si manda solo questa, non tutto lo storico: la schermata
-    // non ne fa altro e questo payload lo legge l'app a ogni apertura.
-    const obtainedPaths = await prisma.autoscuolaLicensePath.findMany({
-      where: {
-        companyId: membership.companyId,
-        studentId: { in: studentMembers.map((m) => m.userId) },
-        status: "obtained",
-      },
-      select: { studentId: true, licenseCategory: true, obtainedAt: true, closedAt: true },
-      orderBy: { closedAt: "desc" },
-    });
-    const lastObtainedByStudent = new Map<
-      string,
-      { licenseCategory: string | null; obtainedAt: string | null }
-    >();
-    for (const path of obtainedPaths) {
-      // `orderBy closedAt desc` → la prima che incontro è la più recente.
-      if (lastObtainedByStudent.has(path.studentId)) continue;
-      lastObtainedByStudent.set(path.studentId, {
-        licenseCategory: path.licenseCategory,
-        obtainedAt: (path.obtainedAt ?? path.closedAt)?.toISOString() ?? null,
-      });
-    }
-
     const students = studentMembers.map((m) => {
       const fullName = (m.user?.name ?? "").trim();
       const [firstName, ...rest] = fullName.split(" ");
@@ -151,8 +125,6 @@ export async function GET() {
         studentPhase: m.studentPhase,
         examReady: m.examReady,
         examReadyAt: m.examReadyAt ? m.examReadyAt.toISOString() : null,
-        // Assente quando l'allievo non ha ancora concluso nessun percorso.
-        lastObtainedLicense: lastObtainedByStudent.get(m.userId) ?? null,
       };
     });
     const assignedStudentIds = studentMembers

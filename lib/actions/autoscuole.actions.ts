@@ -1744,12 +1744,51 @@ export async function getAutoscuolaStudents(search?: string) {
       orderBy: { createdAt: "desc" },
       take: 500,
     });
+    // REG-458 — le patenti GIA' conseguite. Senza, il dettaglio allievo
+    // dell'app istruttore non ha modo di sapere che chi ha in auto guida gia':
+    // la riga "Gia' conseguita" era stata scritta leggendo questo endpoint, ma
+    // il campo era finito su `instructor-settings` ed e' rimasta vuota per
+    // tutti dal rilascio. Viaggia **solo per chi ne ha almeno una**, cioe' per
+    // pochissimi: per tutti gli altri il payload non cresce di un byte.
+    const obtainedPaths = await prisma.autoscuolaLicensePath.findMany({
+      where: {
+        companyId,
+        studentId: { in: members.map((m) => m.userId) },
+        status: "obtained",
+      },
+      select: {
+        studentId: true,
+        licenseCategory: true,
+        transmission: true,
+        obtainedAt: true,
+        closedAt: true,
+      },
+      orderBy: { closedAt: "desc" },
+    });
+    const obtainedByStudent = new Map<
+      string,
+      { licenseCategory: string | null; transmission: string | null; obtainedAt: string | null }[]
+    >();
+    for (const path of obtainedPaths) {
+      const list = obtainedByStudent.get(path.studentId) ?? [];
+      list.push({
+        licenseCategory: path.licenseCategory,
+        transmission: path.transmission,
+        // In produzione 67 patentati su 72 non hanno mai avuto una data di
+        // conseguimento: si ripiega sulla chiusura del percorso, e se manca
+        // anche quella resta la sola categoria.
+        obtainedAt: (path.obtainedAt ?? path.closedAt)?.toISOString() ?? null,
+      });
+      obtainedByStudent.set(path.studentId, list);
+    }
     return {
       success: true,
       data: members.map((m) => ({
         ...toStudentProfile(m.user, m.createdAt),
         assignedInstructorId: m.assignedInstructorId ?? null,
         studentPhase: m.studentPhase,
+        /// Dalla piu' recente. Assente per chi e' al primo percorso.
+        obtainedLicenses: obtainedByStudent.get(m.userId),
         licenseCategory: m.licenseCategory ?? null,
         transmission: m.transmission ?? null,
         groupLessonsOptIn: m.groupLessonsOptIn ?? false,

@@ -162,6 +162,15 @@ conseguiti — perché "Le tue guide" sull'app ha lo stesso problema del tab Gui
 del gestionale. `obtainedLicenses` resta derivato dagli stessi dati e invariato:
 la 2.3.0 già installata non deve accorgersi di niente.
 
+**Il dettaglio allievo dell'app ISTRUTTORE** legge invece
+`/api/autoscuole/students` (`getAutoscuolaStudents`), che espone
+`obtainedLicenses` — le patenti già conseguite, solo per chi ne ha. ⚠️ È lo
+stesso fatto esposto da tre endpoint diversi: `/me` per l'allievo, `students`
+per l'istruttore, il server action per il web. Il 9 ottobre il campo era finito
+su `instructor-settings`, che quella schermata **non legge**, e la riga «Già
+conseguita» è rimasta vuota per tutti dal rilascio. Legato da
+`tests/e2e/reg458-students-obtained.spec.ts`.
+
 La regola è duplicata in `reglo-mobile/src/utils/licensePaths.ts`: i due repo
 non condividono codice, ma **devono restare allineati**. Un allievo che vede
 sull'app un insieme di guide diverso da quello che la segreteria vede qui è
