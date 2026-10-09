@@ -28,10 +28,14 @@ import {
 import { updateStudentPhone } from "@/lib/actions/autoscuole.actions";
 import { TRANSMISSION_LABELS, type Transmission } from "@/lib/autoscuole/license";
 import {
+  ALL_LESSON_PATHS,
   closedPathsNewestFirst,
+  currentPath,
   historySectionTitle,
   isQualification,
+  lessonsPathFilterId,
   openPath,
+  pathForDate,
 } from "@/lib/autoscuole/license-paths";
 import { StartNewLicensePathDialog } from "@/components/pages/Autoscuole/dialogs/StartNewLicensePathDialog";
 import { cn } from "@/lib/utils";
@@ -142,6 +146,14 @@ export function ConsorzioStudentDrawer({
   const nameOrder = useStudentNameOrder();
   const [detail, setDetail] = React.useState<ConsorzioStudentDetail | null>(null);
   const [tab, setTab] = React.useState<DrawerTab>("summary");
+  /**
+   * REG-458 — quale percorso si sta guardando nel tab Guide. `null` = nessuna
+   * scelta, vale il default (il percorso corrente); `ALL_LESSON_PATHS` = tutte.
+   * Gemello di `AutoscuoleStudentsPage`: stessa regola, stesso comportamento,
+   * perche' la stessa domanda non puo' avere due risposte a seconda di chi
+   * guarda l'allievo.
+   */
+  const [lessonsPathChoice, setLessonsPathChoice] = React.useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [licenseDialogOpen, setLicenseDialogOpen] = React.useState(false);
@@ -168,6 +180,7 @@ export function ConsorzioStudentDrawer({
       return;
     }
     setTab("summary");
+    setLessonsPathChoice(null);
     setEditingPhone(false);
     void getConsorzioStudentDetail(userId).then((res) => {
       if (res.success) setDetail(res.data);
@@ -393,6 +406,16 @@ export function ConsorzioStudentDrawer({
                       )}
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    className={blueLinkClass}
+                    onClick={() => {
+                      setLessonsPathChoice(path.id);
+                      setTab("lessons");
+                    }}
+                  >
+                    Vedi guide
+                  </button>
                 </div>
               );
             })}
@@ -505,17 +528,67 @@ export function ConsorzioStudentDrawer({
   };
 
   const renderLessons = (data: ConsorzioStudentDetail) => {
-    const rows = [
+    const allRows = [
       ...data.lessons.map((lesson) => ({ kind: "guide" as const, ...lesson })),
       ...data.exams.map((exam) => ({ kind: "exam" as const, ...exam })),
     ].sort((a, b) => (a.startsAt < b.startsAt ? 1 : -1));
 
+    // REG-458 — a quale percorso appartiene una riga si ricava dalla data: le
+    // guide non hanno una colonna che lo dica. Il banner esiste solo con piu'
+    // di un percorso, e parte da quello corrente.
+    const paths = data.licensePaths ?? [];
+    const filterId = lessonsPathFilterId(paths, lessonsPathChoice);
+    const filteredPath = filterId ? paths.find((p) => p.id === filterId) ?? null : null;
+    const thisPath = currentPath(paths);
+    const showPathBanner = paths.length > 1;
+    const rows = filterId
+      ? allRows.filter((row) => pathForDate(paths, row.startsAt)?.id === filterId)
+      : allRows;
+
+    const banner = showPathBanner ? (
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-[12px] bg-[#f7f7f7] px-4 py-3">
+        <p className="text-[13px] font-medium text-foreground">
+          {filteredPath ? (
+            <>
+              Solo le guide del percorso{" "}
+              <span className="font-semibold">{filteredPath.licenseCategory ?? "—"}</span>
+            </>
+          ) : (
+            "Tutte le guide, di tutti i percorsi"
+          )}
+        </p>
+        <button
+          type="button"
+          className={blueLinkClass}
+          onClick={() =>
+            setLessonsPathChoice(
+              filteredPath ? ALL_LESSON_PATHS : thisPath?.id ?? ALL_LESSON_PATHS,
+            )
+          }
+        >
+          {filteredPath
+            ? "Mostra tutte"
+            : `Solo il percorso ${thisPath?.licenseCategory ?? "attuale"}`}
+        </button>
+      </div>
+    ) : null;
+
     if (rows.length === 0) {
-      return <p className={emptyRowClass}>Nessuna guida col consorzio finora.</p>;
+      return (
+        <div>
+          {banner}
+          <p className={emptyRowClass}>
+            {filteredPath && allRows.length > 0
+              ? "Nessuna guida in questo percorso. Le altre sono sotto «Mostra tutte»."
+              : "Nessuna guida col consorzio finora."}
+          </p>
+        </div>
+      );
     }
 
     return (
       <div>
+        {banner}
         {rows.map((row) => (
           <div
             key={row.appointmentId}
