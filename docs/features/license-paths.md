@@ -155,6 +155,19 @@ prodotto abbia perso lo storico.
 > `tests/unit/autoscuole/license-paths.test.ts` e
 > `tests/e2e/reg458-filtro-guide.auth.spec.ts`.
 
+## Il gemello mobile
+
+`/api/autoscuole/me` espone `licensePaths` — **tutti** i percorsi, non solo i
+conseguiti — perché "Le tue guide" sull'app ha lo stesso problema del tab Guide
+del gestionale. `obtainedLicenses` resta derivato dagli stessi dati e invariato:
+la 2.3.0 già installata non deve accorgersi di niente.
+
+La regola è duplicata in `reglo-mobile/src/utils/licensePaths.ts`: i due repo
+non condividono codice, ma **devono restare allineati**. Un allievo che vede
+sull'app un insieme di guide diverso da quello che la segreteria vede qui è
+peggio del bug che questo codice risolve. I test di questa regola stanno solo
+qui (il mobile non ne ha).
+
 ## Connessioni
 
 - → **Student Phase**: `startNewLicensePath` riporta la fase a PRATICA/TEORIA e
