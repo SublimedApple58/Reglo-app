@@ -1772,6 +1772,35 @@ export async function getAutoscuolaStudents(search?: string) {
       list.push(path);
       pathsByStudent.set(path.studentId, list);
     }
+    const multiPathStudents = new Map<
+      string,
+      {
+        id: string;
+        licenseCategory: string | null;
+        transmission: string | null;
+        status: string;
+        startedAt: string;
+        closedAt: string | null;
+        obtainedAt: string | null;
+      }[]
+    >();
+    for (const [studentId, paths] of pathsByStudent) {
+      if (paths.length < 2) continue;
+      multiPathStudents.set(
+        studentId,
+        [...paths]
+          .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime())
+          .map((path) => ({
+            id: path.id,
+            licenseCategory: path.licenseCategory,
+            transmission: path.transmission,
+            status: path.status,
+            startedAt: path.startedAt.toISOString(),
+            closedAt: path.closedAt?.toISOString() ?? null,
+            obtainedAt: path.obtainedAt?.toISOString() ?? null,
+          })),
+      );
+    }
     const obtainedByStudent = new Map<
       string,
       { licenseCategory: string | null; transmission: string | null; obtainedAt: string | null }[]
@@ -1800,6 +1829,11 @@ export async function getAutoscuolaStudents(search?: string) {
         /// Le conseguite PRIMA di quella in corso, dalla piu' recente.
         /// Assente per chi non ne ha, cioe' per quasi tutti.
         obtainedLicenses: obtainedByStudent.get(m.userId),
+        /// Tutti i percorsi, solo per chi ne ha piu' di uno: serve all'app
+        /// istruttore per capire a quale percorso appartiene una guida, che
+        /// non ha una colonna per dirlo. Senza, lo storico guide mostrava le
+        /// guide della patente precedente dentro il percorso nuovo.
+        licensePaths: multiPathStudents.get(m.userId),
         licenseCategory: m.licenseCategory ?? null,
         transmission: m.transmission ?? null,
         groupLessonsOptIn: m.groupLessonsOptIn ?? false,

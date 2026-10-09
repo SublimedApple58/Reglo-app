@@ -31,6 +31,7 @@ test("gli allievi portano le patenti già conseguite", async ({ page, baseURL })
       firstName?: string;
       lastName?: string;
       obtainedLicenses?: Array<{ licenseCategory: string | null; obtainedAt: string | null }>;
+      licensePaths?: Array<{ id: string; licenseCategory: string | null; startedAt: string }>;
     }>;
   };
   expect(body.success).toBeTruthy();
@@ -59,4 +60,21 @@ test("gli allievi portano le patenti già conseguite", async ({ page, baseURL })
 
   // E chi e' al primo percorso NON lo porta: il payload non cresce per tutti.
   expect(senzaStorico.length).toBeGreaterThan(0);
+
+  // `licensePaths` serve allo storico guide dell'app istruttore per sapere a
+  // quale percorso appartiene una guida: senza `startedAt` non si puo' ricavare
+  // e lo storico torna a mostrare le guide della patente precedente.
+  const conPercorsi = body.data.filter((s) => s.licensePaths !== undefined);
+  expect(conPercorsi.length).toBeGreaterThan(0);
+  for (const student of conPercorsi) {
+    expect(student.licensePaths!.length).toBeGreaterThan(1);
+    for (const path of student.licensePaths!) {
+      expect(path.id).toBeTruthy();
+      expect(Number.isNaN(new Date(path.startedAt).getTime())).toBe(false);
+    }
+    // Dal piu' vecchio: `pathForDate` ordina da se', ma un payload gia' in
+    // ordine e' quello che la schermata si aspetta di leggere.
+    const date = student.licensePaths!.map((p) => new Date(p.startedAt).getTime());
+    expect([...date].sort((a, b) => a - b)).toEqual(date);
+  }
 });
