@@ -72,7 +72,11 @@ import {
   syncMemberMirror,
   updateOpenPath,
 } from "@/lib/autoscuole/license-path-writes";
-import { openPath, pathForDate } from "@/lib/autoscuole/license-paths";
+import {
+  licensesObtainedBeforeCurrent,
+  openPath,
+  pathForDate,
+} from "@/lib/autoscuole/license-paths";
 import { FOLLOW_CAR_CATEGORY, parseFollowCarRulesFromLimits, type FollowCarRules } from "@/lib/autoscuole/follow-car";
 import { MOTO_LESSON_TYPES } from "@/lib/autoscuole/moto-lesson-type";
 import {
@@ -1744,42 +1748,48 @@ export async function getAutoscuolaStudents(search?: string) {
       orderBy: { createdAt: "desc" },
       take: 500,
     });
-    // REG-458 — le patenti GIA' conseguite. Senza, il dettaglio allievo
-    // dell'app istruttore non ha modo di sapere che chi ha in auto guida gia':
-    // la riga "Gia' conseguita" era stata scritta leggendo questo endpoint, ma
-    // il campo era finito su `instructor-settings` ed e' rimasta vuota per
-    // tutti dal rilascio. Viaggia **solo per chi ne ha almeno una**, cioe' per
-    // pochissimi: per tutti gli altri il payload non cresce di un byte.
-    const obtainedPaths = await prisma.autoscuolaLicensePath.findMany({
-      where: {
-        companyId,
-        studentId: { in: members.map((m) => m.userId) },
-        status: "obtained",
-      },
+    // REG-458 — le patenti conseguite nei percorsi PRECEDENTI a quello in
+    // corso. Non tutte le conseguite: per un patentato con un percorso solo,
+    // "ha gia' la B" accanto al chip "B · Manuale" e' la stessa cosa detta due
+    // volte, e in produzione sono 71 allievi su 72. Qui interessa solo cio' che
+    // la patente corrente NON dice gia'.
+    const allPathsForHistory = await prisma.autoscuolaLicensePath.findMany({
+      where: { companyId, studentId: { in: members.map((m) => m.userId) } },
       select: {
+        id: true,
         studentId: true,
         licenseCategory: true,
         transmission: true,
+        status: true,
+        startedAt: true,
         obtainedAt: true,
         closedAt: true,
       },
-      orderBy: { closedAt: "desc" },
     });
+    const pathsByStudent = new Map<string, typeof allPathsForHistory>();
+    for (const path of allPathsForHistory) {
+      const list = pathsByStudent.get(path.studentId) ?? [];
+      list.push(path);
+      pathsByStudent.set(path.studentId, list);
+    }
     const obtainedByStudent = new Map<
       string,
       { licenseCategory: string | null; transmission: string | null; obtainedAt: string | null }[]
     >();
-    for (const path of obtainedPaths) {
-      const list = obtainedByStudent.get(path.studentId) ?? [];
-      list.push({
-        licenseCategory: path.licenseCategory,
-        transmission: path.transmission,
-        // In produzione 67 patentati su 72 non hanno mai avuto una data di
-        // conseguimento: si ripiega sulla chiusura del percorso, e se manca
-        // anche quella resta la sola categoria.
-        obtainedAt: (path.obtainedAt ?? path.closedAt)?.toISOString() ?? null,
-      });
-      obtainedByStudent.set(path.studentId, list);
+    for (const [studentId, paths] of pathsByStudent) {
+      const precedenti = licensesObtainedBeforeCurrent(paths);
+      if (precedenti.length === 0) continue;
+      obtainedByStudent.set(
+        studentId,
+        precedenti.map((path) => ({
+          licenseCategory: path.licenseCategory,
+          transmission: path.transmission,
+          // In produzione 67 patentati su 72 non hanno mai avuto una data di
+          // conseguimento: si ripiega sulla chiusura del percorso, e se manca
+          // anche quella resta la sola categoria.
+          obtainedAt: (path.obtainedAt ?? path.closedAt)?.toISOString() ?? null,
+        })),
+      );
     }
     return {
       success: true,
@@ -1787,7 +1797,8 @@ export async function getAutoscuolaStudents(search?: string) {
         ...toStudentProfile(m.user, m.createdAt),
         assignedInstructorId: m.assignedInstructorId ?? null,
         studentPhase: m.studentPhase,
-        /// Dalla piu' recente. Assente per chi e' al primo percorso.
+        /// Le conseguite PRIMA di quella in corso, dalla piu' recente.
+        /// Assente per chi non ne ha, cioe' per quasi tutti.
         obtainedLicenses: obtainedByStudent.get(m.userId),
         licenseCategory: m.licenseCategory ?? null,
         transmission: m.transmission ?? null,

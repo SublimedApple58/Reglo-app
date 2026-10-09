@@ -121,8 +121,32 @@ export const openPath = <T extends LicensePathLike>(paths: T[]): T | null =>
  * `openPath`: un patentato non ha percorsi aperti, ma ha comunque un percorso
  * di cui si parla.
  */
+const closedAtMs = (path: LicensePathLike): number => {
+  const when = path.obtainedAt ?? path.closedAt;
+  return when ? new Date(when).getTime() : 0;
+};
+
 export function currentPath<T extends LicensePathLike>(paths: T[]): T | null {
   return openPath(paths) ?? closedPathsNewestFirst(paths)[0] ?? null;
+}
+
+/**
+ * Le patenti conseguite nei percorsi **precedenti** a quello corrente, dalla
+ * piu' recente.
+ *
+ * Non sono «tutte le conseguite»: per un patentato con un percorso solo,
+ * «ha gia' la B» accanto alla patente in corso «B · Manuale» e' la stessa cosa
+ * detta due volte — e in produzione sono **71 allievi su 72**. Qui interessa
+ * solo cio' che la patente corrente non dice gia'.
+ */
+export function licensesObtainedBeforeCurrent<T extends LicensePathLike & { id: string }>(
+  paths: T[],
+): T[] {
+  if (paths.length < 2) return [];
+  const corrente = currentPath(paths);
+  return paths
+    .filter((path) => path.id !== corrente?.id && asLicensePathStatus(path.status) === "obtained")
+    .sort((a, b) => closedAtMs(b) - closedAtMs(a));
 }
 
 /**

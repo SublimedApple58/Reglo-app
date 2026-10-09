@@ -9,6 +9,7 @@ import {
   pathLabel,
   currentPath,
   lessonsPathFilterId,
+  licensesObtainedBeforeCurrent,
   ALL_LESSON_PATHS,
 } from "@/lib/autoscuole/license-paths";
 
@@ -288,5 +289,99 @@ describe("il caso Marco Reglo, dal dato di produzione", () => {
   it("quindi il percorso B mostra zero guide, e lo dice", () => {
     const filtro = lessonsPathFilterId([a2, b], null);
     expect(guide.filter((g) => pathForDate([a2, b], g)?.id === filtro)).toHaveLength(0);
+  });
+});
+
+/**
+ * Cosa l'app ISTRUTTORE mostra come «ha gia'». Nasce da un difetto trovato
+ * subito dopo il fix del 9 ottobre: mandando TUTTE le conseguite, 71 allievi su
+ * 72 in produzione si sarebbero visti «Ha gia' la B» accanto al chip della
+ * patente in corso «B · Manuale» — la stessa cosa detta due volte.
+ */
+describe("licensesObtainedBeforeCurrent", () => {
+  const a2 = percorsoConId("a2", {
+    licenseCategory: "A2",
+    status: "obtained",
+    startedAt: "2026-01-01T00:00:00.000Z",
+    closedAt: "2026-06-01T00:00:00.000Z",
+    obtainedAt: "2026-06-01T00:00:00.000Z",
+  });
+  const b = percorsoConId("b", {
+    licenseCategory: "B",
+    status: "active",
+    startedAt: "2026-10-01T00:00:00.000Z",
+    closedAt: null,
+    obtainedAt: null,
+  });
+
+  it("un patentato con un percorso solo non ha niente da raccontare", () => {
+    // Il caso di 71 allievi su 72 in produzione.
+    expect(licensesObtainedBeforeCurrent([a2])).toEqual([]);
+    expect(licensesObtainedBeforeCurrent([])).toEqual([]);
+  });
+
+  it("chi ha ripreso mostra la precedente, non quella in corso", () => {
+    expect(licensesObtainedBeforeCurrent([a2, b]).map((p) => p.licenseCategory)).toEqual(["A2"]);
+  });
+
+  it("due conseguite di fila: la piu' recente e' la corrente e resta fuori", () => {
+    const bConseguita = percorsoConId("b2", {
+      licenseCategory: "B",
+      status: "obtained",
+      startedAt: "2026-07-01T00:00:00.000Z",
+      closedAt: "2026-09-01T00:00:00.000Z",
+      obtainedAt: "2026-09-01T00:00:00.000Z",
+    });
+    expect(
+      licensesObtainedBeforeCurrent([a2, bConseguita]).map((p) => p.licenseCategory),
+    ).toEqual(["A2"]);
+  });
+
+  it("un percorso abbandonato non e' una patente conseguita", () => {
+    const am = percorsoConId("am", {
+      licenseCategory: "AM",
+      status: "abandoned",
+      startedAt: "2025-01-01T00:00:00.000Z",
+      closedAt: "2025-06-01T00:00:00.000Z",
+      obtainedAt: null,
+    });
+    expect(licensesObtainedBeforeCurrent([am, b]).map((p) => p.licenseCategory)).toEqual([]);
+    expect(licensesObtainedBeforeCurrent([am, a2, b]).map((p) => p.licenseCategory)).toEqual(["A2"]);
+  });
+
+  it("piu' di una precedente: dalla piu' recente", () => {
+    const am = percorsoConId("am", {
+      licenseCategory: "AM",
+      status: "obtained",
+      startedAt: "2024-01-01T00:00:00.000Z",
+      closedAt: "2024-06-01T00:00:00.000Z",
+      obtainedAt: "2024-06-01T00:00:00.000Z",
+    });
+    expect(licensesObtainedBeforeCurrent([am, a2, b]).map((p) => p.licenseCategory)).toEqual([
+      "A2",
+      "AM",
+    ]);
+  });
+
+  it("il caso Marco, dal dato di produzione: A2 conseguita senza data", () => {
+    // Il backfill non ha una data di conseguimento per 67 patentati su 72:
+    // resta la chiusura del percorso.
+    const a2SenzaData = percorsoConId("e0682100", {
+      licenseCategory: "A2",
+      status: "obtained",
+      startedAt: "2026-08-28T13:49:19.000Z",
+      closedAt: "2026-09-11T09:47:44.000Z",
+      obtainedAt: null,
+    });
+    const bAttiva = percorsoConId("b4c12985", {
+      licenseCategory: "B",
+      status: "active",
+      startedAt: "2026-10-08T23:22:05.000Z",
+      closedAt: null,
+      obtainedAt: null,
+    });
+    const out = licensesObtainedBeforeCurrent([a2SenzaData, bAttiva]);
+    expect(out.map((p) => p.licenseCategory)).toEqual(["A2"]);
+    expect(out[0].closedAt).toBe("2026-09-11T09:47:44.000Z");
   });
 });
