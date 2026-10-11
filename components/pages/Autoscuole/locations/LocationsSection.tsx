@@ -425,12 +425,25 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
           Sta in fondo e non in cima: nella maggior parte delle autoscuole ogni
           luogo fa tutte le patenti, quindi è una rifinitura, non la prima cosa
           da decidere entrando qui. */}
-      <button
-        type="button"
-        onClick={toggleByLicense}
-        disabled={savingByLicense}
-        aria-pressed={byLicense}
-        className="flex w-full cursor-pointer items-start justify-between gap-4 rounded-[12px] border border-[#e8e8e8] p-5 text-left transition-colors hover:border-[#d2d2d2] disabled:cursor-default disabled:opacity-60"
+      {/* Stessa forma della riga "Posizione precisa" della modale: un div
+          `role="switch"`, non un <button> — dentro c'è già il bottone di
+          InlineToggle, e un bottone dentro un bottone è HTML non valido (il
+          parser chiude il primo e il DOM si rompe sotto React). */}
+      <div
+        role="switch"
+        tabIndex={0}
+        aria-checked={byLicense}
+        aria-busy={savingByLicense}
+        onClick={() => {
+          if (!savingByLicense) void toggleByLicense();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            if (!savingByLicense) void toggleByLicense();
+          }
+        }}
+        className="flex w-full cursor-pointer select-none items-start justify-between gap-4 rounded-[12px] border border-[#e8e8e8] p-5 text-left transition-colors hover:border-[#d2d2d2] aria-busy:opacity-60"
       >
         <div className="min-w-0">
           <div className="text-sm font-semibold text-foreground">
@@ -443,7 +456,7 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
           </div>
         </div>
         <InlineToggle checked={byLicense} size="lg" />
-      </button>
+      </div>
 
       {editing ? (
         <LocationFormDialog
