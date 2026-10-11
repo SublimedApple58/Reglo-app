@@ -19,7 +19,13 @@ navigazione: si apre, si scorre, si chiude.
 - Contatore visite (`viewCount`, `lastViewedAt`) aggiornato best-effort a ogni
   apertura: non deve mai far fallire la pagina.
 - `dynamic = "force-dynamic"`: niente cache di pagina, così il contatore vede
-  ogni apertura e i numeri sono quelli di adesso.
+  ogni apertura.
+- **I numeri sì, hanno una cache**: `computeKpis` tiene il risultato in Redis
+  per 10 minuti (ottobre 2026). Qui conta più che nel backoffice — la pagina è
+  pubblica, e ogni anteprima link di WhatsApp o LinkedIn scaricava l'URL
+  facendo ripartire il calcolo completo, periodo "12 mesi" compreso.
+  "Aggiornato alle" legge `computedAt` del calcolo, non l'ora della visita:
+  vedi `projectInvestorKpis(..., new Date(res.data.computedAt))`.
 
 Gestione dal backoffice: **KPI → "Link investor"** (crea con etichetta, copia —
 il link finisce negli appunti da solo appena creato —, vedi quante volte è stato

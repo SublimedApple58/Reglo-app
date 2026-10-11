@@ -114,6 +114,42 @@ describe("saturazione — orologio italiano", () => {
     expect(totalMinutes([{ start, end }])).toBe(240);
   });
 
+  // I convertitori memorizzano i risultati per non ricostruire un
+  // `Intl.DateTimeFormat` 150.000 volte per ogni calcolo dei KPI. La chiave è
+  // (giorno, minuto) e non il solo giorno proprio per i due giorni dell'anno
+  // qui sotto: il 25 ottobre l'offset cambia a metà giornata, e una cache per
+  // giornata sbaglierebbe di un'ora tutte le fasce del pomeriggio.
+  it("il 25 ottobre mezzanotte è +2 e il pomeriggio è +1 (stesso giorno)", () => {
+    expect(new Date(romeWallClockToInstant(2026, 10, 25, 0)).toISOString()).toBe(
+      "2026-10-24T22:00:00.000Z",
+    );
+    expect(new Date(romeWallClockToInstant(2026, 10, 25, 14 * 60)).toISOString()).toBe(
+      "2026-10-25T13:00:00.000Z",
+    );
+  });
+
+  it("il 29 marzo mezzanotte è +1 e il pomeriggio è +2 (stesso giorno)", () => {
+    expect(new Date(romeWallClockToInstant(2026, 3, 29, 0)).toISOString()).toBe(
+      "2026-03-28T23:00:00.000Z",
+    );
+    expect(new Date(romeWallClockToInstant(2026, 3, 29, 14 * 60)).toISOString()).toBe(
+      "2026-03-29T12:00:00.000Z",
+    );
+  });
+
+  it("la stessa domanda ripetuta dà la stessa risposta (cache)", () => {
+    const first = romeWallClockToInstant(2026, 7, 15, 9 * 60);
+    const second = romeWallClockToInstant(2026, 7, 15, 9 * 60);
+    expect(second).toBe(first);
+    const day = new Date("2026-09-13T23:30:00.000Z");
+    expect(romeYmd(day)).toEqual(romeYmd(day));
+    expect(romeYmd(new Date("2026-09-14T10:00:00.000Z"))).toEqual({
+      year: 2026,
+      month: 9,
+      day: 14,
+    });
+  });
+
   it("il giorno di calendario è quello italiano, non quello UTC", () => {
     // 23:30 UTC del 13 settembre = 01:30 del 14 a Roma.
     expect(romeYmd(new Date("2026-09-13T23:30:00.000Z"))).toEqual({

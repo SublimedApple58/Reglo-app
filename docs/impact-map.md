@@ -190,7 +190,9 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - ← **Secretary-only / Consorzio**: `limits.secretaryOnly` e `limits.accountKind` danno l'etichetta di tipo account (inclusi nelle medie, etichettati)
 - ← **Notifications/mobile**: `MobilePushDevice` (`platform`, `appVersion`, `lastSeenAt`) per il parco app
 - ← **Quiz, Aula, Swap, Group lessons, Voice, Pagellino, Pagamenti**: conteggi di adozione per feature (sola lettura, un `groupBy` per feature)
-- Nessun modello nuovo e nessun job: tutto calcolato live dall'action `getBackofficeKpis`
+- Nessun modello nuovo e nessun job: tutto calcolato live da `computeKpis` (`lib/backoffice/kpi-compute.ts`), dietro una **cache Redis di 10 minuti** condivisa con la pagina investor. Chiave `backoffice:kpi:v1:<from>:<to>:<full|investor>`: chi aggiunge un'opzione che cambia i numeri deve metterla nella chiave, o due viste diverse si leggono a vicenda
+- → **Instructor Hours**: i due convertitori di orologio italiano (`romeWallClockToInstant`, `romeYmd` in `lib/backoffice/agenda-saturation.ts`) sono **memoizzati** da ottobre 2026 — erano il 95% del costo dei KPI e lo erano anche del report ore del titolare. La chiave è `(giorno, minuto)` e non il solo giorno **apposta**: nei due giorni del cambio d'ora l'offset cambia a metà giornata. Chi li tocca lo verifichi lì (test in `tests/unit/backoffice/agenda-saturation.test.ts`)
+- Il filtro periodo riscrive l'URL con `history.replaceState`, **non** con `router.replace`: quest'ultimo rigenera il server component e fa girare il calcolo una seconda volta a ogni click
 
 ### Instructor Hours (report "Ore guida" web)
 - ← **Appointments**: le ORE del report sono le guide svolte (`completed`/`checked_in`/`no_show`, `esame` escluso). L'OCCUPAZIONE (REG-444) usa un filtro diverso apposta — tutto ciò che non è `cancelled`, esami e guide ancora da svolgere compresi — perché misura quanto dell'agenda è preso, non quanto è stato fatto. Chi tocca gli stati deve guardare ENTRAMBI i filtri: `getInstructorDrivingHoursRange` per le ore, `loadAgendaOccupancy` per l'occupazione

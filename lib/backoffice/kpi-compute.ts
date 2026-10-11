@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/db/prisma";
+import { getRedis } from "@/lib/cache/redis";
 import { formatError } from "@/lib/utils";
 import { buildAvailabilityResolver } from "@/lib/actions/autoscuole-availability.actions";
 import {
@@ -113,6 +114,9 @@ export type KpiGrowthPoint = {
 };
 
 export type BackofficeKpis = {
+  /** Quando questa fotografia è stata calcolata (ISO). Con la cache può non
+   *  essere "adesso": la pagina lo dichiara a schermo. */
+  computedAt: string;
   range: {
     from: string;
     to: string;
@@ -201,11 +205,60 @@ const formatYmd = (date: Date) =>
 
 const delta = (current: number, previous: number): KpiDelta => ({ current, previous });
 
+// ── Cache ───────────────────────────────────────────────────────────────────
+// Dieci minuti di Redis davanti al calcolo. Non è un dettaglio di performance:
+// è ciò che impedisce che la stessa fotografia venga ricalcolata da zero ogni
+// volta che si tocca il filtro (e, sulla pagina investor pubblica, ogni volta
+// che un bot di anteprima link apre l'URL). Su KPI di piattaforma dieci minuti
+// non cambiano nessuna decisione — e `computedAt` dice a schermo di quando è
+// la fotografia, così il numero non mente mai.
+//
+// Se Redis non è configurato o risponde male si calcola e si tira avanti: la
+// cache è un acceleratore, non una dipendenza.
+
+const KPI_CACHE_TTL_SECONDS = 600;
+
+const kpiCacheKey = (from: string, to: string, excludeSeedDemo: boolean) =>
+  `backoffice:kpi:v1:${from}:${to}:${excludeSeedDemo ? "investor" : "full"}`;
+
 // ── Action ──────────────────────────────────────────────────────────────────
 
 export async function computeKpis(
   input: z.infer<typeof rangeSchema>,
   /** `excludeSeedDemo`: usata dalla pagina investor, vedi `isSeedDemo`. */
+  options: { excludeSeedDemo?: boolean } = {},
+) {
+  const parsed = rangeSchema.safeParse(input);
+  // Intervallo malformato: lo lascia dire al calcolo, che ha già il suo errore.
+  if (!parsed.success) return computeKpisFresh(input, options);
+
+  const key = kpiCacheKey(parsed.data.from, parsed.data.to, options.excludeSeedDemo === true);
+  const redis = getRedis();
+
+  if (redis) {
+    try {
+      const cached = await redis.get<BackofficeKpis>(key);
+      if (cached) return { success: true as const, data: cached };
+    } catch {
+      // cache irraggiungibile: si calcola.
+    }
+  }
+
+  const result = await computeKpisFresh(input, options);
+
+  if (redis && result.success) {
+    try {
+      await redis.set(key, result.data, { ex: KPI_CACHE_TTL_SECONDS });
+    } catch {
+      // non essere riuscito a scrivere in cache non è un errore per chi legge.
+    }
+  }
+
+  return result;
+}
+
+async function computeKpisFresh(
+  input: z.infer<typeof rangeSchema>,
   options: { excludeSeedDemo?: boolean } = {},
 ) {
   try {
@@ -762,13 +815,34 @@ export async function computeKpis(
 
       // Un giorno alla volta, sul calendario ITALIANO: le fasce sono orari da
       // orologio, non istanti (il server gira a UTC).
-      const days: Date[] = [];
+      //
+      // Il calendario si costruisce UNA volta per finestra, non una volta per
+      // istruttore: giorno di calendario e giorno della settimana sono gli
+      // stessi per tutti e cinquanta. Prima stavano dentro il ciclo degli
+      // istruttori e venivano ricalcolati cinquanta volte a giornata.
+      const calendar: Array<{
+        date: Date;
+        year: number;
+        month: number;
+        dayOfMonth: number;
+        ymd: string;
+        dow: number;
+      }> = [];
       for (
         let cursor = windowStart.getTime();
         cursor < windowEnd.getTime();
         cursor += dayMs
       ) {
-        days.push(new Date(cursor + dayMs / 2)); // mezzogiorno: immune all'ora legale
+        const date = new Date(cursor + dayMs / 2); // mezzogiorno: immune all'ora legale
+        const { year, month, day: dayOfMonth } = romeYmd(date);
+        calendar.push({
+          date,
+          year,
+          month,
+          dayOfMonth,
+          ymd: `${year}-${String(month).padStart(2, "0")}-${String(dayOfMonth).padStart(2, "0")}`,
+          dow: new Date(romeWallClockToInstant(year, month, dayOfMonth, 12 * 60)).getUTCDay(),
+        });
       }
 
       let available = 0;
@@ -781,20 +855,25 @@ export async function computeKpis(
           const closedDays = holidaysByCompany.get(companyId) ?? new Set<string>();
           const rows = ids.map((instructorId) => {
             const slots: Interval[] = [];
-            for (const day of days) {
-              const { year, month, day: dayOfMonth } = romeYmd(day);
-              const ymd = `${year}-${String(month).padStart(2, "0")}-${String(dayOfMonth).padStart(2, "0")}`;
-              if (closedDays.has(ymd)) continue;
-              const record = resolver.resolve(instructorId, day);
+            for (const day of calendar) {
+              if (closedDays.has(day.ymd)) continue;
+              const record = resolver.resolve(instructorId, day.date);
               if (!record) continue;
-              const dow = new Date(
-                romeWallClockToInstant(year, month, dayOfMonth, 12 * 60),
-              ).getUTCDay();
-              if (!record.daysOfWeek.includes(dow)) continue;
+              if (!record.daysOfWeek.includes(day.dow)) continue;
               for (const range of record.ranges) {
                 slots.push({
-                  start: romeWallClockToInstant(year, month, dayOfMonth, range.startMinutes),
-                  end: romeWallClockToInstant(year, month, dayOfMonth, range.endMinutes),
+                  start: romeWallClockToInstant(
+                    day.year,
+                    day.month,
+                    day.dayOfMonth,
+                    range.startMinutes,
+                  ),
+                  end: romeWallClockToInstant(
+                    day.year,
+                    day.month,
+                    day.dayOfMonth,
+                    range.endMinutes,
+                  ),
                 });
               }
             }
@@ -885,6 +964,7 @@ export async function computeKpis(
     return {
       success: true as const,
       data: {
+        computedAt: new Date().toISOString(),
         range: {
           from: formatYmd(from),
           to: formatYmd(new Date(toExclusive.getTime() - dayMs)),

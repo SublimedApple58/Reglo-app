@@ -68,6 +68,81 @@ export const clampIntervals = (intervals: Interval[], window: Interval): Interva
 
 const MINUTE = 60_000;
 
+// ── I due convertitori di fuso ───────────────────────────────────────────────
+// Erano il collo di bottiglia dei KPI del backoffice e del report ore del
+// titolare: costruivano un `Intl.DateTimeFormat` NUOVO a ogni chiamata. Misurato
+// su node 22: 27,8 µs costruendolo ogni volta contro 2,2 µs con il formatter già
+// pronto. Il ciclo della saturazione li chiama una volta per ogni istruttore per
+// ogni giorno del periodo — sul filtro "Anno" sono ~150.000 chiamate, cioè
+// quattro secondi di CPU buttati a ricostruire sempre lo stesso oggetto.
+//
+// Due accorgimenti, nessun cambio di risultato:
+//  1. il formatter nasce una volta sola, a livello di modulo;
+//  2. i risultati si ricordano, perché le stesse domande tornano identiche
+//     decine di volte (il giorno di calendario e l'inizio di una fascia sono
+//     gli stessi per tutti gli istruttori della stessa giornata).
+//
+// L'ora legale resta gestita come prima: si memorizza la risposta per
+// (giorno, minuto), non un offset valido per tutto il giorno — il 26 ottobre
+// alle 02:00 l'offset cambia a metà giornata e un offset unico sbaglierebbe
+// di un'ora.
+//
+// La memoria non cresce all'infinito: oltre il tetto la cache si svuota e
+// riparte da zero. Fluid Compute riusa l'istanza per molte richieste, e una
+// cache senza tetto è una perdita di memoria lenta.
+
+const CACHE_CAP = 20_000;
+
+const remember = <K, V>(cache: Map<K, V>, key: K, compute: () => V): V => {
+  const hit = cache.get(key);
+  if (hit !== undefined) return hit;
+  const value = compute();
+  if (cache.size >= CACHE_CAP) cache.clear();
+  cache.set(key, value);
+  return value;
+};
+
+const ROME_WALL_CLOCK = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Europe/Rome",
+  hour12: false,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+const ROME_DAY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Rome",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+const instantCache = new Map<number, number>();
+const ymdCache = new Map<number, { year: number; month: number; day: number }>();
+
+const wallClockToInstant = (
+  year: number,
+  month: number,
+  day: number,
+  minutes: number,
+): number => {
+  const naiveUtc = Date.UTC(year, month - 1, day, 0, 0, 0) + minutes * MINUTE;
+  // Offset di Roma misurato su quell'istante (gestisce l'ora legale da sé).
+  const parts = ROME_WALL_CLOCK.formatToParts(new Date(naiveUtc));
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? "0");
+  const asIfUtc = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour") % 24,
+    get("minute"),
+  );
+  const offset = asIfUtc - naiveUtc;
+  return naiveUtc - offset;
+};
+
 /**
  * Le fasce di disponibilità sono minuti di orologio ITALIANO ("dalle 9 alle
  * 13"), non istanti. In produzione il server gira a UTC: senza questa
@@ -80,40 +155,32 @@ export function romeWallClockToInstant(
   day: number,
   minutes: number,
 ): number {
-  const naiveUtc = Date.UTC(year, month - 1, day, 0, 0, 0) + minutes * MINUTE;
-  // Offset di Roma misurato su quell'istante (gestisce l'ora legale da sé).
-  const probe = new Date(naiveUtc);
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Europe/Rome",
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).formatToParts(probe);
-  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? "0");
-  const asIfUtc = Date.UTC(
-    get("year"),
-    get("month") - 1,
-    get("day"),
-    get("hour") % 24,
-    get("minute"),
-  );
-  const offset = asIfUtc - naiveUtc;
-  return naiveUtc - offset;
+  // Chiave numerica compatta. Fuori da questi intervalli (date assurde, minuti
+  // negativi) si calcola e non si memorizza: la chiave collasserebbe.
+  const cacheable =
+    Number.isInteger(year) &&
+    year > 0 &&
+    year < 10_000 &&
+    month >= 0 &&
+    month < 100 &&
+    day >= 0 &&
+    day < 100 &&
+    Number.isInteger(minutes) &&
+    minutes >= 0 &&
+    minutes < 10_000;
+  if (!cacheable) return wallClockToInstant(year, month, day, minutes);
+  const key = year * 100_000_000 + month * 1_000_000 + day * 10_000 + minutes;
+  return remember(instantCache, key, () => wallClockToInstant(year, month, day, minutes));
 }
 
 /** Giorno di calendario italiano di un istante. */
 export function romeYmd(date: Date): { year: number; month: number; day: number } {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Rome",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
-  const [year, month, day] = parts.split("-").map(Number);
-  return { year, month, day };
+  const stamp = date.getTime();
+  if (!Number.isFinite(stamp)) return { year: NaN, month: NaN, day: NaN };
+  return remember(ymdCache, stamp, () => {
+    const [year, month, day] = ROME_DAY.format(date).split("-").map(Number);
+    return { year, month, day };
+  });
 }
 
 export const totalMinutes = (intervals: Interval[]): number =>

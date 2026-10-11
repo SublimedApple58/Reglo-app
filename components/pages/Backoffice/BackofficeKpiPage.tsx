@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { motion, useReducedMotion } from "motion/react";
 import { Download, Info } from "lucide-react";
 
@@ -26,6 +26,7 @@ import {
   COMPANY_KIND_LABEL,
   buildKpiCsv,
   downloadCsv,
+  formatClock,
   formatEuro,
   formatInt,
   formatPercent,
@@ -97,7 +98,6 @@ export function BackofficeKpiPage({
   initialKpis: BackofficeKpis | null;
   initialRange: { from: string; to: string };
 }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useFeedbackToast();
   const reduce = useReducedMotion();
@@ -134,15 +134,21 @@ export function BackofficeKpiPage({
   }, [range.from, range.to]);
 
   // L'intervallo vive nell'URL: un link a un periodo si incolla in chat.
+  //
+  // L'URL si riscrive con `history.replaceState`, non con `router.replace`:
+  // quest'ultimo rigenera il server component della pagina, che a sua volta
+  // richiama `getBackofficeKpis` — quindi ogni click sul filtro faceva girare
+  // il calcolo DUE volte (una dall'effetto qui sotto, una dal server). Next
+  // tiene comunque allineato `useSearchParams`, e il link resta incollabile.
   const applyRange = React.useCallback(
     (next: { from: string; to: string }) => {
       setRange(next);
       const params = new URLSearchParams(searchParams?.toString() ?? "");
       params.set("da", next.from);
       params.set("a", next.to);
-      router.replace(`?${params.toString()}`, { scroll: false });
+      window.history.replaceState(null, "", `?${params.toString()}`);
     },
-    [router, searchParams],
+    [searchParams],
   );
 
   const onPreset = (value: PresetKey) => {
@@ -187,6 +193,10 @@ export function BackofficeKpiPage({
                 <span className="text-[#9a9a9a]">
                   confronto con {formatRangeLabel(kpis.range.previousFrom, kpis.range.previousTo)}
                 </span>
+                {/* I numeri stanno in cache per pochi minuti: meglio dire di
+                    quando sono che far credere che siano del secondo esatto. */}
+                <span className="mx-2 text-[#d5d5dd]">·</span>
+                <span className="text-[#9a9a9a]">calcolati alle {formatClock(kpis.computedAt)}</span>
               </>
             ) : (
               "Andamento di Reglo nel periodo scelto."

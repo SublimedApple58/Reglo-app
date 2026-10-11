@@ -125,11 +125,47 @@ WHERE "companyId" = '<id>' AND "serviceKey" = 'AUTOSCUOLE';
 ## Data model
 
 **Nessun modello nuovo, nessuna migrazione, nessun job.** Tutto è calcolato live
-a ogni richiesta: i volumi sono minuscoli per una query analitica (~10k
-appuntamenti, 14 autoscuole su prod a settembre 2026) e una tabella di rollup
-sarebbe solo un impianto in più da tenere in vita. Se un giorno le query
-diventassero lente, il primo passo è una cache Redis breve sull'action, non la
-materializzazione.
+a ogni richiesta: i volumi sono minuscoli per una query analitica (~14k
+appuntamenti, 21 autoscuole su prod a ottobre 2026) e una tabella di rollup
+sarebbe solo un impianto in più da tenere in vita.
+
+## Costo del calcolo (ottobre 2026)
+
+La pagina era diventata inusabile sui periodi lunghi: cambiare filtro
+richiedeva decine di secondi, tutti di CPU — che su Vercel è la voce che si
+paga. **Non erano le query.** Misurato su prod: le ~18 query in parallelo
+stanno in **1,15 s** (3,0 s se messe in fila), e il filtro "Anno" ne tocca
+12.475 righe. Il costo stava in due posti:
+
+1. **La conversione di fuso orario.** `romeWallClockToInstant` e `romeYmd`
+   (`lib/backoffice/agenda-saturation.ts`) costruivano un
+   `Intl.DateTimeFormat` **nuovo a ogni chiamata**: 27,8 µs contro 2,2 µs con
+   il formatter già pronto. Il ciclo della saturazione le chiama una volta per
+   istruttore per giorno, su due finestre (periodo + periodo precedente): sul
+   filtro "Anno", con 51 istruttori, sono 37.230 iterazioni e **149.732
+   chiamate**. Formatter a livello di modulo + memoizzazione per
+   `(giorno, minuto)` → il ciclo passa da **4.194 ms a 85 ms** (misurato sul
+   dato di prod). La chiave è per giorno **e minuto**, non per giorno: il 25
+   ottobre l'offset cambia a metà giornata.
+   Lo stesso ciclo vive in `lib/autoscuole/agenda-occupancy.ts` (report ore del
+   titolare, pagina di cliente): beneficia della stessa correzione senza
+   toccarlo.
+2. **Il doppio calcolo per ogni click.** `applyRange` faceva `setRange` (→
+   effetto → server action) **e** `router.replace`, che rigenera il server
+   component della route → `getBackofficeKpis` una seconda volta, in parallelo.
+   Ora l'URL si riscrive con `window.history.replaceState`: resta incollabile,
+   ma il calcolo gira una volta sola.
+
+Davanti al calcolo c'è poi una **cache Redis di 10 minuti**
+(`backoffice:kpi:v1:<from>:<to>:<full|investor>`, dentro `computeKpis`, quindi
+copre anche la pagina investor pubblica — che altrimenti ricalcola a ogni
+anteprima link di WhatsApp o LinkedIn). Se Redis manca o risponde male si
+calcola e si tira avanti: è un acceleratore, non una dipendenza. Il payload
+porta `computedAt` e la testata scrive **"calcolati alle HH:MM"**, così il
+numero non finge mai di essere del secondo esatto.
+
+Il prossimo passo, se mai servisse, è trasformare le due findMany da 12k righe
+in aggregati SQL — oggi non è il collo di bottiglia e non vale il rischio.
 
 ## File
 
@@ -137,7 +173,8 @@ materializzazione.
 |------|-------|
 | `lib/backoffice/agenda-saturation.ts` | Aritmetica pura degli intervalli per la saturazione agenda + conversione orologio italiano → istante |
 | `lib/backoffice/kpi-math.ts` | Modulo **puro** (niente Prisma): granularità dei bucket (`pickBucketUnit`, `buildBuckets`, `bucketKeyFor`), esiti (`isDoneStatus`/`isCancelledStatus`), canali (`SOURCE_BUCKETS`, `sourceBucketOf`), piani (`planMonthlyCents`), tipo account (`companyKindOf`) |
-| `lib/actions/backoffice-kpi.actions.ts` | `getBackofficeKpis({from,to})`: `requireGlobalAdmin`, ~18 query in parallelo, aggregazione in memoria, tipo `BackofficeKpis` |
+| `lib/actions/backoffice-kpi.actions.ts` | `getBackofficeKpis({from,to})`: solo la guardia `requireGlobalAdmin`, il calcolo è in `kpi-compute.ts` |
+| `lib/backoffice/kpi-compute.ts` | `computeKpis`: cache Redis 10 min + `computeKpisFresh` (~18 query in parallelo, aggregazione in memoria, saturazione agenda), tipo `BackofficeKpis` con `computedAt` |
 | `app/[locale]/backoffice/kpi/page.tsx` | Route: legge `?da=&a=` (default ultimi 30 giorni) e calcola il primo giro lato server (nessun flash di scheletri) |
 | `components/pages/Backoffice/BackofficeKpiPage.tsx` | La pagina: filtro periodo sticky, card, sezioni, tabella autoscuole, export CSV |
 | `components/pages/Backoffice/kpi/KpiPrimitives.tsx` | `KpiCard` (numero che sale, delta, sparkline), `DeltaPill`, `Sparkline`, `KpiSection`, `LegendDot` |

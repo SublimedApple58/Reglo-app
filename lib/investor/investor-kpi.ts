@@ -61,7 +61,9 @@ export async function buildInvestorKpis(
     allTimeTotals(),
   ]);
   if (!res.success || !res.data) return null;
-  return projectInvestorKpis(res.data, totals, period.key);
+  // "Aggiornato alle" dice l'ora del CALCOLO, non quella della visita: i KPI
+  // stanno in cache qualche minuto e la pagina non deve raccontare il falso.
+  return projectInvestorKpis(res.data, totals, period.key, new Date(res.data.computedAt));
 }
 
 // ── Link ────────────────────────────────────────────────────────────────────

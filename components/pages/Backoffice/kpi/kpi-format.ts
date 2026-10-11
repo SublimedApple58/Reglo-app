@@ -36,6 +36,14 @@ export const formatDateLabel = (iso: string) =>
     year: "numeric",
   });
 
+/** Ora di calcolo della fotografia: "14:07", orologio italiano. */
+export const formatClock = (iso: string) =>
+  new Date(iso).toLocaleTimeString("it-IT", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Rome",
+  });
+
 /** "1 – 30 settembre 2026", con l'anno una volta sola quando coincide. */
 export const formatRangeLabel = (from: string, to: string) => {
   const start = new Date(`${from}T12:00:00`);
