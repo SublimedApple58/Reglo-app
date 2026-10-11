@@ -157,7 +157,10 @@ stanno in **1,15 s** (3,0 s se messe in fila), e il filtro "Anno" ne tocca
    ma il calcolo gira una volta sola.
 
 Davanti al calcolo c'è poi una **cache Redis di 10 minuti**
-(`backoffice:kpi:v1:<from>:<to>:<full|investor>`, dentro `computeKpis`, quindi
+(`backoffice:kpi:v1:<APP_ENV>:<from>:<to>:<full|investor>` — dev, staging e
+prod condividono la stessa istanza Upstash con tre DB diversi, senza `APP_ENV`
+nella chiave staging servirebbe i suoi numeri alla produzione), dentro
+`computeKpis`, quindi
 copre anche la pagina investor pubblica — che altrimenti ricalcola a ogni
 anteprima link di WhatsApp o LinkedIn). Se Redis manca o risponde male si
 calcola e si tira avanti: è un acceleratore, non una dipendenza. Il payload

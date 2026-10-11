@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/db/prisma";
+import { APP_ENV } from "@/lib/app-env";
 import { getRedis } from "@/lib/cache/redis";
 import { formatError } from "@/lib/utils";
 import { buildAvailabilityResolver } from "@/lib/actions/autoscuole-availability.actions";
@@ -218,8 +219,14 @@ const delta = (current: number, previous: number): KpiDelta => ({ current, previ
 
 const KPI_CACHE_TTL_SECONDS = 600;
 
+/**
+ * `APP_ENV` nella chiave non è pignoleria: dev, staging e prod condividono la
+ * STESSA istanza Upstash ma hanno tre DB Neon diversi. Senza il prefisso, i
+ * numeri calcolati su staging verrebbero serviti alla produzione (e viceversa)
+ * per dieci minuti, perché la chiave sarebbe identica.
+ */
 const kpiCacheKey = (from: string, to: string, excludeSeedDemo: boolean) =>
-  `backoffice:kpi:v1:${from}:${to}:${excludeSeedDemo ? "investor" : "full"}`;
+  `backoffice:kpi:v1:${APP_ENV}:${from}:${to}:${excludeSeedDemo ? "investor" : "full"}`;
 
 // ── Action ──────────────────────────────────────────────────────────────────
 
