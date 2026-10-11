@@ -417,6 +417,10 @@ const autoscuolaSettingsPatchSchema = z
     // defaultTransmission at registration (no gate) and the owner changes it by
     // hand if needed.
     licensePathMode: z.enum(["fixed_default", "student_choice"]).optional(),
+    // Luoghi diversi per tipo di patente (ottobre 2026). Spento = ogni luogo
+    // fa tutte le patenti; le categorie assegnate restano in database e
+    // tornano appena si riaccende.
+    locationsByLicense: z.boolean().optional(),
     // "Auto al seguito": single global toggle for ALL moto categories. When on,
     // every moto guida additionally reserves a follow car.
     followCarMotoEnabled: z.boolean().optional(),
@@ -653,6 +657,9 @@ export type AutoscuolaSettingsData = {
   defaultLicenseCategory: string;
   defaultTransmission: string;
   licensePathMode: "fixed_default" | "student_choice";
+  /** `null` = nessuno ha mai toccato l'interruttore: lo stato si deduce dai
+   *  luoghi con `locationsByLicenseEnabled`. */
+  locationsByLicense: boolean | null;
   followCarMotoEnabled: boolean;
   followCarRules: FollowCarRules;
   groupLessonsEnabled: boolean;
@@ -1028,6 +1035,13 @@ const resolveAutoscuolaSettingsData = async (
         : "manual",
     licensePathMode:
       limits.licensePathMode === "fixed_default" ? "fixed_default" : "student_choice",
+    // Si passa il valore GREZZO (null se mai impostato) e non lo stato
+    // effettivo: dedurlo richiederebbe una query sui luoghi, e questa funzione
+    // sta nel percorso caldo di quasi ogni schermata. Lo stato effettivo lo
+    // calcola chi ha già i luoghi in mano, con la stessa funzione pura del
+    // server (`locationsByLicenseEnabled`).
+    locationsByLicense:
+      typeof limits.locationsByLicense === "boolean" ? limits.locationsByLicense : null,
     followCarMotoEnabled: readFollowCarMotoEnabled(limits),
     followCarRules: parseFollowCarRulesFromLimits(limits),
     groupLessonsEnabled: limits.groupLessonsEnabled === true,
@@ -1423,6 +1437,13 @@ export async function updateAutoscuolaSettings(
     const previousLicensePathMode =
       limits.licensePathMode === "fixed_default" ? "fixed_default" : "student_choice";
     const nextLicensePathMode = payload.licensePathMode ?? previousLicensePathMode;
+    // Interruttore «Luoghi diversi per tipo di patente». Finché nessuno lo
+    // tocca la chiave non esiste e lo stato si deduce dai luoghi (vedi
+    // `isLocationsByLicenseEnabled`): qui si scrive solo quando arriva una
+    // scelta esplicita, così non si fissa un default alle spalle di nessuno.
+    const nextLocationsByLicense =
+      payload.locationsByLicense ??
+      (typeof limits.locationsByLicense === "boolean" ? limits.locationsByLicense : undefined);
     const switchedToFixedDefault =
       previousLicensePathMode !== "fixed_default" && nextLicensePathMode === "fixed_default";
     // Single global follow-car flag. Prefer the new flag; else derive from the
@@ -1654,6 +1675,9 @@ export async function updateAutoscuolaSettings(
       defaultLicenseCategory: nextDefaultLicenseCategory,
       defaultTransmission: nextDefaultTransmission,
       licensePathMode: nextLicensePathMode,
+      ...(nextLocationsByLicense !== undefined
+        ? { locationsByLicense: nextLocationsByLicense }
+        : {}),
       followCarMotoEnabled: nextFollowCarMotoEnabled,
       followCarRules: nextFollowCarRules,
       groupLessonsEnabled: nextGroupLessonsEnabled,

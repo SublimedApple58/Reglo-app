@@ -1,8 +1,10 @@
 import {
   lessonLicenseCategory,
   locationIdForLicenseCategory,
+  locationsByLicenseEnabled,
   resolveGroupPrefilledLocationId,
   resolvePrefilledLocationId,
+  withoutLicenseCategories,
   type LicenseAwareLocation,
 } from "@/lib/autoscuole/location-for-license";
 
@@ -199,5 +201,58 @@ describe("resolveGroupPrefilledLocationId (guide di gruppo)", () => {
     expect(
       resolveGroupPrefilledLocationId({ locations: [], licenseCategories: ["B"] }),
     ).toBeNull();
+  });
+});
+
+describe("interruttore «Luoghi diversi per tipo di patente»", () => {
+  const SENZA_PATENTI: LicenseAwareLocation[] = [
+    { id: "sede", isDefault: true, licenseCategories: [] },
+    { id: "parcheggio", isDefault: false, licenseCategories: [] },
+  ];
+
+  it("una scelta esplicita vince sempre sul dato", () => {
+    expect(locationsByLicenseEnabled(false, LOCATIONS)).toBe(false);
+    expect(locationsByLicenseEnabled(true, SENZA_PATENTI)).toBe(true);
+  });
+
+  it("senza scelta esplicita si deduce dai luoghi", () => {
+    // Chi aveva già assegnato delle patenti continua come prima...
+    expect(locationsByLicenseEnabled(undefined, LOCATIONS)).toBe(true);
+    expect(locationsByLicenseEnabled(null, LOCATIONS)).toBe(true);
+    // ...e chi non l'ha mai usato parte spento.
+    expect(locationsByLicenseEnabled(undefined, SENZA_PATENTI)).toBe(false);
+    expect(locationsByLicenseEnabled(undefined, [])).toBe(false);
+  });
+
+  it("spento, il luogo della patente non entra più nella precedenza", () => {
+    const spenti = withoutLicenseCategories(LOCATIONS);
+    // Acceso la A1 porta al luogo "moto"...
+    expect(
+      resolvePrefilledLocationId({ locations: LOCATIONS, vehicle: { licenseCategory: "A1" } }),
+    ).toBe("moto");
+    // ...spento si ricade in sede.
+    expect(
+      resolvePrefilledLocationId({ locations: spenti, vehicle: { licenseCategory: "A1" } }),
+    ).toBe("sede");
+    expect(
+      resolveGroupPrefilledLocationId({ locations: spenti, licenseCategories: ["A1", "A2"] }),
+    ).toBe("sede");
+  });
+
+  it("il default dell'allievo continua a vincere anche da spento (REG-392)", () => {
+    const spenti = withoutLicenseCategories(LOCATIONS);
+    expect(
+      resolvePrefilledLocationId({
+        locations: spenti,
+        studentDefaultLocationId: "parcheggio",
+        vehicle: { licenseCategory: "A1" },
+      }),
+    ).toBe("parcheggio");
+  });
+
+  it("non tocca i luoghi originali: le patenti restano dove sono", () => {
+    const copia = withoutLicenseCategories(LOCATIONS);
+    expect(copia[1].licenseCategories).toEqual([]);
+    expect(LOCATIONS[1].licenseCategories).toEqual(["AM", "A1", "A2", "A"]);
   });
 });

@@ -60,6 +60,39 @@ export function locationIdForLicenseCategory(
   return null;
 }
 
+// ─── L'interruttore «Luoghi diversi per tipo di patente» ─────────────────────
+// L'assegnazione delle patenti ai luoghi è OPZIONALE (ottobre 2026): per la
+// maggior parte delle autoscuole ogni luogo fa tutte le patenti, e l'esclusività
+// (una categoria in un luogo solo) era una gabbia invece di un aiuto. Quando
+// l'interruttore è spento le categorie assegnate **restano salvate** ma non si
+// leggono: spegnere un'impostazione non cancella dati, e riaccendendola si
+// ritrova tutto com'era.
+//
+// La regola è applicata in un punto solo per ogni lettore — chi carica i luoghi
+// li passa da `withoutLicenseCategories` — così nessun consumatore deve
+// ricordarsi del flag. Vedi `lib/autoscuole/locations.ts`.
+
+/**
+ * Stato effettivo dell'interruttore. `stored` è `limits.locationsByLicense`:
+ * quando manca (nessuno l'ha mai toccato) si deduce dal dato, così le
+ * autoscuole che avevano già assegnato delle patenti continuano a comportarsi
+ * come prima senza bisogno di toccare loro i dati.
+ */
+export function locationsByLicenseEnabled(
+  stored: unknown,
+  locations: readonly LicenseAwareLocation[],
+): boolean {
+  if (typeof stored === "boolean") return stored;
+  return locations.some((l) => (l.licenseCategories ?? []).length > 0);
+}
+
+/** Gli stessi luoghi, senza patenti assegnate. Non tocca il database. */
+export function withoutLicenseCategories<T extends LicenseAwareLocation>(
+  locations: readonly T[],
+): T[] {
+  return locations.map((l) => ({ ...l, licenseCategories: [] }));
+}
+
 export type ResolveLocationInput = {
   /** Luoghi attivi della company (ordine: `isDefault desc, name asc`). */
   locations: readonly LicenseAwareLocation[];

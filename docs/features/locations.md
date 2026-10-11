@@ -6,10 +6,50 @@ Sede dell'autoscuola (luogo di default di ogni guida) + luoghi extra da cui le g
 
 `AutoscuolaLocation`: `companyId`, `name`, `isDefault` (la sede, una per company), `isPrecise`, `address`, `latitude`/`longitude` (Decimal), `placeId` (Google), `createdByUserId` SetNull, **`licenseCategories String[]`** (REG-409: tipi di patente serviti dal luogo).
 
-## Luogo per tipo di patente (REG-409)
+## Luogo per tipo di patente (REG-409) — OPZIONALE da ottobre 2026
 
 Il titolare assegna a ogni luogo (sede compresa) uno o più **tipi di patente**;
 creando una guida il campo "Luogo" si precompila di conseguenza.
+
+### L'interruttore
+
+In fondo al pane "Sede e luoghi" c'è **"Luoghi diversi per tipo di patente"**
+(`limits.locationsByLicense`, nessuna migrazione). Spento — che è il caso della
+quasi totalità delle autoscuole — **ogni luogo vale per tutte le patenti** e la
+precedenza si accorcia a *default dell'allievo → sede*.
+
+Perché è nato: in produzione, a ottobre 2026, **solo 2 luoghi su tutte le
+autoscuole** avevano delle patenti assegnate, e in entrambi i casi stavano su un
+luogo secondario mentre la sede non ne aveva nessuna — con l'effetto che ogni
+guida di quella patente si precompilava fuori sede. L'esclusività (una categoria
+in un luogo solo) era una gabbia: chi fa la B in due posti non poteva dirlo.
+
+- **Default senza scelta esplicita**: la chiave nei limits nasce assente, e
+  allora lo stato si **deduce dai luoghi** — acceso se almeno uno ha delle
+  patenti assegnate (`locationsByLicenseEnabled`, modulo puro). Così le due
+  autoscuole che lo usavano continuano esattamente come prima **senza che
+  nessuno abbia toccato i loro dati**, e tutte le altre partono spente. Dal
+  primo salvataggio in poi il valore è esplicito.
+- **Spegnere non cancella niente**: le categorie restano in database e tornano
+  identiche riaccendendo. La modale, da spenta, **omette** `licenseCategories`
+  dal salvataggio (`undefined`, non `[]`) — mandare una lista vuota
+  cancellerebbe assegnazioni che l'utente non ha mai visto.
+- **Un punto solo di applicazione**: `listLocationsForCompany` è l'unica porta da
+  cui i luoghi raggiungono i client (pane, agenda web, dialog guide di gruppo,
+  mobile) e da spenta restituisce le categorie **vuote**. Nessun consumatore sa
+  che l'interruttore esiste. Lo stesso filtro è applicato nei due resolver
+  server-side (`resolveStudentBookingLocationId`,
+  `resolveGroupLessonLocationId`), che leggono i luoghi per conto loro.
+  Chi aggiunge un terzo lettore di luoghi deve passare da
+  `withoutLicenseCategories`, o il flag lo salta.
+- **Acceso, l'esclusività resta** (decisione di prodotto, ottobre 2026): una
+  categoria in un luogo solo, altrimenti il precompile diventerebbe
+  indeterminato — con la B su due luoghi nessuno saprebbe spiegare perché esce
+  l'uno invece dell'altro.
+- `getAutoscuolaSettings` espone il valore **grezzo** (`boolean | null`), non lo
+  stato effettivo: dedurlo richiederebbe una query sui luoghi, e quella funzione
+  sta nel percorso caldo di quasi ogni schermata. Lo stato lo calcola chi ha già
+  i luoghi in mano, con la stessa funzione pura del server.
 
 - **Esclusività**: una categoria appartiene a UN solo luogo per company —
   altrimenti il precompile sarebbe ambiguo. Applicata in transazione da
@@ -78,13 +118,14 @@ creando una guida il campo "Luogo" si precompila di conseguenza.
   resolver puro. La patente della guida viene dal **veicolo assegnato dal
   matcher**; senza veicolo (o col modulo Veicoli spento) si ricade sul percorso
   dell'allievo.
-- **Mobile** (follow-up 2026-09-19): il `BookingForm` dell'agenda
-  istruttore/titolare consuma `licenseCategories` e applica la stessa
-  precedenza, con lo stesso comportamento del web sul ricalcolo (cambio allievo
-  azzera, cambio veicolo rispetta la scelta manuale). La logica è duplicata in
-  `reglo-mobile/src/utils/locationForLicense.ts`, **gemello** di
-  `lib/autoscuole/location-for-license.ts`: le due copie vanno cambiate insieme.
-  Vedi `reglo-mobile/docs/features/locations.md`.
+- **Mobile**: NON implementato, al contrario di quanto diceva questa pagina
+  fino a ottobre 2026. In `reglo-mobile/src` non esiste `utils/locationForLicense.ts`
+  e non c'è **nessuna** occorrenza di `licenseCategories`: il `BookingForm`
+  mobile non applica la precedenza per patente. Quando la guida la crea il
+  mobile senza mandare il luogo, a risolvere è il backend
+  (`resolveGroupLessonLocationId` / `resolveStudentBookingLocationId`), che ha
+  la regola giusta — quindi il buco si vede solo nel campo precompilato a
+  schermo, non nel dato salvato.
 
 ## Backend — API routes
 

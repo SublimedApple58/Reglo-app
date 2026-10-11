@@ -2,10 +2,13 @@ import type { AutoscuolaLocation, Prisma } from "@prisma/client";
 
 import { prisma } from "@/db/prisma";
 
+import { getCachedCompanyServiceLimits } from "./cached-service";
 import { isOwner } from "./roles";
 import {
+  locationsByLicenseEnabled,
   resolveGroupPrefilledLocationId,
   resolvePrefilledLocationId,
+  withoutLicenseCategories,
 } from "./location-for-license";
 
 export const DEFAULT_LOCATION_LABEL = "Sede dell'autoscuola";
@@ -86,12 +89,29 @@ export async function setLocationLicenseCategories(
   });
 }
 
+/**
+ * I luoghi attivi della company, nell'ordine `isDefault desc, name asc` su cui
+ * contano i resolver.
+ *
+ * È l'UNICA porta da cui i luoghi raggiungono i client (pane Impostazioni,
+ * agenda web, dialog guide di gruppo, mobile): se l'interruttore «Luoghi
+ * diversi per tipo di patente» è spento, le categorie escono vuote e nessun
+ * consumatore deve sapere che l'interruttore esiste. In database restano dove
+ * sono.
+ */
 export async function listLocationsForCompany(companyId: string) {
-  return prisma.autoscuolaLocation.findMany({
-    where: { companyId, archivedAt: null },
-    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
-  });
+  const [locations, limits] = await Promise.all([
+    prisma.autoscuolaLocation.findMany({
+      where: { companyId, archivedAt: null },
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    }),
+    getCachedCompanyServiceLimits(companyId),
+  ]);
+  return locationsByLicenseEnabled(limits.locationsByLicense, locations)
+    ? locations
+    : withoutLicenseCategories(locations);
 }
+
 
 export async function getDefaultLocation(companyId: string) {
   return prisma.autoscuolaLocation.findFirst({
@@ -127,7 +147,7 @@ export async function resolveStudentBookingLocationId(
     vehicleLicenseCategory?: string | null;
   },
 ): Promise<string | null> {
-  const [locations, member] = await Promise.all([
+  const [locations, member, limits] = await Promise.all([
     tx.autoscuolaLocation.findMany({
       where: { companyId: params.companyId, archivedAt: null },
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
@@ -137,10 +157,14 @@ export async function resolveStudentBookingLocationId(
       where: { companyId: params.companyId, userId: params.studentId },
       select: { defaultLocationId: true, licenseCategory: true },
     }),
+    // Lettura dalla cache Redis dei settings, non dal DB: non allunga la
+    // transazione.
+    getCachedCompanyServiceLimits(params.companyId),
   ]);
+  const byLicense = locationsByLicenseEnabled(limits.locationsByLicense, locations);
 
   return resolvePrefilledLocationId({
-    locations,
+    locations: byLicense ? locations : withoutLicenseCategories(locations),
     studentDefaultLocationId: member?.defaultLocationId ?? null,
     student: { licenseCategory: member?.licenseCategory ?? null },
     vehicle: { licenseCategory: params.vehicleLicenseCategory ?? null },
@@ -168,7 +192,7 @@ export async function resolveGroupLessonLocationId(
     licenseCategories: readonly (string | null | undefined)[];
   },
 ): Promise<string | null> {
-  const [locations, members] = await Promise.all([
+  const [locations, members, limits] = await Promise.all([
     tx.autoscuolaLocation.findMany({
       where: { companyId: params.companyId, archivedAt: null },
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
@@ -180,10 +204,12 @@ export async function resolveGroupLessonLocationId(
           select: { defaultLocationId: true },
         })
       : Promise.resolve([]),
+    getCachedCompanyServiceLimits(params.companyId),
   ]);
+  const byLicense = locationsByLicenseEnabled(limits.locationsByLicense, locations);
 
   return resolveGroupPrefilledLocationId({
-    locations,
+    locations: byLicense ? locations : withoutLicenseCategories(locations),
     studentDefaultLocationIds: members.map((m) => m.defaultLocationId),
     licenseCategories: params.licenseCategories,
   });

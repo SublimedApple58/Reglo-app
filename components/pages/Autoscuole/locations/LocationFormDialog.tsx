@@ -22,8 +22,10 @@ export type LocationFormValues = {
   latitude: number | null;
   longitude: number | null;
   placeId: string | null;
-  /** Tipi di patente serviti dal luogo (REG-409). */
-  licenseCategories: string[];
+  /** Tipi di patente serviti dal luogo (REG-409). `undefined` quando
+   *  l'interruttore è spento: il backend lascia invariato ciò che è salvato,
+   *  invece di azzerarlo con una lista vuota che l'utente non ha mai visto. */
+  licenseCategories?: string[];
 };
 
 export type LocationFormDialogProps = {
@@ -39,6 +41,10 @@ export type LocationFormDialogProps = {
    * luogo). Il chip resta cliccabile: selezionandolo la si sposta qui.
    */
   takenCategories?: Record<string, string>;
+  /** Interruttore «Luoghi diversi per tipo di patente» (pane Sede e luoghi).
+   *  Spento, la sezione in fondo non si mostra: ogni luogo fa tutte le patenti.
+   *  Le categorie già salvate restano in database e non vengono toccate. */
+  showLicenseCategories?: boolean;
 };
 
 type Suggestion = {
@@ -68,6 +74,7 @@ export function LocationFormDialog({
   onSubmit,
   consortium = false,
   takenCategories = {},
+  showLicenseCategories = true,
 }: LocationFormDialogProps) {
   const [name, setName] = useState("");
   const [isPrecise, setIsPrecise] = useState(true);
@@ -210,7 +217,10 @@ export function LocationFormDialog({
         latitude: isPrecise ? latitude : null,
         longitude: isPrecise ? longitude : null,
         placeId: isPrecise ? placeId : null,
-        licenseCategories,
+        // Interruttore spento = la sezione non si vede: non si manda niente,
+        // altrimenti si cancellerebbero le patenti salvate senza che nessuno
+        // abbia chiesto di cancellarle.
+        licenseCategories: showLicenseCategories ? licenseCategories : undefined,
       });
       onClose();
     } catch (error) {
@@ -369,6 +379,8 @@ export function LocationFormDialog({
           </>
         )}
 
+        {showLicenseCategories && (
+        <>
         {/* ── Tipi di patente serviti dal luogo (REG-409) ──
             I gruppi si impacchettano in orizzontale (flex-wrap) invece di
             impilarsi: 10 patenti stanno in due righe. Palette neutra: le
@@ -441,6 +453,8 @@ export function LocationFormDialog({
             "Il luogo di default dell\u2019allievo, se impostato, ha la precedenza."
           )}
         </div>
+        </>
+        )}
 
         {/* ── Footer dal proto: Annulla testo + CTA pill navy ── */}
         <div className="mt-[26px] flex items-center justify-end gap-3.5">

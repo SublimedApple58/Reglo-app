@@ -5,6 +5,9 @@ import Image from "next/image";
 import { ExternalLink, MapPin, Pencil, Trash2 } from "lucide-react";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { InlineToggle } from "@/components/ui/inline-toggle";
+import { getAutoscuolaSettings, updateAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
+import { locationsByLicenseEnabled } from "@/lib/autoscuole/location-for-license";
 import { FadeIn } from "@/components/ui/fade-in";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LocationFormDialog, type LocationFormValues } from "./LocationFormDialog";
@@ -35,6 +38,10 @@ function toNumber(value: string | number | null | undefined): number | null {
 export function LocationsSection({ consortium = false }: { consortium?: boolean }) {
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
+  // `null` = nessuno ha mai toccato l'interruttore: lo stato effettivo si
+  // deduce dai luoghi, con la stessa funzione pura che usa il server.
+  const [byLicenseStored, setByLicenseStored] = useState<boolean | null>(null);
+  const [savingByLicense, setSavingByLicense] = useState(false);
   const [editing, setEditing] = useState<{
     mode: "default" | "custom";
     initial?: Partial<LocationFormValues> & { id?: string };
@@ -50,6 +57,10 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
         return;
       }
       setLocations(json.data ?? []);
+      const settings = await getAutoscuolaSettings();
+      if (settings.success && settings.data) {
+        setByLicenseStored(settings.data.locationsByLicense);
+      }
     } catch {
       toast.error({ description: "Errore di rete." });
     } finally {
@@ -79,6 +90,39 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
   const anyLicenseAssigned = locations.some(
     (l) => (l.licenseCategories ?? []).length > 0,
   );
+
+  // Interruttore «Luoghi diversi per tipo di patente». Spento, l'API restituisce
+  // i luoghi con le categorie vuote: i tag spariscono dalle card e la sezione
+  // sparisce dalla modale senza che nient'altro debba saperlo.
+  const byLicense = locationsByLicenseEnabled(byLicenseStored, locations);
+
+  const toggleByLicense = async () => {
+    const next = !byLicense;
+    setSavingByLicense(true);
+    const previous = byLicenseStored;
+    setByLicenseStored(next);
+    try {
+      const res = await updateAutoscuolaSettings({ locationsByLicense: next });
+      if (!res.success) {
+        setByLicenseStored(previous);
+        toast.error({ description: res.message ?? "Impossibile salvare." });
+        return;
+      }
+      // Rileggere i luoghi: accendendo tornano le patenti già assegnate,
+      // spegnendo spariscono dalla vista (in database restano).
+      await load();
+      toast.success({
+        description: next
+          ? "Ora puoi assegnare i tipi di patente ai luoghi."
+          : "Ogni luogo vale per tutte le patenti.",
+      });
+    } catch {
+      setByLicenseStored(previous);
+      toast.error({ description: "Errore di rete." });
+    } finally {
+      setSavingByLicense(false);
+    }
+  };
 
   // La registrazione crea SEMPRE una sede default automatica ("Sede {nome}",
   // senza indirizzo né posizione): per l'onboarding conta come NON configurata
@@ -251,6 +295,7 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
             initialValue={editing.initial}
             consortium={consortium}
             takenCategories={takenCategories}
+            showLicenseCategories={byLicense}
             onClose={() => setEditing(null)}
             onSubmit={async (values) => {
               await handleUpdateDefault(values);
@@ -376,6 +421,30 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
         )}
       </div>
 
+      {/* ── Luoghi diversi per tipo di patente ──
+          Sta in fondo e non in cima: nella maggior parte delle autoscuole ogni
+          luogo fa tutte le patenti, quindi è una rifinitura, non la prima cosa
+          da decidere entrando qui. */}
+      <button
+        type="button"
+        onClick={toggleByLicense}
+        disabled={savingByLicense}
+        aria-pressed={byLicense}
+        className="flex w-full cursor-pointer items-start justify-between gap-4 rounded-[12px] border border-[#e8e8e8] p-5 text-left transition-colors hover:border-[#d2d2d2] disabled:cursor-default disabled:opacity-60"
+      >
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-foreground">
+            Luoghi diversi per tipo di patente
+          </div>
+          <div className="mt-0.5 max-w-[460px] text-xs font-medium text-[#929292]">
+            {byLicense
+              ? "Ogni tipo di patente è assegnato a un luogo solo, e le guide di quella patente si precompilano lì. Assegni le patenti dalla scheda di ogni luogo."
+              : "Ogni luogo vale per tutte le patenti. Le guide si precompilano con il luogo dell'allievo, se ne ha uno, altrimenti con la sede."}
+          </div>
+        </div>
+        <InlineToggle checked={byLicense} size="lg" />
+      </button>
+
       {editing ? (
         <LocationFormDialog
           open
@@ -383,6 +452,7 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
           initialValue={editing.initial}
           consortium={consortium}
           takenCategories={takenCategories}
+          showLicenseCategories={byLicense}
           onClose={() => setEditing(null)}
           onSubmit={async (values) => {
             if (editing.mode === "default") {
