@@ -44,9 +44,9 @@ import {
   linkConsorzioSchoolToCompany,
   searchLinkableCompanies,
   unlinkConsorzioSchool,
-  type AffiliateAccessStatus,
   type AffiliateSchoolRow,
 } from "@/lib/actions/consorzio-affiliate.actions";
+import type { AffiliateAccessStatus } from "@/lib/consorzio/affiliate-invite-targets";
 import { updateCompanyService } from "@/lib/actions/backoffice.actions";
 import { impersonateCompany } from "@/lib/actions/backoffice.actions";
 import { affiliateCompanyName } from "@/lib/consorzio/affiliate-name";

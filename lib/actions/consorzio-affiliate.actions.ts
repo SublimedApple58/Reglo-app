@@ -45,11 +45,16 @@ import { SERVER_URL } from "@/lib/constants";
 import crypto from "crypto";
 
 /**
- * Stato dell'accesso del titolare di una consorziata. Definito nel modulo puro
- * `lib/consorzio/affiliate-invite-targets.ts` insieme alla regola di chi è "da
- * invitare", che lo legge: tenere i due a contatto è il punto.
+ * `AffiliateAccessStatus` vive nel modulo puro
+ * `lib/consorzio/affiliate-invite-targets.ts`, insieme alla regola di chi è "da
+ * invitare" che lo legge, e **da lì** lo importa chi gli serve.
+ *
+ * Qui non si ri-esporta: un file `"use server"` può esportare **solo funzioni
+ * async**, e un `export type { ... }` sopravvive alla trasformazione come
+ * binding a runtime → `ReferenceError: AffiliateAccessStatus is not defined`
+ * al caricamento del chunk, che in dev fa cadere tutte le server action della
+ * pagina (l'agenda in primis).
  */
-export type { AffiliateAccessStatus };
 
 export type AffiliateSchoolRow = {
   schoolId: string;

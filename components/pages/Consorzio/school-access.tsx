@@ -10,7 +10,7 @@
  * che nasce e resta dal lato del titolare.
  */
 
-import type { AffiliateAccessStatus } from "@/lib/actions/consorzio-affiliate.actions";
+import type { AffiliateAccessStatus } from "@/lib/consorzio/affiliate-invite-targets";
 import { cn } from "@/lib/utils";
 
 export const ACCESS_LABEL: Record<AffiliateAccessStatus, string> = {
