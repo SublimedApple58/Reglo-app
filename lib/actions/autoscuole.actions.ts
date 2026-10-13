@@ -4077,8 +4077,10 @@ const createAppointmentBatchSchema = z.object({
   studentId: z.string().uuid(),
   instructorId: z.string().uuid(),
   vehicleId: z.string().uuid().optional().nullable(),
-  // Follow car + extra motos applied to every entry in the batch (same vehicle
-  // set across the slots).
+  // L'auto al seguito e le moto aggiuntive valgono per tutte le date del
+  // gruppo. REG-612: la SOLA auto al seguito si puo' poi cambiare data per
+  // data (`entries[].followVehicleId`), perche' con un mezzo occupato in una
+  // data sola saltava l'intera prenotazione.
   followVehicleId: z.string().uuid().optional().nullable(),
   extraMotoVehicleIds: z.array(z.string().uuid()).optional(),
   motoLessonType: z.enum(MOTO_LESSON_TYPES).nullable().optional(),
@@ -4098,6 +4100,13 @@ const createAppointmentBatchSchema = z.object({
       z.object({
         startsAt: z.string().min(1),
         endsAt: z.string().min(1),
+        /**
+         * REG-612 — tre stati: assente = eredita l'auto al seguito condivisa,
+         * `null` = questa guida va senza auto al seguito, id = quella auto.
+         * "Assente" e "null" devono restare distinti: il primo segue il
+         * gruppo, il secondo e' una scelta esplicita dell'utente.
+         */
+        followVehicleId: z.string().uuid().nullable().optional(),
       }),
     )
     .min(1)
@@ -4170,8 +4179,13 @@ export async function createAutoscuolaAppointmentBatch(
 
     // Validate the extra vehicles (follow car + extra motos): they must belong to
     // the company and be active. Extra motos must additionally be motos.
+    // REG-612: non basta piu' l'auto condivisa — ogni data puo' avere la sua,
+    // e tutte vanno validate con le stesse regole.
+    const followVehicleIdsInPlay = payload.entries.map((entry) =>
+      effectiveFollowVehicleId(payload.followVehicleId, entry.followVehicleId),
+    );
     const extraReservedIds = [
-      payload.followVehicleId,
+      ...followVehicleIdsInPlay,
       ...(payload.extraMotoVehicleIds ?? []),
     ].filter((id): id is string => Boolean(id));
     if (extraReservedIds.length) {
@@ -4216,7 +4230,11 @@ export async function createAutoscuolaAppointmentBatch(
     }
 
     // ── Parse & validate each entry ──
-    const parsedEntries: Array<{ startsAt: Date; endsAt: Date }> = [];
+    const parsedEntries: Array<{
+      startsAt: Date;
+      endsAt: Date;
+      followVehicleId: string | null;
+    }> = [];
     for (const entry of payload.entries) {
       const start = new Date(entry.startsAt);
       const end = new Date(entry.endsAt);
@@ -4226,7 +4244,14 @@ export async function createAutoscuolaAppointmentBatch(
       if (!payload.allowPast && start.getTime() < Date.now()) {
         return { success: false, message: "Non puoi prenotare una guida nel passato." };
       }
-      parsedEntries.push({ startsAt: start, endsAt: end });
+      parsedEntries.push({
+        startsAt: start,
+        endsAt: end,
+        followVehicleId: effectiveFollowVehicleId(
+          payload.followVehicleId,
+          entry.followVehicleId,
+        ),
+      });
     }
 
     // ── Weekly limit check (aggregated across all entries) ──
@@ -4315,20 +4340,26 @@ export async function createAutoscuolaAppointmentBatch(
     }
 
     // ── Conflict detection (single query for all entries) ──
-    // Ogni veicolo che questa prenotazione impegna su ciascuno slot.
-    const batchReservedVehicles = buildReservedVehicles({
-      primaryVehicleId: payload.vehicleId,
-      extraMotoVehicleIds: payload.extraMotoVehicleIds,
-      followVehicleId: payload.followVehicleId,
-    });
-
     // REG-611: il controllo sta tutto in `scanEntryConflicts`, condiviso con la
     // prova a vuoto, cosi' le due strade non possono dire cose diverse. Qui ci
     // si ferma alla prima data che non va: il tutto-o-niente non cambia.
+    // REG-612: i mezzi si costruiscono PER DATA, perche' l'auto al seguito
+    // puo' essere diversa su ognuna.
+    const reservedByEntry = parsedEntries.map((entry) =>
+      buildReservedVehicles({
+        primaryVehicleId: payload.vehicleId,
+        extraMotoVehicleIds: payload.extraMotoVehicleIds,
+        followVehicleId: entry.followVehicleId,
+      }),
+    );
     const entryConflicts = await scanEntryConflicts({
       companyId,
       instructorId: resolvedInstructorId,
-      entries: parsedEntries.map((entry) => ({ ...entry, reserved: batchReservedVehicles })),
+      entries: parsedEntries.map((entry, index) => ({
+        startsAt: entry.startsAt,
+        endsAt: entry.endsAt,
+        reserved: reservedByEntry[index],
+      })),
     });
     const firstBadIndex = entryConflicts.findIndex((c) => c !== null);
     if (firstBadIndex >= 0) {
@@ -4409,15 +4440,17 @@ export async function createAutoscuolaAppointmentBatch(
             invoiceStatus: paymentSnapshot.invoiceStatus,
             creditApplied: paymentSnapshot.creditApplied,
             manualPaymentStatus: paymentSnapshot.manualPaymentStatus ?? null,
-            // Reserve every vehicle this slot uses (primary moto + extra motos
-            // + follow car), de-duped by vehicleId.
+            // Riserva ogni mezzo di QUESTO slot (moto principale + moto
+            // aggiuntive + auto al seguito), senza doppioni. REG-612: l'auto
+            // al seguito e' quella della singola data, non piu' una sola per
+            // tutta la prenotazione.
             ...(payload.vehicleId
               ? {
                   appointmentVehicles: {
                     create: buildAppointmentVehicleRows({
                       primaryVehicleId: payload.vehicleId,
                       extraMotoVehicleIds: payload.extraMotoVehicleIds,
-                      followVehicleId: payload.followVehicleId,
+                      followVehicleId: entry.followVehicleId,
                     }),
                   },
                 }
