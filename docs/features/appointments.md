@@ -117,11 +117,38 @@ Lo storico del dettaglio allievo è **cronologico, le guide più recenti in cima
 Il toggle **"Prenotazione multipla"** nel popover *Nuovo appuntamento* (`AutoscuoleAgendaPage.tsx`) replica quello dell'app (`reglo-mobile/src/components/booking/BookingForm.tsx`): acceso, Giorno/Orario/Durata singoli lasciano il posto a una **lista di guide** (`entries`), ognuna con data, ora e durata proprie; **tutto il resto resta condiviso** — allievo, istruttore, veicolo, auto al seguito, moto aggiuntive, tipo guida, luogo e **nota**. Max 20 guide (il cap è nello schema, `.max(20)`).
 
 - **Backend già esistente**: `createAutoscuolaAppointmentBatch` (usata dall'app via `/api/autoscuole/instructor-bookings/confirm-batch`) è una server action → il web la chiama **diretta**, niente route nuova, niente migrazione. L'unica aggiunta è `notes` nello schema del batch: il form web ha il campo Note anche in multipla, e senza quel campo la nota sparirebbe in silenzio. La nota si scrive su **ogni** guida creata, come gli altri campi condivisi.
-- **Tutto-o-niente**: al primo conflitto (istruttore/veicolo occupato, slot bloccato, guida di gruppo, due guide del batch che si sovrappongono) l'azione torna `success: false` e **non crea nulla**. Il messaggio nomina lo slot (`"Conflitto per lo slot del 05/10 09:00…"`) e va mostrato **così com'è**: un "errore" generico costringerebbe a cercare a mano quale guida non va.
+- **Tutto-o-niente**: al primo conflitto (istruttore/veicolo occupato, slot bloccato, guida di gruppo, due guide del batch che si sovrappongono) l'azione torna `success: false` e **non crea nulla**. Il messaggio nomina lo slot (`"Conflitto per lo slot del 05/10 09:00…"`) e va mostrato **così com'è**: un "errore" generico costringerebbe a cercare a mano quale guida non va. Dal 13/10/2026 nomina anche **quale mezzo** è impegnato (REG-609).
+- ⚠️ **Il set di veicoli è condiviso da tutte le date, tranne l'auto al seguito.** Veicolo principale e moto aggiuntive valgono per l'intero gruppo e non si possono differenziare per data; l'**auto al seguito** sì, dal 13/10/2026 (`entries[].followVehicleId`, REG-612). Era la cosa che nessun doc diceva — stava solo in un commento dello schema zod — ed è la ragione per cui una sola macchina occupata faceva saltare dieci guide.
 - **Conferme**: `WEEKLY_LIMIT_CONFIRM` si ritenta con `skipWeeklyLimitCheck` (come nel singolo). `LESSON_BUFFER_CONFIRM` **non esiste** sul percorso batch — non va gestito. La conferma "guida nel passato" si chiede **una volta sola**, sulla guida più vecchia del gruppo.
 - **Anteprima**: un blocco tratteggiato per **ogni** guida (`multiGhosts`), numerato, e ognuno è **trascinabile** per conto suo — `moveDraftTo(ymd, time, colId, entryId?)` sposta la guida di quel ghost; cliccando una colonna vuota (nessun `entryId`) si muove **l'ultima** guida, quella che si sta posando. ⚠️ `moveDraftTo` è condivisa con esame/blocco/gruppo/modifica guida/richiesta consorzio: il ramo nuovo vive **dentro** `if (createOpen)` e solo quando `multiMode`, gli altri rami non cambiano. `renderGhostBlock` è il markup unico del ghost (singolo + multipli); `ghostTint(durMin)` è la tinta per durata, prima ricopiata in ogni ramo.
 - **Sovrapposizioni dentro il gruppo**: `overlappingEntryIds` le segna **mentre compili** (riga rossa + nota) e blocca la CTA. Capita da sé allungando la durata di una guida sopra quella dopo; prima lo diceva solo il server, al salvataggio, a form già pieno.
 - In multipla `draftGhost` torna `null`: giorno e ora del form non vogliono più dire niente, e lasciarlo acceso dipingeva un ghost fantasma in più.
+
+## Auto al seguito occupata: scelta dell'auto sostitutiva per data (REG-608, 2026-10-13)
+
+Nella multipla moto l'auto al seguito era **una sola per tutte le date**: bastava che fosse occupata una volta perché non nascesse **nessuna** guida, con un messaggio che non diceva nemmeno quale auto fosse (segnalazione Mara Macchiavello, 12/10/2026). Ora il tutto-o-niente resta, ma prima di arrendersi si passa da una schermata di riparazione: **il punto è trovare un'altra auto, non un'altra data**.
+
+**Come funziona**
+1. "Crea N guide" non scrive subito: chiama `checkAutoscuolaAppointmentBatch` (sola lettura) che verifica **tutte** le date.
+2. Zero conflitti → si crea come prima. **Il caso normale non vede niente di nuovo.**
+3. Altrimenti il corpo del popover diventa **«Auto al seguito occupata»** (`dialogs/FollowCarConflictPane.tsx`), secondo schermo della stessa card: i ghost tratteggiati restano vivi in agenda dietro e **diventano rossi** sulle date bocciate.
+
+**La schermata**
+- Riga di riepilogo (quante sono già libere, quale auto blocca le altre). Il nome dell'auto si scrive **solo** se il motivo è lo stesso su tutte le date in conflitto: con motivi misti la frase mentirebbe.
+- **Scorciatoia** "Usa la X per tutte e N" quando una stessa auto è libera in **tutte** le date in conflitto (`suggestedForAll`, calcolata lato server).
+- Una riga per ogni data in conflitto, **solo per quelle**. Il menu offre **solo le auto davvero libere in quello slot** (`listFreeFollowCarsForSlots`) più "Nessuna auto al seguito". Una sola auto libera non è una scelta: viene preselezionata (stessa regola del veicolo precompilato, REG-586).
+- **Nessuna auto libera** → `Senza auto al seguito` · `Togli la guida`. **Mai** una data diversa.
+- **Conflitto che non è l'auto al seguito** (istruttore, moto, slot bloccato, gruppo) → riga informativa con il motivo e il solo `Togli la guida`: cambiare auto non risolve.
+- Footer: **Crea N guide** (attivo solo a righe tutte risposte) e **Crea solo le N libere**, che sparisce quando non ce n'è nemmeno una.
+- Risolta una riga il motivo sparisce e il pallino prende una spunta. Le Select qui sono `h-10` invece di `h-11`: con tre conflitti la card deve stare senza scorrere.
+
+**Backend** — nessuna migrazione, nessun modello nuovo:
+- `lib/autoscuole/conflict-reason.ts` (puro) — sceglie **quale** mezzo raccontare fra quelli riservati e ne ricava la frase. Ordine: principale → moto aggiuntive → auto al seguito; se sono occupati sia la moto sia l'auto si racconta la **moto**, perché non si sostituisce con un clic.
+- `lib/autoscuole/conflict-scan.ts` — il controllo conflitti, **condiviso** fra prova a vuoto e creazione vera (prima viveva dentro il batch e al primo conflitto faceva `return`). Tre letture in tutto qualunque sia il numero di guide; il container di gruppo si interrogava dentro il ciclo, una query per data. Contiene anche `buildReservedVehicles` ed `effectiveFollowVehicleId` (assente = eredita · `null` = nessuna · id = quella).
+- `lib/autoscuole/free-follow-cars.ts` — quali auto B sono **libere** in uno slot. Una scansione per tutti gli slot insieme. **Non filtra per istruttore**: la creazione di una guida oggi non lo fa (lo fa solo la modifica), e filtrare qui darebbe due comportamenti diversi nella stessa schermata.
+- ⚠️ Se a bloccare è lo **stesso** istruttore, il motivo detto è lui anche quando usa pure uno dei nostri mezzi: cambiare auto non libererebbe l'ora.
+
+**e2e** — `tests/e2e/reg608-auto-al-seguito.auth.spec.ts` + i dati di prova `scripts/seed-reg608.ts` (`--cleanup` per rimuoverli), che costruiscono i tre casi veri sul DB di dev.
 
 ## Key functions
 - `createAutoscuolaAppointment()` — single lesson. Conflict scan istruttore+veicoli (aggirabile con `skipConflictCheck`, il "prenota comunque") **+ sovrapposizione stesso allievo (2026-07-29, HARD: non aggirabile)** — *"L'allievo ha già una guida o un esame in quell'orario."* (segnalazione Macchiavello: stesso allievo, stessa ora, 2 istruttori). Il percorso allievo (`createBookingRequest`) aveva già il proprio guard.

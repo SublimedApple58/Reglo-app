@@ -5797,14 +5797,18 @@ export function AutoscuoleAgendaPage({
                 Indietro
               </button>
               <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  disabled={creating || conflictStep.freeCount === 0}
-                  onClick={() => handleConflictConfirm(true)}
-                  className="cursor-pointer rounded-[10px] border border-[#dddddd] bg-white px-4 py-2.5 text-[13.5px] font-semibold text-[#555555] transition-colors hover:border-[#929292] disabled:opacity-40"
-                >
-                  {`Crea solo le ${conflictStep.freeCount} liber${conflictStep.freeCount === 1 ? "a" : "e"}`}
-                </button>
+                {/* Senza nemmeno una data libera la scorciatoia non ha senso:
+                    "Crea solo le 0 libere" e' un pulsante che non fa niente. */}
+                {conflictStep.freeCount > 0 ? (
+                  <button
+                    type="button"
+                    disabled={creating}
+                    onClick={() => handleConflictConfirm(true)}
+                    className="cursor-pointer rounded-[10px] border border-[#dddddd] bg-white px-4 py-2.5 text-[13.5px] font-semibold text-[#555555] transition-colors hover:border-[#929292] disabled:opacity-40"
+                  >
+                    {`Crea solo le ${conflictStep.freeCount} liber${conflictStep.freeCount === 1 ? "a" : "e"}`}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   disabled={creating || conflictPending > 0 || conflictKeptCount === 0}
@@ -5937,6 +5941,7 @@ export function AutoscuoleAgendaPage({
               {entries.map((entry, idx) => (
                 <div
                   key={entry.id}
+                  data-testid="multi-entry"
                   className={cn(
                     "rounded-[10px] border bg-white p-2.5 transition-colors",
                     overlappingEntryIds.has(entry.id) ? "border-[#C13515] bg-[#FFF8F7]" : "border-[#dddddd]",
@@ -6159,7 +6164,7 @@ export function AutoscuoleAgendaPage({
                   advanceCreateFocus({ instructorId: value });
                 }}
               >
-                <SelectTrigger><SelectValue placeholder="Istruttore" /></SelectTrigger>
+                <SelectTrigger aria-label="Istruttore"><SelectValue placeholder="Istruttore" /></SelectTrigger>
                 <SelectContent>
                   {instructors.map((instructor) => (
                     <SelectItem key={instructor.id} value={instructor.id}>{instructor.name}</SelectItem>
@@ -6189,7 +6194,9 @@ export function AutoscuoleAgendaPage({
                     advanceCreateFocus({ vehicleId: value });
                   }}
                 >
-                  <SelectTrigger><SelectValue placeholder={form.bookingMode === "moto" ? "Moto" : "Veicolo"} /></SelectTrigger>
+                  <SelectTrigger aria-label={form.bookingMode === "moto" ? "Moto" : "Veicolo"}>
+                    <SelectValue placeholder={form.bookingMode === "moto" ? "Moto" : "Veicolo"} />
+                  </SelectTrigger>
                   <SelectContent>
                     {vehicles
                       .filter((vehicle) =>
@@ -6227,7 +6234,9 @@ export function AutoscuoleAgendaPage({
               <div>
                 <p className="mb-1.5 text-xs font-semibold text-[#555555]">Auto al seguito</p>
                 <Select value={form.followVehicleId} onValueChange={(value) => setForm((prev) => ({ ...prev, followVehicleId: value }))}>
-                  <SelectTrigger><SelectValue placeholder="Auto al seguito" /></SelectTrigger>
+                  <SelectTrigger aria-label="Auto al seguito">
+                    <SelectValue placeholder="Auto al seguito" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">Nessuna auto al seguito</SelectItem>
                     {carOptions.map((vehicle) => (

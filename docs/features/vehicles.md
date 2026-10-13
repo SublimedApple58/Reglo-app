@@ -116,6 +116,16 @@ Second brick of the Vehicles module. Each vehicle serves **one** license categor
 - **Waitlist offers** (`lib/actions/autoscuole-availability.actions.ts`): `broadcastWaitlistOffer` recipients + `getWaitlistOffers` visibility filtered by an OPEN vehicle slot serving the student's license at that time; `respondWaitlistOffer` picks a vehicle slot compatible with the taker's license (was `findFirst` = any vehicle). Gated on `vehiclesEnabled`.
 - **Tests**: `tests/unit/autoscuole/fixed-vehicle.test.ts` covers category match/mismatch on fixed + pool.
 
+## Auto al seguito per singola data + "chi è libero in questo slot" (REG-608, 2026-10-13)
+
+Due aggiunte che vivono accanto al controllo conflitti, **senza migrazione**:
+
+- **`entries[].followVehicleId` nel batch** (`createAppointmentBatchSchema`): tre stati, assente = eredita quella condivisa · `null` = questa guida senza auto al seguito · id = quella auto. Veicolo principale e moto aggiuntive restano invece condivisi da tutte le date. Le righe `AutoscuolaAppointmentVehicle` si costruiscono **per singola guida**.
+- **`lib/autoscuole/free-follow-cars.ts`** — il prodotto sapeva dire se un veicolo è occupato, non il contrario. `listFreeFollowCarsForSlots` ribalta la domanda: dato uno slot, quali auto B sono libere. "Occupato" vuol dire le stesse tre cose del controllo conflitti (veicolo principale di un'altra guida, mezzo tenuto via la join — il caso dell'auto al seguito di un collega — e contenitore di guida di gruppo, che impegna anche a zero iscritti). Una scansione per tutti gli slot, poi si incrocia in memoria; il cuore `computeFreeVehiclesPerSlot` è puro e testato.
+- **I messaggi di conflitto nominano il mezzo** (`lib/autoscuole/conflict-reason.ts`): `findVehicleReservationConflict` torna *quale* veicolo collide invece di un `true` muto, e `findGroupContainerConflict` porta anche i suoi mezzi. Vale su creazione singola, multipla e modifica veicoli.
+
+Il flusso che usa tutto questo è in [appointments.md](appointments.md) § «Auto al seguito occupata».
+
 ## Connected features
 - `availability.md` (the "follows instructor" rule), booking/slot-matcher, mobile `vehicles` (owner + instructor self-assign, category picker) / `quick-book`.
 

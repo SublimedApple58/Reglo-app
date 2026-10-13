@@ -78,11 +78,15 @@ export function FollowCarConflictPane({
 }) {
   const conflicts = step.entries.filter((e) => e.conflict);
   const total = step.entries.length;
-  const busyName = conflicts.find((e) => e.conflict?.role === "follow")?.conflict?.vehicleName;
+  const followConflicts = conflicts.filter((e) => e.conflict?.role === "follow");
+  // Il nome si puo' dire solo se a bloccare e' SEMPRE quella macchina: con
+  // motivi misti (anche l'istruttore occupato) la frase mentirebbe.
+  const busyName =
+    followConflicts.length === conflicts.length
+      ? followConflicts[0]?.conflict?.vehicleName
+      : undefined;
   // La scorciatoia ha senso finche' resta qualcosa da sistemare a mano.
-  const pendingFollow = conflicts.filter(
-    (e) => e.conflict?.role === "follow" && choice[e.index] === undefined,
-  );
+  const pendingFollow = followConflicts.filter((e) => choice[e.index] === undefined);
   const showSuggestion = Boolean(step.suggestedForAll) && pendingFollow.length > 1;
   const anyChoosable = conflicts.some((e) => (e.freeFollowCars?.length ?? 0) > 0);
 
@@ -92,8 +96,11 @@ export function FollowCarConflictPane({
         <AlertCircle className="size-[15px] shrink-0 text-[#767676]" strokeWidth={2} />
         <p className="text-[13px] leading-snug">
           <span className="font-semibold text-[#222222]">
-            {step.freeCount} guid{step.freeCount === 1 ? "a" : "e"} su {total}{" "}
-            {step.freeCount === 1 ? "è libera" : "sono libere"}.
+            {step.freeCount === 0
+              ? `Nessuna delle ${total} date è libera.`
+              : `${step.freeCount} guid${step.freeCount === 1 ? "a" : "e"} su ${total} ${
+                  step.freeCount === 1 ? "è libera" : "sono libere"
+                }.`}
           </span>{" "}
           <span className="font-medium text-[#767676]">
             {busyName
