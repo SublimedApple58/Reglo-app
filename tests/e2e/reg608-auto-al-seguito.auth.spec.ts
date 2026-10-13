@@ -211,7 +211,8 @@ test.describe("REG-608 — auto al seguito occupata", () => {
     await expect(card.getByText("Auto al seguito occupata")).toBeVisible({ timeout: 30_000 });
     await card.getByRole("button", { name: "Applica a tutte" }).click();
     await card.getByRole("button", { name: /^Crea 2 guide$/ }).click();
-    await expect(page.getByText("2 guide prenotate.")).toBeVisible({ timeout: 30_000 });
+    // `.first()`: il toast ripete il testo in piu' nodi (titolo + descrizione).
+    await expect(page.getByText(/2 guide prenotate\./).first()).toBeVisible({ timeout: 30_000 });
     // La card si chiude: non e' rimasto niente da sistemare.
     await expect(card.getByText("Auto al seguito occupata")).toHaveCount(0);
   });
