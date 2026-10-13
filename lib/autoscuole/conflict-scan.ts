@@ -185,6 +185,10 @@ export async function scanEntryConflicts(args: {
         instructorId: true,
         vehicleId: true,
         appointmentVehicles: { select: { vehicleId: true } },
+        // Serve a sapere PERCHE' una riga e' uscita dalla query: con un solo
+        // `instructorId` non si distingue la guida che il nostro istruttore
+        // accompagna da quella di un collega presa solo per via di un mezzo.
+        coInstructors: { select: { instructorId: true } },
       },
     }),
     prisma.autoscuolaInstructorBlock.findMany({
@@ -218,56 +222,100 @@ export async function scanEntryConflicts(args: {
     }),
   ]);
 
-  const busyAppointments = appointments.map((a) => ({
+  const busyAppointments: BusyRow[] = appointments.map((a) => ({
     startsAt: a.startsAt,
     endsAt: a.endsAt ?? new Date(a.startsAt.getTime() + DEFAULT_LESSON_MS),
-    instructorId: a.instructorId,
+    // L'istruttore e' impegnato anche quando ACCOMPAGNA la guida di un collega.
+    ownInstructor:
+      a.instructorId === instructorId ||
+      a.coInstructors.some((co) => co.instructorId === instructorId),
     vehicleIds: busyVehicleIds(a),
   }));
-  const busyContainers = containers.map((c) => ({
+  const busyContainers: BusyRow[] = containers.map((c) => ({
     startsAt: c.startsAt,
     endsAt: c.endsAt ?? new Date(c.startsAt.getTime() + DEFAULT_LESSON_MS),
-    instructorId: c.instructorId,
+    ownInstructor: c.instructorId === instructorId,
     vehicleIds: busyVehicleIds(c),
   }));
 
-  return entries.map((entry, index) => {
-    // 1. Un'altra guida gia' in agenda. Se tocca un mezzo riservato lo diciamo,
-    //    altrimenti e' l'istruttore a essere occupato.
-    const blockingAppointment = busyAppointments.find((row) => overlaps(row, entry));
-    if (blockingAppointment) {
-      // Se a bloccare e' lo STESSO istruttore, il motivo da dire e' lui anche
-      // quando per caso usa pure uno dei nostri mezzi: cambiare auto non
-      // libererebbe l'ora, e proporlo manderebbe l'utente a sbattere.
-      const busy =
-        blockingAppointment.instructorId === instructorId
-          ? null
-          : pickConflictingVehicle(entry.reserved, blockingAppointment.vehicleIds);
-      return busy
-        ? { kind: "vehicle" as const, vehicleId: busy.id, role: busy.role, inGroupLesson: false }
-        : { kind: "instructor" as const, inGroupLesson: false };
+  return resolveEntryConflicts({
+    entries,
+    appointments: busyAppointments,
+    blocks: blocks.map((b) => ({ startsAt: b.startsAt, endsAt: b.endsAt })),
+    containers: busyContainers,
+  });
+}
+
+/**
+ * Una riga d'agenda che potrebbe bloccare una data: una guida o il container
+ * di una guida di gruppo, ridotti a quel che serve per decidere.
+ */
+export type BusyRow = {
+  startsAt: Date;
+  endsAt: Date;
+  /** Impegna il NOSTRO istruttore (titolare della guida o accompagnatore). */
+  ownInstructor: boolean;
+  /** Tutti i mezzi che quella riga tiene occupati. */
+  vehicleIds: string[];
+};
+
+/**
+ * Perche' una riga d'agenda blocca QUESTA data — o perche' non la blocca.
+ *
+ * Il punto delicato (REG-616): le righe arrivano da una query sola per tutte
+ * le date, con in OR l'istruttore e **l'unione** dei mezzi di tutte quante.
+ * Quindi fra loro ce ne sono che con questa data non c'entrano niente: la
+ * guida di un collega, pescata perche' usa l'auto al seguito che qui abbiamo
+ * gia' sostituito. Si considera bloccante solo la riga che tocca davvero il
+ * nostro istruttore o uno dei mezzi riservati **in questa data**.
+ *
+ * L'istruttore occupato viene prima: cambiare auto non libererebbe l'ora, e
+ * proporlo manderebbe l'utente a sbattere.
+ */
+const pickRowConflict = (
+  entry: ScanEntry,
+  rows: readonly BusyRow[],
+  inGroupLesson: boolean,
+): EntryConflict | null => {
+  if (rows.some((row) => row.ownInstructor && overlaps(row, entry))) {
+    return { kind: "instructor" as const, inGroupLesson };
+  }
+  for (const row of rows) {
+    if (!overlaps(row, entry)) continue;
+    const busy = pickConflictingVehicle(entry.reserved, row.vehicleIds);
+    if (busy) {
+      return { kind: "vehicle" as const, vehicleId: busy.id, role: busy.role, inGroupLesson };
     }
+  }
+  return null;
+};
+
+/**
+ * Il cuore del controllo, senza database: date le righe d'agenda gia' lette,
+ * dice per ciascuna guida perche' non va (o `null` se va).
+ *
+ * Sta fuori da `scanEntryConflicts` per poter essere provato sui dati esatti
+ * che hanno prodotto il difetto, senza passare dal DB.
+ */
+export function resolveEntryConflicts(args: {
+  entries: readonly ScanEntry[];
+  appointments: readonly BusyRow[];
+  blocks: readonly { startsAt: Date; endsAt: Date }[];
+  containers: readonly BusyRow[];
+}): Array<EntryConflict | null> {
+  const { entries, appointments, blocks, containers } = args;
+
+  return entries.map((entry, index) => {
+    // 1. Un'altra guida gia' in agenda.
+    const byAppointment = pickRowConflict(entry, appointments, false);
+    if (byAppointment) return byAppointment;
 
     // 2. Slot bloccato sull'istruttore (malattia, ferie, impegno manuale).
-    if (
-      blocks.some((b) =>
-        overlaps({ startsAt: b.startsAt, endsAt: b.endsAt }, entry),
-      )
-    ) {
-      return { kind: "block" as const };
-    }
+    if (blocks.some((b) => overlaps(b, entry))) return { kind: "block" as const };
 
     // 3. Container di guida di gruppo: impegna anche a zero iscritti.
-    const blockingContainer = busyContainers.find((row) => overlaps(row, entry));
-    if (blockingContainer) {
-      const busy =
-        blockingContainer.instructorId === instructorId
-          ? null
-          : pickConflictingVehicle(entry.reserved, blockingContainer.vehicleIds);
-      return busy
-        ? { kind: "vehicle" as const, vehicleId: busy.id, role: busy.role, inGroupLesson: true }
-        : { kind: "instructor" as const, inGroupLesson: true };
-    }
+    const byContainer = pickRowConflict(entry, containers, true);
+    if (byContainer) return byContainer;
 
     // 4. Due guide della stessa prenotazione che si accavallano fra loro.
     const selfOverlap = entries.some(

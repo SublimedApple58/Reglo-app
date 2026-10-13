@@ -201,6 +201,12 @@ async function main() {
   await prisma.autoscuolaAppointment.deleteMany({
     where: { companyId, studentId: filler.userId, instructorId: booking.id },
   });
+  // E le guide che l'e2e ha CREATO in un giro precedente: senza questo, il
+  // test che arriva fino in fondo occupa l'istruttore in quegli slot e al giro
+  // dopo lo scenario non e' piu' quello (REG-616).
+  await prisma.autoscuolaAppointment.deleteMany({
+    where: { companyId, studentId: studentUser.id },
+  });
 
   // Qualunque ALTRA auto B dell'autoscuola (es. quella del seed base) resterebbe
   // libera in ogni slot e falserebbe lo scenario: la si occupa ovunque.

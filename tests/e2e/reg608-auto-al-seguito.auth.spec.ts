@@ -186,6 +186,33 @@ test.describe("REG-608 — auto al seguito occupata", () => {
     await shoot(card, "vera-03-nessuna-auto-libera.png");
   });
 
+  /**
+   * Il giro completo, fino alle guide create davvero (REG-616).
+   *
+   * E' il passo che mancava: i test sopra si fermano alla schermata di
+   * riparazione, e il difetto viveva proprio dopo — scelta l'auto sostitutiva,
+   * la creazione rispondeva "l'istruttore ha gia' un impegno" su un istruttore
+   * libero, perche' il controllo prendeva per buona la riga di un collega che
+   * con quella data non c'entrava piu'.
+   *
+   * ⚠️ Questo test OCCUPA gli slot: per ripeterlo rilancia `scripts/seed-reg608.ts`
+   * (che ora ripulisce anche le guide dell'allievo di prova).
+   */
+  test("scelta l'auto sostitutiva, le guide si creano davvero", async ({ page }) => {
+    test.setTimeout(180_000);
+    const card = await openMotoForm(page);
+    await fillSlotsAndSubmit(page, card, [
+      { date: day(1), time: "09:00" },
+      { date: day(1), time: "11:00" },
+    ]);
+    await expect(card.getByText("Auto al seguito occupata")).toBeVisible({ timeout: 30_000 });
+    await card.getByRole("button", { name: "Applica a tutte" }).click();
+    await card.getByRole("button", { name: /^Crea 2 guide$/ }).click();
+    await expect(page.getByText("2 guide prenotate.")).toBeVisible({ timeout: 30_000 });
+    // La card si chiude: non e' rimasto niente da sistemare.
+    await expect(card.getByText("Auto al seguito occupata")).toHaveCount(0);
+  });
+
   test("guida singola: il messaggio dice QUALE auto è occupata", async ({ page }) => {
     test.setTimeout(180_000);
     const card = await openMotoForm(page);
