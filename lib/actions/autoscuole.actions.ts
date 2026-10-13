@@ -95,6 +95,15 @@ import {
   reconcileAppointmentVehicles,
   resolveVehicleOwnerOnUpdate,
 } from "@/lib/autoscuole/appointment-vehicles";
+import {
+  asSentence,
+  busyVehicleIds,
+  describeConflict,
+  pickConflictingVehicle,
+  type ConflictReason,
+  type ReservedVehicle,
+  type ReservedVehicleRole,
+} from "@/lib/autoscuole/conflict-reason";
 import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
 import {
   createLessonBufferBlock,
@@ -3204,16 +3213,27 @@ const findGroupContainerConflict = async ({
           : []),
       ],
     },
-    select: { id: true },
+    // REG-609: servono anche i mezzi, non solo l'id — e' con questi che il
+    // messaggio di conflitto puo' dire QUALE veicolo e' impegnato.
+    select: {
+      id: true,
+      instructorId: true,
+      vehicleId: true,
+      followVehicleId: true,
+      fleetVehicles: { select: { vehicleId: true } },
+    },
   });
 };
 
 /**
- * True when any of `vehicleIds` is already reserved in [startsAt, endsAt) by
- * ANOTHER appointment (as primary `vehicleId` or via the appointmentVehicles
- * join — follow cars and extra motos included) or by a scheduled group-lesson
- * container. Used when EDITING a lesson's vehicles; the create paths run
- * their own combined scan.
+ * Quale dei `vehicleIds` e' gia' riservato in [startsAt, endsAt) da UN'ALTRA
+ * guida (come `vehicleId` principale o via la join appointmentVehicles — auto
+ * al seguito e moto aggiuntive comprese) o da un container di guida di gruppo.
+ * Usata quando si MODIFICANO i veicoli di una guida; i percorsi di creazione
+ * fanno la loro scansione combinata.
+ *
+ * REG-609: torna l'id del veicolo (e se l'impegno e' una guida di gruppo)
+ * invece di un `true` muto, cosi' il messaggio puo' nominarlo.
  */
 const findVehicleReservationConflict = async ({
   companyId,
@@ -3227,9 +3247,9 @@ const findVehicleReservationConflict = async ({
   endsAt: Date;
   vehicleIds: string[];
   excludeAppointmentId?: string;
-}) => {
+}): Promise<{ vehicleId: string | null; inGroupLesson: boolean } | null> => {
   const reserved = Array.from(new Set(vehicleIds.filter(Boolean)));
-  if (!reserved.length) return false;
+  if (!reserved.length) return null;
   const [appointmentConflict, containerConflict] = await Promise.all([
     prisma.autoscuolaAppointment.findFirst({
       where: {
@@ -3243,11 +3263,52 @@ const findVehicleReservationConflict = async ({
           { appointmentVehicles: { some: { vehicleId: { in: reserved } } } },
         ],
       },
-      select: { id: true },
+      select: {
+        id: true,
+        vehicleId: true,
+        appointmentVehicles: { select: { vehicleId: true } },
+      },
     }),
     findGroupContainerConflict({ companyId, startsAt, endsAt, vehicleIds: reserved }),
   ]);
-  return Boolean(appointmentConflict || containerConflict);
+  // L'appuntamento vince sul container solo perche' e' il caso piu' comune:
+  // il messaggio nomina comunque un veicolo davvero in conflitto.
+  const blocking = appointmentConflict
+    ? { row: appointmentConflict, inGroupLesson: false }
+    : containerConflict
+      ? { row: containerConflict, inGroupLesson: true }
+      : null;
+  if (!blocking) return null;
+  const busy = new Set(busyVehicleIds(blocking.row));
+  return {
+    vehicleId: reserved.find((id) => busy.has(id)) ?? null,
+    inGroupLesson: blocking.inGroupLesson,
+  };
+};
+
+/**
+ * Nome dei veicoli per id, per i messaggi di conflitto. Si chiama SOLO quando
+ * un conflitto c'e' davvero: sul percorso felice non costa niente.
+ */
+const loadVehicleNames = async (companyId: string, vehicleIds: readonly string[]) => {
+  const ids = Array.from(new Set(vehicleIds.filter(Boolean)));
+  if (!ids.length) return new Map<string, string>();
+  const rows = await prisma.autoscuolaVehicle.findMany({
+    where: { id: { in: ids }, companyId },
+    select: { id: true, name: true },
+  });
+  return new Map(rows.map((v) => [v.id, v.name]));
+};
+
+/**
+ * La frase di conflitto gia' pronta: carica il nome del mezzo e lo infila
+ * nella descrizione. Senza maiuscola iniziale ne' punto — chi la usa decide
+ * se e' una frase a se' (`asSentence`) o la coda di "Conflitto per lo slot...".
+ */
+const conflictClause = async (companyId: string, reason: ConflictReason) => {
+  if (reason.kind !== "vehicle") return describeConflict(reason);
+  const names = await loadVehicleNames(companyId, [reason.vehicleId]);
+  return describeConflict(reason, names.get(reason.vehicleId));
 };
 
 export async function createAutoscuolaAppointment(
@@ -3595,11 +3656,17 @@ export async function createAutoscuolaAppointment(
     // A lesson may reserve more than one vehicle (moto + follow car). Catch a
     // conflict on ANY reserved vehicle, whether the other appointment uses it as
     // its primary `vehicleId` or as a secondary (follow) row in the join.
-    const reservedVehicleIds = [
-      payload.vehicleId,
-      payload.followVehicleId,
-      ...(payload.extraMotoVehicleIds ?? []),
-    ].filter((id): id is string => Boolean(id));
+    // REG-609: l'ordine e' quello in cui raccontiamo il conflitto — prima il
+    // veicolo principale (non sostituibile), poi le moto aggiuntive, infine
+    // l'auto al seguito, che e' l'unica che si cambia davvero con un clic.
+    const reservedVehicles: ReservedVehicle[] = [
+      ...(payload.vehicleId ? [{ id: payload.vehicleId, role: "primary" as const }] : []),
+      ...(payload.extraMotoVehicleIds ?? []).map((id) => ({ id, role: "extra_moto" as const })),
+      ...(payload.followVehicleId
+        ? [{ id: payload.followVehicleId, role: "follow" as const }]
+        : []),
+    ];
+    const reservedVehicleIds = reservedVehicles.map((v) => v.id);
     const conflictOr: Array<Record<string, unknown>> = [
       { instructorId: resolvedInstructorId },
       // REG-591: l'istruttore e' occupato anche quando ACCOMPAGNA la guida di
@@ -3627,6 +3694,9 @@ export async function createAutoscuolaAppointment(
         status: { notIn: ["cancelled"] },
         OR: conflictOr,
       },
+      // REG-609: senza la join non si distingue un'auto occupata come veicolo
+      // principale da una occupata come auto al seguito di un collega.
+      include: { appointmentVehicles: { select: { vehicleId: true } } },
     });
     const overlapsSlot = (item: { startsAt: Date; endsAt: Date | null }) => {
       const start = item.startsAt;
@@ -3647,14 +3717,23 @@ export async function createAutoscuolaAppointment(
         message: "L'allievo ha già una guida o un esame in quell'orario.",
       };
     }
-    const hasConflict = conflicts.some(
+    const blockingAppointment = conflicts.find(
       (item) => item.studentId !== payload.studentId && overlapsSlot(item),
     );
-    if (hasConflict && !payload.skipConflictCheck) {
-      return {
-        success: false,
-        message: "Slot non disponibile per istruttore o veicolo.",
-      };
+    if (blockingAppointment && !payload.skipConflictCheck) {
+      // REG-609: "istruttore o veicolo" non diceva niente a nessuno. Se a
+      // bloccare e' un mezzo lo nominiamo; altrimenti e' l'istruttore.
+      const busy = pickConflictingVehicle(
+        reservedVehicles,
+        busyVehicleIds(blockingAppointment),
+      );
+      const clause = await conflictClause(
+        companyId,
+        busy
+          ? { kind: "vehicle", vehicleId: busy.id, role: busy.role }
+          : { kind: "instructor" },
+      );
+      return { success: false, message: asSentence(clause) };
     }
 
     // Check overlap with instructor blocks (sick leave, unavailability, etc.)
@@ -3687,10 +3766,17 @@ export async function createAutoscuolaAppointment(
         vehicleIds: reservedVehicleIds,
       });
       if (containerConflict) {
-        return {
-          success: false,
-          message: "Slot non disponibile: istruttore o veicolo impegnato in una guida di gruppo.",
-        };
+        const busy = pickConflictingVehicle(
+          reservedVehicles,
+          busyVehicleIds(containerConflict),
+        );
+        const clause = await conflictClause(
+          companyId,
+          busy
+            ? { kind: "vehicle", vehicleId: busy.id, role: busy.role, inGroupLesson: true }
+            : { kind: "instructor", inGroupLesson: true },
+        );
+        return { success: false, message: asSentence(clause) };
       }
     }
 
@@ -4078,11 +4164,17 @@ export async function createAutoscuolaAppointmentBatch(
     scanEnd.setDate(scanEnd.getDate() + 1);
 
     // Every vehicle this batch reserves on each slot (primary + follow + extras).
-    const batchReservedVehicleIds = [
-      payload.vehicleId,
-      payload.followVehicleId,
-      ...(payload.extraMotoVehicleIds ?? []),
-    ].filter((id): id is string => Boolean(id));
+    // REG-609: stesso ordine della creazione singola (principale → moto
+    // aggiuntive → auto al seguito), cosi' i due percorsi raccontano lo stesso
+    // conflitto con le stesse parole.
+    const batchReservedVehicles: ReservedVehicle[] = [
+      ...(payload.vehicleId ? [{ id: payload.vehicleId, role: "primary" as const }] : []),
+      ...(payload.extraMotoVehicleIds ?? []).map((id) => ({ id, role: "extra_moto" as const })),
+      ...(payload.followVehicleId
+        ? [{ id: payload.followVehicleId, role: "follow" as const }]
+        : []),
+    ];
+    const batchReservedVehicleIds = batchReservedVehicles.map((v) => v.id);
     const batchConflictOr: Array<Record<string, unknown>> = [
       { instructorId: resolvedInstructorId },
       // REG-591, come sopra: vale anche per la prenotazione multipla.
@@ -4105,6 +4197,7 @@ export async function createAutoscuolaAppointmentBatch(
         status: { notIn: ["cancelled"] },
         OR: batchConflictOr,
       },
+      include: { appointmentVehicles: { select: { vehicleId: true } } },
     });
 
     // Check overlap with instructor blocks
@@ -4118,12 +4211,12 @@ export async function createAutoscuolaAppointmentBatch(
 
     for (let i = 0; i < parsedEntries.length; i++) {
       const entry = parsedEntries[i];
-      const hasConflict = existingAppointments.some((appt) => {
+      const blockingAppointment = existingAppointments.find((appt) => {
         const start = appt.startsAt;
         const end = appt.endsAt ?? new Date(start.getTime() + 30 * 60 * 1000);
         return start < entry.endsAt && end > entry.startsAt;
       });
-      if (hasConflict) {
+      if (blockingAppointment) {
         const dateStr = entry.startsAt.toLocaleString("it-IT", {
           day: "2-digit",
           month: "2-digit",
@@ -4131,9 +4224,19 @@ export async function createAutoscuolaAppointmentBatch(
           minute: "2-digit",
           timeZone: "Europe/Rome",
         });
+        const busy = pickConflictingVehicle(
+          batchReservedVehicles,
+          busyVehicleIds(blockingAppointment),
+        );
+        const clause = await conflictClause(
+          companyId,
+          busy
+            ? { kind: "vehicle", vehicleId: busy.id, role: busy.role }
+            : { kind: "instructor" },
+        );
         return {
           success: false,
-          message: `Conflitto per lo slot del ${dateStr}: istruttore o veicolo non disponibile.`,
+          message: `Conflitto per lo slot del ${dateStr}: ${clause}.`,
         };
       }
 
@@ -4172,9 +4275,19 @@ export async function createAutoscuolaAppointmentBatch(
           minute: "2-digit",
           timeZone: "Europe/Rome",
         });
+        const busy = pickConflictingVehicle(
+          batchReservedVehicles,
+          busyVehicleIds(containerConflict),
+        );
+        const clause = await conflictClause(
+          companyId,
+          busy
+            ? { kind: "vehicle", vehicleId: busy.id, role: busy.role, inGroupLesson: true }
+            : { kind: "instructor", inGroupLesson: true },
+        );
         return {
           success: false,
-          message: `Conflitto per lo slot del ${dateStr}: istruttore o veicolo impegnato in una guida di gruppo.`,
+          message: `Conflitto per lo slot del ${dateStr}: ${clause}.`,
         };
       }
 
@@ -6118,6 +6231,14 @@ export async function updateAutoscuolaAppointmentDetails(
     // Robatto, 2026-07-03 — the create path would have blocked it). Only the
     // added ids are checked, so a pre-existing overlap on an untouched vehicle
     // never blocks unrelated edits; past lessons stay editable (record fixes).
+    // REG-609: il ruolo di ogni mezzo, per nominarlo nel messaggio.
+    const editRoleOf = (id: string): ReservedVehicleRole =>
+      id === finalFollowVehicleId
+        ? "follow"
+        : finalExtraMotoVehicleIds.includes(id)
+          ? "extra_moto"
+          : "primary";
+
     if (vehiclesNeedSync && appointmentEnd.getTime() > Date.now()) {
       const currentRows = await prisma.autoscuolaAppointmentVehicle.findMany({
         where: { appointmentId: appointment.id },
@@ -6140,9 +6261,20 @@ export async function updateAutoscuolaAppointmentDetails(
           excludeAppointmentId: appointment.id,
         });
         if (conflict) {
+          const clause = await conflictClause(
+            membership.companyId,
+            conflict.vehicleId
+              ? {
+                  kind: "vehicle",
+                  vehicleId: conflict.vehicleId,
+                  role: editRoleOf(conflict.vehicleId),
+                  inGroupLesson: conflict.inGroupLesson,
+                }
+              : { kind: "instructor", inGroupLesson: conflict.inGroupLesson },
+          );
           return {
             success: false,
-            message: "Veicolo già impegnato in quell'orario su un'altra guida.",
+            message: asSentence(clause),
             code: "VEHICLE_UNAVAILABLE" as const,
           };
         }
@@ -6172,9 +6304,21 @@ export async function updateAutoscuolaAppointmentDetails(
           excludeAppointmentId: appointment.id,
         });
         if (conflict) {
+          const clause = await conflictClause(
+            membership.companyId,
+            conflict.vehicleId
+              ? {
+                  kind: "vehicle",
+                  vehicleId: conflict.vehicleId,
+                  role: editRoleOf(conflict.vehicleId),
+                  inGroupLesson: conflict.inGroupLesson,
+                }
+              : { kind: "instructor", inGroupLesson: conflict.inGroupLesson },
+          );
           return {
             success: false,
-            message: "Veicolo già impegnato in quell'orario: riduci la durata o cambia veicolo.",
+            // La durata e' cresciuta: oltre al perche', si dice come uscirne.
+            message: `${asSentence(clause)} Riduci la durata o cambia veicolo.`,
             code: "VEHICLE_UNAVAILABLE" as const,
           };
         }
