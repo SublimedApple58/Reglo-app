@@ -104,6 +104,13 @@ import {
   type ReservedVehicle,
   type ReservedVehicleRole,
 } from "@/lib/autoscuole/conflict-reason";
+import {
+  buildReservedVehicles,
+  effectiveFollowVehicleId,
+  findGroupContainerConflict,
+  scanEntryConflicts,
+} from "@/lib/autoscuole/conflict-scan";
+import { listFreeFollowCarsForSlots } from "@/lib/autoscuole/free-follow-cars";
 import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
 import {
   createLessonBufferBlock,
@@ -3176,56 +3183,6 @@ export async function getAutoscuolaLatestStudentAppointmentNote(input: {
 }
 
 /**
- * Overlap check against scheduled group-lesson CONTAINERS: a group lesson
- * reserves its instructor, primary vehicle, shared follow car and moto fleet
- * for the whole window even with ZERO participants — in that case it has no
- * appointment rows, so appointment-based conflict scans cannot see it.
- */
-const findGroupContainerConflict = async ({
-  companyId,
-  startsAt,
-  endsAt,
-  instructorId,
-  vehicleIds,
-}: {
-  companyId: string;
-  startsAt: Date;
-  endsAt: Date;
-  instructorId?: string | null;
-  vehicleIds?: string[];
-}) => {
-  const reserved = Array.from(new Set((vehicleIds ?? []).filter(Boolean)));
-  if (!instructorId && !reserved.length) return null;
-  return prisma.autoscuolaGroupLesson.findFirst({
-    where: {
-      companyId,
-      status: "scheduled",
-      startsAt: { lt: endsAt },
-      endsAt: { gt: startsAt },
-      OR: [
-        ...(instructorId ? [{ instructorId }] : []),
-        ...(reserved.length
-          ? [
-              { vehicleId: { in: reserved } },
-              { followVehicleId: { in: reserved } },
-              { fleetVehicles: { some: { vehicleId: { in: reserved } } } },
-            ]
-          : []),
-      ],
-    },
-    // REG-609: servono anche i mezzi, non solo l'id — e' con questi che il
-    // messaggio di conflitto puo' dire QUALE veicolo e' impegnato.
-    select: {
-      id: true,
-      instructorId: true,
-      vehicleId: true,
-      followVehicleId: true,
-      fleetVehicles: { select: { vehicleId: true } },
-    },
-  });
-};
-
-/**
  * Quale dei `vehicleIds` e' gia' riservato in [startsAt, endsAt) da UN'ALTRA
  * guida (come `vehicleId` principale o via la join appointmentVehicles — auto
  * al seguito e moto aggiuntive comprese) o da un container di guida di gruppo.
@@ -3285,6 +3242,16 @@ const findVehicleReservationConflict = async ({
     inGroupLesson: blocking.inGroupLesson,
   };
 };
+
+/** "17/10 09:00" — l'etichetta con cui i messaggi del batch nominano lo slot. */
+const formatSlotLabel = (startsAt: Date) =>
+  startsAt.toLocaleString("it-IT", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Rome",
+  });
 
 /**
  * Nome dei veicoli per id, per i messaggi di conflitto. Si chiama SOLO quando
@@ -3656,16 +3623,11 @@ export async function createAutoscuolaAppointment(
     // A lesson may reserve more than one vehicle (moto + follow car). Catch a
     // conflict on ANY reserved vehicle, whether the other appointment uses it as
     // its primary `vehicleId` or as a secondary (follow) row in the join.
-    // REG-609: l'ordine e' quello in cui raccontiamo il conflitto — prima il
-    // veicolo principale (non sostituibile), poi le moto aggiuntive, infine
-    // l'auto al seguito, che e' l'unica che si cambia davvero con un clic.
-    const reservedVehicles: ReservedVehicle[] = [
-      ...(payload.vehicleId ? [{ id: payload.vehicleId, role: "primary" as const }] : []),
-      ...(payload.extraMotoVehicleIds ?? []).map((id) => ({ id, role: "extra_moto" as const })),
-      ...(payload.followVehicleId
-        ? [{ id: payload.followVehicleId, role: "follow" as const }]
-        : []),
-    ];
+    const reservedVehicles = buildReservedVehicles({
+      primaryVehicleId: payload.vehicleId,
+      extraMotoVehicleIds: payload.extraMotoVehicleIds,
+      followVehicleId: payload.followVehicleId,
+    });
     const reservedVehicleIds = reservedVehicles.map((v) => v.id);
     const conflictOr: Array<Record<string, unknown>> = [
       { instructorId: resolvedInstructorId },
@@ -3914,6 +3876,203 @@ export async function createAutoscuolaAppointment(
 // Batch appointment creation (multi-booking from instructor app)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Prova a vuoto della prenotazione multipla (REG-611)
+// ---------------------------------------------------------------------------
+
+const checkAppointmentBatchSchema = z.object({
+  instructorId: z.string().uuid(),
+  vehicleId: z.string().uuid().optional().nullable(),
+  /** L'auto al seguito condivisa da tutte le date. */
+  followVehicleId: z.string().uuid().optional().nullable(),
+  extraMotoVehicleIds: z.array(z.string().uuid()).optional(),
+  entries: z
+    .array(
+      z.object({
+        startsAt: z.string().min(1),
+        endsAt: z.string().min(1),
+        /** Scelta solo per QUESTA data: assente = eredita, null = nessuna. */
+        followVehicleId: z.string().uuid().nullable().optional(),
+      }),
+    )
+    .min(1)
+    .max(20),
+});
+
+export type BatchCheckEntry = {
+  index: number;
+  startsAt: string;
+  endsAt: string;
+  /** Il motivo per cui non va; assente = la data e' libera. */
+  conflict?: {
+    kind: "instructor" | "block" | "overlap" | "vehicle";
+    /** Vero se a bloccare e' il contenitore di una guida di gruppo. */
+    inGroupLesson?: boolean;
+    role?: "primary" | "extra_moto" | "follow";
+    vehicleId?: string;
+    vehicleName?: string;
+    /** La frase gia' pronta, le stesse parole dei messaggi di errore. */
+    label: string;
+  };
+  /**
+   * Le auto al seguito libere in QUESTO slot. Valorizzata solo quando il
+   * conflitto e' sull'auto al seguito: e' l'unico caso in cui cambiare mezzo
+   * risolve. Lista vuota = non c'e' nessuna auto libera a quell'ora.
+   */
+  freeFollowCars?: Array<{ id: string; name: string; transmission: string | null }>;
+};
+
+/**
+ * Dice quali date della prenotazione multipla si possono creare e quali no,
+ * **senza scrivere niente**.
+ *
+ * Nasce per REG-608: con una sola auto al seguito per tutte le date, bastava
+ * che fosse occupata una volta per far fallire l'intera prenotazione, e il
+ * messaggio non diceva nemmeno quale auto fosse. Qui si torna il quadro
+ * completo piu' le auto libere in ciascuno slot problematico, cosi' si puo'
+ * scegliere la sostituta invece di ricominciare da capo.
+ *
+ * NON controlla il limite settimanale: quella e' una conferma a parte che il
+ * client gestisce gia' al momento della creazione vera.
+ */
+export async function checkAutoscuolaAppointmentBatch(
+  input: z.infer<typeof checkAppointmentBatchSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+    const payload = checkAppointmentBatchSchema.parse(input);
+
+    const isInstructorActor =
+      isInstructor(membership.autoscuolaRole) && membership.role !== "admin";
+    const isOwnerOrAdminActor =
+      membership.role === "admin" || isOwner(membership.autoscuolaRole);
+    if (!isInstructorActor && !isOwnerOrAdminActor) {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+
+    // Un istruttore puo' interrogare solo la PROPRIA agenda: altrimenti la
+    // prova a vuoto diventerebbe un modo per sbirciare quella dei colleghi.
+    let resolvedInstructorId = payload.instructorId;
+    if (isInstructorActor) {
+      const ownInstructor = await getOwnInstructorProfile(companyId, membership.userId);
+      if (!ownInstructor) {
+        return {
+          success: false as const,
+          message: "Profilo istruttore non trovato per questo account.",
+        };
+      }
+      resolvedInstructorId = ownInstructor.id;
+    }
+
+    const parsed = payload.entries.map((entry) => ({
+      startsAt: new Date(entry.startsAt),
+      endsAt: new Date(entry.endsAt),
+      followVehicleId: effectiveFollowVehicleId(payload.followVehicleId, entry.followVehicleId),
+    }));
+    if (
+      parsed.some(
+        (e) =>
+          Number.isNaN(e.startsAt.getTime()) ||
+          Number.isNaN(e.endsAt.getTime()) ||
+          e.endsAt <= e.startsAt,
+      )
+    ) {
+      return { success: false as const, message: "Uno o più intervalli orari non validi." };
+    }
+
+    const conflicts = await scanEntryConflicts({
+      companyId,
+      instructorId: resolvedInstructorId,
+      entries: parsed.map((entry) => ({
+        startsAt: entry.startsAt,
+        endsAt: entry.endsAt,
+        reserved: buildReservedVehicles({
+          primaryVehicleId: payload.vehicleId,
+          extraMotoVehicleIds: payload.extraMotoVehicleIds,
+          followVehicleId: entry.followVehicleId,
+        }),
+      })),
+    });
+
+    // Le auto libere servono SOLO dove il problema e' l'auto al seguito: su un
+    // istruttore occupato o una moto presa, cambiare macchina non risolve.
+    const followConflictIndexes = conflicts
+      .map((c, index) => (c && c.kind === "vehicle" && c.role === "follow" ? index : -1))
+      .filter((index) => index >= 0);
+    const freeBySlot = await listFreeFollowCarsForSlots({
+      companyId,
+      slots: followConflictIndexes.map((index) => ({
+        key: String(index),
+        startsAt: parsed[index].startsAt,
+        endsAt: parsed[index].endsAt,
+      })),
+    });
+
+    const names = await loadVehicleNames(
+      companyId,
+      conflicts.flatMap((c) => (c && c.kind === "vehicle" ? [c.vehicleId] : [])),
+    );
+
+    const entries: BatchCheckEntry[] = parsed.map((entry, index) => {
+      const conflict = conflicts[index];
+      const base: BatchCheckEntry = {
+        index,
+        startsAt: entry.startsAt.toISOString(),
+        endsAt: entry.endsAt.toISOString(),
+      };
+      if (!conflict) return base;
+      if (conflict.kind === "overlap") {
+        return {
+          ...base,
+          conflict: {
+            kind: "overlap",
+            label: "si sovrappone a un'altra guida di questa prenotazione",
+          },
+        };
+      }
+      const vehicleName =
+        conflict.kind === "vehicle" ? names.get(conflict.vehicleId) : undefined;
+      return {
+        ...base,
+        conflict: {
+          kind: conflict.kind,
+          ...(conflict.kind === "vehicle"
+            ? { role: conflict.role, vehicleId: conflict.vehicleId, vehicleName }
+            : {}),
+          ...("inGroupLesson" in conflict ? { inGroupLesson: conflict.inGroupLesson } : {}),
+          label: describeConflict(conflict, vehicleName),
+        },
+        ...(conflict.kind === "vehicle" && conflict.role === "follow"
+          ? { freeFollowCars: freeBySlot.get(String(index)) ?? [] }
+          : {}),
+      };
+    });
+
+    // La scorciatoia: un'auto libera in TUTTE le date in conflitto si sceglie
+    // con un clic solo. Se non ce n'e' nessuna, si decide data per data.
+    const freeLists = followConflictIndexes.map((index) => freeBySlot.get(String(index)) ?? []);
+    const suggestedForAll =
+      freeLists.length > 0 && freeLists.every((list) => list.length > 0)
+        ? (freeLists[0].find((car) =>
+            freeLists.every((list) => list.some((c) => c.id === car.id)),
+          ) ?? null)
+        : null;
+
+    return {
+      success: true as const,
+      data: {
+        entries,
+        freeCount: entries.filter((e) => !e.conflict).length,
+        conflictCount: entries.filter((e) => e.conflict).length,
+        suggestedForAll,
+      },
+    };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
 const createAppointmentBatchSchema = z.object({
   studentId: z.string().uuid(),
   instructorId: z.string().uuid(),
@@ -4156,151 +4315,37 @@ export async function createAutoscuolaAppointmentBatch(
     }
 
     // ── Conflict detection (single query for all entries) ──
-    const allStarts = parsedEntries.map((e) => e.startsAt.getTime());
-    const allEnds = parsedEntries.map((e) => e.endsAt.getTime());
-    const scanStart = new Date(Math.min(...allStarts));
-    scanStart.setDate(scanStart.getDate() - 1);
-    const scanEnd = new Date(Math.max(...allEnds));
-    scanEnd.setDate(scanEnd.getDate() + 1);
-
-    // Every vehicle this batch reserves on each slot (primary + follow + extras).
-    // REG-609: stesso ordine della creazione singola (principale → moto
-    // aggiuntive → auto al seguito), cosi' i due percorsi raccontano lo stesso
-    // conflitto con le stesse parole.
-    const batchReservedVehicles: ReservedVehicle[] = [
-      ...(payload.vehicleId ? [{ id: payload.vehicleId, role: "primary" as const }] : []),
-      ...(payload.extraMotoVehicleIds ?? []).map((id) => ({ id, role: "extra_moto" as const })),
-      ...(payload.followVehicleId
-        ? [{ id: payload.followVehicleId, role: "follow" as const }]
-        : []),
-    ];
-    const batchReservedVehicleIds = batchReservedVehicles.map((v) => v.id);
-    const batchConflictOr: Array<Record<string, unknown>> = [
-      { instructorId: resolvedInstructorId },
-      // REG-591, come sopra: vale anche per la prenotazione multipla.
-      { coInstructors: { some: { instructorId: resolvedInstructorId } } },
-    ];
-    for (const vid of batchReservedVehicleIds) {
-      batchConflictOr.push({ vehicleId: vid });
-    }
-    if (batchReservedVehicleIds.length) {
-      // Also catch appointments using any of these vehicles in the join (e.g.
-      // a car already used as a follow car elsewhere).
-      batchConflictOr.push({
-        appointmentVehicles: { some: { vehicleId: { in: batchReservedVehicleIds } } },
-      });
-    }
-    const existingAppointments = await prisma.autoscuolaAppointment.findMany({
-      where: {
-        companyId,
-        startsAt: { gte: scanStart, lt: scanEnd },
-        status: { notIn: ["cancelled"] },
-        OR: batchConflictOr,
-      },
-      include: { appointmentVehicles: { select: { vehicleId: true } } },
+    // Ogni veicolo che questa prenotazione impegna su ciascuno slot.
+    const batchReservedVehicles = buildReservedVehicles({
+      primaryVehicleId: payload.vehicleId,
+      extraMotoVehicleIds: payload.extraMotoVehicleIds,
+      followVehicleId: payload.followVehicleId,
     });
 
-    // Check overlap with instructor blocks
-    const existingBlocks = await prisma.autoscuolaInstructorBlock.findMany({
-      where: {
-        companyId,
-        instructorId: resolvedInstructorId,
-        startsAt: { gte: scanStart, lt: scanEnd },
-      },
+    // REG-611: il controllo sta tutto in `scanEntryConflicts`, condiviso con la
+    // prova a vuoto, cosi' le due strade non possono dire cose diverse. Qui ci
+    // si ferma alla prima data che non va: il tutto-o-niente non cambia.
+    const entryConflicts = await scanEntryConflicts({
+      companyId,
+      instructorId: resolvedInstructorId,
+      entries: parsedEntries.map((entry) => ({ ...entry, reserved: batchReservedVehicles })),
     });
-
-    for (let i = 0; i < parsedEntries.length; i++) {
-      const entry = parsedEntries[i];
-      const blockingAppointment = existingAppointments.find((appt) => {
-        const start = appt.startsAt;
-        const end = appt.endsAt ?? new Date(start.getTime() + 30 * 60 * 1000);
-        return start < entry.endsAt && end > entry.startsAt;
-      });
-      if (blockingAppointment) {
-        const dateStr = entry.startsAt.toLocaleString("it-IT", {
-          day: "2-digit",
-          month: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-          timeZone: "Europe/Rome",
-        });
-        const busy = pickConflictingVehicle(
-          batchReservedVehicles,
-          busyVehicleIds(blockingAppointment),
-        );
-        const clause = await conflictClause(
-          companyId,
-          busy
-            ? { kind: "vehicle", vehicleId: busy.id, role: busy.role }
-            : { kind: "instructor" },
-        );
+    const firstBadIndex = entryConflicts.findIndex((c) => c !== null);
+    if (firstBadIndex >= 0) {
+      const reason = entryConflicts[firstBadIndex]!;
+      if (reason.kind === "overlap") {
         return {
           success: false,
-          message: `Conflitto per lo slot del ${dateStr}: ${clause}.`,
+          message: "Due o più guide nella prenotazione si sovrappongono.",
         };
       }
-
-      // Check overlap with instructor blocks
-      const hasBlockConflict = existingBlocks.some(
-        (block) => block.startsAt < entry.endsAt && block.endsAt > entry.startsAt,
-      );
-      if (hasBlockConflict) {
-        const dateStr = entry.startsAt.toLocaleString("it-IT", {
-          day: "2-digit",
-          month: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-          timeZone: "Europe/Rome",
-        });
-        return {
-          success: false,
-          message: `Conflitto per lo slot del ${dateStr}: l'istruttore ha uno slot bloccato.`,
-        };
-      }
-
-      // Group-lesson containers (even with zero participants) reserve
-      // instructor + vehicles but have no appointment rows.
-      const containerConflict = await findGroupContainerConflict({
-        companyId,
-        startsAt: entry.startsAt,
-        endsAt: entry.endsAt,
-        instructorId: resolvedInstructorId,
-        vehicleIds: batchReservedVehicleIds,
-      });
-      if (containerConflict) {
-        const dateStr = entry.startsAt.toLocaleString("it-IT", {
-          day: "2-digit",
-          month: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-          timeZone: "Europe/Rome",
-        });
-        const busy = pickConflictingVehicle(
-          batchReservedVehicles,
-          busyVehicleIds(containerConflict),
-        );
-        const clause = await conflictClause(
-          companyId,
-          busy
-            ? { kind: "vehicle", vehicleId: busy.id, role: busy.role, inGroupLesson: true }
-            : { kind: "instructor", inGroupLesson: true },
-        );
-        return {
-          success: false,
-          message: `Conflitto per lo slot del ${dateStr}: ${clause}.`,
-        };
-      }
-
-      // Also check inter-entry conflicts (within the batch itself)
-      for (let j = i + 1; j < parsedEntries.length; j++) {
-        const other = parsedEntries[j];
-        if (entry.startsAt < other.endsAt && entry.endsAt > other.startsAt) {
-          return {
-            success: false,
-            message: "Due o più guide nella prenotazione si sovrappongono.",
-          };
-        }
-      }
+      const clause = await conflictClause(companyId, reason);
+      return {
+        success: false,
+        message: `Conflitto per lo slot del ${formatSlotLabel(
+          parsedEntries[firstBadIndex].startsAt,
+        )}: ${clause}.`,
+      };
     }
 
     // Resolve location: explicit payload or company default sede
