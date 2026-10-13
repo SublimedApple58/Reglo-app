@@ -148,6 +148,8 @@ Nella multipla moto l'auto al seguito era **una sola per tutte le date**: bastav
 - `lib/autoscuole/free-follow-cars.ts` — quali auto B sono **libere** in uno slot. Una scansione per tutti gli slot insieme. **Non filtra per istruttore**: la creazione di una guida oggi non lo fa (lo fa solo la modifica), e filtrare qui darebbe due comportamenti diversi nella stessa schermata.
 - ⚠️ Se a bloccare è lo **stesso** istruttore, il motivo detto è lui anche quando usa pure uno dei nostri mezzi: cambiare auto non libererebbe l'ora.
 
+**App istruttore (REG-615)** — stesso flusso, forma nativa: `POST /api/autoscuole/instructor-bookings/check-batch` espone la prova a vuoto all'app (l'azione limita da sola un istruttore alla **propria** agenda) e `reglo-mobile` apre il foglio «Auto al seguito occupata» (`src/components/booking/FollowCarConflictSheet.tsx`). Stessi testi: cambiarne uno qui va rifatto là. Dettagli in `reglo-mobile/docs/features/quick-book.md`.
+
 **e2e** — `tests/e2e/reg608-auto-al-seguito.auth.spec.ts` + i dati di prova `scripts/seed-reg608.ts` (`--cleanup` per rimuoverli), che costruiscono i tre casi veri sul DB di dev.
 
 ## Key functions
