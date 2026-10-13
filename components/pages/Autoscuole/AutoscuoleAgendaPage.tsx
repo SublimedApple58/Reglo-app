@@ -40,6 +40,7 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   createAutoscuolaAppointment,
   createAutoscuolaAppointmentBatch,
+  checkAutoscuolaAppointmentBatch,
   annulAutoscuolaAppointment,
   hardCleanupAutoscuolaAppointment,
   updateAutoscuolaAppointmentStatus,
@@ -81,6 +82,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import {
+  FollowCarConflictPane,
+  type ConflictChoice,
+  type ConflictStepState,
+} from "@/components/pages/Autoscuole/dialogs/FollowCarConflictPane";
 import { FieldGroup } from "@/components/ui/field-group";
 import { TRANSMISSION_LABELS, isMotoLicenseCategory, vehicleServesLicense, type Transmission } from "@/lib/autoscuole/license";
 import { pathForDate } from "@/lib/autoscuole/license-paths";
@@ -1261,6 +1267,13 @@ export function AutoscuoleAgendaPage({
    */
   type BookingEntry = { id: string; day: string; time: string; duration: string };
   const [multiMode, setMultiMode] = React.useState(false);
+  /**
+   * REG-613 — passo "Auto al seguito occupata". La prova a vuoto dice quali
+   * date non si possono creare e perche'; qui si tiene il suo esito e la
+   * risposta data a ciascuna. `undefined` = non ancora risposto.
+   */
+  const [conflictStep, setConflictStep] = React.useState<ConflictStepState | null>(null);
+  const [conflictChoice, setConflictChoice] = React.useState<Record<number, ConflictChoice>>({});
   const [entries, setEntries] = React.useState<BookingEntry[]>([]);
   type AgendaLocationOption = {
     id: string;
@@ -2328,9 +2341,14 @@ export function AutoscuoleAgendaPage({
           // spostando è l'unica cosa che le distingue.
           title: `${idx + 1}. ${title}`,
           ...ghostTint(dur),
+          // REG-613: le date che la verifica ha bocciato si vedono in agenda,
+          // cosi' si capisce DOVE sta il problema senza leggere l'elenco.
+          ...(conflictStep?.entries[idx]?.conflict && conflictChoice[idx] === undefined
+            ? { cardClass: "bg-[#FFF1F0]/85 border-[#C13515]", dotClass: "bg-[#C13515]" }
+            : {}),
         };
       });
-  }, [createOpen, multiMode, entries, form.studentId, form.instructorId, form.vehicleId, students, studentNameOrder, DAY_START_HOUR]);
+  }, [createOpen, multiMode, entries, form.studentId, form.instructorId, form.vehicleId, students, studentNameOrder, DAY_START_HOUR, conflictStep, conflictChoice]);
 
   // Annullamento pregresso dell'allievo su QUESTO orario. Se l'allievo aveva
   // annullato lui una guida che iniziava a questo istante, mostriamo un banner
@@ -2694,6 +2712,8 @@ export function AutoscuoleAgendaPage({
    */
   const setMulti = (value: boolean) => {
     setMultiMode(value);
+    // Cambiando modo l'esito della verifica non vale piu' niente.
+    closeConflictStep();
     if (value) {
       setEntries([
         {
@@ -2911,6 +2931,165 @@ export function AutoscuoleAgendaPage({
    * 09:00…"). Quel messaggio si mostra com'è: dire "errore" e basta
    * costringerebbe a cercare a mano quale guida non va.
    */
+  /** I campi condivisi da tutte le guide del gruppo: non cambiano mai per data. */
+  const batchSharedPayload = () => {
+    const isMotoMode = vehiclesEnabled && form.bookingMode === "moto";
+    const needFollowCar =
+      isMotoMode && Object.values(followCarRules).some((r) => r?.enabled === true);
+    return {
+      studentId: form.studentId,
+      instructorId: form.instructorId,
+      type: form.types[0] || form.type,
+      types: form.types,
+      vehicleId: vehiclesEnabled ? form.vehicleId : null,
+      followVehicleId:
+        needFollowCar && form.followVehicleId !== "__none__" ? form.followVehicleId : null,
+      extraMotoVehicleIds: isMotoMode
+        ? form.extraMotoVehicleIds.filter((id) => id !== form.vehicleId)
+        : [],
+      motoLessonType: isMotoMode ? form.motoLessonType : null,
+      locationId: form.locationId || null,
+      notes: form.notes.trim() || undefined,
+    };
+  };
+
+  /** Chiude il form dopo una creazione riuscita e porta l'agenda sulla prima guida. */
+  const finishBatchCreate = (created: number, firstStart: Date) => {
+    setCreating(false);
+    setCreateOpen(false);
+    setConflictStep(null);
+    setConflictChoice({});
+    setMultiMode(false);
+    setEntries([]);
+    setForm({
+      studentId: "",
+      type: "guida",
+      types: ["guida"],
+      day: "",
+      time: "09:00",
+      instructorId: "",
+      bookingMode: "auto",
+      vehicleId: "",
+      followVehicleId: "",
+      extraMotoVehicleIds: [],
+      motoLessonType: null,
+      locationId: defaultLocationId,
+      duration: "30",
+      notes: "",
+    });
+    createLocationTouchedRef.current = false;
+    toast.success({ description: `${created} guid${created === 1 ? "a prenotata" : "e prenotate"}.` });
+    // L'agenda segue la PRIMA guida creata, come fa col singolo.
+    const createdDay = normalizeDay(firstStart);
+    if (viewMode === "week") {
+      const ws = weekAnchor(createdDay, viewPrefs.weekMode);
+      if (ws.getTime() !== weekStart.getTime()) setWeekStart(ws);
+    } else if (createdDay.getTime() !== dayFocus.getTime()) {
+      setDayFocus(createdDay);
+    }
+    const startMin = firstStart.getHours() * 60 + firstStart.getMinutes() - DAY_START_HOUR * 60;
+    calendarScrollRef.current?.scrollTo({
+      top: Math.max(0, startMin * PIXELS_PER_MINUTE - 140),
+      behavior: "smooth",
+    });
+    load({ silent: true });
+  };
+
+  /** La creazione vera e propria, una volta che le date sono decise. */
+  const submitBatch = async (
+    payloadEntries: Array<{ startsAt: string; endsAt: string; followVehicleId?: string | null }>,
+    opts: { allowPast: boolean },
+  ) => {
+    if (!payloadEntries.length) {
+      toast.info({ description: "Non resta nessuna guida da creare." });
+      return;
+    }
+    setCreating(true);
+    const makePayload = (skip?: boolean) => ({
+      ...batchSharedPayload(),
+      entries: payloadEntries,
+      ...(skip ? { skipWeeklyLimitCheck: true } : {}),
+      ...(opts.allowPast ? { allowPast: true } : {}),
+    });
+    let res = await createAutoscuolaAppointmentBatch(makePayload());
+    if (!res.success && (res as { code?: string }).code === "WEEKLY_LIMIT_CONFIRM") {
+      setCreating(false);
+      const confirmed = window.confirm(
+        res.message ?? "L'allievo supererebbe il limite settimanale. Procedere comunque?",
+      );
+      if (!confirmed) return;
+      setCreating(true);
+      res = await createAutoscuolaAppointmentBatch(makePayload(true));
+    }
+    if (!res.success) {
+      setCreating(false);
+      toast.error({ description: res.message ?? "Impossibile creare le guide." });
+      // Qualcuno puo' aver preso lo slot fra la verifica e la conferma: invece
+      // di buttare via tutto, si rifa' la prova e si torna a scegliere.
+      if (conflictStep) void runBatchCheck({ allowPast: opts.allowPast, silent: true });
+      return;
+    }
+    const created = (res as { data?: { created?: number } }).data?.created ?? payloadEntries.length;
+    const firstStart = payloadEntries
+      .map((e) => new Date(e.startsAt))
+      .sort((a, b) => a.getTime() - b.getTime())[0];
+    finishBatchCreate(created, firstStart);
+  };
+
+  /** Le date del form, in ISO, nell'ordine in cui l'utente le ha messe. */
+  const batchEntriesIso = () =>
+    entries.map((e) => {
+      const start = buildLocalDateTime(e.day, e.time);
+      const end = new Date(start.getTime() + (parseInt(e.duration, 10) || 30) * 60 * 1000);
+      return { startsAt: start.toISOString(), endsAt: end.toISOString() };
+    });
+
+  /**
+   * Prova a vuoto: chiede al backend quali date si possono creare. Se sono
+   * tutte libere crea e basta — il caso normale non deve vedere niente di
+   * nuovo. Altrimenti apre il passo "Auto al seguito occupata".
+   */
+  const runBatchCheck = async (opts: { allowPast: boolean; silent?: boolean }) => {
+    const shared = batchSharedPayload();
+    const slots = batchEntriesIso();
+    if (!opts.silent) setCreating(true);
+    const check = await checkAutoscuolaAppointmentBatch({
+      instructorId: shared.instructorId,
+      vehicleId: shared.vehicleId || null,
+      followVehicleId: shared.followVehicleId,
+      extraMotoVehicleIds: shared.extraMotoVehicleIds,
+      entries: slots,
+    });
+    if (!opts.silent) setCreating(false);
+    if (!check.success) {
+      toast.error({ description: check.message ?? "Impossibile verificare le date." });
+      return;
+    }
+    if (!check.data.conflictCount) {
+      setConflictStep(null);
+      setConflictChoice({});
+      await submitBatch(slots, { allowPast: opts.allowPast });
+      return;
+    }
+    setConflictStep({
+      entries: check.data.entries,
+      freeCount: check.data.freeCount,
+      suggestedForAll: check.data.suggestedForAll,
+      allowPast: opts.allowPast,
+    });
+    // Una sola auto libera non e' una scelta: la mettiamo gia' noi. Con piu'
+    // d'una si lascia decidere (stessa regola del veicolo precompilato).
+    setConflictChoice((prev) => {
+      const next = { ...prev };
+      for (const entry of check.data.entries) {
+        if (entry.conflict?.role !== "follow") continue;
+        if (next[entry.index] !== undefined) continue;
+        if (entry.freeFollowCars?.length === 1) next[entry.index] = entry.freeFollowCars[0].id;
+      }
+      return next;
+    });
+  };
+
   const handleCreateBatch = async (opts?: { allowPast?: boolean }) => {
     const isMotoMode = vehiclesEnabled && form.bookingMode === "moto";
     const needFollowCar =
@@ -2939,18 +3118,14 @@ export function AutoscuoleAgendaPage({
       toast.info({ description: "Scegli l'auto al seguito (o \"Nessuna\") per la guida moto." });
       return;
     }
-    const parsed = entries.map((e) => {
-      const start = buildLocalDateTime(e.day, e.time);
-      return { start, end: new Date(start.getTime() + (parseInt(e.duration, 10) || 30) * 60 * 1000) };
-    });
-    if (parsed.some((p) => Number.isNaN(p.start.getTime()))) {
+    const parsed = entries.map((e) => buildLocalDateTime(e.day, e.time));
+    if (parsed.some((d) => Number.isNaN(d.getTime()))) {
       toast.error({ description: "Data o orario non validi." });
       return;
     }
     // Conferma "nel passato" sulla guida PIÙ VECCHIA del gruppo: una sola
     // domanda per tutto il batch, come fa l'app.
     const earliestPast = parsed
-      .map((p) => p.start)
       .filter((d) => d.getTime() < Date.now())
       .sort((a, b) => a.getTime() - b.getTime())[0];
     if (!opts?.allowPast && earliestPast) {
@@ -2958,80 +3133,38 @@ export function AutoscuoleAgendaPage({
       setPastConfirmOpen(true);
       return;
     }
-    setCreating(true);
-    const makePayload = (skip?: boolean) => ({
-      studentId: form.studentId,
-      instructorId: form.instructorId,
-      type: form.types[0] || form.type,
-      types: form.types,
-      vehicleId: vehiclesEnabled ? form.vehicleId : null,
-      followVehicleId:
-        needFollowCar && form.followVehicleId !== "__none__" ? form.followVehicleId : null,
-      extraMotoVehicleIds: isMotoMode
-        ? form.extraMotoVehicleIds.filter((id) => id !== form.vehicleId)
-        : [],
-      motoLessonType: isMotoMode ? form.motoLessonType : null,
-      locationId: form.locationId || null,
-      notes: form.notes.trim() || undefined,
-      entries: parsed.map((p) => ({ startsAt: p.start.toISOString(), endsAt: p.end.toISOString() })),
-      ...(skip ? { skipWeeklyLimitCheck: true } : {}),
-      ...(opts?.allowPast ? { allowPast: true } : {}),
-    });
-    let res = await createAutoscuolaAppointmentBatch(makePayload());
-    if (!res.success && (res as { code?: string }).code === "WEEKLY_LIMIT_CONFIRM") {
-      setCreating(false);
-      const confirmed = window.confirm(
-        res.message ?? "L'allievo supererebbe il limite settimanale. Procedere comunque?",
-      );
-      if (!confirmed) return;
-      setCreating(true);
-      res = await createAutoscuolaAppointmentBatch(makePayload(true));
-    }
-    if (!res.success) {
-      setCreating(false);
-      toast.error({ description: res.message ?? "Impossibile creare le guide." });
-      return;
-    }
-    const created = (res as { data?: { created?: number } }).data?.created ?? parsed.length;
-    setCreating(false);
-    setCreateOpen(false);
-    setMultiMode(false);
-    setEntries([]);
-    setForm({
-      studentId: "",
-      type: "guida",
-      types: ["guida"],
-      day: "",
-      time: "09:00",
-      instructorId: "",
-      bookingMode: "auto",
-      vehicleId: "",
-      followVehicleId: "",
-      extraMotoVehicleIds: [],
-      motoLessonType: null,
-      locationId: defaultLocationId,
-      duration: "30",
-      notes: "",
-    });
-    createLocationTouchedRef.current = false;
-    toast.success({ description: `${created} guid${created === 1 ? "a prenotata" : "e prenotate"}.` });
-    // L'agenda segue la PRIMA guida creata, come fa col singolo.
-    {
-      const first = parsed.map((p) => p.start).sort((a, b) => a.getTime() - b.getTime())[0];
-      const createdDay = normalizeDay(first);
-      if (viewMode === "week") {
-        const ws = weekAnchor(createdDay, viewPrefs.weekMode);
-        if (ws.getTime() !== weekStart.getTime()) setWeekStart(ws);
-      } else if (createdDay.getTime() !== dayFocus.getTime()) {
-        setDayFocus(createdDay);
-      }
-      const startMin = first.getHours() * 60 + first.getMinutes() - DAY_START_HOUR * 60;
-      const scroller = calendarScrollRef.current;
-      if (scroller) {
-        scroller.scrollTo({ top: Math.max(0, startMin * PIXELS_PER_MINUTE - 140), behavior: "smooth" });
-      }
-    }
-    load({ silent: true });
+    await runBatchCheck({ allowPast: Boolean(opts?.allowPast) });
+  };
+
+  /** Conferma dal passo conflitti: `onlyFree` crea solo le date gia' libere. */
+  const handleConflictConfirm = async (onlyFree: boolean) => {
+    if (!conflictStep) return;
+    const payloadEntries = conflictStep.entries
+      .filter((entry) => conflictChoice[entry.index] !== "remove")
+      .filter((entry) => (onlyFree ? !entry.conflict : true))
+      .map((entry) => {
+        const choice = conflictChoice[entry.index];
+        return {
+          startsAt: entry.startsAt,
+          endsAt: entry.endsAt,
+          // `undefined` = eredita l'auto condivisa; `null` = nessuna auto.
+          ...(choice !== undefined && choice !== "remove" ? { followVehicleId: choice } : {}),
+        };
+      });
+    await submitBatch(payloadEntries, { allowPast: conflictStep.allowPast });
+  };
+
+  /** Quante righe aspettano ancora una risposta, e quante guide resteranno. */
+  const conflictPending = conflictStep
+    ? conflictStep.entries.filter((e) => e.conflict && conflictChoice[e.index] === undefined).length
+    : 0;
+  const conflictKeptCount = conflictStep
+    ? conflictStep.entries.filter((e) => conflictChoice[e.index] !== "remove").length
+    : 0;
+
+  const closeConflictStep = () => {
+    setConflictStep(null);
+    setConflictChoice({});
   };
 
   // Accetta/Rifiuta la Richiesta guida del consorzio (card flottante).
@@ -5641,11 +5774,52 @@ export function AutoscuoleAgendaPage({
 
       <CreateEventPopover
         open={createOpen}
-        onClose={() => { if (!creating) setCreateOpen(false); }}
-        title="Nuovo appuntamento"
-        subtitle={multiMode ? "I blocchi tratteggiati in agenda si aggiornano mentre compili" : "Il blocco tratteggiato in agenda si aggiorna mentre compili"}
+        onClose={() => { if (!creating) { setCreateOpen(false); closeConflictStep(); } }}
+        title={conflictStep ? "Auto al seguito occupata" : "Nuovo appuntamento"}
+        subtitle={
+          conflictStep
+            ? "Cambia solo la macchina: le date restano quelle che hai scelto"
+            : multiMode
+              ? "I blocchi tratteggiati in agenda si aggiornano mentre compili"
+              : "Il blocco tratteggiato in agenda si aggiorna mentre compili"
+        }
+        onBack={conflictStep && !creating ? closeConflictStep : undefined}
         anchor={popoverAnchor}
         footer={
+          conflictStep ? (
+            <>
+              <button
+                type="button"
+                className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50"
+                disabled={creating}
+                onClick={closeConflictStep}
+              >
+                Indietro
+              </button>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  disabled={creating || conflictStep.freeCount === 0}
+                  onClick={() => handleConflictConfirm(true)}
+                  className="cursor-pointer rounded-[10px] border border-[#dddddd] bg-white px-4 py-2.5 text-[13.5px] font-semibold text-[#555555] transition-colors hover:border-[#929292] disabled:opacity-40"
+                >
+                  {`Crea solo le ${conflictStep.freeCount} liber${conflictStep.freeCount === 1 ? "a" : "e"}`}
+                </button>
+                <button
+                  type="button"
+                  disabled={creating || conflictPending > 0 || conflictKeptCount === 0}
+                  onClick={() => handleConflictConfirm(false)}
+                  className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
+                >
+                  {creating ? (
+                    <LoadingDots className="min-h-5" />
+                  ) : (
+                    `Crea ${conflictKeptCount} guid${conflictKeptCount === 1 ? "a" : "e"}`
+                  )}
+                </button>
+              </div>
+            </>
+          ) : (
           <>
             <button type="button" className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50" disabled={creating} onClick={() => setCreateOpen(false)}>
               Annulla
@@ -5673,8 +5847,36 @@ export function AutoscuoleAgendaPage({
               )}
             </button>
           </>
+          )
         }
       >
+        {conflictStep ? (
+          <FollowCarConflictPane
+            step={conflictStep}
+            choice={conflictChoice}
+            onChoose={(index, value) =>
+              setConflictChoice((prev) => {
+                const next = { ...prev };
+                if (value === undefined) delete next[index];
+                else next[index] = value;
+                return next;
+              })
+            }
+            onApplyToAll={() => {
+              const car = conflictStep.suggestedForAll;
+              if (!car) return;
+              setConflictChoice((prev) => {
+                const next = { ...prev };
+                for (const entry of conflictStep.entries) {
+                  if (entry.conflict?.role !== "follow") continue;
+                  if (next[entry.index] !== undefined) continue;
+                  next[entry.index] = car.id;
+                }
+                return next;
+              });
+            }}
+          />
+        ) : (
         <div className="space-y-4">
           {/* REG-590 — prenotazione multipla: stesso gesto dell'app. Acceso,
               Giorno/Orario/Durata lasciano il posto alla lista delle guide;
@@ -6107,6 +6309,7 @@ export function AutoscuoleAgendaPage({
             />
           </div>
         </div>
+        )}
       </CreateEventPopover>
 
       {/* ── Richiesta guida del consorzio (card 1:1 dal prototipo) ── */}

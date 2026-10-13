@@ -182,6 +182,7 @@ export async function scanEntryConflicts(args: {
       select: {
         startsAt: true,
         endsAt: true,
+        instructorId: true,
         vehicleId: true,
         appointmentVehicles: { select: { vehicleId: true } },
       },
@@ -220,6 +221,7 @@ export async function scanEntryConflicts(args: {
   const busyAppointments = appointments.map((a) => ({
     startsAt: a.startsAt,
     endsAt: a.endsAt ?? new Date(a.startsAt.getTime() + DEFAULT_LESSON_MS),
+    instructorId: a.instructorId,
     vehicleIds: busyVehicleIds(a),
   }));
   const busyContainers = containers.map((c) => ({
@@ -234,7 +236,13 @@ export async function scanEntryConflicts(args: {
     //    altrimenti e' l'istruttore a essere occupato.
     const blockingAppointment = busyAppointments.find((row) => overlaps(row, entry));
     if (blockingAppointment) {
-      const busy = pickConflictingVehicle(entry.reserved, blockingAppointment.vehicleIds);
+      // Se a bloccare e' lo STESSO istruttore, il motivo da dire e' lui anche
+      // quando per caso usa pure uno dei nostri mezzi: cambiare auto non
+      // libererebbe l'ora, e proporlo manderebbe l'utente a sbattere.
+      const busy =
+        blockingAppointment.instructorId === instructorId
+          ? null
+          : pickConflictingVehicle(entry.reserved, blockingAppointment.vehicleIds);
       return busy
         ? { kind: "vehicle" as const, vehicleId: busy.id, role: busy.role, inGroupLesson: false }
         : { kind: "instructor" as const, inGroupLesson: false };
@@ -252,7 +260,10 @@ export async function scanEntryConflicts(args: {
     // 3. Container di guida di gruppo: impegna anche a zero iscritti.
     const blockingContainer = busyContainers.find((row) => overlaps(row, entry));
     if (blockingContainer) {
-      const busy = pickConflictingVehicle(entry.reserved, blockingContainer.vehicleIds);
+      const busy =
+        blockingContainer.instructorId === instructorId
+          ? null
+          : pickConflictingVehicle(entry.reserved, blockingContainer.vehicleIds);
       return busy
         ? { kind: "vehicle" as const, vehicleId: busy.id, role: busy.role, inGroupLesson: true }
         : { kind: "instructor" as const, inGroupLesson: true };

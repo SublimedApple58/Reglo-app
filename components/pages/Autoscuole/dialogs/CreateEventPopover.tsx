@@ -3,7 +3,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useDragControls } from "motion/react";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -17,6 +17,7 @@ export function CreateEventPopover({
   onClose,
   title,
   subtitle,
+  onBack,
   anchor,
   width = 600,
   children,
@@ -27,6 +28,8 @@ export function CreateEventPopover({
   onClose: () => void;
   title: string;
   subtitle?: string;
+  /** Se c'e', l'header mostra una freccia indietro: la card ha piu' di un passo. */
+  onBack?: () => void;
   /** Coordinate viewport a cui ancorare l'angolo in alto a destra della card. */
   anchor: { x: number; y: number } | null;
   /** Larghezza di partenza (poi ridimensionabile dal grip). */
@@ -174,11 +177,23 @@ export function CreateEventPopover({
               dragControls.start(event);
             }}
           >
-            <div className="min-w-0">
-              <div className="text-[17px] font-bold tracking-[-0.2px] text-[#222222]">{title}</div>
-              {subtitle ? (
-                <div className="mt-0.5 text-[12.5px] font-medium text-[#929292]">{subtitle}</div>
+            <div className="flex min-w-0 items-start gap-2.5">
+              {onBack ? (
+                <button
+                  type="button"
+                  onClick={onBack}
+                  aria-label="Indietro"
+                  className="mt-px flex size-[30px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#f2f2f2] transition-colors hover:bg-[#e8e8e8]"
+                >
+                  <ChevronLeft className="size-[13px] text-[#555555]" strokeWidth={2.4} />
+                </button>
               ) : null}
+              <div className="min-w-0">
+                <div className="text-[17px] font-bold tracking-[-0.2px] text-[#222222]">{title}</div>
+                {subtitle ? (
+                  <div className="mt-0.5 text-[12.5px] font-medium text-[#929292]">{subtitle}</div>
+                ) : null}
+              </div>
             </div>
             <button
               type="button"
