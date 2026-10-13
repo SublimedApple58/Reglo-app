@@ -124,6 +124,15 @@ async function main() {
     return;
   }
 
+  // L'account con cui si prova (titolare e istruttore del seed base) deve
+  // ATTERRARE qui: su staging quegli utenti stanno anche in altre autoscuole e
+  // basta che qualcuno cambi azienda perche' l'e2e si ritrovi in un'agenda che
+  // non e' questa, senza l'allievo di prova (preso 13/10/2026).
+  await prisma.user.updateMany({
+    where: { email: { in: ['titolare@reglo.it', 'istruttore@reglo.it'] } },
+    data: { activeCompanyId: companyId },
+  });
+
   // ── Veicoli: le quattro auto B piu' la moto dell'allievo ──
   const vehicleIdByName = new Map<string, string>();
   for (const [index, name] of [...CARS, MOTO].entries()) {

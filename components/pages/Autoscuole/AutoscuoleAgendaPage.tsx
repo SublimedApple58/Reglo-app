@@ -84,6 +84,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   FollowCarConflictPane,
+  countCreatable,
   type ConflictChoice,
   type ConflictStepState,
 } from "@/components/pages/Autoscuole/dialogs/FollowCarConflictPane";
@@ -3161,6 +3162,10 @@ export function AutoscuoleAgendaPage({
   const conflictKeptCount = conflictStep
     ? conflictStep.entries.filter((e) => conflictChoice[e.index] !== "remove").length
     : 0;
+  /** Quante ne nascerebbero premendo adesso: il bottone dice questo, non le righe rimaste. */
+  const conflictCreatableCount = conflictStep
+    ? countCreatable(conflictStep.entries, conflictChoice)
+    : 0;
 
   const closeConflictStep = () => {
     setConflictStep(null);
@@ -5818,7 +5823,7 @@ export function AutoscuoleAgendaPage({
                   {creating ? (
                     <LoadingDots className="min-h-5" />
                   ) : (
-                    `Crea ${conflictKeptCount} guid${conflictKeptCount === 1 ? "a" : "e"}`
+                    `Crea ${conflictCreatableCount} guid${conflictCreatableCount === 1 ? "a" : "e"}`
                   )}
                 </button>
               </div>

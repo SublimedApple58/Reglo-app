@@ -5,6 +5,7 @@ import { AlertCircle, Check } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TRANSMISSION_LABELS, type Transmission } from "@/lib/autoscuole/license";
 import { cn } from "@/lib/utils";
+import { countCreatable, orderConflicts } from "@/lib/autoscuole/follow-car-conflict";
 
 /**
  * «Auto al seguito occupata» — il secondo schermo della prenotazione multipla
@@ -64,6 +65,8 @@ const formatSlot = (startsAt: string, endsAt: string) => {
 /** Select piu' compatta della solita (h-11): con tre conflitti la card non deve scorrere. */
 const SELECT_CLASS = "h-10 rounded-lg px-3.5 text-[13.5px]";
 
+export { countCreatable, orderConflicts };
+
 export function FollowCarConflictPane({
   step,
   choice,
@@ -76,7 +79,7 @@ export function FollowCarConflictPane({
   onChoose: (index: number, value: ConflictChoice | undefined) => void;
   onApplyToAll: () => void;
 }) {
-  const conflicts = step.entries.filter((e) => e.conflict);
+  const conflicts = orderConflicts(step.entries);
   const total = step.entries.length;
   const followConflicts = conflicts.filter((e) => e.conflict?.role === "follow");
   // Il nome si puo' dire solo se a bloccare e' SEMPRE quella macchina: con
@@ -142,7 +145,7 @@ export function FollowCarConflictPane({
       </div>
 
       <div className="space-y-2">
-        {conflicts.map((entry) => {
+        {conflicts.map((entry, position) => {
           const answer = choice[entry.index];
           const answered = answer !== undefined;
           const removed = answer === "remove";
@@ -170,7 +173,7 @@ export function FollowCarConflictPane({
                   {answered ? (
                     <Check className="size-3" strokeWidth={3} aria-label="sistemata" />
                   ) : (
-                    entry.index + 1
+                    position + 1
                   )}
                 </span>
                 <div className="text-[13px] font-semibold text-[#222222]">

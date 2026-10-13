@@ -144,12 +144,15 @@ test.describe("REG-608 — auto al seguito occupata", () => {
   test("conflitti misti: due date si risolvono da sole, una resta da scegliere", async ({ page }) => {
     test.setTimeout(180_000);
     const card = await openMotoForm(page);
+    // Scritte APPOSTA fuori ordine: a schermo devono leggersi in ordine di orario.
     await fillSlotsAndSubmit(page, card, [
       { date: day(0), time: "09:00" },
-      { date: day(0), time: "11:00" },
       { date: day(0), time: "15:00" },
+      { date: day(0), time: "11:00" },
     ]);
     await expect(card.getByText("Auto al seguito occupata")).toBeVisible({ timeout: 30_000 });
+    const orari = await card.getByText(/·\s\d{2}:\d{2} – \d{2}:\d{2}$/).allInnerTexts();
+    expect(orari.map((t) => t.slice(-13, -8))).toEqual(["09:00", "11:00", "15:00"]);
     // Due date si risolvono da sole (un'auto libera sola non e' una scelta),
     // una resta da scegliere.
     await expect(card.getByText(new RegExp(`${FOLLOW_CAR} è già impegnata`)).first()).toBeVisible();

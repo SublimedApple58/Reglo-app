@@ -141,6 +141,7 @@ Nella multipla moto l'auto al seguito era **una sola per tutte le date**: bastav
 - **Conflitto che non è l'auto al seguito** (istruttore, moto, slot bloccato, gruppo) → riga informativa con il motivo e il solo `Togli la guida`: cambiare auto non risolve.
 - Footer: **Crea N guide** (attivo solo a righe tutte risposte) e **Crea solo le N libere**, che sparisce quando non ce n'è nemmeno una.
 - Risolta una riga il motivo sparisce e il pallino prende una spunta. Le Select qui sono `h-10` invece di `h-11`: con tre conflitti la card deve stare senza scorrere.
+- **Ordine cronologico** e **numeri onesti** (`lib/autoscuole/follow-car-conflict.ts`, provato a parte): le date da sistemare si leggono in ordine di orario — non in quello in cui sono state digitate — e si numerano di seguito; il bottone finale dice quante guide nascerebbero **premendo adesso** (libere + già sistemate − tolte), mai il totale delle righe rimaste. Le stesse due regole valgono nel foglio dell'app istruttore.
 
 **Backend** — nessuna migrazione, nessun modello nuovo:
 - `lib/autoscuole/conflict-reason.ts` (puro) — sceglie **quale** mezzo raccontare fra quelli riservati e ne ricava la frase. Ordine: principale → moto aggiuntive → auto al seguito; se sono occupati sia la moto sia l'auto si racconta la **moto**, perché non si sostituisce con un clic.
