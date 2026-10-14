@@ -17,6 +17,22 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 /** Il timeout del client mobile: il numero che il difetto faceva sforare. */
 const MOBILE_CLIENT_TIMEOUT_MS = 15_000;
 
+/**
+ * Il tetto vero di questo test, e perche' non e' il timeout del client.
+ *
+ * Misurato sul seed di REG-617 (14 destinatari), dev locale: con gli invii
+ * dentro la risposta **9179ms** — circa 655ms a testa fra la push, l'email e le
+ * due righe di registro — contro **1342ms** con il fix. A 14 destinatari i 15
+ * secondi del client non si sforano ancora, quindi usarli come soglia
+ * lascerebbe passare la regressione: su Robatto, 256 allievi idonei, quei
+ * 655ms a testa fanno quasi tre minuti.
+ *
+ * Quindi si misura la cosa giusta: il tempo di risposta **non deve crescere coi
+ * destinatari**. Tre secondi e mezzo di margine sopra la misura buona, e un
+ * ritorno al vecchio comportamento fa fallire il test gia' con questo seed.
+ */
+const INVITE_BUDGET_MS = 5_000;
+
 type Invitee = { id: string; name: string | null };
 
 /** Giorno di lavoro lontano, per non incrociare dati veri né altri test. */
@@ -153,13 +169,15 @@ test.describe("Invito a una guida di gruppo (REG-617)", () => {
           .toBeGreaterThan(0);
       }
 
-      // La guardia vera contro la regressione: se gli invii tornassero dentro
-      // la risposta, su un'autoscuola popolata questo supererebbe il tempo che
-      // il client concede, ed è esattamente quello che l'utente vedeva.
+      // La guardia vera contro la regressione.
       expect(
         elapsed,
-        `l'invito deve tornare entro i ${MOBILE_CLIENT_TIMEOUT_MS}ms del client (misurato: ${elapsed}ms)`,
-      ).toBeLessThan(MOBILE_CLIENT_TIMEOUT_MS);
+        `l'invito deve rispondere entro ${INVITE_BUDGET_MS}ms a prescindere dai ` +
+          `destinatari (misurato: ${elapsed}ms con ${invitedCount} destinatari). ` +
+          `Oltre, gli invii sono tornati dentro la risposta: su un'autoscuola ` +
+          `vera supererebbero i ${MOBILE_CLIENT_TIMEOUT_MS}ms del client e ` +
+          `l'app mostrerebbe di nuovo "Aborted" su un invito riuscito.`,
+      ).toBeLessThan(INVITE_BUDGET_MS);
 
       // ── Reinvitare non è un errore: l'invito precedente viene superato ────
       const againRes = await api.post(
