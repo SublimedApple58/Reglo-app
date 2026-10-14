@@ -36,6 +36,7 @@ import {
   markGroupLessonAllPresent,
 } from "@/lib/actions/autoscuole.actions";
 import { inviteToGroupLesson } from "@/lib/actions/autoscuole-availability.actions";
+import { matchesPersonSearch } from "@/lib/autoscuole/people-search";
 import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
 import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, motoLessonTypeLabel, asMotoLessonType, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
 import { MOTO_LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
@@ -439,15 +440,33 @@ export function GroupLessonManageDialog({
     if (!groupLessonId) return;
     setInviting(true);
     try {
-      await run(() => inviteToGroupLesson({ groupLessonId }), "Invito inviato agli allievi idonei.");
+      // Non passa da `run` perche' il messaggio dipende dall'esito: dire a
+      // QUANTI allievi e' andato l'invito e' l'unica conferma che si vede
+      // (gli invii veri partono dopo la risposta — REG-617).
+      const res = await inviteToGroupLesson({ groupLessonId });
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Operazione non riuscita." });
+        return;
+      }
+      const n = res.data?.invitedCount ?? 0;
+      toast.success({
+        description: n
+          ? `Invito inviato a ${n} ${n === 1 ? "allievo" : "allievi"}.`
+          : "Invito aperto, ma non c'è nessun allievo idoneo da avvisare.",
+      });
+      onChanged();
+    } catch (e) {
+      toast.error({ description: (e as Error)?.message ?? "Errore inatteso." });
     } finally {
       setInviting(false);
     }
   };
-  const filteredEligible = React.useMemo(() => {
-    const q = addSearch.trim().toLowerCase();
-    return q ? eligible.filter((e) => e.name.toLowerCase().includes(q)) : eligible;
-  }, [eligible, addSearch]);
+  const filteredEligible = React.useMemo(
+    // Senza accenti ne' maiuscole, e a parole: "rossi mario" trova "Mario
+    // Rossi" (stessa regola del picker mobile, REG-617).
+    () => eligible.filter((e) => matchesPersonSearch(e.name, addSearch)),
+    [eligible, addSearch],
+  );
   // Parco moto nel pannello: in guida prima, poi le altre; filtro per nome.
   const fleetPanelRows = React.useMemo(() => {
     const inFleet = new Set((lesson?.fleet ?? []).map((f) => f.id));

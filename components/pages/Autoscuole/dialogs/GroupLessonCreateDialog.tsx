@@ -38,6 +38,7 @@ import {
   listOptedInGroupLessonStudents,
 } from "@/lib/actions/autoscuole.actions";
 import { inviteToGroupLesson } from "@/lib/actions/autoscuole-availability.actions";
+import { matchesPersonSearch } from "@/lib/autoscuole/people-search";
 import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
 import { resolveGroupPrefilledLocationId } from "@/lib/autoscuole/location-for-license";
 import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
@@ -107,11 +108,6 @@ const DURATIONS = [
   { value: "180", label: "3 ore" },
   { value: "240", label: "4 ore" },
 ];
-
-// Accent/case-insensitive match so "Niccolo" finds "Niccolò" (schools can have
-// hundreds of opted-in students).
-const normalizeQuery = (s: string) =>
-  s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const todayYMD = () => {
@@ -364,12 +360,11 @@ export function GroupLessonCreateDialog({
     setFollowVehicleId((prev) => (prev && !ok.has(prev) ? "" : prev));
   }, [accessibleVehicles]);
 
-  // Live search over the eligible list (accent/case-insensitive).
-  const filteredStudents = React.useMemo(() => {
-    const q = normalizeQuery(studentQuery.trim());
-    if (!q) return eligibleStudents;
-    return eligibleStudents.filter((st) => normalizeQuery(st.name ?? "").includes(q));
-  }, [eligibleStudents, studentQuery]);
+  // Live search over the eligible list (accent/case-insensitive, a parole).
+  const filteredStudents = React.useMemo(
+    () => eligibleStudents.filter((st) => matchesPersonSearch(st.name ?? "", studentQuery)),
+    [eligibleStudents, studentQuery],
+  );
 
   // Allievi ancora aggiungibili (idonei non già pre-inseriti) per il pannello laterale.
   const addableCount = React.useMemo(
@@ -456,6 +451,7 @@ export function GroupLessonCreateDialog({
         return;
       }
       // Optionally open the remaining seats to an invite.
+      let invited = 0;
       if (openInvites && res.data.participants < res.data.capacity) {
         const inv = await inviteToGroupLesson({ groupLessonId: res.data.groupLessonId });
         if (!inv.success) {
@@ -464,9 +460,15 @@ export function GroupLessonCreateDialog({
               "Guida creata, ma l'invio degli inviti non è riuscito: " +
               (inv.message ?? "errore inatteso."),
           });
+        } else {
+          invited = inv.data?.invitedCount ?? 0;
         }
       }
-      toast.success({ description: "Guida di gruppo creata." });
+      toast.success({
+        description: invited
+          ? `Guida di gruppo creata, invito a ${invited} ${invited === 1 ? "allievo" : "allievi"}.`
+          : "Guida di gruppo creata.",
+      });
       onCreated();
       onOpenChange(false);
     } catch (e) {

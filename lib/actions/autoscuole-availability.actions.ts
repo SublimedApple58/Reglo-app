@@ -1,6 +1,7 @@
 "use server";
 
 import { randomUUID } from "crypto";
+import { after } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/db/prisma";
 import { Prisma } from "@prisma/client";
@@ -4736,6 +4737,35 @@ type GroupLessonVehicleLicense = {
  * module is on, available, no time conflict, not already enrolled). Returns the
  * created invite (or null if the lesson is full / has no open seats).
  */
+/**
+ * Lavoro che non deve far aspettare chi ha premuto il bottone (REG-617).
+ *
+ * `after()` lo esegue dopo che la risposta e' partita. Fuori da una richiesta
+ * — un task Trigger.dev, uno script — `after()` non ha un ambito a cui
+ * attaccarsi e lancia: in quel caso si aspetta, come prima. Mai silenzioso su
+ * un errore del lavoro stesso: quello resta nel registro consegne.
+ */
+async function deferOrAwait(work: () => Promise<void>): Promise<void> {
+  try {
+    after(work);
+  } catch {
+    await work();
+  }
+}
+
+/**
+ * Invito broadcast a una guida di gruppo.
+ *
+ * Torna l'invito creato **e a quante persone e' andato**: il chiamante lo dice
+ * all'utente ("Invito inviato a N allievi") invece di un generico "fatto".
+ * `null` significa "non c'era niente da invitare" (discovery spenta, guida
+ * inesistente, posti esauriti).
+ *
+ * Gli invii NON sono nel percorso della risposta (REG-617): su un'autoscuola
+ * con centinaia di allievi idonei la cascata in serie — una push e un'email a
+ * testa, con la loro riga di registro — arrivava a decine di secondi, oltre il
+ * timeout del client, e l'app mostrava "Aborted" su un invito **riuscito**.
+ */
 export async function broadcastGroupLessonInvite({
   companyId,
   groupLessonId,
@@ -4744,7 +4774,7 @@ export async function broadcastGroupLessonInvite({
   companyId: string;
   groupLessonId: string;
   expiresAt: Date;
-}) {
+}): Promise<{ invite: { id: string }; recipients: number } | null> {
   // Discovery spenta → niente inviti broadcast: gli allievi non potrebbero
   // comunque vedere/iscriversi ai gruppi dalla lista. Coerente con il gate in
   // getGroupLessonInvites (setting groupLessonsDiscoveryEnabled, default ON).
@@ -4815,7 +4845,7 @@ export async function broadcastGroupLessonInvite({
   const candidateIds = students
     .map((s) => s.user.id)
     .filter((id) => !enrolled.has(id));
-  if (!candidateIds.length) return invite;
+  if (!candidateIds.length) return { invite, recipients: 0 };
 
   // A group lesson is a fixed-time event the school offers, NOT a student-driven
   // booking — so we do NOT require the student to have declared a weekly
@@ -4868,7 +4898,7 @@ export async function broadcastGroupLessonInvite({
     if (hasAppointmentConflict(booked, gl.startsAt, gl.endsAt!)) return false;
     return true;
   });
-  if (!eligible.length) return invite;
+  if (!eligible.length) return { invite, recipients: 0 };
 
   const channels = normalizeChannels(
     (service?.limits as Record<string, unknown> | null)?.slotFillChannels,
@@ -4883,15 +4913,19 @@ export async function broadcastGroupLessonInvite({
   const title = "👥 Guida di gruppo disponibile";
   const message = `C'è posto in una guida di gruppo il ${formattedDate} alle ${formattedTime}. Apri Reglo per iscriverti.`;
 
+  const recipients = eligible.map((student) => ({
+    userId: student.user.id,
+    email: student.user.email,
+    phone: student.user.phone,
+  }));
+
   // REG-604: canali di `slotFillChannels`, invariati. `group_lesson_invite` è
   // anche in `PUSH_ONLY_KINDS`, quindi WhatsApp lo esclude la struttura.
-  await notifyAutoscuolaUsers(
-    eligible.map((student) => ({
-      userId: student.user.id,
-      email: student.user.email,
-      phone: student.user.phone,
-    })),
-    {
+  // REG-617: la cascata resta **in serie** (N invii paralleli aprirebbero 2N
+  // scritture di registro insieme), ma dopo la risposta: l'invito è già a DB,
+  // quindi quello che conta per l'utente è concluso quando l'app torna.
+  await deferOrAwait(() =>
+    notifyAutoscuolaUsers(recipients, {
       companyId,
       kind: "group_lesson_invite",
       audience: "student",
@@ -4905,10 +4939,10 @@ export async function broadcastGroupLessonInvite({
         groupLessonId: gl.id,
         startsAt: gl.startsAt.toISOString(),
       },
-    },
+    }),
   );
 
-  return invite;
+  return { invite, recipients: recipients.length };
 }
 
 /** Owner/instructor-triggered broadcast of a group-lesson invite. */
@@ -4949,15 +4983,20 @@ export async function inviteToGroupLesson(input: z.infer<typeof inviteToGroupLes
       };
     }
 
-    const invite = await broadcastGroupLessonInvite({
+    const broadcast = await broadcastGroupLessonInvite({
       companyId: membership.companyId,
       groupLessonId: gl.id,
       expiresAt,
     });
-    if (!invite) {
+    if (!broadcast) {
       return { success: false as const, message: "Nessun posto disponibile da invitare." };
     }
-    return { success: true as const, data: { inviteId: invite.id } };
+    // `invitedCount` serve all'interfaccia: dire "a quanti" è l'unico modo di
+    // far capire che l'invito è partito davvero (REG-617).
+    return {
+      success: true as const,
+      data: { inviteId: broadcast.invite.id, invitedCount: broadcast.recipients },
+    };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
