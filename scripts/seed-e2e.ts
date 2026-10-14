@@ -61,12 +61,23 @@ async function main() {
   }
 
   // 2. AUTOSCUOLE service (vehicles on, follow-car rule for A)
+  //
+  // ATTENZIONE: questo oggetto SOSTITUISCE i `limits` dell'autoscuola di prova,
+  // non li fonde. Tutto quello che serve agli e2e va scritto qui, altrimenti
+  // riaccenderlo a mano dura fino al prossimo seed (succede: 14/10/2026).
   const limits = {
     vehiclesEnabled: true,
     followCarRules: { A: { enabled: true } },
     phasesEnabled: ['PRATICA'],
     defaultLicenseCategory: 'B',
     defaultTransmission: 'manual',
+    // Guide di gruppo: senza questo `createGroupLesson` rifiuta con "Il modulo
+    // Guide di gruppo non è attivo" e due spec non partono nemmeno
+    // (group-lesson-location, reg617-invito-gruppo).
+    groupLessonsEnabled: true,
+    // Chi prenota dall'app: serve perché l'app istruttore mostri "Prenota
+    // guida" (`canInstructorBook`) — il flusso della prenotazione multipla.
+    appBookingActors: 'both',
   };
   const service = await prisma.companyService.findFirst({
     where: { companyId: company.id, serviceKey: 'AUTOSCUOLE' },
