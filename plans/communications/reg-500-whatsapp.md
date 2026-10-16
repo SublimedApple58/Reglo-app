@@ -458,13 +458,18 @@ fatti. Sono tutti dal portale Telnyx e da Meta, in quest'ordine.
 1. **Comprare un numero su Telnyx** (portale → Numbers → Buy Numbers). In Italia
    ci sono solo **geografici**, niente mobili: va bene, WhatsApp Business supporta
    ufficialmente i fissi. **Non** un numero già usato su WhatsApp.
-2. **Assegnargli un messaging profile** (Messaging → Messaging Profiles). Senza
-   questo l'Embedded Signup rifiuta il numero.
+2. **Creare un messaging profile** (Messaging → Messaging Profiles).
+   *Aggiornamento 16/10:* fatto (`Reglo WhatsApp`, `4001a145-397f-48f5-abad-8ef9cdb2e549`).
+   Il numero **non** gli si può assegnare — un geografico italiano non è
+   SMS-enabled e Telnyx risponde `40323` — quindi il profilo va passato
+   **nel corpo dell'invio** (`TELNYX_MESSAGING_PROFILE_ID`): senza, ogni
+   `POST /messages/whatsapp` muore con `40305 Invalid 'from' address`.
 3. **Copiare la chiave pubblica dei webhook**: portale → Account Settings → Keys &
    Credentials → Public Key. Serve per `TELNYX_PUBLIC_KEY`.
 4. **Impostare su Vercel** (progetto `reglo`, ambienti staging e production):
    - `WHATSAPP_PROVIDER=telnyx`
    - `TELNYX_WHATSAPP_FROM=<numero in E.164, es. +39…>`
+   - `TELNYX_MESSAGING_PROFILE_ID=<id del messaging profile>` (obbligatoria, vedi punto 2)
    - `TELNYX_PUBLIC_KEY=<chiave pubblica>`
    `TELNYX_API_KEY` c'è già: è la stessa della voce, non va toccata.
 5. **Puntare il webhook WhatsApp** su `https://app.reglo.it/api/webhooks/whatsapp`

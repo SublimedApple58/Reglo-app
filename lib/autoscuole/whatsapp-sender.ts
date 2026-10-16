@@ -206,6 +206,10 @@ class TelnyxSender implements WhatsAppSender {
       apiKey: string;
       /** Numero mittente registrato su WhatsApp, in E.164. */
       from: string;
+      /**
+       * Messaging profile Telnyx, obbligatorio: vedi `resolveWhatsAppSender`.
+       */
+      messagingProfileId: string;
       baseUrl: string;
     },
   ) {}
@@ -222,6 +226,11 @@ class TelnyxSender implements WhatsAppSender {
       body: JSON.stringify({
         from: this.config.from,
         to,
+        // Senza questo Telnyx rifiuta l'invio con `40305 Invalid 'from' address`
+        // (misurato il 16/10/2026): il mittente è un geografico italiano e non
+        // è SMS-enabled, quindi il profilo non si deduce dal numero. Vedi
+        // `resolveWhatsAppSender`.
+        messaging_profile_id: this.config.messagingProfileId,
         whatsapp_message: {
           type: "template",
           template: {
@@ -317,11 +326,28 @@ export function resolveWhatsAppSender(env: NodeJS.ProcessEnv = process.env): Sen
           "TELNYX_WHATSAPP_FROM non configurata (il numero mittente registrato su WhatsApp, in E.164)",
       };
     }
+    // Il messaging profile è obbligatorio, e non è una formalità del portale:
+    // `POST /messages/whatsapp` lo pretende nel corpo quando il numero mittente
+    // non è SMS-enabled, e il nostro non lo è né lo può diventare. Il mittente
+    // è un geografico italiano (+39 02 …) — in Italia Telnyx non vende mobili —
+    // e assegnarlo a un profilo è rifiutato con `40323 Messaging activation
+    // failed`. Senza il profilo nel corpo, ogni invio muore con `40305 Invalid
+    // 'from' address`: meglio dirlo qui, una volta, che farlo scoprire a un
+    // allievo che non riceve il promemoria.
+    const messagingProfileId = env.TELNYX_MESSAGING_PROFILE_ID;
+    if (!messagingProfileId) {
+      return {
+        configured: false,
+        reason:
+          "TELNYX_MESSAGING_PROFILE_ID non configurata (il messaging profile Telnyx: senza, l'invio viene rifiutato con 40305)",
+      };
+    }
     return {
       configured: true,
       sender: new TelnyxSender({
         apiKey,
         from,
+        messagingProfileId,
         baseUrl: env.TELNYX_API_BASE_URL ?? "https://api.telnyx.com/v2",
       }),
     };

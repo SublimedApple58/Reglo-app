@@ -31,6 +31,7 @@ const TELNYX_ENV = {
   WHATSAPP_PROVIDER: "telnyx",
   TELNYX_API_KEY: "KEY0123-finta",
   TELNYX_WHATSAPP_FROM: "+390000000000",
+  TELNYX_MESSAGING_PROFILE_ID: "00000000-0000-0000-0000-000000000000",
 } as unknown as NodeJS.ProcessEnv;
 
 describe("registro dei template", () => {
@@ -258,6 +259,9 @@ describe("sendWhatsAppTemplate", () => {
     // Telnyx vuole il +, la Cloud API no: è la differenza che si sbaglia per prima.
     expect(body.to).toBe("+393331234567");
     expect(body.from).toBe("+390000000000");
+    // Senza il profilo nel corpo Telnyx risponde 40305: il mittente italiano
+    // non è SMS-enabled, quindi il profilo non si deduce dal numero.
+    expect(body.messaging_profile_id).toBe("00000000-0000-0000-0000-000000000000");
     expect(body.whatsapp_message.type).toBe("template");
     expect(body.whatsapp_message.template.name).toBe("promemoria_guida_mattutino");
     expect(body.whatsapp_message.template.language).toEqual({
@@ -319,6 +323,43 @@ describe("sendWhatsAppTemplate", () => {
         TELNYX_API_KEY: "KEY0123-finta",
       } as unknown as NodeJS.ProcessEnv),
     ).toBe(false);
+  });
+
+  it("senza TELNYX_MESSAGING_PROFILE_ID il canale non risulta collegato", () => {
+    const env = {
+      WHATSAPP_PROVIDER: "telnyx",
+      TELNYX_API_KEY: "KEY0123-finta",
+      TELNYX_WHATSAPP_FROM: "+390000000000",
+    } as unknown as NodeJS.ProcessEnv;
+
+    const res = resolveWhatsAppSender(env);
+    expect(res.configured).toBe(false);
+    if (!res.configured) expect(res.reason).toContain("TELNYX_MESSAGING_PROFILE_ID");
+    // In UI il canale non va offerto: meglio non prometterlo che vederlo
+    // rifiutare dal fornitore con un 40305 che nessuno legge.
+    expect(isWhatsAppChannelAvailable(env)).toBe(false);
+  });
+
+  it("senza il profilo non tenta nemmeno la chiamata al fornitore", async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const res = await sendWhatsAppTemplate(
+      {
+        to: "+393331234567",
+        kind: "morning_reminder_student",
+        values: { nome: "M", ora: "1", autoscuola: "R" },
+      },
+      {
+        WHATSAPP_PROVIDER: "telnyx",
+        TELNYX_API_KEY: "KEY0123-finta",
+        TELNYX_WHATSAPP_FROM: "+390000000000",
+      } as unknown as NodeJS.ProcessEnv,
+    );
+
+    expect(res).toMatchObject({ ok: false, retriable: false });
+    if (!res.ok) expect(res.reason).toContain("TELNYX_MESSAGING_PROFILE_ID");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("senza provider configurato non lancia: torna un motivo da scrivere a log", async () => {
