@@ -144,10 +144,20 @@ export async function deliverWhatsApp(
   }
   const templateKind = wanted as WhatsAppTemplateKind;
 
-  const values = {
-    ...input.values,
-    autoscuola: input.values.autoscuola ?? (await companyName(logged.companyId)),
-  };
+  // `autoscuola` si riempie **solo** se il template la dichiara. Dal 16/10
+  // nessuno dei dieci la usa — i messaggi non sono firmati dall'autoscuola —
+  // e riempirla comunque vorrebbe dire una query per ogni invio per un valore
+  // che nessuno legge. Il gancio resta per il giorno in cui servirà.
+  // Il cast serve perché oggi nessun template dichiara `autoscuola`: senza, il
+  // tipo delle variabili è l'unione dei nomi esistenti e TypeScript rifiuta il
+  // confronto. È il tipo che dice che il gancio è spento, non un errore.
+  const needsCompanyName =
+    (WHATSAPP_TEMPLATES[templateKind].variables as readonly string[]).includes(
+      "autoscuola",
+    ) && !input.values.autoscuola;
+  const values = needsCompanyName
+    ? { ...input.values, autoscuola: await companyName(logged.companyId) }
+    : input.values;
 
   return deliverAndLog(logged, async (to) => {
     const result = await sendWhatsAppTemplate({ to, kind: templateKind, values });

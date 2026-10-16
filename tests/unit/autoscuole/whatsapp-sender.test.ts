@@ -73,7 +73,7 @@ describe("registro dei template", () => {
 
   it("il promemoria esame non contiene l'orario", () => {
     const body = WHATSAPP_TEMPLATES.exam_reminder_student.body.toLowerCase();
-    expect(body).toContain("orario e luogo di presentazione");
+    expect(body).toContain("orario e luogo ti verranno comunicati dall'autoscuola");
     expect(WHATSAPP_TEMPLATES.exam_reminder_student.variables).not.toContain("ora");
   });
 
@@ -98,14 +98,14 @@ describe("registro dei template", () => {
     }
   });
 
-  it("i messaggi-evento nominano l'autoscuola nella coda", () => {
-    // `deliverWhatsApp` riempie `autoscuola` da sé, ed è l'ultima variabile di
-    // tutti e quattro: il nome della scuola chiude il messaggio, ma con una
-    // frase dopo (vedi il test qui sopra). Il promemoria all'istruttore ne è
-    // fuori per scelta: è interno, chi lo riceve sa per chi lavora.
-    for (const template of EVENT_KINDS.map((kind) => WHATSAPP_TEMPLATES[kind])) {
-      expect(template.variables[template.variables.length - 1]).toBe("autoscuola");
-      expect(template.body).toContain(`{{${template.variables.length}}}`);
+  it("nessun messaggio è firmato dall'autoscuola", () => {
+    // Decisione di Tiziano del 16/10, e viene prima delle regole di Meta: il
+    // mittente nel telefono dell'allievo è già «Reglo», aggiungere il nome
+    // della scuola in coda faceva sembrare il messaggio una firma commerciale.
+    // «l'autoscuola» come parola fissa va bene (è chi gli dirà l'orario); come
+    // variabile no.
+    for (const template of Object.values(WHATSAPP_TEMPLATES)) {
+      expect(template.variables).not.toContain("autoscuola");
     }
   });
 
@@ -117,7 +117,6 @@ describe("registro dei template", () => {
       const annullata = render("appointment_cancelled", {
         nome: "Marco",
         appuntamento: `${subject} di giovedì 23 ottobre alle 15:00`,
-        autoscuola: "Autoscuola Robatto",
       });
       expect(annullata).toContain(`${subject} di giovedì 23 ottobre alle 15:00 non si terrà più`);
       const spostata = render("appointment_rescheduled", {
@@ -125,7 +124,6 @@ describe("registro dei template", () => {
         appuntamento: subject,
         prima: "giovedì 23 ottobre alle 15:00",
         adesso: "venerdì 24 ottobre alle 10:00",
-        autoscuola: "Autoscuola Robatto",
       });
       expect(spostata).toContain(`${subject} si sposta`);
       expect(spostata).toContain("non più giovedì 23 ottobre alle 15:00, ma venerdì 24 ottobre");
@@ -137,16 +135,12 @@ describe("registro dei template", () => {
     // contenere la parola "orario" in nessun altro punto.
     const body = WHATSAPP_TEMPLATES.exam_scheduled.body;
     expect(body).not.toMatch(/\balle\b/);
-    expect(body).toContain("Il luogo di presentazione ti verrà comunicato");
+    expect(body).toContain("Il luogo ti verrà comunicato dall'autoscuola");
     expect(
-      render("exam_scheduled", {
-        nome: "Marco",
-        quando: "venerdì 24 ottobre",
-        autoscuola: "Autoscuola Robatto",
-      }),
+      render("exam_scheduled", { nome: "Marco", quando: "venerdì 24 ottobre" }),
     ).toBe(
       "Ciao Marco, il tuo esame di guida è fissato: venerdì 24 ottobre. " +
-        "Il luogo di presentazione ti verrà comunicato da Autoscuola Robatto. In bocca al lupo!",
+        "Il luogo ti verrà comunicato dall'autoscuola. In bocca al lupo!",
     );
   });
 
@@ -156,11 +150,10 @@ describe("registro dei template", () => {
         nome: "Marco",
         appuntamento: "la tua guida di giovedì 23 ottobre alle 15:00",
         luogo: "Piazzale Roma 12",
-        autoscuola: "Autoscuola Robatto",
       }),
     ).toBe(
       "Ciao Marco, cambia il luogo di ritrovo per la tua guida di giovedì 23 ottobre " +
-        "alle 15:00: ora è Piazzale Roma 12. Autoscuola Robatto ti aspetta lì.",
+        "alle 15:00: ora è Piazzale Roma 12. Ci vediamo lì!",
     );
   });
 
@@ -183,18 +176,17 @@ describe("buildTemplateParameters", () => {
   });
 
   it("schiaccia gli a capo, che Meta rifiuta", () => {
-    const params = buildTemplateParameters("morning_reminder_student", {
+    const params = buildTemplateParameters("appointment_cancelled", {
       nome: "Marco\nRossi",
-      ora: "10:00",
-      autoscuola: "  Autoscuola  Reglo ",
+      appuntamento: "  la tua guida  di giovedì 23 ottobre ",
     });
-    expect(params).toEqual(["Marco Rossi", "10:00", "Autoscuola Reglo"]);
+    expect(params).toEqual(["Marco Rossi", "la tua guida di giovedì 23 ottobre"]);
   });
 
   it("si ferma se manca una variabile invece di mandare un buco", () => {
     expect(() =>
-      buildTemplateParameters("morning_reminder_student", { nome: "Marco", ora: "10:00" }),
-    ).toThrow(/autoscuola/);
+      buildTemplateParameters("morning_reminder_student", { nome: "Marco" }),
+    ).toThrow(/ora/);
   });
 });
 
@@ -250,7 +242,7 @@ describe("sendWhatsAppTemplate", () => {
       {
         to: "333 1234567",
         kind: "morning_reminder_student",
-        values: { nome: "Marco", ora: "10:00", autoscuola: "Reglo" },
+        values: { nome: "Marco", ora: "10:00" },
       },
       CLOUD_ENV,
     );
@@ -261,7 +253,7 @@ describe("sendWhatsAppTemplate", () => {
     expect(body.type).toBe("template");
     expect(body.template.name).toBe("promemoria_guida_mattutino");
     expect(body.template.components[0].parameters.map((p: { text: string }) => p.text))
-      .toEqual(["Marco", "10:00", "Reglo"]);
+      .toEqual(["Marco", "10:00"]);
   });
 
   it("non prova nemmeno a mandare a un fisso", async () => {
@@ -271,7 +263,7 @@ describe("sendWhatsAppTemplate", () => {
       {
         to: "0445060017",
         kind: "morning_reminder_student",
-        values: { nome: "Marco", ora: "10:00", autoscuola: "Reglo" },
+        values: { nome: "Marco", ora: "10:00" },
       },
       CLOUD_ENV,
     );
@@ -313,7 +305,7 @@ describe("sendWhatsAppTemplate", () => {
       {
         to: "3331234567",
         kind: "morning_reminder_student",
-        values: { nome: "Marco", ora: "10:00", autoscuola: "Reglo" },
+        values: { nome: "Marco", ora: "10:00" },
       },
       TWILIO_ENV,
     );
@@ -324,7 +316,6 @@ describe("sendWhatsAppTemplate", () => {
     expect(JSON.parse(form.get("ContentVariables") as string)).toEqual({
       "1": "Marco",
       "2": "10:00",
-      "3": "Reglo",
     });
   });
 
@@ -352,7 +343,7 @@ describe("sendWhatsAppTemplate", () => {
       {
         to: "333 1234567",
         kind: "morning_reminder_student",
-        values: { nome: "Marco", ora: "10:00", autoscuola: "Reglo" },
+        values: { nome: "Marco", ora: "10:00" },
       },
       TELNYX_ENV,
     );
@@ -379,7 +370,7 @@ describe("sendWhatsAppTemplate", () => {
       body.whatsapp_message.template.components[0].parameters.map(
         (p: { text: string }) => p.text,
       ),
-    ).toEqual(["Marco", "10:00", "Reglo"]);
+    ).toEqual(["Marco", "10:00"]);
   });
 
   it("su Telnyx riporta l'errore del fornitore invece di inghiottirlo", async () => {

@@ -520,6 +520,23 @@ fatti. Sono tutti dal portale Telnyx e da Meta, in quest'ordine.
    > I testi definitivi sono quelli del registro, e il test
    > «nessun testo comincia o finisce con una variabile» impedisce la ricaduta.
 
+   **Seconda stesura, 16/10 (Tiziano): i messaggi non sono firmati
+   dall'autoscuola.** La chiusa «{{n}} ti aspetta!» col nome della scuola è
+   stata bocciata: il mittente nel telefono dell'allievo è già «Reglo», e
+   aggiungere il nome in coda faceva sembrare il messaggio una firma
+   commerciale. La variabile `autoscuola` **non esiste più in nessun template**;
+   le chiuse sono neutre («A presto!», «Ci vediamo!», «In bocca al lupo!») e
+   dove serve dire chi darà un'informazione si scrive «l'autoscuola» come parola
+   fissa. `deliverWhatsApp` riempie `autoscuola` solo se un template la
+   dichiara, quindi oggi non fa più la query per nessun invio.
+
+   Per sostituire i testi i dieci sono stati **ritirati e risottomessi**: Meta
+   non lascia modificare un template in attesa (`2388003` «Message templates can
+   only be edited if they have been rejected»), e dopo la cancellazione rifiuta
+   per circa un minuto il riuso dello stesso nome (`2388023`, transitorio) — lo
+   script riprova invece di passare a un suffisso `_v2`, così i nomi nel
+   registro restano quelli.
+
 Quando 1-5 sono fatti posso verificare il collegamento su staging **senza
 mandare niente a nessuno**: `APP_ENV=staging` rende gli invii esterni no-op, e
 `isWhatsAppChannelAvailable()` dice se la configurazione regge.

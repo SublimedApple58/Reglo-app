@@ -24,12 +24,19 @@
  *
  * 1. **Nessuna variabile a inizio o fine corpo** (`2388299`, «Leading or
  *    Trailing Params Not Allowed»). Un punto finale non basta: dopo l'ultima
- *    variabile ci vogliono parole. È il motivo per cui i testi non si chiudono
- *    più con «… {{n}}.» ma con una coda fissa — «{{n}} ti aspetta!».
+ *    variabile ci vogliono parole. È il motivo per cui nessun testo si chiude
+ *    con «… {{n}}.».
  * 2. **Rapporto variabili/parole** (`2388293`, «Params Words Ratio Exceeds
- *    Limit»): un testo corto con molte variabili viene rifiutato. Il promemoria
- *    all'istruttore e la guida spostata sono stati allungati per questo, non
- *    per gusto.
+ *    Limit»): un testo corto con molte variabili viene rifiutato. Se serve
+ *    allungare, si allungano **solo le parti fisse**.
+ *
+ * E una regola di prodotto, che viene prima delle due: **i messaggi non sono
+ * firmati dall'autoscuola** (decisione di Tiziano, 16/10). Il mittente è già
+ * «Reglo» nel telefono dell'allievo; mettere anche il nome della scuola in coda
+ * faceva sembrare il messaggio una firma commerciale. Per questo la variabile
+ * `autoscuola` non esiste più in nessun template, e le chiuse sono neutre
+ * («A presto!», «Ci vediamo!»). Dove serve dire chi darà un'informazione, si
+ * scrive «l'autoscuola» come parola fissa, non come variabile.
  */
 export type WhatsAppTemplateCategory = "utility" | "authentication" | "marketing";
 
@@ -51,40 +58,40 @@ export const WHATSAPP_TEMPLATES = {
   appointment_reminder_student: {
     name: "promemoria_guida_allievo",
     category: "utility",
-    variables: ["nome", "quando", "durata", "autoscuola"],
+    variables: ["nome", "quando", "durata"],
     body:
       "Ciao {{1}}, ti ricordiamo la tua guida di {{2}}, della durata di {{3}} minuti. " +
-      "{{4}} ti aspetta!",
+      "A presto!",
   },
   morning_reminder_student: {
     name: "promemoria_guida_mattutino",
     category: "utility",
-    variables: ["nome", "ora", "autoscuola"],
-    body: "Ciao {{1}}, oggi hai la guida alle {{2}}. {{3}} ti aspetta!",
+    variables: ["nome", "ora"],
+    body: "Ciao {{1}}, oggi hai la guida alle {{2}}. Ci vediamo!",
   },
   day_before_reminder_student: {
     name: "promemoria_guida_giorno_prima",
     category: "utility",
-    variables: ["nome", "quando", "autoscuola"],
-    body: "Ciao {{1}}, domani hai la guida: {{2}}. {{3}} ti aspetta!",
+    variables: ["nome", "quando"],
+    body: "Ciao {{1}}, domani hai la guida: {{2}}. A domani!",
   },
   // L'esame non porta mai l'orario: la convocazione la dà l'autoscuola e può
   // cambiare fino all'ultimo (decisione del 31/07, richiesta Macchiavello).
   exam_reminder_student: {
     name: "promemoria_esame_allievo",
     category: "utility",
-    variables: ["nome", "data", "autoscuola"],
+    variables: ["nome", "data"],
     body:
-      "Ciao {{1}}, il {{2}} hai l'esame di guida. Orario e luogo di presentazione " +
-      "ti verranno comunicati da {{3}}. In bocca al lupo!",
+      "Ciao {{1}}, il {{2}} hai l'esame di guida. Orario e luogo ti verranno " +
+      "comunicati dall'autoscuola. In bocca al lupo!",
   },
   appointment_reminder_instructor: {
     name: "promemoria_guida_istruttore",
     category: "utility",
     variables: ["nome_istruttore", "nome_allievo", "quando", "durata"],
     body:
-      "Ciao {{1}}, ti ricordiamo che hai una guida con {{2}} il {{3}}, " +
-      "della durata di {{4}} minuti. Buona guida!",
+      "Ciao {{1}}, hai una guida con {{2}} il {{3}}, della durata di {{4}} minuti. " +
+      "Buona guida!",
   },
   /* ─────────── I quattro messaggi-evento (decisione Tiziano, 16/10) ────────
    *
@@ -103,44 +110,43 @@ export const WHATSAPP_TEMPLATES = {
   appointment_cancelled: {
     name: "guida_annullata_allievo",
     category: "utility",
-    variables: ["nome", "appuntamento", "autoscuola"],
+    variables: ["nome", "appuntamento"],
     body:
-      "Ciao {{1}}, ti avvisiamo che {{2}} non si terrà più. " +
-      "{{3}} resta a disposizione per riprenotare.",
+      "Ciao {{1}}, {{2}} non si terrà più. " +
+      "Contatta l'autoscuola per riprenotarla.",
   },
   appointment_rescheduled: {
     name: "guida_spostata_allievo",
     category: "utility",
-    variables: ["nome", "appuntamento", "prima", "adesso", "autoscuola"],
+    variables: ["nome", "appuntamento", "prima", "adesso"],
     body:
-      "Ciao {{1}}, ti avvisiamo che {{2}} si sposta: non più {{3}}, ma {{4}}. " +
-      "{{5}} ti aspetta nel nuovo orario.",
+      "Ciao {{1}}, {{2}} si sposta: non più {{3}}, ma {{4}}. " +
+      "Ci vediamo nel nuovo orario!",
   },
   appointment_location_changed: {
     name: "guida_cambio_luogo",
     category: "utility",
-    variables: ["nome", "appuntamento", "luogo", "autoscuola"],
+    variables: ["nome", "appuntamento", "luogo"],
     body:
       "Ciao {{1}}, cambia il luogo di ritrovo per {{2}}: ora è {{3}}. " +
-      "{{4}} ti aspetta lì.",
+      "Ci vediamo lì!",
   },
   // Come il promemoria esame, non promette un orario: `quando` porta l'ora solo
   // quando l'autoscuola l'ha davvero definita, altrimenti è la sola data.
   exam_scheduled: {
     name: "esame_fissato_allievo",
     category: "utility",
-    variables: ["nome", "quando", "autoscuola"],
+    variables: ["nome", "quando"],
     body:
       "Ciao {{1}}, il tuo esame di guida è fissato: {{2}}. " +
-      "Il luogo di presentazione ti verrà comunicato da {{3}}. In bocca al lupo!",
+      "Il luogo ti verrà comunicato dall'autoscuola. In bocca al lupo!",
   },
   case_deadline: {
     name: "scadenza_documento_allievo",
     category: "utility",
-    variables: ["nome", "documento", "data", "autoscuola"],
+    variables: ["nome", "documento", "data"],
     body:
-      "Ciao {{1}}, ti avvisiamo che il tuo {{2}} scade il {{3}}. " +
-      "Passa in segreteria di {{4}} per il rinnovo.",
+      "Ciao {{1}}, il tuo {{2}} scade il {{3}}. Passa in segreteria per il rinnovo.",
   },
 } as const satisfies Record<string, WhatsAppTemplate>;
 
