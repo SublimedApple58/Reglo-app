@@ -2,6 +2,7 @@ import {
   buildTemplateParameters,
   PUSH_ONLY_KINDS,
   WHATSAPP_TEMPLATES,
+  type WhatsAppTemplateKind,
 } from "@/lib/autoscuole/whatsapp-templates";
 import {
   isWhatsAppChannelAvailable,
@@ -10,6 +11,25 @@ import {
 } from "@/lib/autoscuole/whatsapp-sender";
 
 jest.mock("@/lib/app-env", () => ({ externalSendsDisabled: () => false }));
+
+/** I quattro messaggi-evento collegati il 16/10 (decisione 6 + 4). */
+const EVENT_KINDS = [
+  "appointment_cancelled",
+  "appointment_rescheduled",
+  "appointment_location_changed",
+  "exam_scheduled",
+] as const;
+
+/**
+ * Il testo come lo vedrà l'allievo: Meta sostituisce {{n}} con i parametri
+ * nell'ordine del registro. Serve a leggere la frase finita, che è l'unica cosa
+ * che conta davvero quando si valuta una copy.
+ */
+const render = (kind: WhatsAppTemplateKind, values: Record<string, string>) =>
+  buildTemplateParameters(kind, values).reduce(
+    (text, value, index) => text.replaceAll(`{{${index + 1}}}`, value),
+    WHATSAPP_TEMPLATES[kind].body,
+  );
 
 const CLOUD_ENV = {
   WHATSAPP_PROVIDER: "cloud",
@@ -55,6 +75,93 @@ describe("registro dei template", () => {
     const body = WHATSAPP_TEMPLATES.exam_reminder_student.body.toLowerCase();
     expect(body).toContain("orario e luogo di presentazione");
     expect(WHATSAPP_TEMPLATES.exam_reminder_student.variables).not.toContain("ora");
+  });
+
+  it("i quattro messaggi-evento hanno il nome e la categoria concordati (16/10)", () => {
+    expect(WHATSAPP_TEMPLATES.appointment_cancelled.name).toBe("guida_annullata_allievo");
+    expect(WHATSAPP_TEMPLATES.appointment_rescheduled.name).toBe("guida_spostata_allievo");
+    expect(WHATSAPP_TEMPLATES.appointment_location_changed.name).toBe("guida_cambio_luogo");
+    expect(WHATSAPP_TEMPLATES.exam_scheduled.name).toBe("esame_fissato_allievo");
+    for (const kind of EVENT_KINDS) {
+      expect(WHATSAPP_TEMPLATES[kind].category).toBe("utility");
+    }
+  });
+
+  it("nessun testo comincia o finisce con una variabile", () => {
+    // Meta li rifiuta: `2388299` «Leading or Trailing Params Not Allowed».
+    // Ha respinto tutti e dieci i template alla prima sottomissione, e un punto
+    // finale dopo la variabile non basta — dopo ci vogliono parole.
+    for (const template of Object.values(WHATSAPP_TEMPLATES)) {
+      const body = template.body.trim();
+      expect(body.startsWith("{{")).toBe(false);
+      expect(/\{\{\d+\}\}[\s.!?,;:]*$/.test(body)).toBe(false);
+    }
+  });
+
+  it("i messaggi-evento nominano l'autoscuola nella coda", () => {
+    // `deliverWhatsApp` riempie `autoscuola` da sé, ed è l'ultima variabile di
+    // tutti e quattro: il nome della scuola chiude il messaggio, ma con una
+    // frase dopo (vedi il test qui sopra). Il promemoria all'istruttore ne è
+    // fuori per scelta: è interno, chi lo riceve sa per chi lavora.
+    for (const template of EVENT_KINDS.map((kind) => WHATSAPP_TEMPLATES[kind])) {
+      expect(template.variables[template.variables.length - 1]).toBe("autoscuola");
+      expect(template.body).toContain(`{{${template.variables.length}}}`);
+    }
+  });
+
+  it("i verbi dei messaggi-evento reggono sia la guida sia l'esame", () => {
+    // Il soggetto è una variabile, quindi il verbo non può concordare: «non si
+    // terrà più» e «si sposta» valgono per entrambi, «è stata annullata» no.
+    const subjects = ["la tua guida", "il tuo esame di guida"];
+    for (const subject of subjects) {
+      const annullata = render("appointment_cancelled", {
+        nome: "Marco",
+        appuntamento: `${subject} di giovedì 23 ottobre alle 15:00`,
+        autoscuola: "Autoscuola Robatto",
+      });
+      expect(annullata).toContain(`${subject} di giovedì 23 ottobre alle 15:00 non si terrà più`);
+      const spostata = render("appointment_rescheduled", {
+        nome: "Marco",
+        appuntamento: subject,
+        prima: "giovedì 23 ottobre alle 15:00",
+        adesso: "venerdì 24 ottobre alle 10:00",
+        autoscuola: "Autoscuola Robatto",
+      });
+      expect(spostata).toContain(`${subject} si sposta`);
+      expect(spostata).toContain("non più giovedì 23 ottobre alle 15:00, ma venerdì 24 ottobre");
+    }
+  });
+
+  it("l'esame fissato non promette un orario che il codice non ha", () => {
+    // `describeWhen` mette l'ora solo quando c'è: il testo approvato non deve
+    // contenere la parola "orario" in nessun altro punto.
+    const body = WHATSAPP_TEMPLATES.exam_scheduled.body;
+    expect(body).not.toMatch(/\balle\b/);
+    expect(body).toContain("Il luogo di presentazione ti verrà comunicato");
+    expect(
+      render("exam_scheduled", {
+        nome: "Marco",
+        quando: "venerdì 24 ottobre",
+        autoscuola: "Autoscuola Robatto",
+      }),
+    ).toBe(
+      "Ciao Marco, il tuo esame di guida è fissato: venerdì 24 ottobre. " +
+        "Il luogo di presentazione ti verrà comunicato da Autoscuola Robatto. In bocca al lupo!",
+    );
+  });
+
+  it("il cambio luogo dice dove si va, senza rompere la frase", () => {
+    expect(
+      render("appointment_location_changed", {
+        nome: "Marco",
+        appuntamento: "la tua guida di giovedì 23 ottobre alle 15:00",
+        luogo: "Piazzale Roma 12",
+        autoscuola: "Autoscuola Robatto",
+      }),
+    ).toBe(
+      "Ciao Marco, cambia il luogo di ritrovo per la tua guida di giovedì 23 ottobre " +
+        "alle 15:00: ora è Piazzale Roma 12. Autoscuola Robatto ti aspetta lì.",
+    );
   });
 
   it("i broadcast NON hanno un template: restano su push", () => {

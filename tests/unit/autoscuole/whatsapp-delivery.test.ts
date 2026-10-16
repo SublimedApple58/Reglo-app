@@ -1,4 +1,5 @@
 import {
+  firstNameFor,
   hasWhatsAppTemplate,
   whatsAppSkipReason,
 } from "@/lib/autoscuole/whatsapp-delivery";
@@ -56,6 +57,51 @@ describe("quando si manda", () => {
     "appointment_reminder_instructor",
   ])("%s ha il suo template", (kind) => {
     expect(hasWhatsAppTemplate(kind)).toBe(true);
+  });
+
+  // I quattro messaggi-evento aggiunti il 16/10. Il nome della chiave è il
+  // `kind` del registro: se qualcuno lo rinomina, `deliverWhatsApp` non trova
+  // più il template e il messaggio torna a essere uno `skipped` muto.
+  it.each([
+    "appointment_cancelled",
+    "appointment_rescheduled",
+    "appointment_location_changed",
+    "exam_scheduled",
+  ])("%s ha il suo template", (kind) => {
+    expect(hasWhatsAppTemplate(kind)).toBe(true);
+  });
+});
+
+describe("gli inviti restano su push (decisione del 21/09, confermata il 16/10)", () => {
+  // Non è una dimenticanza: sono proposte, non impegni presi, e da soli valgono
+  // piu' di tutti i promemoria in bolletta (5.489 inviti ai gruppi in 30
+  // giorni). Se un giorno qualcuno aggiunge il template, questo test cade e
+  // costringe a rileggere la decisione.
+  it.each([
+    "group_lesson_invite",
+    "group_lesson_invite_student",
+    "slot_fill_offer",
+    "swap_offer",
+    "swap_offer_student",
+    "waitlist_slot_student",
+    "available_slots",
+    "broadcast",
+  ])("%s NON ha un template", (kind) => {
+    expect(hasWhatsAppTemplate(kind)).toBe(false);
+  });
+});
+
+describe("la variabile `nome`", () => {
+  it("usa il nome di battesimo: i testi cominciano con «Ciao …»", () => {
+    expect(firstNameFor({ name: "Marco Rossi", email: "marco@example.com" })).toBe("Marco");
+    expect(firstNameFor({ name: "  Anna   Maria De Luca " })).toBe("Anna");
+  });
+
+  it("senza nome ripiega sull'email, non lascia un buco", () => {
+    // Meta rifiuta i parametri vuoti: un buco qui sarebbe un invio perso.
+    expect(firstNameFor({ name: null, email: "giulia@example.com" })).toBe("Giulia");
+    expect(firstNameFor({ name: "", email: "" })).toBe("Allievo");
+    expect(firstNameFor({})).toBe("Allievo");
   });
 });
 

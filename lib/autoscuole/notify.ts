@@ -38,6 +38,17 @@ export const EVENT_CHANNELS = ["push", "email"] as const;
 /** Messaggi che esistono solo come push: non c'è un'email da mandare. */
 export const PUSH_ONLY = ["push"] as const;
 
+/**
+ * I messaggi-evento che hanno un template Meta approvato (decisione del 16/10:
+ * guida annullata, spostata, cambio luogo, esame fissato).
+ *
+ * Esiste come costante e non come lista scritta a mano nei punti di invio
+ * perché la domanda «quali messaggi possono finire su WhatsApp?» deve avere una
+ * risposta sola e leggibile. Il secondo cancello — «esiste il template?» — lo
+ * tiene `deliverWhatsApp`.
+ */
+export const EVENT_CHANNELS_WITH_WHATSAPP = ["push", "email", "whatsapp"] as const;
+
 export type NotifyRecipient = {
   userId: string;
   email?: string | null;

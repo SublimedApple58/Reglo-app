@@ -497,9 +497,28 @@ fatti. Sono tutti dal portale Telnyx e da Meta, in quest'ordine.
 7. **Verifica del Meta Business** — documenti aziendali (visura, P.IVA, sito,
    email di dominio). Non blocca la partenza: fino a verifica si mandano 250
    messaggi business-initiated ogni 24 ore, e il fabbisogno di Reglo è ~73/giorno.
-8. **Sottomissione dei template** a Meta: i testi sono già scritti in
-   `lib/autoscuole/whatsapp-templates.ts`, vanno incollati nel portale e attesa
-   l'approvazione (di solito minuti-ore per la categoria *utility*).
+8. ~~**Sottomissione dei template** a Meta~~ → **fatta il 16/10**: tutti e
+   **dieci** sottomessi via `POST /v2/whatsapp/message_templates` (UTILITY,
+   lingua `it`), partendo dal registro in `lib/autoscuole/whatsapp-templates.ts`.
+
+   I dieci sono i 6 promemoria più i **4 messaggi-evento** decisi da Tiziano il
+   16/10 (guida annullata, spostata, cambio luogo, esame fissato). Gli inviti
+   — guide di gruppo, posti liberi, scambi, posti liberi domani, lista d'attesa
+   — **restano su push**: sono proposte, non impegni presi, e da soli valgono
+   più di tutti i promemoria in bolletta.
+
+   > ⚠️ **Meta ha respinto la prima stesura di tutti e dieci**, per due regole
+   > che non erano scritte da nessuna parte qui:
+   > - `2388299` «Leading or Trailing Params Not Allowed»: una variabile non può
+   >   stare a inizio o fine corpo, e il punto finale non basta. Tutti i testi
+   >   chiudevano con «… {{n}}.» (il nome dell'autoscuola) → riscritti con una
+   >   coda fissa: «{{n}} ti aspetta!».
+   > - `2388293` «Params Words Ratio Exceeds Limit»: troppe variabili per la
+   >   lunghezza del testo. Ha colpito il promemoria all'istruttore (4 variabili
+   >   in 11 parole) e la guida spostata (5 variabili) → allungati.
+   >
+   > I testi definitivi sono quelli del registro, e il test
+   > «nessun testo comincia o finisce con una variabile» impedisce la ricaduta.
 
 Quando 1-5 sono fatti posso verificare il collegamento su staging **senza
 mandare niente a nessuno**: `APP_ENV=staging` rende gli invii esterni no-op, e

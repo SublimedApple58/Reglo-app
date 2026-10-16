@@ -66,6 +66,26 @@ export function whatsAppSkipReason(input: {
   return null;
 }
 
+/**
+ * `nome`, la prima variabile di ogni template: il nome di battesimo, perché i
+ * testi cominciano con «Ciao …» e il cognome lì suona come una raccomandata.
+ *
+ * Sta qui, accanto a `companyName`, perché `nome` e `autoscuola` sono le due
+ * variabili che hanno **tutti** i template: chi aggiunge un punto di invio deve
+ * trovarle in un posto solo. `communications.ts` tiene il suo `parseNameParts`
+ * perché lì serve anche il cognome, per l'email.
+ */
+export function firstNameFor(user: {
+  name?: string | null;
+  email?: string | null;
+}): string {
+  const clean = (user.name ?? "").trim().replace(/\s+/g, " ");
+  if (clean) return clean.split(" ")[0];
+  const localPart = (user.email ?? "").split("@")[0];
+  if (localPart) return localPart.slice(0, 1).toUpperCase() + localPart.slice(1);
+  return "Allievo";
+}
+
 /** Nome dell'autoscuola, variabile di ogni template. Una query per company. */
 const companyNames = new Map<string, string>();
 async function companyName(companyId: string): Promise<string> {
