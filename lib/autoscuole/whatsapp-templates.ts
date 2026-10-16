@@ -41,7 +41,16 @@
 export type WhatsAppTemplateCategory = "utility" | "authentication" | "marketing";
 
 export type WhatsAppTemplate = {
-  /** Nome su Meta: minuscolo, underscore. È la chiave dell'invio. */
+  /**
+   * Nome su Meta: minuscolo, underscore. È la chiave dell'invio.
+   *
+   * Il suffisso `_v2` non è una versione del testo: è la cicatrice del ritiro
+   * del 16/10. Dopo aver cancellato i dieci template per sostituirne i testi,
+   * Meta ha tenuto i nomi bloccati (`2388023`, «Message template language is
+   * being deleted») per oltre venti minuti e sei tentativi, quindi si è
+   * ripartiti col suffisso invece di aspettare un blocco di durata ignota.
+   * Non rinominarli: un nome nuovo è un template nuovo da far approvare.
+   */
   name: string;
   category: WhatsAppTemplateCategory;
   /** Variabili {{1}}, {{2}}… nell'ordine esatto in cui Meta le sostituisce. */
@@ -56,7 +65,7 @@ export type WhatsAppTemplate = {
  */
 export const WHATSAPP_TEMPLATES = {
   appointment_reminder_student: {
-    name: "promemoria_guida_allievo",
+    name: "promemoria_guida_allievo_v2",
     category: "utility",
     variables: ["nome", "quando", "durata"],
     body:
@@ -64,13 +73,13 @@ export const WHATSAPP_TEMPLATES = {
       "A presto!",
   },
   morning_reminder_student: {
-    name: "promemoria_guida_mattutino",
+    name: "promemoria_guida_mattutino_v2",
     category: "utility",
     variables: ["nome", "ora"],
     body: "Ciao {{1}}, oggi hai la guida alle {{2}}. Ci vediamo!",
   },
   day_before_reminder_student: {
-    name: "promemoria_guida_giorno_prima",
+    name: "promemoria_guida_giorno_prima_v2",
     category: "utility",
     variables: ["nome", "quando"],
     body: "Ciao {{1}}, domani hai la guida: {{2}}. A domani!",
@@ -78,7 +87,7 @@ export const WHATSAPP_TEMPLATES = {
   // L'esame non porta mai l'orario: la convocazione la dà l'autoscuola e può
   // cambiare fino all'ultimo (decisione del 31/07, richiesta Macchiavello).
   exam_reminder_student: {
-    name: "promemoria_esame_allievo",
+    name: "promemoria_esame_allievo_v2",
     category: "utility",
     variables: ["nome", "data"],
     body:
@@ -86,7 +95,7 @@ export const WHATSAPP_TEMPLATES = {
       "comunicati dall'autoscuola. In bocca al lupo!",
   },
   appointment_reminder_instructor: {
-    name: "promemoria_guida_istruttore",
+    name: "promemoria_guida_istruttore_v2",
     category: "utility",
     variables: ["nome_istruttore", "nome_allievo", "quando", "durata"],
     body:
@@ -108,7 +117,7 @@ export const WHATSAPP_TEMPLATES = {
    * «è stata annullata» no.
    */
   appointment_cancelled: {
-    name: "guida_annullata_allievo",
+    name: "guida_annullata_allievo_v2",
     category: "utility",
     variables: ["nome", "appuntamento"],
     body:
@@ -116,7 +125,7 @@ export const WHATSAPP_TEMPLATES = {
       "Contatta l'autoscuola per riprenotarla.",
   },
   appointment_rescheduled: {
-    name: "guida_spostata_allievo",
+    name: "guida_spostata_allievo_v2",
     category: "utility",
     variables: ["nome", "appuntamento", "prima", "adesso"],
     body:
@@ -124,7 +133,7 @@ export const WHATSAPP_TEMPLATES = {
       "Ci vediamo nel nuovo orario!",
   },
   appointment_location_changed: {
-    name: "guida_cambio_luogo",
+    name: "guida_cambio_luogo_v2",
     category: "utility",
     variables: ["nome", "appuntamento", "luogo"],
     body:
@@ -134,7 +143,7 @@ export const WHATSAPP_TEMPLATES = {
   // Come il promemoria esame, non promette un orario: `quando` porta l'ora solo
   // quando l'autoscuola l'ha davvero definita, altrimenti è la sola data.
   exam_scheduled: {
-    name: "esame_fissato_allievo",
+    name: "esame_fissato_allievo_v2",
     category: "utility",
     variables: ["nome", "quando"],
     body:
@@ -142,7 +151,7 @@ export const WHATSAPP_TEMPLATES = {
       "Il luogo ti verrà comunicato dall'autoscuola. In bocca al lupo!",
   },
   case_deadline: {
-    name: "scadenza_documento_allievo",
+    name: "scadenza_documento_allievo_v2",
     category: "utility",
     variables: ["nome", "documento", "data"],
     body:

@@ -78,10 +78,12 @@ describe("registro dei template", () => {
   });
 
   it("i quattro messaggi-evento hanno il nome e la categoria concordati (16/10)", () => {
-    expect(WHATSAPP_TEMPLATES.appointment_cancelled.name).toBe("guida_annullata_allievo");
-    expect(WHATSAPP_TEMPLATES.appointment_rescheduled.name).toBe("guida_spostata_allievo");
-    expect(WHATSAPP_TEMPLATES.appointment_location_changed.name).toBe("guida_cambio_luogo");
-    expect(WHATSAPP_TEMPLATES.exam_scheduled.name).toBe("esame_fissato_allievo");
+    // `_v2` è il nome vero su Meta: i nomi senza suffisso sono rimasti
+    // bloccati dopo il ritiro del 16/10 (vedi il commento su `name`).
+    expect(WHATSAPP_TEMPLATES.appointment_cancelled.name).toBe("guida_annullata_allievo_v2");
+    expect(WHATSAPP_TEMPLATES.appointment_rescheduled.name).toBe("guida_spostata_allievo_v2");
+    expect(WHATSAPP_TEMPLATES.appointment_location_changed.name).toBe("guida_cambio_luogo_v2");
+    expect(WHATSAPP_TEMPLATES.exam_scheduled.name).toBe("esame_fissato_allievo_v2");
     for (const kind of EVENT_KINDS) {
       expect(WHATSAPP_TEMPLATES[kind].category).toBe("utility");
     }
@@ -251,7 +253,7 @@ describe("sendWhatsAppTemplate", () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.to).toBe("393331234567"); // E.164 senza il +, come vuole la Cloud API
     expect(body.type).toBe("template");
-    expect(body.template.name).toBe("promemoria_guida_mattutino");
+    expect(body.template.name).toBe("promemoria_guida_mattutino_v2");
     expect(body.template.components[0].parameters.map((p: { text: string }) => p.text))
       .toEqual(["Marco", "10:00"]);
   });
@@ -361,7 +363,7 @@ describe("sendWhatsAppTemplate", () => {
     // non è SMS-enabled, quindi il profilo non si deduce dal numero.
     expect(body.messaging_profile_id).toBe("00000000-0000-0000-0000-000000000000");
     expect(body.whatsapp_message.type).toBe("template");
-    expect(body.whatsapp_message.template.name).toBe("promemoria_guida_mattutino");
+    expect(body.whatsapp_message.template.name).toBe("promemoria_guida_mattutino_v2");
     expect(body.whatsapp_message.template.language).toEqual({
       policy: "deterministic",
       code: "it",

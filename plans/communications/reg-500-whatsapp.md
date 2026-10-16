@@ -534,8 +534,15 @@ fatti. Sono tutti dal portale Telnyx e da Meta, in quest'ordine.
    non lascia modificare un template in attesa (`2388003` «Message templates can
    only be edited if they have been rejected»), e dopo la cancellazione rifiuta
    per circa un minuto il riuso dello stesso nome (`2388023`, transitorio) — lo
-   script riprova invece di passare a un suffisso `_v2`, così i nomi nel
-   registro restano quelli.
+   script ha riprovato per **oltre venti minuti e sei giri** senza che il blocco
+   cadesse, quindi — come concordato — i dieci sono stati risottomessi col
+   suffisso **`_v2`** (`promemoria_guida_mattutino_v2`, …). È il nome vero su
+   Meta ed è quello che sta nel registro: rinominarli vorrebbe dire creare
+   dieci template nuovi da far approvare.
+
+   Nessuno dei dieci è stato respinto per il rapporto variabili/parole: i testi
+   sono **esattamente** quelli approvati da Tiziano, nonostante due siano più
+   corti di prima (via «ti ricordiamo che» e «ti avvisiamo che»).
 
 Quando 1-5 sono fatti posso verificare il collegamento su staging **senza
 mandare niente a nessuno**: `APP_ENV=staging` rende gli invii esterni no-op, e
