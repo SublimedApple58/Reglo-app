@@ -104,8 +104,8 @@ in un luogo solo) era una gabbia: chi fa la B in due posti non poteva dirlo.
     il luogo (e il dialog di gestione non lo mostra). Per cambiarlo si passa
     dalla singola seat.
 - **Granularità**: solo la categoria patente, nessuna distinzione manuale/
-  automatico ("B" copre entrambi). Diverso dalla palette colori agenda, dove
-  "B autom." è una voce a sé.
+  automatico ("B" copre entrambi). Anche in agenda la B automatica ha il colore
+  della B: la distingue il bordo (REG-622).
 - **Agenda web** (`AutoscuoleAgendaPage`): ricalcolo al cambio **allievo**
   (sempre, azzerando il flag) e al cambio **veicolo** (solo se il titolare non
   ha scelto il Luogo a mano — `createLocationTouchedRef`). Toccare il select

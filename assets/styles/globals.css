@@ -518,6 +518,9 @@
    il default è neutro. */
 .agenda-card {
   box-shadow:
+    /* bordo delle guide a cambio automatico (REG-622): trasparente se assente,
+       interno così non cambia le misure del blocco */
+    inset 0 0 0 2px var(--agenda-card-ring, transparent),
     /* solco bianco: apre lo stacco fra card e banda della colonna */
     0 0 0 2px rgba(255, 255, 255, 0.98),
     /* alone scuro morbido appena fuori dal solco: è quello che rende leggibile

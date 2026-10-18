@@ -29,6 +29,7 @@ export function ColorSwatchPicker({
   className,
   taken,
   resetLabel = "Automatico",
+  resetHex,
   renderTrigger,
 }: {
   value: string | null | undefined;
@@ -39,6 +40,8 @@ export function ColorSwatchPicker({
   taken?: string[];
   /** Etichetta della voce di reset (null): "Automatico", "Colore standard", … */
   resetLabel?: string;
+  /** Colore reale della voce di reset, quando non è "automatico" (es. nero). */
+  resetHex?: string;
   /** Trigger custom (es. chip colorata) al posto del bottone 7×7 di default. */
   renderTrigger?: (state: { saving: boolean }) => React.ReactElement;
 }) {
@@ -133,6 +136,7 @@ export function ColorSwatchPicker({
             className="size-3 rounded-full border border-black/10"
             style={{
               background:
+                resetHex ??
                 "conic-gradient(#EC4899, #F59E0B, #10B981, #0EA5E9, #8B5CF6, #EC4899)",
             }}
           />

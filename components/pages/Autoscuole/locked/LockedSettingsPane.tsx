@@ -869,7 +869,7 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
           />
           <CriterionChoice
             label="Tipo patente"
-            swatches={["b", "autom", "am", "a"].map(
+            swatches={["b", "be", "am", "a"].map(
               (key) =>
                 LICENSE_COLOR_ENTRIES.find((entry) => entry.key === key)?.bgHex ?? "#eeeeee",
             )}

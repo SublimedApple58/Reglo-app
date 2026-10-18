@@ -9,8 +9,11 @@ import { instructorColorAlpha } from "@/lib/autoscuole/instructor-colors";
  * mantengono sempre il loro colore per tipo/stato.
  *
  * - "durata": bucket per durata della guida (comportamento storico, default)
- * - "patente": colore per patente della guida (la B automatica — e ogni
- *   percorso a cambio automatico — è distinta col ciano dedicato)
+ * - "patente": colore per patente della guida
+ *
+ * Le guide a cambio automatico NON hanno un colore loro (REG-622): prendono il
+ * colore del criterio come tutte e si riconoscono dal BORDO, se il titolare
+ * tiene acceso "Contrassegna le guide con mezzi automatici".
  *
  * Ogni voce di entrambi i criteri può essere personalizzata dal titolare
  * (overrides in `CompanyService.limits.agendaColorOverrides`, pannello
@@ -35,8 +38,7 @@ export function asAgendaColorCriterion(value: unknown): AgendaColorCriterion {
 
 // ─── Voci colore ──────────────────────────────────────────────────────────────
 // Stesso stile per tutti (sfondo pastello vivo + ombra in tinta, niente bordo).
-// Il ciano "cambio automatico" è lo stesso hex nei due criteri così
-// l'automatico resta riconoscibile in entrambe le modalità.
+// L'unico bordo è il contrassegno delle guide automatiche (vedi in fondo).
 
 export type AgendaColorEntry = {
   key: string;
@@ -90,7 +92,6 @@ const D_SHADOW = "rgba(217,70,239,0.22)";
  */
 export const LICENSE_COLOR_ENTRIES: AgendaColorEntry[] = [
   ENTRY("b", "Patente B", "B", "#E3EEFF", "rgba(59,130,246,0.22)"),
-  ENTRY("autom", "Cambio automatico (B autom., …)", "B autom.", "#CFFAFE", "rgba(6,182,212,0.22)"),
   ENTRY("be", "Patente BE", "BE", "#E6E9FF", "rgba(99,102,241,0.22)"),
   ENTRY("amq", "AM quadriciclo (microcar)", "AM quadr.", QUAD_BG, QUAD_SHADOW),
   ENTRY("b1", "Patente B1", "B1", QUAD_BG, QUAD_SHADOW, "amq"),
@@ -115,7 +116,7 @@ const licenseEntryByKey = new Map(LICENSE_COLOR_ENTRIES.map((e) => [e.key, e]));
 
 /** Gruppi del pannello "Personalizza i colori" (criterio patente). */
 export const LICENSE_COLOR_GROUPS: Array<{ label: string; keys: string[] }> = [
-  { label: "Auto", keys: ["b", "autom", "be"] },
+  { label: "Auto", keys: ["b", "be"] },
   { label: "Quadricicli", keys: ["amq", "b1"] },
   { label: "Moto", keys: ["am", "a1", "a2", "a"] },
   { label: "Camion", keys: ["c", "ce", "c1", "c1e"] },
@@ -136,8 +137,7 @@ export function resolveColorOverride(
   return overrides[entry.key] ?? (entry.parent ? overrides[entry.parent] ?? null : null);
 }
 
-/** Bucket durata per minuti (stesse soglie storiche). Il cambio automatico
- * non è più un bucket: è l'eccezione "automatic" (attiva di default). */
+/** Bucket durata per minuti (stesse soglie storiche). */
 export function durationColorEntry(minutes: number): AgendaColorEntry {
   if (minutes <= 30) return DURATION_COLOR_ENTRIES[0];
   if (minutes <= 45) return DURATION_COLOR_ENTRIES[1];
@@ -149,8 +149,7 @@ export function durationColorEntry(minutes: number): AgendaColorEntry {
 /**
  * Risolve il tag patente mostrato sui blocchi agenda ("B", "B autom.", "AM",
  * "C1E", … da studentLicenseById) nella voce colore. Il suffisso " autom."
- * vince sulla categoria: distinguere B da B automatica è NATIVO di questo
- * criterio (per il criterio durata invece esiste l'eccezione "automatic").
+ * non cambia colore: "B autom." è una B (l'automatico lo dice il bordo).
  */
 export function licenseColorEntryForTag(
   tag: string | null | undefined,
@@ -159,10 +158,9 @@ export function licenseColorEntryForTag(
   if (!tag) return none;
   const t = tag.trim().toUpperCase();
   if (!t) return none;
-  if (t.includes("AUTOM")) return licenseEntryByKey.get("autom")!;
   const category = t.split(/\s+/)[0];
   const exact = licenseEntryByKey.get(category.toLowerCase());
-  if (exact && exact.key !== "none" && exact.key !== "autom") return exact;
+  if (exact && exact.key !== "none") return exact;
   // Tag non canonici: prefisso (come prima di REG-461).
   if (t.startsWith("AM")) return licenseEntryByKey.get("am")!;
   if (t.startsWith("A1")) return licenseEntryByKey.get("a1")!;
@@ -220,17 +218,6 @@ export type AgendaColorException = {
 };
 
 export const AGENDA_COLOR_EXCEPTIONS: AgendaColorException[] = [
-  {
-    // Solo criterio durata: nel criterio patente la distinzione B/B autom.
-    // è nativa (voce "autom" della palette patenti).
-    key: "automatic",
-    label: "Cambio automatico in evidenza",
-    description:
-      "Le guide con veicolo o percorso a cambio automatico sono sempre in ciano invece del colore per durata.",
-    defaultEnabled: true,
-    criteria: ["durata"],
-    entry: ENTRY("automatic", "Cambio automatico", "Autom.", "#CFFAFE", "rgba(6,182,212,0.22)"),
-  },
   {
     key: "exam_ready",
     label: "Pronti per l'esame in evidenza",
@@ -346,5 +333,58 @@ export function agendaBlockStyle(
   return {
     backgroundColor,
     "--agenda-card-shadow": shadow,
+  } as React.CSSProperties;
+}
+
+// ─── Contrassegno guide automatiche (REG-622) ─────────────────────────────────
+// Le guide a cambio automatico (veicolo automatico o allievo sul percorso
+// automatico) tengono il colore del criterio e prendono in più un bordo, che
+// vale anche sopra le eccezioni moto/esame. Un solo setting nel pannello
+// Aspetto: acceso/spento + colore del bordo (null = nero standard).
+
+export const DEFAULT_AUTOMATIC_MARKER_COLOR = "#111111";
+
+export type AutomaticLessonMarker = {
+  enabled: boolean;
+  /** Colore personalizzato del bordo; null = standard (nero). */
+  color: string | null;
+};
+
+const validHex = (value: unknown): string | null =>
+  typeof value === "string" && HEX_RE.test(value) ? value.toUpperCase() : null;
+
+const nested = (value: unknown, ...path: string[]): unknown => {
+  let cur = value;
+  for (const key of path) {
+    if (!cur || typeof cur !== "object") return undefined;
+    cur = (cur as Record<string, unknown>)[key];
+  }
+  return cur;
+};
+
+/**
+ * Il setting dai limits. Chi non l'ha mai salvato eredita da prima di REG-622:
+ * acceso salvo eccezione "Cambio automatico in evidenza" spenta, e il colore
+ * che aveva scelto per l'automatico (eccezione, poi voce "B autom." delle
+ * patenti) diventa il colore del bordo.
+ */
+export function resolveAutomaticLessonMarker(limits: unknown): AutomaticLessonMarker {
+  const raw = limits && typeof limits === "object" ? (limits as Record<string, unknown>) : {};
+  const enabled =
+    typeof raw.automaticLessonMarker === "boolean"
+      ? raw.automaticLessonMarker
+      : nested(raw, "agendaColorExceptions", "automatic") !== false;
+  const color =
+    "automaticLessonMarkerColor" in raw
+      ? validHex(raw.automaticLessonMarkerColor)
+      : validHex(nested(raw, "agendaColorOverrides", "eccezioni", "automatic")) ??
+        validHex(nested(raw, "agendaColorOverrides", "patente", "autom"));
+  return { enabled, color };
+}
+
+/** Stile che aggiunge il bordo al blocco (`.agenda-card` legge la variabile). */
+export function automaticMarkerStyle(color: string | null): React.CSSProperties {
+  return {
+    "--agenda-card-ring": color ?? DEFAULT_AUTOMATIC_MARKER_COLOR,
   } as React.CSSProperties;
 }

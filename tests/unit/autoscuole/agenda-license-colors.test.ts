@@ -23,8 +23,9 @@ describe("colori per patente (REG-461)", () => {
     expect([...grouped].sort()).toEqual(LICENSE_COLOR_ENTRIES.map((e) => e.key).sort());
   });
 
-  it("cambio automatico vince sulla categoria", () => {
-    expect(licenseColorEntryForTag("CE autom.").key).toBe("autom");
+  it("il cambio automatico non cambia colore: B autom. è una B (REG-622)", () => {
+    expect(licenseColorEntryForTag("B autom.").key).toBe("b");
+    expect(licenseColorEntryForTag("CE autom.").key).toBe("ce");
   });
 
   it("le sotto-patenti ereditano il colore personalizzato della madre", () => {

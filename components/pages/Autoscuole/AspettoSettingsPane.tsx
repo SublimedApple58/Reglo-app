@@ -11,10 +11,12 @@ import {
 import {
   AGENDA_COLOR_EXCEPTIONS,
   DEFAULT_AGENDA_COLOR_CRITERION,
+  DEFAULT_AUTOMATIC_MARKER_COLOR,
   DURATION_COLOR_ENTRIES,
   LICENSE_COLOR_ENTRIES,
   LICENSE_COLOR_GROUPS,
   agendaBlockStyle,
+  automaticMarkerStyle,
   resolveColorOverride,
   asAgendaColorExceptions,
   type AgendaColorCriterion,
@@ -46,7 +48,7 @@ type AspettoInstructor = { id: string; name: string; color?: string | null };
 
 // Anteprima patenti nei card del criterio: le voci più comuni.
 const LICENSE_PREVIEW = LICENSE_COLOR_ENTRIES.filter((e) =>
-  ["b", "autom", "am", "a"].includes(e.key),
+  ["b", "be", "am", "a"].includes(e.key),
 );
 
 const CRITERION_OPTIONS: Array<{
@@ -63,7 +65,7 @@ const CRITERION_OPTIONS: Array<{
     value: "patente",
     label: "Tipo patente",
     description:
-      "Ogni blocco prende il colore della patente della guida (la B automatica è distinta dalla B).",
+      "Ogni blocco prende il colore della patente della guida.",
   },
 ];
 
@@ -196,6 +198,10 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
     asAgendaColorExceptions(null),
   );
   const [savingExceptionKey, setSavingExceptionKey] = React.useState<string | null>(null);
+  // Contrassegno guide automatiche (REG-622): bordo on/off + colore (null = nero).
+  const [markerEnabled, setMarkerEnabled] = React.useState(true);
+  const [markerColor, setMarkerColor] = React.useState<string | null>(null);
+  const [savingMarker, setSavingMarker] = React.useState(false);
   // Ordine custom delle colonne istruttore in agenda (REG-449): elenco di id
   // salvato nei limits. Vuoto = ordine alfabetico (com'era prima).
   const [order, setOrder] = React.useState<string[]>([]);
@@ -214,6 +220,8 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
         setNameOrder(res.data.studentNameOrder);
         setOverrides(res.data.agendaColorOverrides);
         setExceptions(res.data.agendaColorExceptions);
+        setMarkerEnabled(res.data.automaticLessonMarker);
+        setMarkerColor(res.data.automaticLessonMarkerColor);
         setOrder(res.data.agendaInstructorOrder);
       }
       setLoading(false);
@@ -289,6 +297,26 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
       return;
     }
     setExceptions(res.data.agendaColorExceptions);
+  };
+
+  const saveMarker = async (patch: {
+    automaticLessonMarker?: boolean;
+    automaticLessonMarkerColor?: string | null;
+  }) => {
+    const res = await updateAutoscuolaSettings(patch);
+    if (!res.success || !res.data) {
+      toast.error({ description: res.message ?? "Impossibile salvare l'impostazione." });
+      return;
+    }
+    setMarkerEnabled(res.data.automaticLessonMarker);
+    setMarkerColor(res.data.automaticLessonMarkerColor);
+  };
+
+  const toggleMarker = async () => {
+    if (savingMarker) return;
+    setSavingMarker(true);
+    await saveMarker({ automaticLessonMarker: !markerEnabled });
+    setSavingMarker(false);
   };
 
   // La lista mostrata segue l'ordine salvato; gli istruttori non ancora
@@ -469,7 +497,7 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
                 {/* Anteprima chip (coi colori personalizzati, se presenti) */}
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
                   {(option.value === "durata"
-                    ? DURATION_COLOR_ENTRIES.filter((e) => e.key !== "autom")
+                    ? DURATION_COLOR_ENTRIES
                     : LICENSE_PREVIEW
                   ).map((entry) => (
                     <span
@@ -618,6 +646,70 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
           })}
         </div>
       )}
+
+      {/* ── Guide con mezzi automatici (REG-622): bordo, non colore ── */}
+      <section className="mt-10" data-testid="automatic-marker-setting">
+        <div className="flex items-center justify-between gap-4 rounded-2xl border-[1.5px] border-[#ededed] p-4">
+          <div className="flex min-w-0 items-center gap-4">
+            {/* Anteprima: un blocco guida col bordo. Tocca → colore del bordo. */}
+            <ColorSwatchPicker
+              value={markerColor}
+              title="Colore del bordo"
+              resetLabel="Nero (standard)"
+              resetHex={DEFAULT_AUTOMATIC_MARKER_COLOR}
+              onSelect={(hex) => saveMarker({ automaticLessonMarkerColor: hex })}
+              renderTrigger={({ saving }) => (
+                <button
+                  type="button"
+                  title="Colore del bordo"
+                  data-testid="automatic-marker-color"
+                  disabled={!markerEnabled}
+                  className={cn(
+                    "agenda-card flex h-12 w-[68px] shrink-0 cursor-pointer flex-col justify-center rounded-[10px] px-2 text-left transition disabled:cursor-default",
+                    saving && "animate-pulse opacity-60",
+                    !markerEnabled && "opacity-45",
+                  )}
+                  style={{
+                    ...agendaBlockStyle(
+                      DURATION_COLOR_ENTRIES[2],
+                      overrides.durata?.[DURATION_COLOR_ENTRIES[2].key],
+                    ),
+                    ...(markerEnabled ? automaticMarkerStyle(markerColor) : {}),
+                  }}
+                >
+                  <span className="text-[10px] font-semibold leading-tight text-[#3a3a3a]">
+                    09:00
+                  </span>
+                  <span className="truncate text-[11px] font-semibold leading-tight text-[#222222]">
+                    Guida
+                  </span>
+                </button>
+              )}
+            />
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-[#222222]">
+                Contrassegna le guide con mezzi automatici
+              </div>
+              <div className="mt-0.5 max-w-[460px] text-[13px] font-medium leading-normal text-[#929292]">
+                Le guide con veicolo o percorso a cambio automatico tengono il loro colore e
+                hanno in più un bordo, in agenda sul web e sull&apos;app.
+                {markerEnabled && " Tocca il blocco per cambiare il colore del bordo."}
+              </div>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center">
+            {savingMarker ? (
+              <LoadingDots className="text-[#929292]" />
+            ) : (
+              <InlineToggle
+                checked={markerEnabled}
+                size="lg"
+                onChange={() => void toggleMarker()}
+              />
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* ── Nome degli allievi (REG-507) ── */}
       <section className="mt-10">

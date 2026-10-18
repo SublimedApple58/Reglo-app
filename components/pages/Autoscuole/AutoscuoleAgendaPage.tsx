@@ -116,6 +116,7 @@ import {
   DURATION_COLOR_ENTRIES,
   agendaBlockStyle,
   asAgendaColorExceptions,
+  automaticMarkerStyle,
   durationColorEntry,
   licenseColorEntryForTag,
   licenseLegendEntries,
@@ -1415,6 +1416,12 @@ export function AutoscuoleAgendaPage({
   const [agendaColorExceptions, setAgendaColorExceptions] = React.useState<AgendaColorExceptions>(
     () => asAgendaColorExceptions(null),
   );
+  // Contrassegno guide automatiche (REG-622): bordo sopra il colore normale.
+  // false = spento (anche finché i settings non arrivano: nessun bordo che
+  // lampeggia), null = acceso col nero standard, hex = colore scelto.
+  const [automaticMarkerColor, setAutomaticMarkerColor] = React.useState<string | null | false>(
+    false,
+  );
   React.useEffect(() => {
     let active = true;
     getAutoscuolaSettings().then((res) => {
@@ -1422,6 +1429,9 @@ export function AutoscuoleAgendaPage({
         setAgendaColorCriterion(res.data.agendaColorCriterion);
         setAgendaColorOverrides(res.data.agendaColorOverrides);
         setAgendaColorExceptions(res.data.agendaColorExceptions);
+        setAutomaticMarkerColor(
+          res.data.automaticLessonMarker ? res.data.automaticLessonMarkerColor : false,
+        );
         setAgendaInstructorOrder(res.data.agendaInstructorOrder);
       }
     });
@@ -1444,34 +1454,48 @@ export function AutoscuoleAgendaPage({
   // Stile del blocco guida normale: prima le ECCEZIONI attive (in ordine di
   // registry, la prima che matcha vince), poi il criterio base + overrides.
   // Restituisce sempre uno stile inline (coi default replica i colori storici).
+  // Le guide automatiche aggiungono il bordo, qualunque colore abbiano.
   const guideBlockColorStyle = React.useCallback(
     (item: AppointmentRow, licenseTag: string | null): React.CSSProperties => {
+      const marker =
+        automaticMarkerColor !== false && isAutomaticLesson(item)
+          ? automaticMarkerStyle(automaticMarkerColor)
+          : null;
       const flags = studentColorFlagsById.get(item.student.id);
+      let base: React.CSSProperties | null = null;
       for (const exc of AGENDA_COLOR_EXCEPTIONS) {
         if (!exc.criteria.includes(agendaColorCriterion)) continue;
         if (!agendaColorExceptions[exc.key]) continue;
         const hit =
-          exc.key === "automatic"
-            ? isAutomaticLesson(item)
-            : exc.key === "moto"
-              ? Boolean(flags?.moto)
-              : exc.key === "exam_ready"
-                ? Boolean(flags?.examReady)
-                : false;
+          exc.key === "moto"
+            ? Boolean(flags?.moto)
+            : exc.key === "exam_ready"
+              ? Boolean(flags?.examReady)
+              : false;
         if (hit) {
-          return agendaBlockStyle(exc.entry, agendaColorOverrides.eccezioni?.[exc.key]);
+          base = agendaBlockStyle(exc.entry, agendaColorOverrides.eccezioni?.[exc.key]);
+          break;
         }
       }
-      if (agendaColorCriterion === "patente") {
+      if (!base && agendaColorCriterion === "patente") {
         const entry = licenseColorEntryForTag(licenseTag);
-        return agendaBlockStyle(entry, resolveColorOverride(entry, agendaColorOverrides.patente));
+        base = agendaBlockStyle(entry, resolveColorOverride(entry, agendaColorOverrides.patente));
       }
-      const start = toDate(item.startsAt);
-      const end = getAppointmentEnd(item);
-      const entry = durationColorEntry(Math.round(diffMinutes(end, start)));
-      return agendaBlockStyle(entry, agendaColorOverrides.durata?.[entry.key]);
+      if (!base) {
+        const start = toDate(item.startsAt);
+        const end = getAppointmentEnd(item);
+        const entry = durationColorEntry(Math.round(diffMinutes(end, start)));
+        base = agendaBlockStyle(entry, agendaColorOverrides.durata?.[entry.key]);
+      }
+      return marker ? { ...base, ...marker } : base;
     },
-    [agendaColorCriterion, agendaColorOverrides, agendaColorExceptions, studentColorFlagsById],
+    [
+      agendaColorCriterion,
+      agendaColorOverrides,
+      agendaColorExceptions,
+      automaticMarkerColor,
+      studentColorFlagsById,
+    ],
   );
   // Google-Calendar-style slot menu: click on an empty agenda slot → ghost
   // block on the grid + popover with the same options as "+ Nuovo", pre-filled
@@ -6498,6 +6522,18 @@ export function AutoscuoleAgendaPage({
                 </div>
               </div>
             )}
+            {automaticMarkerColor !== false && (
+              <div className="flex items-center gap-3">
+                <div
+                  className="agenda-card h-5 w-8 rounded-md"
+                  style={{
+                    ...agendaBlockStyle(DURATION_COLOR_ENTRIES[2], agendaColorOverrides.durata?.d60),
+                    ...automaticMarkerStyle(automaticMarkerColor),
+                  }}
+                />
+                <span className="text-xs text-foreground">Bordo: guida con mezzo automatico</span>
+              </div>
+            )}
             <div>
               <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Per tipo &amp; stato</p>
               <div className="space-y-1.5">
@@ -7769,13 +7805,11 @@ function buildLocalDateTime(day: string, time: string) {
 // Sistema colori unificato web+mobile (Reglo-Colori-Blocchi-Guida, decisioni
 // 2026-06-29): guide normali per DURATA (freddo→caldo), esami/gruppi per tipo,
 // annullata/assente muted. Stile: NIENTE bordo, sfondo vivo, ombra in tinta
-// (opacity .22). Gli override moto/automatico sono stati RIMOSSI; il ≤30 min è
-// blu (il teal è riservato alle guide di gruppo). Lo stato vive sul badge.
-// Guide a CAMBIO AUTOMATICO: colore dedicato (ciano) che SOSTITUISCE quello di
-// durata, così si distinguono a colpo d'occhio. Automatica se il veicolo usato è
+// (opacity .22). Il ≤30 min è blu (il teal è riservato alle guide di gruppo).
+// Lo stato vive sul badge.
+// Guide a CAMBIO AUTOMATICO (REG-622): stesso colore delle altre, le distingue
+// il bordo (vedi guideBlockColorStyle). Automatica se il veicolo usato è
 // automatico o, in mancanza, se l'allievo segue il percorso automatico.
-const AUTOMATIC_CLASS = "bg-[#CFFAFE] [--agenda-card-shadow:rgba(6,182,212,0.22)]";
-
 function isAutomaticLesson(appointment: AppointmentRow): boolean {
   return (
     appointment.vehicle?.transmission === "automatic" ||
@@ -7784,7 +7818,6 @@ function isAutomaticLesson(appointment: AppointmentRow): boolean {
 }
 
 function getScheduledDurationClass(appointment: AppointmentRow): string {
-  if (isAutomaticLesson(appointment)) return AUTOMATIC_CLASS;
   const start = toDate(appointment.startsAt);
   const end = getAppointmentEnd(appointment);
   const dur = Math.round(diffMinutes(end, start));

@@ -103,9 +103,9 @@ tabella allievi del dettaglio autoscuola ancora in "Nome Cognome".
 
 - Criterio `"patente"`: SOLO le guide individuali normali prendono il colore
   della patente della guida, risolta via `licenseTagFor`/`studentLicenseById`
-  (categoria allievo + suffisso " autom."). Il suffisso automatico vince sulla
-  categoria → ciano dedicato (stesso hex del criterio durata): è così che una
-  B automatica si distingue da una B. Famiglie: B blu, BE indaco, AM lime,
+  (categoria allievo + suffisso " autom."). Il suffisso " autom." NON cambia
+  colore (REG-622): una B automatica è una B, la distingue il bordo (vedi
+  sotto). Famiglie: B blu, BE indaco, AM lime,
   A1 smeraldo, A2 arancio, A rosa, C ambra, D fucsia, ADR ardesia, patente non
   impostata grigio. **REG-461**: una voce per OGNI patente gestita (anche
   CE/C1/C1E, DE/D1/D1E, CQC, ADR): le sotto-categorie hanno `parent` (C o D;
@@ -126,7 +126,8 @@ tabella allievi del dettaglio autoscuola ancora in "Nome Cognome".
   alone scuro morbido + ombra in tinta (`--agenda-card-shadow`, inline per le
   guide via `agendaBlockStyle`, classe arbitraria per esami/gruppi/`blockTint`).
   **Nessun bordo disegnato**: la separazione è solo di profondità — un bordo in
-  tinta era stato provato e scartato (feedback di Tiziano). Prima i pastelli dei
+  tinta era stato provato e scartato (feedback di Tiziano). L'unica eccezione è
+  il contrassegno delle guide automatiche (REG-622, sotto). Prima i pastelli dei
   blocchi si fondevano con la banda della colonna (stessa famiglia di colore) e
   con gli override, che erano **translucidi** (rgba 0.20): ora la tinta override
   è appiattita su bianco, quindi opaca.
@@ -134,15 +135,36 @@ tabella allievi del dettaglio autoscuola ancora in "Nome Cognome".
   condiviso): regole toggleabili che VINCONO sul criterio (prima che matcha
   vince, in ordine di registry), ognuna con colore personalizzabile
   (namespace `eccezioni`) e con un campo `criteria` che dice in quali
-  criteri ha senso (mostrata + applicata solo lì). Attuali: `automatic`
-  (veicolo/percorso automatico → ciano, **ON di default**, SOLO criterio
-  durata — nel criterio patente la distinzione B/B autom. è NATIVA, voce
-  `autom` della palette patenti), `exam_ready` (allievo "Pronto per
+  criteri ha senso (mostrata + applicata solo lì). Attuali: `exam_ready` (allievo "Pronto per
   l'esame" → viola, OFF, entrambi i criteri), `moto` (patente AM/A1/A2/A →
   stesso arancio per tutte, OFF, entrambi — nel criterio patente significa
   collassare le patenti moto in un colore unico). Match in
-  `guideBlockColorStyle` via `isAutomaticLesson` + `studentColorFlagsById`
+  `guideBlockColorStyle` via `studentColorFlagsById`
   (directory allievi: `licenseCategory`/`isMotoLicenseCategory`, `examReady`).
+- **REG-622 — guide con mezzi automatici: bordo, non colore** (2026-10-18).
+  Prima avevano un ciano pieno (eccezione `automatic` nel criterio durata, voce
+  `autom` nel criterio patente). Ora prendono il colore normale come tutte e,
+  se è acceso "Contrassegna le guide con mezzi automatici" (sezione propria in
+  Aspetto, sopra "Nome degli allievi"), un bordo interno 2px: nero `#111111` di
+  default, colore scelto col `ColorSwatchPicker` (voce di reset "Nero
+  (standard)", prop `resetHex`). Niente badge. Solo guide individuali normali
+  (come prima: non esami, gruppi, annullate/assenti). Automatica = veicolo
+  automatico OPPURE allievo sul percorso automatico (`isAutomaticLesson`).
+  - Dati: `automaticLessonMarker` (bool) + `automaticLessonMarkerColor` (hex o
+    null) in `CompanyService.limits`, niente migrazione. Lettura via
+    `resolveAutomaticLessonMarker(limits)`: chi non li ha mai salvati eredita
+    dai setting vecchi (spento solo se l'eccezione `automatic` era spenta;
+    colore = override `eccezioni.automatic`, poi `patente.autom`). Ogni
+    salvataggio di colori/settings li scrive espliciti (`automaticMarkerLimits`)
+    perché la normalizzazione di eccezioni/overrides butta le chiavi vecchie.
+  - Resa web: `.agenda-card` ha un primo strato `inset 0 0 0 2px
+    var(--agenda-card-ring, transparent)`; `guideBlockColorStyle` aggiunge la
+    variabile con `automaticMarkerStyle`. Il bordo vale anche sopra le eccezioni
+    moto/esame. Legenda: riga "Bordo: guida con mezzo automatico" se acceso.
+  - Mobile: stessa logica in `reglo-mobile/src/utils/agendaColors.ts`
+    (`borderWidth` 2 + `borderColor` sui blocchi), riga nella schermata Aspetto
+    agenda. Test: `tests/unit/autoscuole/automatic-lesson-marker.test.ts`,
+    `tests/e2e/reg622-automatic-marker.auth.spec.ts`.
 - Nel pannello le eccezioni sono nascoste dietro il link "Eccezioni" (badge
   col conteggio delle attive), accordion mutuamente esclusivo con
   "Personalizza i colori"; la lista mostra solo quelle del criterio attivo.

@@ -32,6 +32,7 @@ import {
   asAgendaColorExceptions,
   asAgendaColorOverrides,
   type AgendaColorCriterion,
+  resolveAutomaticLessonMarker,
   type AgendaColorExceptions,
   type AgendaColorOverrides,
 } from "@/lib/autoscuole/agenda-color-criterion";
@@ -457,6 +458,10 @@ const autoscuolaSettingsPatchSchema = z
     // Eccezioni colore pre-costruite (chiave → attiva); chiavi rivalidate da
     // asAgendaColorExceptions (default dal registry per quelle mancanti).
     agendaColorExceptions: z.record(z.string(), z.boolean()).optional(),
+    // Contrassegno guide automatiche (REG-622): bordo on/off + colore
+    // (null = nero standard).
+    automaticLessonMarker: z.boolean().optional(),
+    automaticLessonMarkerColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
     // Ordine custom delle colonne istruttore in agenda (REG-449): elenco di id,
     // anche parziale. Array vuoto = si torna all'ordine alfabetico.
     agendaInstructorOrder: z.array(z.string()).optional(),
@@ -670,8 +675,27 @@ export type AutoscuolaSettingsData = {
   agendaColorCriterion: AgendaColorCriterion;
   agendaColorOverrides: AgendaColorOverrides;
   agendaColorExceptions: AgendaColorExceptions;
+  automaticLessonMarker: boolean;
+  automaticLessonMarkerColor: string | null;
   agendaInstructorOrder: string[];
   studentNameOrder: StudentNameOrder;
+};
+
+// Contrassegno guide automatiche (REG-622): si scrive SEMPRE esplicito insieme
+// ai colori, perché la normalizzazione di eccezioni/overrides butta le chiavi
+// vecchie da cui chi non l'ha mai salvato eredita valore e colore.
+const automaticMarkerLimits = (
+  payload: { automaticLessonMarker?: boolean; automaticLessonMarkerColor?: string | null },
+  limits: Record<string, unknown>,
+) => {
+  const current = resolveAutomaticLessonMarker(limits);
+  return {
+    automaticLessonMarker: payload.automaticLessonMarker ?? current.enabled,
+    automaticLessonMarkerColor:
+      payload.automaticLessonMarkerColor === undefined
+        ? current.color
+        : payload.automaticLessonMarkerColor?.toUpperCase() ?? null,
+  };
 };
 
 const resolveAutoscuolaSettingsData = async (
@@ -1055,6 +1079,8 @@ const resolveAutoscuolaSettingsData = async (
     agendaColorCriterion: asAgendaColorCriterion(limits.agendaColorCriterion),
     agendaColorOverrides: asAgendaColorOverrides(limits.agendaColorOverrides),
     agendaColorExceptions: asAgendaColorExceptions(limits.agendaColorExceptions),
+    automaticLessonMarker: resolveAutomaticLessonMarker(limits).enabled,
+    automaticLessonMarkerColor: resolveAutomaticLessonMarker(limits).color,
     agendaInstructorOrder: asAgendaInstructorOrder(limits.agendaInstructorOrder),
     studentNameOrder: asStudentNameOrder(limits.studentNameOrder),
   };
@@ -1693,6 +1719,7 @@ export async function updateAutoscuolaSettings(
       agendaColorExceptions: asAgendaColorExceptions(
         payload.agendaColorExceptions ?? limits.agendaColorExceptions,
       ),
+      ...automaticMarkerLimits(payload, limits),
       studentNameOrder: asStudentNameOrder(
         payload.studentNameOrder ?? limits.studentNameOrder,
       ),
@@ -1875,6 +1902,8 @@ export async function updateAutoscuolaSettings(
         agendaColorCriterion: nextLimits.agendaColorCriterion,
         agendaColorOverrides: nextLimits.agendaColorOverrides,
         agendaColorExceptions: nextLimits.agendaColorExceptions,
+        automaticLessonMarker: nextLimits.automaticLessonMarker,
+        automaticLessonMarkerColor: nextLimits.automaticLessonMarkerColor,
         agendaInstructorOrder: nextLimits.agendaInstructorOrder,
         studentNameOrder: nextLimits.studentNameOrder,
       },
@@ -1903,6 +1932,8 @@ const agendaColorPatchSchema = z
       })
       .optional(),
     agendaColorExceptions: z.record(z.string(), z.boolean()).optional(),
+    automaticLessonMarker: z.boolean().optional(),
+    automaticLessonMarkerColor: z.string().regex(AGENDA_COLOR_HEX).nullable().optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), {
     message: "Nessun campo da aggiornare.",
@@ -1939,6 +1970,7 @@ export async function updateAgendaColorSettings(
       agendaColorExceptions: asAgendaColorExceptions(
         payload.agendaColorExceptions ?? limits.agendaColorExceptions,
       ),
+      ...automaticMarkerLimits(payload, limits),
     };
 
     if (service) {
