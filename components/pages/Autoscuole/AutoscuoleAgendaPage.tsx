@@ -143,10 +143,12 @@ import { GroupLessonManageDialog } from "@/components/pages/Autoscuole/dialogs/G
 import { GroupLessonCreateDialog } from "@/components/pages/Autoscuole/dialogs/GroupLessonCreateDialog";
 import {
   AgendaPrintDialog,
+  type ExamPrintSource,
   type AgendaPrintData,
   type AgendaPrintBlock,
   type AgendaPrintColumn,
 } from "@/components/pages/Autoscuole/AgendaPrintDialog";
+import { buildExamPrintDays } from "@/lib/autoscuole/exam-print";
 import { NeverAccessedNudge } from "@/components/pages/Autoscuole/NeverAccessedNudge";
 import { UserPhotoCircle } from "@/components/ui/user-photo";
 
@@ -3766,6 +3768,53 @@ export function AutoscuoleAgendaPage({
     };
   }, [printOpen, viewMode, viewPrefs.startHour, viewPrefs.endHour, viewPrefs.days, filtered, examGroups, instructors, vehicles, instructorFilter, vehicleFilter, typeFilter, statusFilter, search, dayFocus, weekStart, dayViewInstructors, rangeStart, rangeEnd, todayNormalized, vehiclesEnabled, nowTick, studentNameOrder]);
 
+  // REG-620 — stampa "Solo esami": un periodo scelto nel dialog, indipendente
+  // dalla vista. Proposto = i giorni che si stanno guardando.
+  const examPrintSource = React.useMemo<ExamPrintSource>(() => {
+    const parseYmd = (ds: string) => {
+      const [y, m, d] = ds.split("-").map(Number);
+      return new Date(y, m - 1, d);
+    };
+    return {
+      defaultFrom: formatYmd(rangeStart),
+      defaultTo: formatYmd(addDays(rangeEnd, -1)),
+      load: async (fromYmd, toYmd) => {
+        const from = parseYmd(fromYmd);
+        const to = addDays(parseYmd(toYmd), 1);
+        let data: AgendaBootstrapPayload;
+        if (source) {
+          data = await source.fetchBootstrap(from, to);
+        } else {
+          const params = new URLSearchParams({
+            from: from.toISOString(),
+            to: to.toISOString(),
+            type: "esame",
+            limit: "600",
+          });
+          const response = await fetch(`/api/autoscuole/agenda/bootstrap?${params.toString()}`, {
+            cache: "no-store",
+          });
+          const parsed = (await response.json().catch(() => null)) as
+            | { success?: boolean; data?: AgendaBootstrapPayload; message?: string }
+            | null;
+          if (!response.ok || !parsed?.success || !parsed.data) {
+            throw new Error(parsed?.message ?? "Impossibile caricare gli esami.");
+          }
+          data = parsed.data;
+        }
+        const licenseByStudentId = new Map(studentLicenseById);
+        for (const st of data.students ?? []) {
+          if (!st.licenseCategory) continue;
+          licenseByStudentId.set(st.id, `${st.licenseCategory}${st.transmission === "automatic" ? " autom." : ""}`);
+        }
+        return buildExamPrintDays(data.appointments ?? [], {
+          licenseByStudentId,
+          nameOrder: studentNameOrder,
+        });
+      },
+    };
+  }, [rangeStart, rangeEnd, source, studentLicenseById, studentNameOrder]);
+
   return (
     <PageWrapper
       title="Agenda"
@@ -4386,6 +4435,7 @@ export function AutoscuoleAgendaPage({
         <AgendaPrintDialog
           open={printOpen}
           data={agendaPrintData}
+          exams={examPrintSource}
           onClose={() => setPrintOpen(false)}
         />
 

@@ -95,6 +95,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Mobile**: `TitolareHomeScreen`, `NotificationOverlay`
 - ← **Settings**: `updateAutoscuolaSettings` chiama `syncCompanyNationalHolidays` sui campi `nationalHolidaysEnabled/Disabled` (preset festività nazionali → righe con `presetId`)
 - ← **Trigger.dev**: cron giornaliero `autoscuole-national-holidays` (rolling window annuale del preset)
+- ↔ **Stampa agenda** (REG-620): il calendario a intervallo della modale "Segna festivo" è `dialogs/RangeCalendar.tsx`, condiviso con la stampa "Solo esami" — una modifica vale per entrambi
 
 ### Notifications
 - → **ALL features**: ogni comunicazione passa da **`notifyAutoscuolaUser()`** (`lib/autoscuole/notify.ts`, REG-604), non più da `sendAutoscuolaPushToUsers()` + `sendDynamicEmail()` scritti a mano. Chi invia **non sceglie i canali**: li chiede a `reminder-channels.ts`. Un test (`tests/unit/autoscuole/notify-guard.test.ts`) fallisce se i due invii diretti ricompaiono fuori dalla lista bianca
