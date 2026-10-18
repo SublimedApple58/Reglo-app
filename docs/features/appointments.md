@@ -27,6 +27,26 @@ Click su uno slot vuoto (entrambe le viste: istruttori-settimana e istruttori-gi
 - Auto-avanzamento form: campo compilato → scroll+focus sul prossimo obbligatorio vuoto (allievo → istruttore → veicolo; note escluse), delay 160ms per il focus-restore di Radix Select.
 - **Preselezione istruttore alla scelta dell'allievo**: `assignedInstructorId` (già nel bootstrap) o in mancanza `lastInstructorId` (nuova query DISTINCT ON nel bootstrap: ultimo appuntamento passato non-cancelled per studente). La scelta dell'allievo VINCE sull'istruttore già impostato (es. colonna cliccata nella vista Istruttori); resta il corrente solo se l'allievo non ne suggerisce nessuno.
 
+## L'agenda segue senza spostarti (REG-621, 2026-10-18)
+
+Bozze (ghost dei form) e guide appena create vengono "seguite" dall'agenda, ma
+solo quando serve: `revealDay` naviga **solo se il giorno non è già nel periodo
+visibile**, `revealTime` scrolla **solo se il blocco non è già tutto in vista**.
+Prima ogni follow navigava e scrollava comunque — in "7 giorni da oggi" ri-ancorava
+la finestra sul giorno toccato anche se era già a schermo.
+
+I "+" (Appuntamento, Esame, Evento bloccante, Lezione teorica, Guida di gruppo,
+prima guida della multipla) partono da `newEventDay()`: in vista Giorno il giorno
+mostrato, in Settimana oggi se la settimana visibile lo contiene, altrimenti il
+suo primo giorno. Prima partivano da `dayFocus`, che in Settimana **non segue la
+navigazione** (resta oggi): aprire un "+" su una settimana futura riportava
+l'agenda a oggi. Esame/blocchi/gruppo calcolavano inoltre la data con
+`toISOString().slice(0, 10)` — in Italia **il giorno prima** — e per la guida di
+gruppo in vista Giorno questo innescava un ciclo che faceva arretrare l'agenda di
+un giorno a ogni render finché il dialog restava aperto.
+
+Regressione: `tests/e2e/reg621-agenda-scroll.auth.spec.ts` (matrice vista × azione).
+
 ## Prenotazione nel passato (2026-07-15)
 Titolare (web) e istruttore (mobile) possono creare una guida che inizia nel passato, previa **conferma esplicita** — non è più un blocco duro. Implementazione:
 - **Backend**: `createAutoscuolaAppointment` / `createAutoscuolaAppointmentBatch` accettano `allowPast?: boolean` (schema + payload, stesso pattern di `skipWeeklyLimitCheck`). Il check `startsAt < Date.now()` → *"Non puoi prenotare una guida nel passato."* scatta **solo se `!allowPast`**. Le route mobile `instructor-bookings/confirm` e `confirm-batch` inoltrano `allowPast === true`.

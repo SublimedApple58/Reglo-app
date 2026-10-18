@@ -1742,6 +1742,50 @@ export function AutoscuoleAgendaPage({
     [dayFocus, viewMode, weekEnd],
   );
 
+  /*
+   * REG-621 — l'agenda segue le bozze e le guide appena create, ma senza
+   * strapparti dal punto in cui sei.
+   *
+   * Prima ogni "follow" navigava e scrollava comunque: in "7 giorni da oggi"
+   * ri-ancorava la finestra sul giorno anche quando era già visibile, e lo
+   * scroll si muoveva anche col blocco già sotto gli occhi. E i "+" partivano
+   * da `dayFocus`, che in vista settimana non segue la navigazione e resta su
+   * oggi: aprire un evento dal "+" su una settimana futura riportava a oggi.
+   */
+  const isDayVisible = (day: Date) =>
+    day.getTime() >= rangeStart.getTime() && day.getTime() < rangeEnd.getTime();
+
+  /** Porta in vista il giorno, solo se non lo è già. */
+  const revealDay = (day: Date) => {
+    const normalized = normalizeDay(day);
+    if (isDayVisible(normalized)) return;
+    if (viewMode === "week") setWeekStart(weekAnchor(normalized, viewPrefs.weekMode));
+    else setDayFocus(normalized);
+  };
+
+  /** Scrolla fino all'orario, solo se il blocco non è già tutto in vista. */
+  const revealTime = (startMin: number, durMin: number) => {
+    const scroller = calendarScrollRef.current;
+    if (!scroller) return;
+    const top = startMin * PIXELS_PER_MINUTE;
+    const bottom = (startMin + durMin) * PIXELS_PER_MINUTE;
+    const viewTop = scroller.scrollTop + 8;
+    const viewBottom = scroller.scrollTop + scroller.clientHeight - 8;
+    if (top >= viewTop && bottom <= viewBottom) return;
+    scroller.scrollTo({ top: Math.max(0, top - 140), behavior: "smooth" });
+  };
+
+  /**
+   * Il giorno da cui parte un evento creato dal "+": quello che si sta
+   * guardando. In settimana è oggi se la settimana visibile lo contiene,
+   * altrimenti il suo primo giorno.
+   */
+  const newEventDay = () => {
+    if (viewMode === "day") return dayFocus;
+    const today = normalizeDay(new Date());
+    return isDayVisible(today) ? today : weekStart;
+  };
+
   const buildAgendaBootstrapUrl = React.useCallback(
     (from: Date, to: Date) => {
       const params = new URLSearchParams({
@@ -2395,19 +2439,8 @@ export function AutoscuoleAgendaPage({
     // farebbe saltare la vista a ogni ritocco di una guida lontana.
     const follow = draftGhost ?? multiGhosts[0] ?? null;
     if (!follow || ghostDragRef.current) return;
-    const target = toDate(`${follow.ymd}T00:00:00`);
-    const normalized = normalizeDay(target);
-    if (viewMode === "week") {
-      const ws = weekAnchor(normalized, viewPrefs.weekMode);
-      if (ws.getTime() !== weekStart.getTime()) setWeekStart(ws);
-    } else if (normalized.getTime() !== dayFocus.getTime()) {
-      setDayFocus(normalized);
-    }
-    const scroller = calendarScrollRef.current;
-    if (scroller) {
-      const top = Math.max(0, follow.startMin * PIXELS_PER_MINUTE - 140);
-      scroller.scrollTo({ top, behavior: "smooth" });
-    }
+    revealDay(toDate(`${follow.ymd}T00:00:00`));
+    revealTime(follow.startMin, follow.durMin);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftGhost?.ymd, draftGhost?.startMin, multiGhosts[0]?.ymd, multiGhosts[0]?.startMin]);
 
@@ -2766,7 +2799,7 @@ export function AutoscuoleAgendaPage({
       if (prev.length >= 20) return prev;
       const last = prev[prev.length - 1];
       if (!last) {
-        return [{ id: `e-${Date.now()}`, day: form.day || formatYmd(dayFocus), time: form.time || "09:00", duration: form.duration }];
+        return [{ id: `e-${Date.now()}`, day: form.day || formatYmd(newEventDay()), time: form.time || "09:00", duration: form.duration }];
       }
       const [h, m] = last.time.split(":").map(Number);
       const endMin = h * 60 + m + (parseInt(last.duration, 10) || 30);
@@ -2901,24 +2934,11 @@ export function AutoscuoleAgendaPage({
     // naviga alla settimana/giorno giusto e scrolla all'orario, così la nuova
     // prenotazione è subito visibile anche creando dal "+" mentre si guarda
     // un'altra settimana. Stessa logica del follow del draft ghost.
-    {
-      const created = normalizeDay(startDate);
-      if (viewMode === "week") {
-        const ws = weekAnchor(created, viewPrefs.weekMode);
-        if (ws.getTime() !== weekStart.getTime()) setWeekStart(ws);
-      } else if (created.getTime() !== dayFocus.getTime()) {
-        setDayFocus(created);
-      }
-      const startMin =
-        startDate.getHours() * 60 + startDate.getMinutes() - DAY_START_HOUR * 60;
-      const scroller = calendarScrollRef.current;
-      if (scroller) {
-        scroller.scrollTo({
-          top: Math.max(0, startMin * PIXELS_PER_MINUTE - 140),
-          behavior: "smooth",
-        });
-      }
-    }
+    revealDay(startDate);
+    revealTime(
+      startDate.getHours() * 60 + startDate.getMinutes() - DAY_START_HOUR * 60,
+      parseInt(form.duration, 10) || 30,
+    );
     load({ silent: true });
   };
 
@@ -2981,18 +3001,8 @@ export function AutoscuoleAgendaPage({
     createLocationTouchedRef.current = false;
     toast.success({ description: `${created} guid${created === 1 ? "a prenotata" : "e prenotate"}.` });
     // L'agenda segue la PRIMA guida creata, come fa col singolo.
-    const createdDay = normalizeDay(firstStart);
-    if (viewMode === "week") {
-      const ws = weekAnchor(createdDay, viewPrefs.weekMode);
-      if (ws.getTime() !== weekStart.getTime()) setWeekStart(ws);
-    } else if (createdDay.getTime() !== dayFocus.getTime()) {
-      setDayFocus(createdDay);
-    }
-    const startMin = firstStart.getHours() * 60 + firstStart.getMinutes() - DAY_START_HOUR * 60;
-    calendarScrollRef.current?.scrollTo({
-      top: Math.max(0, startMin * PIXELS_PER_MINUTE - 140),
-      behavior: "smooth",
-    });
+    revealDay(firstStart);
+    revealTime(firstStart.getHours() * 60 + firstStart.getMinutes() - DAY_START_HOUR * 60, 30);
     load({ silent: true });
   };
 
@@ -4190,7 +4200,7 @@ export function AutoscuoleAgendaPage({
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
-                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setForm((prev) => ({ ...prev, day: prev.day || formatYmd(normalizeDay(dayFocus)) })); setCreateOpen(true); }}
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setForm((prev) => ({ ...prev, day: prev.day || formatYmd(newEventDay()) })); setCreateOpen(true); }}
                 >
                   {/* L'appuntamento ha la sua icona (il veicolo), non il "+"
                       generico del bottone che apre questo menu. */}
@@ -4200,7 +4210,7 @@ export function AutoscuoleAgendaPage({
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
-                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setExamForm({ date: normalizeDay(dayFocus).toISOString().slice(0, 10), time: "09:00", duration: "60", timeSet: true, instructorId: "", coInstructorIds: [], studentIds: [], note: "" }); setExamStudentSearch(""); setExamDialogOpen(true); }}
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setExamForm({ date: formatYmd(newEventDay()), time: "09:00", duration: "60", timeSet: true, instructorId: "", coInstructorIds: [], studentIds: [], note: "" }); setExamStudentSearch(""); setExamDialogOpen(true); }}
                 >
                   <GraduationCap className="size-4 text-foreground" strokeWidth={1.7} />
                   Esame
@@ -4208,7 +4218,7 @@ export function AutoscuoleAgendaPage({
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
-                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setBlockKind("generic"); setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "60", reason: "", description: "", recurring: false, recurringWeeks: 12 }); setBlockEditId(null); setBlockDialogOpen(true); }}
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setBlockKind("generic"); setBlockForm({ instructorId: instructors[0]?.id ?? "", date: formatYmd(newEventDay()), startTime: "09:00", duration: "60", reason: "", description: "", recurring: false, recurringWeeks: 12 }); setBlockEditId(null); setBlockDialogOpen(true); }}
                 >
                   <Ban className="size-4 text-foreground" strokeWidth={1.7} />
                   Evento bloccante
@@ -4216,7 +4226,7 @@ export function AutoscuoleAgendaPage({
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
-                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setBlockKind("theory"); setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "120", reason: "", description: "", recurring: false, recurringWeeks: 12 }); setBlockEditId(null); setBlockDialogOpen(true); }}
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setBlockKind("theory"); setBlockForm({ instructorId: instructors[0]?.id ?? "", date: formatYmd(newEventDay()), startTime: "09:00", duration: "120", reason: "", description: "", recurring: false, recurringWeeks: 12 }); setBlockEditId(null); setBlockDialogOpen(true); }}
                 >
                   <BookOpen className="size-4 text-foreground" strokeWidth={1.7} />
                   Lezione teorica
@@ -4343,7 +4353,7 @@ export function AutoscuoleAgendaPage({
           vehiclesEnabled={vehiclesEnabled}
           followCarRules={followCarRules}
           locations={agendaLocations}
-          defaultDate={groupLessonPrefill?.date ?? normalizeDay(dayFocus).toISOString().slice(0, 10)}
+          defaultDate={groupLessonPrefill?.date ?? formatYmd(newEventDay())}
           defaultTime={groupLessonPrefill?.time ?? null}
           defaultInstructorId={groupLessonPrefill?.instructorId ?? null}
           onCreated={() => { load({ silent: true }); }}
