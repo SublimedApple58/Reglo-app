@@ -1064,6 +1064,102 @@ export async function getAutoscuolaOverview() {
   }
 }
 
+/**
+ * REG-623 — dati del riquadro "guida annullata": chi l'ha annullata (con il
+ * ruolo, perché sull'appuntamento c'è solo l'id) e l'eventuale offerta del
+ * posto partita con l'annullamento. Solo per le annullate dall'allievo o dalla
+ * segreteria: due query in tutto, qualunque sia la settimana.
+ */
+async function buildAgendaCancellationInfo(
+  companyId: string,
+  appointments: Array<{
+    id: string;
+    status: string;
+    studentId: string | null;
+    slotId: string | null;
+    cancelledAt: Date | null;
+    cancelledByUserId: string | null;
+    cancellationKind: string | null;
+  }>,
+) {
+  const result = new Map<
+    string,
+    {
+      cancelledBy: { name: string | null; role: "student" | "owner" | "instructor" | "staff" } | null;
+      slotFillOffer: { sentAt: Date; expiresAt: Date; declined: number } | null;
+    }
+  >();
+  const cancelled = appointments.filter(
+    (a) =>
+      a.status === "cancelled" &&
+      (a.cancellationKind === "manual_cancel" || a.cancellationKind === "operational_cancel"),
+  );
+  if (!cancelled.length) return result;
+
+  const actorIds = [
+    ...new Set(
+      cancelled
+        .filter((a) => a.cancelledByUserId && a.cancelledByUserId !== a.studentId)
+        .map((a) => a.cancelledByUserId as string),
+    ),
+  ];
+  const slotIds = [...new Set(cancelled.map((a) => a.slotId).filter(Boolean) as string[])];
+  const [members, offers] = await Promise.all([
+    actorIds.length
+      ? prisma.companyMember.findMany({
+          where: { companyId, userId: { in: actorIds } },
+          select: { userId: true, autoscuolaRole: true, user: { select: { name: true } } },
+        })
+      : Promise.resolve([]),
+    slotIds.length
+      ? prisma.autoscuolaWaitlistOffer.findMany({
+          where: { companyId, slotId: { in: slotIds } },
+          select: {
+            slotId: true,
+            sentAt: true,
+            expiresAt: true,
+            responses: { where: { status: "declined" }, select: { id: true } },
+          },
+          orderBy: { sentAt: "desc" },
+        })
+      : Promise.resolve([]),
+  ]);
+  const memberById = new Map(members.map((m) => [m.userId, m]));
+
+  for (const a of cancelled) {
+    let cancelledBy: { name: string | null; role: "student" | "owner" | "instructor" | "staff" } | null = null;
+    if (a.cancelledByUserId && a.cancelledByUserId === a.studentId) {
+      cancelledBy = { name: null, role: "student" };
+    } else if (a.cancelledByUserId) {
+      const member = memberById.get(a.cancelledByUserId);
+      const role = member?.autoscuolaRole;
+      cancelledBy = {
+        name: member?.user.name ?? null,
+        role:
+          role === "OWNER" || role === "INSTRUCTOR_OWNER"
+            ? "owner"
+            : role === "INSTRUCTOR"
+              ? "instructor"
+              : "staff",
+      };
+    }
+    // L'offerta è quella partita con QUESTO annullamento (stesso slot, dopo).
+    const offer =
+      a.slotId && a.cancelledAt
+        ? offers.find(
+            (o) => o.slotId === a.slotId && o.sentAt.getTime() >= a.cancelledAt!.getTime() - 60_000,
+          ) ?? null
+        : null;
+    result.set(a.id, {
+      cancelledBy,
+      slotFillOffer: offer
+        ? { sentAt: offer.sentAt, expiresAt: offer.expiresAt, declined: offer.responses.length }
+        : null,
+    });
+  }
+  return result;
+}
+
 export async function getAutoscuolaAgendaBootstrapAction(input: {
   from: string | Date;
   to: string | Date;
@@ -1201,6 +1297,12 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           cancellationKind: true,
           cancellationReason: true,
           replacedByAppointmentId: true,
+          // REG-623: il blocco "guida annullata" e il suo riquadro informazioni.
+          cancelledAt: true,
+          cancelledByUserId: true,
+          lateCancellationAction: true,
+          creditRefundedAt: true,
+          agendaDismissedAt: true,
           createdAt: true,
           updatedAt: true,
           student: {
@@ -1350,7 +1452,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
     const agendaGlIds = [
       ...new Set(appointments.map((a) => a.groupLessonId).filter(Boolean) as string[]),
     ];
-    const [gridFlags, agendaGlInfo] = await Promise.all([
+    const [gridFlags, agendaGlInfo, cancellationInfo] = await Promise.all([
       buildAppointmentGridFlags(companyId, appointments),
       // Group lesson capacity + kind per row: agenda consumers need the REAL
       // capacity (mobile seat dots) and the kind ("standard"|"moto") for the
@@ -1363,6 +1465,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
             })
             .then((rows) => new Map(rows.map((g) => [g.id, g])))
         : Promise.resolve(new Map<string, { id: string; capacity: number; kind: string; motoLessonType: string | null }>()),
+      buildAgendaCancellationInfo(companyId, appointments),
     ]);
 
     const mappedAppointments = appointments.map((appointment) => {
@@ -1414,6 +1517,8 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         groupLessonMotoType: appointment.groupLessonId
           ? agendaGlInfo.get(appointment.groupLessonId)?.motoLessonType ?? null
           : null,
+        // REG-623: chi ha annullato e l'offerta del posto, solo sulle annullate.
+        ...(cancellationInfo.get(appointment.id) ?? {}),
       };
     });
 
@@ -1511,6 +1616,11 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           cancellationKind: null,
           cancellationReason: null,
           replacedByAppointmentId: null,
+          cancelledAt: null,
+          cancelledByUserId: null,
+          lateCancellationAction: null,
+          creditRefundedAt: null,
+          agendaDismissedAt: null,
           createdAt: gl.startsAt,
           updatedAt: gl.startsAt,
           case: null,
@@ -4749,6 +4859,40 @@ export async function cancelAutoscuolaAppointment(
   }
 }
 
+/**
+ * REG-623 — «Togli dall'agenda» sul blocco di una guida annullata. Solo
+ * visivo: segna `agendaDismissedAt` e basta, la guida resta annullata e nello
+ * storico esattamente com'era. Più id insieme perché un blocco può raccogliere
+ * più annullate sovrapposte. Rifiuta le guide non annullate.
+ */
+export async function dismissCancelledAppointmentsFromAgenda(input: { appointmentIds: string[] }) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (!isOwner(membership.autoscuolaRole) && !isInstructor(membership.autoscuolaRole) && membership.role !== "admin") {
+      return { success: false, message: "Operazione non consentita." };
+    }
+    const { appointmentIds } = z
+      .object({ appointmentIds: z.array(z.string().uuid()).min(1).max(20) })
+      .parse(input);
+    const res = await prisma.autoscuolaAppointment.updateMany({
+      where: {
+        id: { in: appointmentIds },
+        companyId: membership.companyId,
+        status: "cancelled",
+        agendaDismissedAt: null,
+      },
+      data: { agendaDismissedAt: new Date(), agendaDismissedByUserId: membership.userId },
+    });
+    await invalidateAutoscuoleCache({
+      companyId: membership.companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA],
+    });
+    return { success: true, data: { dismissed: res.count } };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 export async function permanentlyCancelAutoscuolaAppointment(
   input: z.infer<typeof cancelAppointmentSchema>,
 ) {
@@ -5692,6 +5836,7 @@ export async function updateAutoscuolaAppointmentStatus(
       type?: string;
       types?: string[];
       cancelledAt?: Date | null;
+      cancelledByUserId?: string | null;
       cancellationKind?: string | null;
       cancellationReason?: string | null;
     } = {
@@ -5788,6 +5933,9 @@ export async function updateAutoscuolaAppointmentStatus(
     const wasCancelled = normalizeStatus(appointment.status) === "cancelled";
     if (nextStatus === "cancelled") {
       updateData.cancelledAt = appointment.cancelledAt ?? new Date();
+      // REG-623: il riquadro della guida annullata dice chi l'ha annullata;
+      // questo era l'unico percorso che non lo registrava.
+      updateData.cancelledByUserId = appointment.cancelledByUserId ?? membership.userId;
       updateData.cancellationKind = "manual_cancel";
       updateData.cancellationReason = "manual_cancel";
     }

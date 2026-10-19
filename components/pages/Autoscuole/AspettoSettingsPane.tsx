@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ChevronDown, GripVertical } from "lucide-react";
+import { CalendarX2, ChevronDown, GripVertical } from "lucide-react";
 import { Reorder, useDragControls } from "motion/react";
 
 import {
@@ -209,6 +209,8 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
   const [rows, setRows] = React.useState<T[]>([]);
   const [savingOrder, setSavingOrder] = React.useState(false);
   const handleRefs = React.useRef<Record<string, HTMLButtonElement | null>>({});
+  const [cancelledBlocks, setCancelledBlocks] = React.useState(false);
+  const [savingCancelledBlocks, setSavingCancelledBlocks] = React.useState(false);
 
   React.useEffect(() => {
     let active = true;
@@ -222,6 +224,7 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
         setExceptions(res.data.agendaColorExceptions);
         setMarkerEnabled(res.data.automaticLessonMarker);
         setMarkerColor(res.data.automaticLessonMarkerColor);
+        setCancelledBlocks(res.data.cancelledLessonBlocks);
         setOrder(res.data.agendaInstructorOrder);
       }
       setLoading(false);
@@ -310,6 +313,19 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
     }
     setMarkerEnabled(res.data.automaticLessonMarker);
     setMarkerColor(res.data.automaticLessonMarkerColor);
+  };
+
+  // REG-623: blocchi delle guide annullate non ancora sostituite.
+  const toggleCancelledBlocks = async () => {
+    if (savingCancelledBlocks) return;
+    setSavingCancelledBlocks(true);
+    const res = await updateAutoscuolaSettings({ cancelledLessonBlocks: !cancelledBlocks });
+    setSavingCancelledBlocks(false);
+    if (!res.success || !res.data) {
+      toast.error({ description: res.message ?? "Impossibile salvare l'impostazione." });
+      return;
+    }
+    setCancelledBlocks(res.data.cancelledLessonBlocks);
   };
 
   const toggleMarker = async () => {
@@ -705,6 +721,55 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
                 checked={markerEnabled}
                 size="lg"
                 onChange={() => void toggleMarker()}
+              />
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Guide annullate (REG-623) ── */}
+      <section className="mt-4" data-testid="cancelled-blocks-setting">
+        <div className="flex items-center justify-between gap-4 rounded-2xl border-[1.5px] border-[#ededed] p-4">
+          <div className="flex min-w-0 items-center gap-4">
+            {/* Anteprima: il blocco della guida annullata com'è in agenda. */}
+            <div
+              aria-hidden
+              className={cn(
+                "flex h-12 w-[84px] shrink-0 flex-col justify-center overflow-hidden rounded-[10px] border-[1.5px] border-dashed border-[#c4c4c4] px-2 transition-opacity",
+                !cancelledBlocks && "opacity-45",
+              )}
+              style={{
+                background:
+                  "repeating-linear-gradient(135deg, rgba(0,0,0,0.045) 0 5px, rgba(255,255,255,0) 5px 10px), #ffffff",
+              }}
+            >
+              <span className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-[0.06em] text-[#8a8a8a]">
+                <CalendarX2 className="size-2.5 shrink-0" strokeWidth={2.4} />
+                Annullata
+              </span>
+              <span className="text-[10px] font-semibold leading-tight tabular-nums text-[#929292]">
+                09:00
+              </span>
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-[#222222]">
+                Mostra le guide annullate non ancora sostituite
+              </div>
+              <div className="mt-0.5 max-w-[460px] text-[13px] font-medium leading-normal text-[#929292]">
+                Quando un allievo o la segreteria annulla una guida, in agenda resta un blocco
+                rigato finché l&apos;orario non viene occupato da un&apos;altra guida. Cliccalo per
+                i dettagli e per assegnare un sostituto.
+              </div>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center">
+            {savingCancelledBlocks ? (
+              <LoadingDots className="text-[#929292]" />
+            ) : (
+              <InlineToggle
+                checked={cancelledBlocks}
+                size="lg"
+                onChange={() => void toggleCancelledBlocks()}
               />
             )}
           </div>

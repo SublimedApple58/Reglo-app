@@ -68,6 +68,13 @@ tabella allievi del dettaglio autoscuola ancora in "Nome Cognome".
 > colonne `firstName`/`lastName` con migrazione e backfill — vedi
 > `plans/consorzio/002-richieste-federica.md`.
 
+## Guide annullate (REG-623)
+
+Riga «Mostra le guide annullate non ancora sostituite» (on/off, `cancelledLessonBlocks`
+nel JSON `limits`, **default spento**) con anteprima del blocco rigato. Comportamento,
+regola del sostituto e «Assegna sostituto» in
+[cancelled-lesson-blocks.md](cancelled-lesson-blocks.md).
+
 ## Data model
 
 - Nessuna migrazione: `agendaColorCriterion` (valori `"durata"` default |

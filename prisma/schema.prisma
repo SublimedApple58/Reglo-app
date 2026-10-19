@@ -595,6 +595,10 @@ model AutoscuolaAppointment {
   availabilityOverrideApproved Boolean   @default(false)
   manualPaymentStatus          String?
   lateCancellationAction       String?
+  /// REG-623: la guida annullata è stata tolta dall'agenda con la X del suo
+  /// blocco. Solo visivo: la guida resta annullata e nello storico com'era.
+  agendaDismissedAt            DateTime? @db.Timestamp(6)
+  agendaDismissedByUserId      String?   @db.Uuid
   rescheduledAt                DateTime? @db.Timestamp(6)
   rescheduledFromStartsAt      DateTime? @db.Timestamp(6)
   locationId                   String?   @db.Uuid

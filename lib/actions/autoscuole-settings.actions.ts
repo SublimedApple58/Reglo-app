@@ -462,6 +462,8 @@ const autoscuolaSettingsPatchSchema = z
     // (null = nero standard).
     automaticLessonMarker: z.boolean().optional(),
     automaticLessonMarkerColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
+    // Blocchi delle guide annullate non ancora sostituite (REG-623).
+    cancelledLessonBlocks: z.boolean().optional(),
     // Ordine custom delle colonne istruttore in agenda (REG-449): elenco di id,
     // anche parziale. Array vuoto = si torna all'ordine alfabetico.
     agendaInstructorOrder: z.array(z.string()).optional(),
@@ -677,6 +679,7 @@ export type AutoscuolaSettingsData = {
   agendaColorExceptions: AgendaColorExceptions;
   automaticLessonMarker: boolean;
   automaticLessonMarkerColor: string | null;
+  cancelledLessonBlocks: boolean;
   agendaInstructorOrder: string[];
   studentNameOrder: StudentNameOrder;
 };
@@ -1081,6 +1084,8 @@ const resolveAutoscuolaSettingsData = async (
     agendaColorExceptions: asAgendaColorExceptions(limits.agendaColorExceptions),
     automaticLessonMarker: resolveAutomaticLessonMarker(limits).enabled,
     automaticLessonMarkerColor: resolveAutomaticLessonMarker(limits).color,
+    // REG-623: nasce SPENTO, lo accende chi lo vuole.
+    cancelledLessonBlocks: limits.cancelledLessonBlocks === true,
     agendaInstructorOrder: asAgendaInstructorOrder(limits.agendaInstructorOrder),
     studentNameOrder: asStudentNameOrder(limits.studentNameOrder),
   };
@@ -1720,6 +1725,8 @@ export async function updateAutoscuolaSettings(
         payload.agendaColorExceptions ?? limits.agendaColorExceptions,
       ),
       ...automaticMarkerLimits(payload, limits),
+      cancelledLessonBlocks:
+        payload.cancelledLessonBlocks ?? limits.cancelledLessonBlocks === true,
       studentNameOrder: asStudentNameOrder(
         payload.studentNameOrder ?? limits.studentNameOrder,
       ),
@@ -1904,6 +1911,7 @@ export async function updateAutoscuolaSettings(
         agendaColorExceptions: nextLimits.agendaColorExceptions,
         automaticLessonMarker: nextLimits.automaticLessonMarker,
         automaticLessonMarkerColor: nextLimits.automaticLessonMarkerColor,
+        cancelledLessonBlocks: nextLimits.cancelledLessonBlocks,
         agendaInstructorOrder: nextLimits.agendaInstructorOrder,
         studentNameOrder: nextLimits.studentNameOrder,
       },
@@ -1934,6 +1942,7 @@ const agendaColorPatchSchema = z
     agendaColorExceptions: z.record(z.string(), z.boolean()).optional(),
     automaticLessonMarker: z.boolean().optional(),
     automaticLessonMarkerColor: z.string().regex(AGENDA_COLOR_HEX).nullable().optional(),
+    cancelledLessonBlocks: z.boolean().optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), {
     message: "Nessun campo da aggiornare.",
@@ -1971,6 +1980,8 @@ export async function updateAgendaColorSettings(
         payload.agendaColorExceptions ?? limits.agendaColorExceptions,
       ),
       ...automaticMarkerLimits(payload, limits),
+      cancelledLessonBlocks:
+        payload.cancelledLessonBlocks ?? limits.cancelledLessonBlocks === true,
     };
 
     if (service) {

@@ -56,6 +56,7 @@ import {
   updateExamTime,
   updateExamNotes,
   cancelExamEvent,
+  dismissCancelledAppointmentsFromAgenda,
 } from "@/lib/actions/autoscuole.actions";
 import {
   acceptConsorzioGuideRequest,
@@ -73,6 +74,8 @@ import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import { DatePickerInput } from "@/components/ui/date-picker";
 import { TimePickerInput } from "@/components/ui/time-picker";
 import { CreateEventPopover } from "@/components/pages/Autoscuole/dialogs/CreateEventPopover";
+import { CancelledLessonBlock } from "@/components/pages/Autoscuole/CancelledLessonBlock";
+import { findCancelledLessonBlocks, type CancelledByRole } from "@/lib/autoscuole/cancelled-lesson-blocks";
 import { HolidayModal } from "@/components/pages/Autoscuole/dialogs/HolidayModal";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -181,6 +184,14 @@ type AppointmentRow = {
   location?: { id: string; name: string; isDefault: boolean } | null;
   replacedByAppointmentId?: string | null;
   cancellationKind?: string | null;
+  // REG-623: blocco "guida annullata" e il suo riquadro.
+  cancellationReason?: string | null;
+  cancelledAt?: string | Date | null;
+  cancelledBy?: { name: string | null; role: CancelledByRole } | null;
+  lateCancellationAction?: string | null;
+  creditRefundedAt?: string | Date | null;
+  agendaDismissedAt?: string | Date | null;
+  slotFillOffer?: { sentAt: string | Date; expiresAt: string | Date; declined: number } | null;
   creditApplied?: boolean | null;
   paymentRequired?: boolean | null;
   /** REG-585: istruttori aggiuntivi (il principale resta in `instructor`). */
@@ -1424,10 +1435,14 @@ export function AutoscuoleAgendaPage({
   const [automaticMarkerColor, setAutomaticMarkerColor] = React.useState<string | null | false>(
     false,
   );
+  // REG-623: blocchi delle guide annullate non ancora sostituite (spento finché
+  // i settings non arrivano, come il bordo delle automatiche).
+  const [cancelledBlocksEnabled, setCancelledBlocksEnabled] = React.useState(false);
   React.useEffect(() => {
     let active = true;
     getAutoscuolaSettings().then((res) => {
       if (active && res.success && res.data) {
+        setCancelledBlocksEnabled(res.data.cancelledLessonBlocks);
         setAgendaColorCriterion(res.data.agendaColorCriterion);
         setAgendaColorOverrides(res.data.agendaColorOverrides);
         setAgendaColorExceptions(res.data.agendaColorExceptions);
@@ -2154,6 +2169,116 @@ export function AutoscuoleAgendaPage({
     },
     [source],
   );
+
+  // ── REG-623: guide annullate non ancora sostituite ────────────────────────
+  // Derivate da TUTTE le righe dell'agenda (anche quelle che `filtered`
+  // scarta): un blocco esiste solo finché nessuna guida attiva dello stesso
+  // istruttore copre il suo orario, quindi sparisce da solo al primo sostituto.
+  const cancelledBlocks = React.useMemo(
+    () => (cancelledBlocksEnabled ? findCancelledLessonBlocks(appointments) : []),
+    [cancelledBlocksEnabled, appointments],
+  );
+  // La guida annullata per cui si sta assegnando il sostituto: finché il form
+  // è aperto il suo blocco lascia il posto al ghost tratteggiato della nuova.
+  const [substituteForId, setSubstituteForId] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!createOpen) setSubstituteForId(null);
+  }, [createOpen]);
+
+  const dismissCancelledBlock = React.useCallback(
+    async (ids: string[]) => {
+      const res = await dismissCancelledAppointmentsFromAgenda({ appointmentIds: ids });
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Impossibile togliere il blocco." });
+        return;
+      }
+      const dismissedAt = new Date().toISOString();
+      setAppointments((prev) =>
+        prev.map((row) => (ids.includes(row.id) ? { ...row, agendaDismissedAt: dismissedAt } : row)),
+      );
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  // «Assegna sostituto»: il form di creazione già compilato con orario,
+  // durata, istruttore e veicolo della guida annullata. L'allievo resta da
+  // scegliere; tutto il resto si può cambiare.
+  const assignSubstitute = (item: AppointmentRow, anchor: { x: number; y: number }) => {
+    const start = toDate(item.startsAt);
+    const end = getAppointmentEnd(item);
+    const vehicle = item.vehicle?.id ? vehicles.find((v) => v.id === item.vehicle?.id) ?? null : null;
+    // Veicolo scelto "a mano": il prefill (REG-586) non lo sostituisce.
+    createVehicleTouchedRef.current = !!vehicle;
+    setForm((prev) => ({
+      ...prev,
+      studentId: "",
+      type: item.type,
+      types: item.types?.length ? item.types : [item.type],
+      day: formatYmd(start),
+      time: `${pad(start.getHours())}:${pad(start.getMinutes())}`,
+      instructorId: item.instructor?.id ?? "",
+      bookingMode: vehicle && isMotoLicenseCategory(vehicle.licenseCategory) ? "moto" : "auto",
+      vehicleId: vehicle?.id ?? "",
+      followVehicleId: "",
+      extraMotoVehicleIds: [],
+      motoLessonType: null,
+      duration: String(Math.max(15, diffMinutes(end, start))),
+      notes: "",
+    }));
+    setSubstituteForId(item.id);
+    setPopoverAnchor(anchor);
+    setCreateOpen(true);
+  };
+
+  const substituteSubtitle = (() => {
+    const original = substituteForId ? appointments.find((a) => a.id === substituteForId) : null;
+    if (!original) return "";
+    return `Al posto della guida annullata di ${formatStudentName(original.student, studentNameOrder)}. Scegli l'allievo: il resto è già compilato e si può cambiare.`;
+  })();
+
+  const renderCancelledBlocks = (day: Date, colId: string | null, dense: boolean) => {
+    if (!cancelledBlocks.length || !colId) return null;
+    const dayStart = new Date(day);
+    dayStart.setHours(DAY_START_HOUR, 0, 0, 0);
+    const dayEnd = new Date(day);
+    dayEnd.setHours(DAY_END_HOUR, 0, 0, 0);
+    return cancelledBlocks
+      .filter((block) => {
+        const item = block.appointment as AppointmentRow;
+        if (item.id === substituteForId) return false;
+        const start = toDate(item.startsAt);
+        if (!(start < dayEnd && getAppointmentEnd(item) > dayStart)) return false;
+        return colId.startsWith("veh:")
+          ? colId === `veh:${item.vehicle?.id ?? "__none__"}`
+          : block.instructorId === colId;
+      })
+      .map((block) => {
+        const item = block.appointment as AppointmentRow;
+        const start = toDate(item.startsAt);
+        const end = getAppointmentEnd(item);
+        const clippedStart = start < dayStart ? dayStart : start;
+        const clippedEnd = end > dayEnd ? dayEnd : end;
+        const top = Math.max(0, diffMinutes(clippedStart, dayStart)) * PIXELS_PER_MINUTE;
+        const height = Math.max(15, diffMinutes(clippedEnd, clippedStart)) * PIXELS_PER_MINUTE;
+        return (
+          <CancelledLessonBlock
+            key={`cancelled-${item.id}`}
+            item={item}
+            studentName={formatStudentName(item.student, studentNameOrder)}
+            studentNameShort={formatStudentNameShort(item.student, studentNameOrder)}
+            typeLabel={formatEventType(item.type)}
+            vehiclesEnabled={vehiclesEnabled}
+            top={top}
+            height={height}
+            compact={height <= 40}
+            dense={dense}
+            onDismiss={() => void dismissCancelledBlock(block.ids)}
+            onAssignSubstitute={(anchor) => assignSubstitute(item, anchor)}
+          />
+        );
+      });
+  };
 
   const renderGuideRequestGhost = (day: Date, colId: string | null) => {
     if (!guideRequest || !guideDraft) return null;
@@ -4843,6 +4968,7 @@ export function AutoscuoleAgendaPage({
                       >
                         {renderSlotGhost(day, instr.instructorId)}
                         {renderGuideRequestGhost(day, instr.instructorId)}
+                        {renderCancelledBlocks(day, instr.instructorId, true)}
                         {renderDraftGhost(day, instr.instructorId)}
                         {renderMultiGhosts(day, instr.instructorId)}
                         {isColumnHoliday && instrIdx === 0 && (
@@ -5433,6 +5559,7 @@ export function AutoscuoleAgendaPage({
                   >
                     {renderSlotGhost(day, instr.id)}
                     {renderGuideRequestGhost(day, instr.id)}
+                    {renderCancelledBlocks(day, instr.id, false)}
                     {renderDraftGhost(day, instr.id)}
                     {renderMultiGhosts(day, instr.id)}
                     {/* Availability bands — offset e clip alla finestra oraria visibile
@@ -5864,11 +5991,13 @@ export function AutoscuoleAgendaPage({
       <CreateEventPopover
         open={createOpen}
         onClose={() => { if (!creating) { setCreateOpen(false); closeConflictStep(); } }}
-        title={conflictStep ? "Auto al seguito occupata" : "Nuovo appuntamento"}
+        title={conflictStep ? "Auto al seguito occupata" : substituteForId ? "Assegna sostituto" : "Nuovo appuntamento"}
         subtitle={
           conflictStep
             ? "Cambia solo la macchina: le date restano quelle che hai scelto"
-            : multiMode
+            : substituteForId
+              ? substituteSubtitle
+              : multiMode
               ? "I blocchi tratteggiati in agenda si aggiornano mentre compili"
               : "Il blocco tratteggiato in agenda si aggiorna mentre compili"
         }
@@ -6212,22 +6341,34 @@ export function AutoscuoleAgendaPage({
                 // "toccato a mano". Il veicolo viene resettato qui, quindi la
                 // patente della guida è quella del percorso dell'allievo.
                 createLocationTouchedRef.current = false;
-                createVehicleTouchedRef.current = false;
-                const nextLocationId = prefillLocationId({ studentId: id, vehicleId: "" });
+                // REG-623 «Assegna sostituto»: istruttore e veicolo sono quelli
+                // della guida annullata (è il suo orario che si riempie). Il
+                // veicolo resta se va bene per la patente dell'allievo.
+                const substituteVehicle =
+                  substituteForId && form.vehicleId && student
+                    ? vehicles.find((v) => v.id === form.vehicleId) ?? null
+                    : null;
+                const keptVehicleId =
+                  substituteVehicle && vehicleServesLicense(substituteVehicle, student!) ? substituteVehicle.id : "";
+                createVehicleTouchedRef.current = !!keptVehicleId;
+                const nextInstructorId = substituteForId
+                  ? form.instructorId
+                  : preferredInstructorId || form.instructorId;
+                const nextLocationId = prefillLocationId({ studentId: id, vehicleId: keptVehicleId });
                 setForm((prev) => ({
                   ...prev,
                   studentId: id,
-                  instructorId: preferredInstructorId || prev.instructorId,
+                  instructorId: substituteForId ? prev.instructorId : preferredInstructorId || prev.instructorId,
                   locationId: id ? nextLocationId : prev.locationId,
-                  vehicleId: "",
+                  vehicleId: keptVehicleId,
                   followVehicleId: "",
                   extraMotoVehicleIds: [],
                 }));
                 if (id) {
                   advanceCreateFocus({
                     studentId: id,
-                    instructorId: preferredInstructorId || form.instructorId,
-                    vehicleId: "",
+                    instructorId: nextInstructorId,
+                    vehicleId: keptVehicleId,
                   });
                 }
               }}
