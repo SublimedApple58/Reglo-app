@@ -1,5 +1,6 @@
 import {
   buildReservedVehicles,
+  effectiveEntryNotes,
   effectiveFollowVehicleId,
   resolveEntryConflicts,
   type BusyRow,
@@ -182,5 +183,17 @@ describe("REG-616 — la riparazione deve reggere fino alla creazione", () => {
     expect(
       resolveEntryConflicts({ entries: tredate(GOLF), appointments: occupate, blocks: [], containers: [] }),
     ).toEqual([null, null, null]);
+  });
+});
+
+describe("effectiveEntryNotes (REG-625)", () => {
+  it("la nota della data sostituisce quella comune", () => {
+    expect(effectiveEntryNotes("Portare il foglio rosa", "Parcheggio in salita")).toBe("Parcheggio in salita");
+  });
+  it("assente o vuota = eredita la nota comune", () => {
+    expect(effectiveEntryNotes("Portare il foglio rosa", undefined)).toBe("Portare il foglio rosa");
+    expect(effectiveEntryNotes("Portare il foglio rosa", "   ")).toBe("Portare il foglio rosa");
+    expect(effectiveEntryNotes(undefined, undefined)).toBeNull();
+    expect(effectiveEntryNotes("", null)).toBeNull();
   });
 });

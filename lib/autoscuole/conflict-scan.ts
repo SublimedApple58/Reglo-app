@@ -100,6 +100,19 @@ export function effectiveFollowVehicleId(
   return perEntry === undefined ? (shared ?? null) : perEntry;
 }
 
+/**
+ * REG-625 — la nota che vale per UNA data della prenotazione multipla: quella
+ * scritta per quella data se c'e', altrimenti la nota comune. La SOSTITUISCE,
+ * non si aggiunge. Stessa regola dell'auto al seguito, ma una nota vuota non
+ * vuol dire "nessuna nota": eredita (il form non ha un modo per toglierla).
+ */
+export function effectiveEntryNotes(
+  shared: string | null | undefined,
+  perEntry: string | null | undefined,
+): string | null {
+  return perEntry?.trim() || shared?.trim() || null;
+}
+
 /** Una guida da verificare, con i mezzi che terrebbe impegnati. */
 export type ScanEntry = {
   startsAt: Date;

@@ -106,6 +106,7 @@ import {
 } from "@/lib/autoscuole/conflict-reason";
 import {
   buildReservedVehicles,
+  effectiveEntryNotes,
   effectiveFollowVehicleId,
   findGroupContainerConflict,
   scanEntryConflicts,
@@ -4202,7 +4203,8 @@ const createAppointmentBatchSchema = z.object({
   types: z.array(z.string()).optional(),
   // REG-590: la nota del form si applica a OGNI guida del batch (gli altri
   // campi condivisi si comportano cosi'). Il form web ha il campo Note anche
-  // in multipla: senza questo la nota sparirebbe in silenzio.
+  // in multipla: senza questo la nota sparirebbe in silenzio. REG-625: una
+  // data con la sua `entries[].notes` usa quella al posto di questa.
   notes: z.string().optional(),
   skipWeeklyLimitCheck: z.boolean().optional(),
   // Vedi createAppointmentSchema.allowPast — consente di registrare slot passati
@@ -4220,6 +4222,11 @@ const createAppointmentBatchSchema = z.object({
          * gruppo, il secondo e' una scelta esplicita dell'utente.
          */
         followVehicleId: z.string().uuid().nullable().optional(),
+        /**
+         * REG-625 — nota di questa sola data: sostituisce `notes` del gruppo.
+         * Assente o vuota = eredita la nota comune.
+         */
+        notes: z.string().max(2000).nullable().optional(),
       }),
     )
     .min(1)
@@ -4347,6 +4354,7 @@ export async function createAutoscuolaAppointmentBatch(
       startsAt: Date;
       endsAt: Date;
       followVehicleId: string | null;
+      notes: string | null;
     }> = [];
     for (const entry of payload.entries) {
       const start = new Date(entry.startsAt);
@@ -4364,6 +4372,7 @@ export async function createAutoscuolaAppointmentBatch(
           payload.followVehicleId,
           entry.followVehicleId,
         ),
+        notes: effectiveEntryNotes(payload.notes, entry.notes),
       });
     }
 
@@ -4543,7 +4552,7 @@ export async function createAutoscuolaAppointmentBatch(
             vehicleId: payload.vehicleId ?? null,
             motoLessonType: payload.motoLessonType ?? null,
             locationId: batchLocationId,
-            notes: payload.notes?.trim() || null,
+            notes: entry.notes,
             paymentRequired: paymentSnapshot.paymentRequired,
             paymentStatus: paymentSnapshot.paymentStatus,
             priceAmount: paymentSnapshot.priceAmount,

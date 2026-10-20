@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { useAtomValue } from "jotai";
-import { Plus, Layers, SlidersHorizontal, Users, Link2, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2, BookOpen, Lock, Printer, TrafficCone, Route, Truck } from "lucide-react";
+import { Plus, Layers, SlidersHorizontal, Users, Link2, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2, BookOpen, Lock, Printer, TrafficCone, Route, Truck, NotebookPen } from "lucide-react";
 
 import { companyAtom } from "@/atoms/company.store";
 import { isConsortium } from "@/lib/services";
@@ -1285,7 +1285,8 @@ export function AutoscuoleAgendaPage({
    * resto (allievo, veicoli, tipo, luogo, nota) resta CONDIVISO, esattamente
    * come nel batch del backend.
    */
-  type BookingEntry = { id: string; day: string; time: string; duration: string };
+  /** `notes` (REG-625): nota di questa sola data; vuota = eredita la nota comune. */
+  type BookingEntry = { id: string; day: string; time: string; duration: string; notes?: string };
   const [multiMode, setMultiMode] = React.useState(false);
   /**
    * REG-613 — passo "Auto al seguito occupata". La prova a vuoto dice quali
@@ -3188,7 +3189,7 @@ export function AutoscuoleAgendaPage({
 
   /** La creazione vera e propria, una volta che le date sono decise. */
   const submitBatch = async (
-    payloadEntries: Array<{ startsAt: string; endsAt: string; followVehicleId?: string | null }>,
+    payloadEntries: Array<{ startsAt: string; endsAt: string; followVehicleId?: string | null; notes?: string }>,
     opts: { allowPast: boolean },
   ) => {
     if (!payloadEntries.length) {
@@ -3227,12 +3228,15 @@ export function AutoscuoleAgendaPage({
     finishBatchCreate(created, firstStart);
   };
 
+  /** REG-625: la nota della data viaggia solo se scritta; assente = eredita la comune. */
+  const entryNotes = (e: BookingEntry | undefined) => (e?.notes?.trim() ? { notes: e.notes.trim() } : {});
+
   /** Le date del form, in ISO, nell'ordine in cui l'utente le ha messe. */
   const batchEntriesIso = () =>
     entries.map((e) => {
       const start = buildLocalDateTime(e.day, e.time);
       const end = new Date(start.getTime() + (parseInt(e.duration, 10) || 30) * 60 * 1000);
-      return { startsAt: start.toISOString(), endsAt: end.toISOString() };
+      return { startsAt: start.toISOString(), endsAt: end.toISOString(), ...entryNotes(e) };
     });
 
   /**
@@ -3340,6 +3344,7 @@ export function AutoscuoleAgendaPage({
           endsAt: entry.endsAt,
           // `undefined` = eredita l'auto condivisa; `null` = nessuna auto.
           ...(choice !== undefined && choice !== "remove" ? { followVehicleId: choice } : {}),
+          ...entryNotes(entries[entry.index]),
         };
       });
     await submitBatch(payloadEntries, { allowPast: conflictStep.allowPast });
@@ -6224,6 +6229,30 @@ export function AutoscuoleAgendaPage({
                       );
                     })}
                   </div>
+                  <div className="relative mt-2 pl-7">
+                    <NotebookPen
+                      className={cn(
+                        "pointer-events-none absolute left-[38px] top-1/2 size-3.5 -translate-y-1/2",
+                        entry.notes?.trim() ? "text-[#222222]" : "text-[#b0b0b0]",
+                      )}
+                      strokeWidth={2.2}
+                      aria-hidden
+                    />
+                    <input
+                      type="text"
+                      data-testid="multi-entry-note"
+                      aria-label={`Nota della guida ${idx + 1}`}
+                      value={entry.notes ?? ""}
+                      maxLength={2000}
+                      disabled={creating}
+                      onChange={(e) => updateEntry(entry.id, { notes: e.target.value })}
+                      placeholder={form.notes.trim() ? `Nota comune: ${form.notes.trim()}` : "Nota per questa guida"}
+                      className={cn(
+                        "h-8 w-full rounded-[8px] border pl-7 pr-2.5 text-[12px] text-[#222222] outline-none transition-[border-color,background-color,box-shadow] placeholder:truncate placeholder:text-[#a8a8a8] focus:border-[#222222] focus:bg-white focus:shadow-[0_0_0_3px_rgba(0,0,0,0.06)]",
+                        entry.notes?.trim() ? "border-[#cfcfcf] bg-white font-medium" : "border-transparent bg-[#f5f5f5] hover:bg-[#efefef]",
+                      )}
+                    />
+                  </div>
                 </div>
               ))}
               {overlappingEntryIds.size > 0 ? (
@@ -6566,7 +6595,12 @@ export function AutoscuoleAgendaPage({
             </div>
           )}
           <div>
-            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Note</p>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">
+              {multiMode ? "Nota comune" : "Note"}
+              {multiMode ? (
+                <span className="ml-1.5 font-medium text-[#929292]">· vale per le guide senza una nota propria</span>
+              ) : null}
+            </p>
             <Textarea
               value={form.notes}
               onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
