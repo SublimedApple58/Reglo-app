@@ -2,7 +2,7 @@
 
 import React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
-import { CalendarX2, UserPlus, X } from "lucide-react";
+import { CalendarX2, Check, Lock, NotebookPen, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   cancellationNoticeLabel,
@@ -68,6 +68,8 @@ export function CancelledLessonBlock({
   height,
   compact,
   dense,
+  note,
+  onSaveNote,
   onDismiss,
   onAssignSubstitute,
 }: {
@@ -82,10 +84,37 @@ export function CancelledLessonBlock({
   compact: boolean;
   /** Colonna stretta della settimana: testi più piccoli. */
   dense: boolean;
+  /** REG-624: nota dell'ufficio sul blocco. */
+  note?: string | null;
+  /** Assente = chi guarda non è l'ufficio: niente nota, né sul blocco né nel riquadro. */
+  onSaveNote?: (note: string) => Promise<boolean>;
   onDismiss: () => void;
   onAssignSubstitute: (anchor: { x: number; y: number }) => void;
 }) {
   const [open, setOpen] = React.useState(false);
+  const savedNote = onSaveNote ? (note ?? "").trim() : "";
+  const [draft, setDraft] = React.useState(savedNote);
+  const [saving, setSaving] = React.useState(false);
+  const [justSaved, setJustSaved] = React.useState(false);
+  React.useEffect(() => {
+    if (!open) setDraft(savedNote);
+  }, [open, savedNote]);
+  const dirty = draft.trim() !== savedNote;
+  const saveNote = async () => {
+    if (!onSaveNote || !dirty || saving) return;
+    setSaving(true);
+    const ok = await onSaveNote(draft.trim());
+    setSaving(false);
+    if (ok) {
+      setJustSaved(true);
+      window.setTimeout(() => setJustSaved(false), 1600);
+    }
+  };
+  // Chiudere il riquadro con la nota cambiata la salva: niente bottone dimenticato.
+  const handleOpenChange = (next: boolean) => {
+    if (!next && dirty) void saveNote();
+    setOpen(next);
+  };
   const blockRef = React.useRef<HTMLButtonElement>(null);
   const start = toDate(item.startsAt);
   const end = item.endsAt ? toDate(item.endsAt) : new Date(start.getTime() + 60 * 60 * 1000);
@@ -105,7 +134,7 @@ export function CancelledLessonBlock({
   const offerExpired = offer ? toDate(offer.expiresAt).getTime() < Date.now() : false;
 
   return (
-    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+    <PopoverPrimitive.Root open={open} onOpenChange={handleOpenChange}>
       <PopoverPrimitive.Anchor asChild>
         <div
           className="group/cancelled absolute left-0.5 right-0.5 z-[11]"
@@ -135,6 +164,9 @@ export function CancelledLessonBlock({
               >
                 <CalendarX2 className={cn("shrink-0", dense ? "size-2.5" : "size-3")} strokeWidth={2.4} aria-hidden />
                 <span className="truncate">{compact ? `Annullata · ${studentNameShort}` : "Annullata"}</span>
+                {compact && savedNote ? (
+                  <NotebookPen className="ml-auto size-2.5 shrink-0 text-[#6a6a6a]" strokeWidth={2.4} aria-label="Con nota" />
+                ) : null}
               </span>
               {!compact && (
                 <>
@@ -149,6 +181,25 @@ export function CancelledLessonBlock({
                   <span className={cn("truncate tabular-nums text-[#929292]", dense ? "text-[8px]" : "text-[10.5px]")}>
                     {timeRange}
                   </span>
+                  {savedNote ? (
+                    <span
+                      data-testid="cancelled-block-note"
+                      title={savedNote}
+                      className={cn(
+                        "mt-auto flex min-w-0 items-start gap-1 rounded-[5px] bg-white/90 font-medium text-[#3a3a3a] shadow-[0_0_0_1px_rgba(0,0,0,0.06)]",
+                        dense ? "px-1 py-[2px] text-[8.5px] leading-[1.25]" : "px-1.5 py-[3px] text-[10.5px] leading-[1.3]",
+                      )}
+                    >
+                      <NotebookPen
+                        className={cn("mt-[1px] shrink-0 text-[#8a8a8a]", dense ? "size-2" : "size-2.5")}
+                        strokeWidth={2.4}
+                        aria-hidden
+                      />
+                      <span className={cn("min-w-0 break-words", height >= 110 ? "line-clamp-3" : "line-clamp-1")}>
+                        {savedNote}
+                      </span>
+                    </span>
+                  ) : null}
                 </>
               )}
             </button>
@@ -232,18 +283,72 @@ export function CancelledLessonBlock({
             ) : null}
           </div>
 
+          {onSaveNote ? (
+            <div className="mt-3.5">
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor={`cancelled-note-${item.id}`}
+                  className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#a0a0a0]"
+                >
+                  Nota
+                </label>
+                <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-[#a0a0a0]">
+                  <Lock className="size-2.5" strokeWidth={2.4} aria-hidden />
+                  Solo ufficio
+                </span>
+              </div>
+              <textarea
+                id={`cancelled-note-${item.id}`}
+                data-testid="cancelled-note-input"
+                value={draft}
+                maxLength={500}
+                rows={2}
+                placeholder="Es. proposta a Rossi e Bianchi"
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    void saveNote();
+                  }
+                }}
+                className="mt-1.5 block w-full resize-none rounded-[10px] border border-[#e2e2e2] bg-[#fafafa] px-3 py-2 text-[13px] leading-snug text-[#222222] outline-none transition-[border-color,background-color,box-shadow] placeholder:text-[#b0b0b0] hover:border-[#cfcfcf] focus:border-[#222222] focus:bg-white focus:shadow-[0_0_0_3px_rgba(0,0,0,0.06)]"
+              />
+              <div className="mt-1.5 flex min-h-7 items-center justify-between gap-3">
+                <span className="text-[11px] leading-snug text-[#a0a0a0]">
+                  Sparisce col blocco quando lo slot si riempie.
+                </span>
+                {justSaved && !dirty ? (
+                  <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-semibold text-[#3a3a3a]">
+                    <Check className="size-3.5" strokeWidth={2.6} aria-hidden />
+                    Salvata
+                  </span>
+                ) : dirty ? (
+                  <button
+                    type="button"
+                    data-testid="cancelled-note-save"
+                    disabled={saving}
+                    onClick={() => void saveNote()}
+                    className="shrink-0 cursor-pointer rounded-full border border-[#222222] px-3 py-1 text-[12px] font-semibold text-[#222222] transition-colors hover:bg-[#222222] hover:text-white disabled:cursor-default disabled:opacity-50"
+                  >
+                    {saving ? "Salvo…" : "Salva nota"}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           <button
             type="button"
             onClick={() => {
               const rect = blockRef.current?.getBoundingClientRect();
-              setOpen(false);
+              handleOpenChange(false);
               onAssignSubstitute(
                 rect
                   ? { x: (rect.left + rect.right) / 2, y: Math.max(80, Math.min(rect.top - 8, window.innerHeight - 420)) }
                   : { x: window.innerWidth / 2, y: 120 },
               );
             }}
-            className="mt-4 flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-[#222222] px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-black"
+            className={cn(onSaveNote ? "mt-3" : "mt-4", "flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-[#222222] px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-black")}
           >
             <UserPlus className="size-4" strokeWidth={2.2} />
             Assegna sostituto

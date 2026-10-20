@@ -1303,6 +1303,8 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           lateCancellationAction: true,
           creditRefundedAt: true,
           agendaDismissedAt: true,
+          // REG-624: la rotta bootstrap la lascia solo all'ufficio sul web.
+          agendaNote: true,
           createdAt: true,
           updatedAt: true,
           student: {
@@ -1621,6 +1623,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           lateCancellationAction: null,
           creditRefundedAt: null,
           agendaDismissedAt: null,
+          agendaNote: null,
           createdAt: gl.startsAt,
           updatedAt: gl.startsAt,
           case: null,
@@ -4888,6 +4891,40 @@ export async function dismissCancelledAppointmentsFromAgenda(input: { appointmen
       segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA],
     });
     return { success: true, data: { dismissed: res.count } };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+/**
+ * REG-624 — nota dell'ufficio sul blocco di una guida annullata («proposta a
+ * Rossi e Bianchi»). Solo titolare e segreteria. Si scrive su tutte le guide
+ * del blocco, così resta anche se a mostrarsi è un'altra annullata
+ * sovrapposta. Non serve cancellarla: sparisce col blocco quando lo slot si
+ * riempie. Testo vuoto = nessuna nota.
+ */
+export async function updateCancelledLessonAgendaNote(input: { appointmentIds: string[]; note: string }) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (!isOwner(membership.autoscuolaRole) && membership.role !== "admin") {
+      return { success: false, message: "La nota la scrive solo l'ufficio." };
+    }
+    const { appointmentIds, note } = z
+      .object({
+        appointmentIds: z.array(z.string().uuid()).min(1).max(20),
+        note: z.string().max(500, "Nota troppo lunga (max 500 caratteri)."),
+      })
+      .parse(input);
+    const agendaNote = note.trim() || null;
+    const res = await prisma.autoscuolaAppointment.updateMany({
+      where: { id: { in: appointmentIds }, companyId: membership.companyId, status: "cancelled" },
+      data: { agendaNote },
+    });
+    await invalidateAutoscuoleCache({
+      companyId: membership.companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA],
+    });
+    return { success: true, data: { updated: res.count, agendaNote } };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }

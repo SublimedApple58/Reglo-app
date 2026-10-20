@@ -57,6 +57,7 @@ import {
   updateExamNotes,
   cancelExamEvent,
   dismissCancelledAppointmentsFromAgenda,
+  updateCancelledLessonAgendaNote,
 } from "@/lib/actions/autoscuole.actions";
 import {
   acceptConsorzioGuideRequest,
@@ -191,6 +192,8 @@ type AppointmentRow = {
   lateCancellationAction?: string | null;
   creditRefundedAt?: string | Date | null;
   agendaDismissedAt?: string | Date | null;
+  /** REG-624: nota dell'ufficio sul blocco annullato (solo web, solo ufficio). */
+  agendaNote?: string | null;
   slotFillOffer?: { sentAt: string | Date; expiresAt: string | Date; declined: number } | null;
   creditApplied?: boolean | null;
   paymentRequired?: boolean | null;
@@ -352,6 +355,8 @@ export type AgendaBootstrapPayload = {
     generatedAt: string | Date;
     count: number;
     cache?: boolean;
+    /** REG-624: chi guarda è l'ufficio e riceve le note dei blocchi annullati. */
+    officeNotes?: boolean;
   };
 };
 
@@ -1438,6 +1443,8 @@ export function AutoscuoleAgendaPage({
   // REG-623: blocchi delle guide annullate non ancora sostituite (spento finché
   // i settings non arrivano, come il bordo delle automatiche).
   const [cancelledBlocksEnabled, setCancelledBlocksEnabled] = React.useState(false);
+  // REG-624: la nota sul blocco annullato è dell'ufficio (titolare e segreteria).
+  const [officeNotes, setOfficeNotes] = React.useState(false);
   React.useEffect(() => {
     let active = true;
     getAutoscuolaSettings().then((res) => {
@@ -1833,6 +1840,8 @@ export function AutoscuoleAgendaPage({
         from: from.toISOString(),
         to: to.toISOString(),
         limit: "500",
+        // REG-624: le note dei blocchi annullati (la rotta le dà solo all'ufficio).
+        officeNotes: "1",
       });
 
       return `/api/autoscuole/agenda/bootstrap?${params.toString()}`;
@@ -1884,6 +1893,7 @@ export function AutoscuoleAgendaPage({
         // rows from the bootstrap action itself (shared with mobile); the
         // `regularAppointments` memo collapses them into one card per lesson.
         setAppointments(payload.data.appointments ?? []);
+        setOfficeNotes(payload.data.meta?.officeNotes === true);
         setStudents(payload.data.students ?? []);
         setInstructors(payload.data.instructors ?? []);
         setVehicles(payload.data.vehicles ?? []);
@@ -2201,6 +2211,19 @@ export function AutoscuoleAgendaPage({
     [],
   );
 
+  /** REG-624: la nota va su tutte le guide del blocco (vedi updateCancelledLessonAgendaNote). */
+  const saveCancelledBlockNote = React.useCallback(async (ids: string[], note: string) => {
+    const res = await updateCancelledLessonAgendaNote({ appointmentIds: ids, note });
+    if (!res.success || !res.data) {
+      toast.error({ description: res.message ?? "Impossibile salvare la nota." });
+      return false;
+    }
+    const agendaNote = res.data.agendaNote;
+    setAppointments((prev) => prev.map((row) => (ids.includes(row.id) ? { ...row, agendaNote } : row)));
+    return true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // «Assegna sostituto»: il form di creazione già compilato con orario,
   // durata, istruttore e veicolo della guida annullata. L'allievo resta da
   // scegliere; tutto il resto si può cambiare.
@@ -2273,6 +2296,12 @@ export function AutoscuoleAgendaPage({
             height={height}
             compact={height <= 40}
             dense={dense}
+            note={
+              item.agendaNote ||
+              block.ids.map((id) => appointments.find((a) => a.id === id)?.agendaNote).find(Boolean) ||
+              null
+            }
+            onSaveNote={officeNotes ? (note) => saveCancelledBlockNote(block.ids, note) : undefined}
             onDismiss={() => void dismissCancelledBlock(block.ids)}
             onAssignSubstitute={(anchor) => assignSubstitute(item, anchor)}
           />

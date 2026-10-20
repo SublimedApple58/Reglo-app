@@ -6,6 +6,8 @@ import {
   writeAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
 import { getAutoscuolaAgendaBootstrapAction } from "@/lib/actions/autoscuole.actions";
+import { withOfficeNotes } from "@/lib/autoscuole/cancelled-lesson-blocks";
+import { isOwner } from "@/lib/autoscuole/roles";
 import { withPerfJson } from "@/lib/perf";
 import { requireServiceAccess } from "@/lib/service-access";
 
@@ -31,6 +33,9 @@ export async function GET(request: Request) {
         : undefined;
 
     const { membership } = await measure("context", () => requireServiceAccess("AUTOSCUOLE"));
+    const officeNotes =
+      searchParams.get("officeNotes") === "1" &&
+      (isOwner(membership.autoscuolaRole) || membership.role === "admin");
     const filters = {
       from,
       to,
@@ -65,13 +70,16 @@ export async function GET(request: Request) {
         cacheHit: true,
         body: {
           success: true,
-          data: {
-            ...cached,
-            meta: {
-              ...cached.meta,
-              cache: true,
+          data: withOfficeNotes(
+            {
+              ...cached,
+              meta: {
+                ...cached.meta,
+                cache: true,
+              },
             },
-          },
+            officeNotes,
+          ),
         },
       };
     }
@@ -110,7 +118,7 @@ export async function GET(request: Request) {
       cacheHit: false,
       body: {
         success: true,
-        data: payload,
+        data: withOfficeNotes(payload, officeNotes),
       },
     };
   });

@@ -599,6 +599,10 @@ model AutoscuolaAppointment {
   /// blocco. Solo visivo: la guida resta annullata e nello storico com'era.
   agendaDismissedAt            DateTime? @db.Timestamp(6)
   agendaDismissedByUserId      String?   @db.Uuid
+  /// REG-624: nota dell'ufficio sul blocco della guida annullata (es. «proposta
+  /// a Rossi e Bianchi»). Solo web, titolare e segreteria: la rotta bootstrap
+  /// la toglie per l'app. Sparisce col blocco, perché vive sulla guida annullata.
+  agendaNote                   String?
   rescheduledAt                DateTime? @db.Timestamp(6)
   rescheduledFromStartsAt      DateTime? @db.Timestamp(6)
   locationId                   String?   @db.Uuid

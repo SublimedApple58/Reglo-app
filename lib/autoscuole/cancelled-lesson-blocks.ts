@@ -148,3 +148,25 @@ export function lateCancellationLabel(action: string | null | undefined) {
   if (action === "dismissed") return "Penale condonata";
   return null;
 }
+
+/**
+ * REG-624: la nota del blocco annullato è dell'ufficio. Arriva solo all'agenda
+ * web (`officeNotes=1`) di titolare e segreteria; all'app e agli istruttori la
+ * rotta bootstrap la toglie. La cache resta una per autoscuola: il filtro sta
+ * dopo la cache, e `meta.officeNotes` dice al client se può scriverla.
+ */
+export function withOfficeNotes<T extends { appointments?: unknown[]; meta?: Record<string, unknown> }>(
+  data: T,
+  officeNotes: boolean,
+): T {
+  return {
+    ...data,
+    appointments: officeNotes
+      ? data.appointments
+      : data.appointments?.map((row) => {
+          const { agendaNote: _note, ...rest } = row as Record<string, unknown>;
+          return rest;
+        }),
+    meta: { ...data.meta, officeNotes },
+  };
+}

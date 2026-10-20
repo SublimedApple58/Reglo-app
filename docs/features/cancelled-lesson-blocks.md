@@ -52,6 +52,24 @@ Visibili anche nei **giorni passati** (decisione di Tiziano: spiegano il buco).
   Salvando, lo slot è occupato e il blocco sparisce. Se si cambia istruttore
   nel form, il blocco resta (quell'orario dell'istruttore è ancora libero).
 
+## Nota dell'ufficio (REG-624)
+
+Nel riquadro, sopra «Assegna sostituto», il campo **Nota** («Es. proposta a
+Rossi e Bianchi»), etichettato «Solo ufficio». Si salva con «Salva nota»,
+Cmd/Ctrl+Invio o chiudendo il riquadro. Il testo compare anche sul blocco
+rigato (riga in fondo; nei blocchi bassi solo un'icona).
+
+- La vede e scrive **solo l'ufficio sul web** (titolare, `INSTRUCTOR_OWNER`,
+  admin). L'agenda web chiede `officeNotes=1` alla rotta bootstrap; la rotta
+  (`withOfficeNotes`) toglie `agendaNote` a tutti gli altri, app compresa, e
+  mette `meta.officeNotes` per dire al client se mostrarla. La cache Redis
+  resta una per autoscuola: il filtro sta dopo.
+- Si scrive su **tutte** le guide del blocco (annullate sovrapposte), così
+  resta anche se a mostrarsi è un'altra.
+- Niente pulizia: quando lo slot si riempie il blocco sparisce e la nota con
+  lui (vive sulla guida annullata). Se il sostituto viene annullato, blocco e
+  nota ricompaiono.
+
 ## Dati
 
 - Setting: `cancelledLessonBlocks` (boolean) nel JSON `CompanyService.limits`,
@@ -61,6 +79,9 @@ Visibili anche nei **giorni passati** (decisione di Tiziano: spiegano il buco).
   (migrazione additiva `20261019120000_appointment_agenda_dismissed`): la X.
   **Solo visivo**: la guida resta annullata, nello storico e nei conteggi; vale
   per tutta la segreteria.
+- `AutoscuolaAppointment.agendaNote` (migrazione additiva
+  `20261020120000_appointment_agenda_note`): la nota dell'ufficio (REG-624),
+  max 500 caratteri, scritta da `updateCancelledLessonAgendaNote`.
 - Bootstrap agenda (`getAutoscuolaAgendaBootstrapAction`) espone in più
   `cancelledAt`, `cancelledByUserId`, `lateCancellationAction`,
   `creditRefundedAt`, `agendaDismissedAt` e, sulle annullate, `cancelledBy
@@ -77,7 +98,8 @@ Visibili anche nei **giorni passati** (decisione di Tiziano: spiegano il buco).
 | `components/pages/Autoscuole/CancelledLessonBlock.tsx` | Blocco rigato + X all'hover + riquadro al click |
 | `components/pages/Autoscuole/AutoscuoleAgendaPage.tsx` | `cancelledBlocks` memo, `renderCancelledBlocks` (settimana e giorno, anche vista Veicoli), `assignSubstitute`, `substituteForId`, `dismissCancelledBlock` |
 | `components/pages/Autoscuole/AspettoSettingsPane.tsx` | Riga del setting con anteprima del blocco |
-| `lib/actions/autoscuole.actions.ts` | `dismissCancelledAppointmentsFromAgenda`, `buildAgendaCancellationInfo`, campi bootstrap |
+| `lib/actions/autoscuole.actions.ts` | `dismissCancelledAppointmentsFromAgenda`, `updateCancelledLessonAgendaNote`, `buildAgendaCancellationInfo`, campi bootstrap |
+| `app/api/autoscuole/agenda/bootstrap/route.ts` | `officeNotes=1` + ruolo → nota sì/no (`withOfficeNotes`) |
 | `lib/actions/autoscuole-settings.actions.ts` | `cancelledLessonBlocks` |
 | `tests/unit/autoscuole/cancelled-lesson-blocks.test.ts` | Regola |
 | `tests/e2e/reg623-cancelled-blocks.auth.spec.ts` | Flusso completo su dati dev + anteprime |

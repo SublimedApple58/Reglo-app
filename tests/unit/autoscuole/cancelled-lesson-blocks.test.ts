@@ -2,6 +2,7 @@ import {
   cancellationNoticeLabel,
   findCancelledLessonBlocks,
   isCancelledBlockCandidate,
+  withOfficeNotes,
   type CancelledBlockAppointment,
 } from "@/lib/autoscuole/cancelled-lesson-blocks";
 
@@ -93,5 +94,20 @@ describe("blocchi guide annullate (REG-623)", () => {
     expect(cancellationNoticeLabel(at(10), at(7))).toBe("3 ore prima");
     expect(cancellationNoticeLabel(at(10), new Date(2026, 9, 15, 10).toISOString())).toBe("6 giorni prima");
     expect(cancellationNoticeLabel(at(10), at(10, 5))).toBe("Dopo l'inizio della guida");
+  });
+
+  it("la nota del blocco arriva solo all'ufficio (REG-624)", () => {
+    const data = {
+      appointments: [{ id: "a", agendaNote: "proposta a Rossi e Bianchi" }, { id: "b", agendaNote: null }],
+      meta: { count: 2 },
+    };
+    const office = withOfficeNotes(data, true);
+    expect(office.appointments).toEqual(data.appointments);
+    expect(office.meta).toEqual({ count: 2, officeNotes: true });
+    const app = withOfficeNotes(data, false);
+    expect(app.appointments).toEqual([{ id: "a" }, { id: "b" }]);
+    expect(app.meta).toEqual({ count: 2, officeNotes: false });
+    // I dati di partenza (la cache) non si toccano.
+    expect(data.appointments[0].agendaNote).toBe("proposta a Rossi e Bianchi");
   });
 });
