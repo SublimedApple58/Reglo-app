@@ -341,4 +341,99 @@ test.describe("Pausa tra le guide (REG-484)", () => {
       });
     }
   });
+
+  test("il sostituto di una guida annullata non fa scattare l'avviso (REG-623) @lesson-buffer", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    const api = page.request;
+    // Il giorno dopo quello del test sopra: finestre separate.
+    const day = testDay();
+    day.setDate(day.getDate() + 1);
+    const windowStart = at(day, 8, 0);
+    const windowEnd = at(day, 17, 0);
+
+    const original = await getSettings(api);
+    const createdAppointments: string[] = [];
+
+    try {
+      const bootstrapRes = await api.get("/api/autoscuole/agenda/bootstrap", {
+        params: { from: windowStart.toISOString(), to: windowEnd.toISOString() },
+      });
+      expect(bootstrapRes.ok(), "GET /agenda/bootstrap").toBeTruthy();
+      const bootstrap = ((await bootstrapRes.json()) as {
+        data: {
+          appointments: Array<{ id: string }>;
+          instructors: Array<{ id: string; name: string }>;
+          students: Array<{ id: string; email: string | null }>;
+          instructorBlocks: Array<{ id: string }>;
+        };
+      }).data;
+      const instructorName = process.env.E2E_INSTRUCTOR_NAME || "Istruttore E2E";
+      const instructor =
+        bootstrap.instructors.find((i) => i.name === instructorName) ??
+        bootstrap.instructors[0];
+      const student = bootstrap.students.find((s) => s.email === "allievo@reglo.it");
+      expect(instructor, "almeno un istruttore in autoscuola").toBeTruthy();
+      expect(student, "allievo del seed (allievo@reglo.it)").toBeTruthy();
+      for (const appt of bootstrap.appointments) {
+        await api.post(`/api/autoscuole/appointments/${appt.id}/permanent-cancel`);
+      }
+      for (const block of bootstrap.instructorBlocks) {
+        await api.delete(`/api/autoscuole/instructor-blocks/${block.id}`);
+      }
+
+      await patchSettings(api, {
+        lessonBufferEnabled: true,
+        lessonBufferMinutes: BUFFER_MINUTES,
+      });
+      const lesson = { studentId: student!.id, instructorId: instructor!.id };
+      const slots = async () =>
+        (await bufferBlocks(api, windowStart, windowEnd)).map(
+          (b) => `${hhmm(b.startsAt)}–${hhmm(b.endsAt)}`,
+        );
+
+      // La guida 10–11 lascia la sua pausa; l'allievo la annulla, la pausa resta.
+      const aRes = await bookLesson(api, { ...lesson, startsAt: at(day, 10, 0), endsAt: at(day, 11, 0) });
+      expect(aRes.status(), await aRes.text()).toBe(200);
+      const aId = ((await aRes.json()) as { data: { id: string } }).data.id;
+      createdAppointments.push(aId);
+      const cancelRes = await api.post(`/api/autoscuole/appointments/${aId}/cancel`);
+      expect(cancelRes.status(), await cancelRes.text()).toBe(200);
+      expect(await slots()).toEqual(["11:00–11:15"]);
+
+      // Il sostituto nello stesso slot nasce senza avviso e si prende la pausa
+      // che c'era (nessun doppione).
+      const bRes = await bookLesson(api, { ...lesson, startsAt: at(day, 10, 0), endsAt: at(day, 11, 0) });
+      expect(bRes.status(), await bRes.text()).toBe(200);
+      createdAppointments.push(((await bRes.json()) as { data: { id: string } }).data.id);
+      expect(await slots()).toEqual(["11:00–11:15"]);
+
+      // Il caso vero resta: una guida che finisce proprio dove inizia il
+      // sostituto non ha spazio per la pausa → avviso.
+      const before = await bookLesson(api, { ...lesson, startsAt: at(day, 9, 0), endsAt: at(day, 10, 0) });
+      expect(before.status()).toBe(400);
+      expect(((await before.json()) as { code?: string }).code).toBe("LESSON_BUFFER_CONFIRM");
+    } finally {
+      for (const id of createdAppointments) {
+        await api.post(`/api/autoscuole/appointments/${id}/permanent-cancel`);
+      }
+      const leftoverRes = await api.get("/api/autoscuole/instructor-blocks", {
+        params: { from: windowStart.toISOString(), to: windowEnd.toISOString() },
+      });
+      if (leftoverRes.ok()) {
+        const leftover = ((await leftoverRes.json()) as { data: Array<{ id: string }> }).data;
+        for (const block of leftover) {
+          await api.delete(`/api/autoscuole/instructor-blocks/${block.id}`);
+        }
+      }
+      await patchSettings(api, {
+        lessonBufferEnabled: original.lessonBufferEnabled === true,
+        lessonBufferMinutes:
+          typeof original.lessonBufferMinutes === "number"
+            ? original.lessonBufferMinutes
+            : BUFFER_MINUTES,
+      });
+    }
+  });
 });

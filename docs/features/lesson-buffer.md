@@ -32,6 +32,17 @@ Il blocco viene creato dopo che la guida è stata scritta a DB, da
 - **tollerante agli errori**: se la creazione fallisce non fa fallire la
   prenotazione, che a quel punto è già andata a buon fine.
 
+## Pausa di una guida annullata
+
+Annullare una guida **non** toglie la sua pausa: il blocco `lesson_buffer` resta
+dopo l'orario. Per questo una pausa che parte esattamente dalla fine della
+guida si considera la pausa di quello stesso slot, non un impegno successivo.
+`resolveLessonBufferWindow` la ignora e `createLessonBufferBlock` la riusa
+invece di crearne una nuova. Senza questa regola il sostituto di una guida
+annullata (REG-623 «Assegna sostituto», ma anche una prenotazione qualsiasi
+nello stesso orario) faceva scattare «Non avrai tempo per una pausa» anche con
+il resto della giornata libero. Fix del 20/10/2026.
+
 ## Avviso "Non avrai tempo per una pausa"
 
 Se lo staff prenota una guida che riempie esattamente (o quasi) il buco fra due

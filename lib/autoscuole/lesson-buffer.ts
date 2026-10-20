@@ -70,6 +70,11 @@ export function resolveLessonBufferMinutes(
  * la pausa non finisce mai sopra qualcosa di già prenotato. Ritorna `null`
  * quando non resta nemmeno un minuto — è il caso della guida che riempie
  * esattamente un buco fra due guide.
+ *
+ * Una pausa che parte proprio dalla fine della guida è la pausa di QUESTO
+ * slot, non un impegno successivo: è quella rimasta da una guida annullata
+ * nello stesso orario (annullare non toglie la pausa). Il sostituto la eredita
+ * invece di inciamparci (bug REG-623 «Assegna sostituto»).
  */
 export async function resolveLessonBufferWindow(params: {
   companyId: string;
@@ -103,6 +108,13 @@ export async function resolveLessonBufferWindow(params: {
         instructorId,
         startsAt: { lt: wanted },
         endsAt: { gt: lessonEndsAt },
+        // OR esplicito: un NOT su `reason` (nullable) scarterebbe anche i
+        // blocchi senza motivo.
+        OR: [
+          { reason: null },
+          { reason: { not: LESSON_BUFFER_BLOCK_REASON } },
+          { startsAt: { not: lessonEndsAt } },
+        ],
       },
       orderBy: { startsAt: "asc" },
       select: { startsAt: true },
@@ -175,6 +187,19 @@ export async function createLessonBufferBlock(params: {
       db: params.db,
     });
     if (!window) return;
+
+    // La pausa di una guida annullata nello stesso orario si riusa: niente doppioni.
+    const inherited = await client.autoscuolaInstructorBlock.findFirst({
+      where: { companyId, instructorId, reason: LESSON_BUFFER_BLOCK_REASON, startsAt: window.startsAt },
+      select: { id: true },
+    });
+    if (inherited) {
+      await client.autoscuolaInstructorBlock.update({
+        where: { id: inherited.id },
+        data: { endsAt: window.endsAt },
+      });
+      return;
+    }
 
     await client.autoscuolaInstructorBlock.create({
       data: {

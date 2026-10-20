@@ -14,16 +14,30 @@ const at = (hhmm: string) => new Date(`2026-09-21T${hhmm}:00.000Z`);
  * chiesta, esattamente come fa il `findFirst` vero (`startsAt < end` e
  * `endsAt > start`).
  */
-const fakeDb = (rows: {
-  appointments?: Array<{ startsAt: Date; endsAt: Date }>;
-  blocks?: Array<{ startsAt: Date; endsAt: Date }>;
-}) => {
-  const pick = (
-    list: Array<{ startsAt: Date; endsAt: Date }>,
-    where: { startsAt: { lt: Date }; endsAt: { gt: Date } },
-  ) =>
+type Row = { startsAt: Date; endsAt: Date; reason?: string | null };
+type Where = {
+  startsAt: { lt: Date };
+  endsAt: { gt: Date };
+  OR?: Array<{ reason?: null | { not: string }; startsAt?: { not: Date } }>;
+};
+
+const matchesOr = (r: Row, or: Where["OR"]) =>
+  !or ||
+  or.some((c) =>
+    c.reason === null
+      ? r.reason == null
+      : c.reason
+        ? r.reason != null && r.reason !== c.reason.not
+        : r.startsAt.getTime() !== c.startsAt!.not.getTime(),
+  );
+
+const fakeDb = (rows: { appointments?: Row[]; blocks?: Row[] }) => {
+  const pick = (list: Row[], where: Where) =>
     list
-      .filter((r) => r.startsAt < where.startsAt.lt && r.endsAt > where.endsAt.gt)
+      .filter(
+        (r) =>
+          r.startsAt < where.startsAt.lt && r.endsAt > where.endsAt.gt && matchesOr(r, where.OR),
+      )
       .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())[0] ?? null;
 
   return {
@@ -106,6 +120,31 @@ describe("resolveLessonBufferWindow", () => {
     expect(window).toBeNull();
   });
 
+  it("ignores the leftover pause of a lesson cancelled in the same slot (REG-623)", async () => {
+    // Guida 10–11 annullata: la sua pausa 11:00–11:15 resta. Il sostituto 10–11
+    // la eredita, non ci inciampa.
+    const window = await resolveLessonBufferWindow({
+      ...base,
+      db: fakeDb({ blocks: [{ startsAt: at("11:00"), endsAt: at("11:15"), reason: "lesson_buffer" }] }),
+    });
+    expect(window).toEqual({ startsAt: at("11:00"), endsAt: at("11:15") });
+  });
+
+  it("still stops on a manual block or a later pause at the end of the lesson", async () => {
+    for (const reason of [null, "ferie"]) {
+      const window = await resolveLessonBufferWindow({
+        ...base,
+        db: fakeDb({ blocks: [{ startsAt: at("11:00"), endsAt: at("12:00"), reason }] }),
+      });
+      expect(window).toBeNull();
+    }
+    const window = await resolveLessonBufferWindow({
+      ...base,
+      db: fakeDb({ blocks: [{ startsAt: at("11:05"), endsAt: at("11:20"), reason: "lesson_buffer" }] }),
+    });
+    expect(window).toEqual({ startsAt: at("11:00"), endsAt: at("11:05") });
+  });
+
   it("returns null when the buffer is off", async () => {
     const window = await resolveLessonBufferWindow({
       ...base,
@@ -142,6 +181,25 @@ describe("lacksRoomForLessonBuffer", () => {
       lacksRoomForLessonBuffer({
         ...base,
         db: fakeDb({ appointments: [{ startsAt: at("11:05"), endsAt: at("12:00") }] }),
+      }),
+    ).resolves.toBe(true);
+  });
+
+  it("does not ask for the substitute of a cancelled lesson (REG-623)", async () => {
+    await expect(
+      lacksRoomForLessonBuffer({
+        ...base,
+        db: fakeDb({ blocks: [{ startsAt: at("11:00"), endsAt: at("11:15"), reason: "lesson_buffer" }] }),
+      }),
+    ).resolves.toBe(false);
+    // …ma chiede ancora se subito dopo c'è una guida vera.
+    await expect(
+      lacksRoomForLessonBuffer({
+        ...base,
+        db: fakeDb({
+          blocks: [{ startsAt: at("11:00"), endsAt: at("11:15"), reason: "lesson_buffer" }],
+          appointments: [{ startsAt: at("11:00"), endsAt: at("12:00") }],
+        }),
       }),
     ).resolves.toBe(true);
   });
