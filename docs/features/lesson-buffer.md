@@ -34,14 +34,28 @@ Il blocco viene creato dopo che la guida è stata scritta a DB, da
 
 ## Pausa di una guida annullata
 
-Annullare una guida **non** toglie la sua pausa: il blocco `lesson_buffer` resta
-dopo l'orario. Per questo una pausa che parte esattamente dalla fine della
-guida si considera la pausa di quello stesso slot, non un impegno successivo.
-`resolveLessonBufferWindow` la ignora e `createLessonBufferBlock` la riusa
-invece di crearne una nuova. Senza questa regola il sostituto di una guida
-annullata (REG-623 «Assegna sostituto», ma anche una prenotazione qualsiasi
-nello stesso orario) faceva scattare «Non avrai tempo per una pausa» anche con
-il resto della giornata libero. Fix del 20/10/2026.
+**Annullando una guida la sua pausa si libera** (REG-628, 21/10/2026). Lo fa un
+trigger sul DB, `autoscuola_appointment_release_lesson_buffer` (migrazione
+`20261021120000_release_lesson_buffer_on_cancel`): quando una guida passa a
+`cancelled`, o la riga viene cancellata, si elimina il blocco `lesson_buffer`
+dello stesso istruttore che parte esattamente alla fine della guida. Sta nel DB
+perché le guide si annullano da troppe strade (app allievo, segreteria, cambia
+stato, istruttore da app, annullamenti operativi e di massa, festivi, job
+Trigger.dev, cancellazione account): così le copre tutte, anche quelle future,
+senza deploy dei job.
+
+- I blocchi messi a mano (altro `reason`) non si toccano mai.
+- Se un'altra guida attiva dello stesso istruttore finisce alla stessa ora, la
+  pausa è sua e resta.
+- Una guida già annullata non scatena niente.
+- ⚠️ **Spostare** una guida (reschedule) non passa da qui: la pausa resta
+  all'orario vecchio.
+
+Prima del trigger le pause orfane restavano. Per quelle ancora in giro vale la
+regola del 20/10 (aa25e00): una pausa che parte proprio dalla fine della guida è
+la pausa di quello slot. `resolveLessonBufferWindow` la ignora e
+`createLessonBufferBlock` la riusa, così il sostituto non fa scattare «Non avrai
+tempo per una pausa».
 
 ## Avviso "Non avrai tempo per una pausa"
 

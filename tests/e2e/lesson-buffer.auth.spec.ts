@@ -342,7 +342,7 @@ test.describe("Pausa tra le guide (REG-484)", () => {
     }
   });
 
-  test("il sostituto di una guida annullata non fa scattare l'avviso (REG-623) @lesson-buffer", async ({
+  test("il sostituto di una guida annullata non fa scattare l'avviso (REG-623/628) @lesson-buffer", async ({
     page,
   }) => {
     test.setTimeout(180_000);
@@ -400,10 +400,11 @@ test.describe("Pausa tra le guide (REG-484)", () => {
       createdAppointments.push(aId);
       const cancelRes = await api.post(`/api/autoscuole/appointments/${aId}/cancel`);
       expect(cancelRes.status(), await cancelRes.text()).toBe(200);
-      expect(await slots()).toEqual(["11:00–11:15"]);
+      // REG-628: annullando, la pausa se ne va con la guida.
+      expect(await slots()).toEqual([]);
 
-      // Il sostituto nello stesso slot nasce senza avviso e si prende la pausa
-      // che c'era (nessun doppione).
+      // Il sostituto nello stesso slot nasce senza avviso e ha la sua pausa
+      // (nessun doppione).
       const bRes = await bookLesson(api, { ...lesson, startsAt: at(day, 10, 0), endsAt: at(day, 11, 0) });
       expect(bRes.status(), await bRes.text()).toBe(200);
       createdAppointments.push(((await bRes.json()) as { data: { id: string } }).data.id);
@@ -420,6 +421,146 @@ test.describe("Pausa tra le guide (REG-484)", () => {
       }
       const leftoverRes = await api.get("/api/autoscuole/instructor-blocks", {
         params: { from: windowStart.toISOString(), to: windowEnd.toISOString() },
+      });
+      if (leftoverRes.ok()) {
+        const leftover = ((await leftoverRes.json()) as { data: Array<{ id: string }> }).data;
+        for (const block of leftover) {
+          await api.delete(`/api/autoscuole/instructor-blocks/${block.id}`);
+        }
+      }
+      await patchSettings(api, {
+        lessonBufferEnabled: original.lessonBufferEnabled === true,
+        lessonBufferMinutes:
+          typeof original.lessonBufferMinutes === "number"
+            ? original.lessonBufferMinutes
+            : BUFFER_MINUTES,
+      });
+    }
+  });
+
+  test("annullare una guida libera la sua pausa, da ogni strada (REG-628) @lesson-buffer", async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    const api = page.request;
+    // Due giorni dopo il primo test: finestre separate.
+    const day = testDay();
+    day.setDate(day.getDate() + 2);
+    const windowStart = at(day, 7, 0);
+    const windowEnd = at(day, 19, 0);
+
+    const original = await getSettings(api);
+    const createdAppointments: string[] = [];
+
+    try {
+      const bootstrapRes = await api.get("/api/autoscuole/agenda/bootstrap", {
+        params: { from: windowStart.toISOString(), to: windowEnd.toISOString() },
+      });
+      expect(bootstrapRes.ok(), "GET /agenda/bootstrap").toBeTruthy();
+      const bootstrap = ((await bootstrapRes.json()) as {
+        data: {
+          appointments: Array<{ id: string }>;
+          instructors: Array<{ id: string; name: string }>;
+          students: Array<{ id: string; email: string | null }>;
+          instructorBlocks: Array<{ id: string }>;
+        };
+      }).data;
+      const instructorName = process.env.E2E_INSTRUCTOR_NAME || "Istruttore E2E";
+      const instructor =
+        bootstrap.instructors.find((i) => i.name === instructorName) ??
+        bootstrap.instructors[0];
+      const student = bootstrap.students.find((s) => s.email === "allievo@reglo.it");
+      expect(instructor, "almeno un istruttore in autoscuola").toBeTruthy();
+      expect(student, "allievo del seed (allievo@reglo.it)").toBeTruthy();
+      for (const appt of bootstrap.appointments) {
+        await api.post(`/api/autoscuole/appointments/${appt.id}/permanent-cancel`);
+      }
+      for (const block of bootstrap.instructorBlocks) {
+        await api.delete(`/api/autoscuole/instructor-blocks/${block.id}`);
+      }
+
+      await patchSettings(api, {
+        lessonBufferEnabled: true,
+        lessonBufferMinutes: BUFFER_MINUTES,
+      });
+      const lesson = { studentId: student!.id, instructorId: instructor!.id };
+      const slots = async () =>
+        (await bufferBlocks(api, windowStart, windowEnd)).map(
+          (b) => `${hhmm(b.startsAt)}–${hhmm(b.endsAt)}`,
+        );
+      const book = async (h: number, confirmNoBuffer = false) => {
+        const res = await bookLesson(api, {
+          ...lesson,
+          startsAt: at(day, h, 0),
+          endsAt: at(day, h + 1, 0),
+          confirmNoBuffer,
+        });
+        expect(res.status(), await res.text()).toBe(200);
+        const id = ((await res.json()) as { data: { id: string } }).data.id;
+        createdAppointments.push(id);
+        return id;
+      };
+
+      // Un blocco a mano attaccato alla fine della guida delle 14, che non va
+      // mai toccato; poi quattro guide distanziate, ognuna con la sua pausa
+      // (quella delle 14 no: il blocco a mano ne prende il posto).
+      const manual = await api.post("/api/autoscuole/instructor-blocks", {
+        data: {
+          instructorId: instructor!.id,
+          startsAt: at(day, 15, 0).toISOString(),
+          endsAt: at(day, 15, 10).toISOString(),
+          reason: "Impegno E2E",
+        },
+      });
+      expect(manual.status(), await manual.text()).toBe(200);
+      const cancelled = await book(8);
+      const annulled = await book(12);
+      const removed = await book(14, true);
+      const kept = await book(16);
+      expect(await slots()).toEqual(["09:00–09:15", "13:00–13:15", "17:00–17:15"]);
+
+      // Annulla (allievo da app / segreteria).
+      expect((await api.post(`/api/autoscuole/appointments/${cancelled}/cancel`)).status()).toBe(200);
+      // «Annulla guida» operativo (web e istruttore da app).
+      const annulRes = await api.post(`/api/autoscuole/appointments/${annulled}/annul`, {
+        data: { fault: "school" },
+      });
+      expect(annulRes.status(), await annulRes.text()).toBe(200);
+      // Rimuovi (permanent cancel) di una guida che aveva il blocco a mano
+      // al posto della pausa: il blocco resta.
+      expect((await api.post(`/api/autoscuole/appointments/${removed}/permanent-cancel`)).status()).toBe(200);
+
+      // Restano solo la pausa della guida ancora attiva e il blocco a mano.
+      expect(await slots()).toEqual(["17:00–17:15"]);
+      const all = await api.get("/api/autoscuole/instructor-blocks", {
+        params: { from: windowStart.toISOString(), to: windowEnd.toISOString() },
+      });
+      const allBlocks = ((await all.json()) as { data: Array<{ reason: string | null; startsAt: string }> }).data;
+      expect(
+        allBlocks.filter((b) => b.reason !== BUFFER_REASON).map((b) => hhmm(b.startsAt)),
+        "il blocco a mano non si tocca",
+      ).toEqual(["15:00"]);
+      expect(kept).toBeTruthy();
+
+      // Lo slot liberato si riprenota senza avviso e la pausa rinasce.
+      await book(8);
+      expect(await slots()).toEqual(["09:00–09:15", "17:00–17:15"]);
+
+      // Annullamento di massa: l'istruttore si mette in malattia per la
+      // giornata → tutte le sue guide si annullano e le pause con loro.
+      const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(day);
+      const sick = await api.post("/api/autoscuole/instructor-sick-leave", {
+        data: { instructorId: instructor!.id, startDate: ymd, startTime: "07:00", endDate: ymd },
+      });
+      expect(sick.status(), await sick.text()).toBe(200);
+      expect(await slots()).toEqual([]);
+    } finally {
+      for (const id of createdAppointments) {
+        await api.post(`/api/autoscuole/appointments/${id}/permanent-cancel`);
+      }
+      // Tutta la giornata: il blocco malattia parte prima della finestra.
+      const leftoverRes = await api.get("/api/autoscuole/instructor-blocks", {
+        params: { from: at(day, 0, 0).toISOString(), to: at(day, 23, 59).toISOString() },
       });
       if (leftoverRes.ok()) {
         const leftover = ((await leftoverRes.json()) as { data: Array<{ id: string }> }).data;
