@@ -3,7 +3,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
-import { X, Printer, ArrowLeft } from "lucide-react";
+import { X, Printer, ArrowLeft, NotebookPen } from "lucide-react";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import {
   ExamPrintSetup,
@@ -51,11 +51,15 @@ export type AgendaPrintColumn = {
   sublabel?: string;
   /** Oggi (settimana) → intestazione evidenziata. */
   highlight?: boolean;
+  /** REG-632: nota del giorno della colonna (vista settimana). */
+  note?: string;
   blocks: AgendaPrintBlock[];
 };
 
 export type AgendaPrintData = {
   rangeLabel: string;
+  /** REG-632: nota del giorno (vista giorno). */
+  dayNote?: string;
   viewModeLabel: string;
   filtersSummary: string[];
   generatedAt: string;
@@ -419,6 +423,11 @@ export function AgendaPrintDialog({
                 <div className="mt-1 text-[14px] font-medium text-[#555]">
                   {data.rangeLabel}
                 </div>
+                {data.dayNote && (
+                  <div className="mt-2">
+                    <PrintDayNote text={data.dayNote} large />
+                  </div>
+                )}
               </div>
               <div className="text-right text-[11.5px] leading-relaxed text-[#888]">
                 <div className="font-semibold text-[#555]">{data.viewModeLabel}</div>
@@ -475,6 +484,11 @@ export function AgendaPrintDialog({
                         {col.sublabel && (
                           <div className="truncate text-[10.5px] text-[#999]">
                             {col.sublabel}
+                          </div>
+                        )}
+                        {col.note && (
+                          <div className="mt-1 flex justify-center px-0.5">
+                            <PrintDayNote text={col.note} />
                           </div>
                         )}
                       </div>
@@ -585,5 +599,22 @@ export function AgendaPrintDialog({
       </div>
     </>,
     document.body,
+  );
+}
+
+/** REG-632: la nota del giorno sul foglio. Bordo oltre allo sfondo: si legge
+ *  anche se la stampante salta i colori di fondo. */
+function PrintDayNote({ text, large }: { text: string; large?: boolean }) {
+  return (
+    <span
+      data-testid="print-day-note"
+      className={cn(
+        "inline-flex max-w-full items-center gap-1 rounded-[5px] border border-[#d9d3c7] bg-[#f6f4ef] font-medium text-[#3d3730]",
+        large ? "px-2 py-1 text-[12px]" : "px-1.5 py-[2px] text-[10px]",
+      )}
+    >
+      <NotebookPen className={cn("shrink-0 text-[#8a8073]", large ? "size-3" : "size-2.5")} strokeWidth={1.9} />
+      <span className="truncate">{text}</span>
+    </span>
   );
 }

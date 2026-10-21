@@ -3,6 +3,7 @@
 import { randomUUID } from "crypto";
 import { after } from "next/server";
 import { z } from "zod";
+import { dayNoteKey } from "@/lib/autoscuole/day-notes";
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
@@ -1248,7 +1249,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           ? { ...baseWhere, OR: minePredicate }
           : baseWhere;
 
-    const [appointments, students, instructors, vehicles, instructorBlocks, holidays, agendaLimits, lastInstructorRows, lastVehicleByStudentRows, lastVehicleByInstructorRows] = await Promise.all([
+    const [appointments, students, instructors, vehicles, instructorBlocks, holidays, agendaLimits, lastInstructorRows, lastVehicleByStudentRows, lastVehicleByInstructorRows, dayNotes] = await Promise.all([
       prisma.autoscuolaAppointment.findMany({
         where: appointmentsWhere,
         select: {
@@ -1438,6 +1439,13 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           AND "startsAt" <= NOW()
         ORDER BY "instructorId", "startsAt" DESC
       `,
+      // REG-632: note del giorno. Solo per l'ufficio: la rotta bootstrap le
+      // toglie agli altri dopo la cache (withOfficeNotes).
+      prisma.autoscuolaDayNote.findMany({
+        where: { companyId, date: { gte: from, lte: to } },
+        select: { date: true, text: true },
+        orderBy: { date: "asc" },
+      }),
     ]);
     const agendaVehiclesEnabled =
       (agendaLimits as Record<string, unknown>).vehiclesEnabled !== false;
@@ -1678,6 +1686,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           date: h.date.toISOString(),
           label: h.label,
         })),
+        dayNotes: dayNotes.map((n) => ({ date: dayNoteKey(n.date), text: n.text })),
         meta: {
           from,
           to,

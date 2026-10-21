@@ -78,6 +78,8 @@ import { CreateEventPopover } from "@/components/pages/Autoscuole/dialogs/Create
 import { CancelledLessonBlock } from "@/components/pages/Autoscuole/CancelledLessonBlock";
 import { findCancelledLessonBlocks, type CancelledByRole } from "@/lib/autoscuole/cancelled-lesson-blocks";
 import { HolidayModal } from "@/components/pages/Autoscuole/dialogs/HolidayModal";
+import { DayNoteDialog } from "@/components/pages/Autoscuole/dialogs/DayNoteDialog";
+import type { AgendaDayNote } from "@/lib/autoscuole/day-notes";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -348,6 +350,8 @@ export type AgendaBootstrapPayload = {
   followCarRules?: Record<string, { enabled: boolean }>;
   groupLessonsEnabled?: boolean;
   holidays?: Array<{ date: string; label: string | null }>;
+  /** REG-632: note del giorno, solo per l'ufficio. */
+  dayNotes?: AgendaDayNote[];
   instructorBlocks?: Array<Record<string, unknown>>;
   meta: {
     from: string | Date;
@@ -1446,6 +1450,7 @@ export function AutoscuoleAgendaPage({
   const [cancelledBlocksEnabled, setCancelledBlocksEnabled] = React.useState(false);
   // REG-624: la nota sul blocco annullato è dell'ufficio (titolare e segreteria).
   const [officeNotes, setOfficeNotes] = React.useState(false);
+  const [dayNotes, setDayNotes] = React.useState<AgendaDayNote[]>([]);
   React.useEffect(() => {
     let active = true;
     getAutoscuolaSettings().then((res) => {
@@ -1781,6 +1786,31 @@ export function AutoscuoleAgendaPage({
     return set;
   }, [holidays]);
 
+  // REG-632: nota del giorno per data (YYYY-MM-DD).
+  const dayNoteMap = React.useMemo(
+    () => new Map(dayNotes.map((n) => [n.date, n.text])),
+    [dayNotes],
+  );
+  const [dayNoteDialogDate, setDayNoteDialogDate] = React.useState<Date | null>(null);
+  const [dayNoteDialogOpen, setDayNoteDialogOpen] = React.useState(false);
+  const openDayNote = React.useCallback((day: Date | null) => {
+    setDayNoteDialogDate(day ? normalizeDay(day) : null);
+    setDayNoteDialogOpen(true);
+  }, []);
+  /** Menu del tasto destro sull'intestazione della data. */
+  const [dayHeaderMenu, setDayHeaderMenu] = React.useState<{ x: number; y: number; day: Date } | null>(null);
+  React.useEffect(() => {
+    if (!dayHeaderMenu) return;
+    const close = () => setDayHeaderMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [dayHeaderMenu]);
+
   const weekEnd = React.useMemo(() => addDays(weekStart, 7), [weekStart]);
   const rangeStart = React.useMemo(
     () => (viewMode === "week" ? weekStart : dayFocus),
@@ -1895,6 +1925,7 @@ export function AutoscuoleAgendaPage({
         // `regularAppointments` memo collapses them into one card per lesson.
         setAppointments(payload.data.appointments ?? []);
         setOfficeNotes(payload.data.meta?.officeNotes === true);
+        setDayNotes(payload.data.dayNotes ?? []);
         setStudents(payload.data.students ?? []);
         setInstructors(payload.data.instructors ?? []);
         setVehicles(payload.data.vehicles ?? []);
@@ -3858,6 +3889,7 @@ export function AutoscuoleAgendaPage({
           key,
           label: day.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" }),
           highlight: day.getTime() === todayNormalized.getTime(),
+          note: dayNoteMap.get(key),
           blocks,
         };
       });
@@ -3916,6 +3948,7 @@ export function AutoscuoleAgendaPage({
 
     return {
       rangeLabel,
+      dayNote: viewMode === "day" ? dayNoteMap.get(formatYmd(dayFocus)) : undefined,
       viewModeLabel: viewMode === "week" ? "Vista settimana" : "Vista giorno",
       filtersSummary,
       generatedAt,
@@ -3925,7 +3958,7 @@ export function AutoscuoleAgendaPage({
       columns,
       totalCount,
     };
-  }, [printOpen, viewMode, viewPrefs.startHour, viewPrefs.endHour, viewPrefs.days, filtered, examGroups, instructors, vehicles, instructorFilter, vehicleFilter, typeFilter, statusFilter, search, dayFocus, weekStart, dayViewInstructors, rangeStart, rangeEnd, todayNormalized, vehiclesEnabled, nowTick, studentNameOrder]);
+  }, [printOpen, viewMode, viewPrefs.startHour, viewPrefs.endHour, viewPrefs.days, filtered, examGroups, instructors, vehicles, instructorFilter, vehicleFilter, typeFilter, statusFilter, search, dayFocus, weekStart, dayViewInstructors, rangeStart, rangeEnd, todayNormalized, vehiclesEnabled, nowTick, studentNameOrder, dayNoteMap]);
 
   // REG-620 — stampa "Solo esami": un periodo scelto nel dialog, indipendente
   // dalla vista. Proposto = i giorni che si stanno guardando.
@@ -4024,6 +4057,14 @@ export function AutoscuoleAgendaPage({
               onClick={() => viewMode === "week" ? setWeekStart((prev) => addDays(prev, 7)) : setDayFocus((prev) => addDays(prev, 1))}>
               <ChevronRight className="size-4" />
             </button>
+            {/* REG-632: in vista giorno la nota sta accanto alla data. */}
+            {viewMode === "day" && dayNoteMap.has(formatYmd(dayFocus)) && (
+              <DayNoteChip
+                size="lg"
+                text={dayNoteMap.get(formatYmd(dayFocus))!}
+                onClick={officeNotes ? () => openDayNote(dayFocus) : undefined}
+              />
+            )}
           </div>
 
           {/* Scope consorzio (REG-429 Fase 8) — prima del periodo, come nel proto */}
@@ -4474,6 +4515,17 @@ export function AutoscuoleAgendaPage({
                   </button>
                 )}
                 <div className="my-1 border-t border-[#f0f0f0]" />
+                {officeNotes && (
+                  <button
+                    type="button"
+                    data-testid="plus-menu-day-note"
+                    className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f5f5f5] transition-colors cursor-pointer"
+                    onClick={() => { setPlusMenuOpen(false); openDayNote(viewMode === "day" ? dayFocus : null); }}
+                  >
+                    <NotebookPen className="size-4 text-[#5c554c]" strokeWidth={1.7} />
+                    Nota del giorno
+                  </button>
+                )}
                 {viewMode === "day" && holidaySet.has(formatYmd(dayFocus)) ? (
                   <button
                     type="button"
@@ -4796,6 +4848,9 @@ export function AutoscuoleAgendaPage({
             : weekVehicleColsBase;
           const weekInstructors = columnsByVehicle ? weekVehicleCols : weekInstructorCols;
           const instrCount = Math.max(1, weekInstructors.length);
+          // REG-632: riga in più sotto la data (nota del giorno o nome del
+          // festivo) solo nelle settimane che ne hanno bisogno.
+          const weekHasDayNotes = days.some((d) => dayNoteMap.has(formatYmd(d)) || holidaySet.get(formatYmd(d)));
           const totalCols = instrCount * days.length; // sotto-colonne per i giorni visibili
 
           return (
@@ -4812,24 +4867,23 @@ export function AutoscuoleAgendaPage({
                   const dayHolidayLabel = holidaySet.get(formatYmd(day));
                   const isDayHoliday = dayHolidayLabel !== undefined;
                   const isWeekendDay = day.getDay() === 0 || day.getDay() === 6;
+                  const dayNoteText = dayNoteMap.get(formatYmd(day));
                   return (
                     <div
                       key={`day-${day.toISOString()}`}
+                      data-agenda-day-header={formatYmd(day)}
                       className={cn(
-                        "relative flex h-[52px] cursor-pointer flex-col items-center justify-center gap-px border-l border-[#eeeeee] transition-colors hover:bg-[#f7f7f7]",
+                        "relative flex cursor-pointer flex-col items-center gap-px border-l border-[#eeeeee] transition-colors hover:bg-[#f7f7f7]",
+                        // Con la riga in più tutte le colonne partono dall'alto:
+                        // giorno e data restano allineati fra colonne.
+                        weekHasDayNotes ? "h-[70px] justify-start pt-[7px]" : "h-[52px] justify-center",
                         isDayHoliday ? "bg-[#fffcf0]" : isWeekendDay ? "bg-[#fafafa]" : "bg-white",
                       )}
                       style={{ gridColumn: `span ${instrCount}` }}
                       onClick={() => { setDayFocus(normalizeDay(day)); setViewMode("day"); }}
                       onContextMenu={(e) => {
                         e.preventDefault();
-                        if (isDayHoliday) {
-                          setRemoveHolidayDate(normalizeDay(day));
-                          setRemoveHolidayDialogOpen(true);
-                        } else {
-                          setHolidayModalInitialDate(normalizeDay(day));
-                          setHolidayModalOpen(true);
-                        }
+                        setDayHeaderMenu({ x: e.clientX, y: e.clientY, day: normalizeDay(day) });
                       }}
                     >
                       <span className={cn("text-[10px] font-semibold uppercase tracking-[0.5px]", isDayHoliday ? "text-amber-500" : "text-[#aaaaaa]")}>
@@ -4854,7 +4908,20 @@ export function AutoscuoleAgendaPage({
                           {day.toLocaleDateString("it-IT", { month: "short" })}
                         </span>
                       </span>
-                      {isDayHoliday && <span className="absolute right-1.5 top-1 text-[9px] font-semibold uppercase tracking-[0.3px] text-amber-500">{dayHolidayLabel || "festivo"}</span>}
+                      {dayNoteText ? (
+                        <DayNoteChip
+                          text={dayNoteText}
+                          onClick={officeNotes ? () => openDayNote(day) : undefined}
+                        />
+                      ) : isDayHoliday && weekHasDayNotes ? (
+                        // Nome del festivo nella stessa riga della nota, ma in
+                        // ambra maiuscolo: mai sovrapposto al giorno.
+                        <span title={dayHolidayLabel || "Festivo"} className="mt-[5px] block max-w-[calc(100%-10px)] truncate text-[9px] font-semibold uppercase leading-none tracking-[0.4px] text-amber-500">
+                          {dayHolidayLabel || "festivo"}
+                        </span>
+                      ) : isDayHoliday ? (
+                        <span className="absolute right-1.5 top-1 text-[9px] font-semibold uppercase tracking-[0.3px] text-amber-500">festivo</span>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -7723,6 +7790,70 @@ export function AutoscuoleAgendaPage({
       </CreateEventPopover>
 
       {/* ── Holiday Creation Modal (single day + range) ── */}
+      <DayNoteDialog
+        open={dayNoteDialogOpen}
+        onClose={() => setDayNoteDialogOpen(false)}
+        initialDate={dayNoteDialogDate}
+        notes={dayNoteMap}
+        onSaved={(date, text) => {
+          setDayNotes((prev) => {
+            const rest = prev.filter((n) => n.date !== date);
+            return text ? [...rest, { date, text }] : rest;
+          });
+        }}
+      />
+      {dayHeaderMenu && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[90]" onMouseDown={() => setDayHeaderMenu(null)} onContextMenu={(e) => { e.preventDefault(); setDayHeaderMenu(null); }}>
+          <div
+            role="menu"
+            data-testid="day-header-menu"
+            className="absolute min-w-[200px] rounded-[12px] border border-[#ebebeb] bg-white p-1 shadow-[0_8px_28px_rgba(0,0,0,0.12)]"
+            style={{
+              left: Math.min(dayHeaderMenu.x, window.innerWidth - 216),
+              top: Math.min(dayHeaderMenu.y, window.innerHeight - 140),
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="px-3 pb-1 pt-1.5 text-[11px] font-semibold text-[#9a9a9a] first-letter:uppercase">
+              {dayHeaderMenu.day.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })}
+            </div>
+            {officeNotes && (
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="day-header-menu-note"
+                className="flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-3 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-[#f5f5f5]"
+                onClick={() => { const d = dayHeaderMenu.day; setDayHeaderMenu(null); openDayNote(d); }}
+              >
+                <NotebookPen className="size-4 text-[#5c554c]" strokeWidth={1.7} />
+                {dayNoteMap.has(formatYmd(dayHeaderMenu.day)) ? "Modifica nota del giorno" : "Nota del giorno"}
+              </button>
+            )}
+            {holidaySet.has(formatYmd(dayHeaderMenu.day)) ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-3 py-2 text-[13px] font-medium text-[#c13515] transition-colors hover:bg-red-50"
+                onClick={() => { const d = dayHeaderMenu.day; setDayHeaderMenu(null); setRemoveHolidayDate(d); setRemoveHolidayDialogOpen(true); }}
+              >
+                <Ban className="size-4" strokeWidth={1.7} />
+                Rimuovi festivo
+              </button>
+            ) : (
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-3 py-2 text-[13px] font-medium text-[#d97706] transition-colors hover:bg-[#fffbeb]"
+                onClick={() => { const d = dayHeaderMenu.day; setDayHeaderMenu(null); setHolidayModalInitialDate(d); setHolidayModalOpen(true); }}
+              >
+                <Ban className="size-4" strokeWidth={1.7} />
+                Segna festivo
+              </button>
+            )}
+          </div>
+        </div>,
+        document.body,
+      )}
       <HolidayModal
         open={holidayModalOpen}
         onClose={() => setHolidayModalOpen(false)}
@@ -8345,3 +8476,44 @@ function AgendaDayHeader({
   );
 }
 
+
+/**
+ * REG-632: etichetta della nota del giorno. Carta calda e testo scuro: si
+ * riconosce subito e non si confonde col festivo (ambra, maiuscolo).
+ */
+function DayNoteChip({
+  text,
+  onClick,
+  size = "sm",
+}: {
+  text: string;
+  onClick?: () => void;
+  size?: "sm" | "lg";
+}) {
+  const Tag = onClick ? "button" : "span";
+  return (
+    <Tag
+      {...(onClick ? { type: "button" as const } : {})}
+      data-testid="agenda-day-note"
+      title={text}
+      onClick={
+        onClick
+          ? (e: React.MouseEvent) => {
+              e.stopPropagation();
+              onClick();
+            }
+          : undefined
+      }
+      className={cn(
+        "inline-flex min-w-0 items-center rounded-[6px] bg-[#f3f1ec] font-medium text-[#4a443c] ring-1 ring-inset ring-[#e6e0d4]",
+        size === "sm"
+          ? "mt-[3px] max-w-[calc(100%-10px)] gap-1 px-1.5 py-[3px] text-[10px] leading-none"
+          : "ml-1 max-w-[220px] gap-1.5 rounded-full px-2.5 py-[5px] text-[12px]",
+        onClick && "cursor-pointer transition-colors hover:bg-[#ece8df]",
+      )}
+    >
+      <NotebookPen className={cn("shrink-0 text-[#8a8073]", size === "sm" ? "size-2.5" : "size-3.5")} strokeWidth={1.9} />
+      <span className="truncate">{text}</span>
+    </Tag>
+  );
+}

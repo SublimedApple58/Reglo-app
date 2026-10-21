@@ -23,6 +23,7 @@ Nessun backend, nessuna dipendenza nuova: tutto client-side, read-only. La stamp
 - **Orientamento**: settimana → landscape; giorno → portrait (o landscape con >4 istruttori). La scala verticale (`pxPerMin`) si adatta per far stare la fascia in una pagina, poi impagina.
 
 ## Note
+- REG-632: la nota del giorno esce sul foglio (`AgendaPrintColumn.note` in settimana, `AgendaPrintData.dayNote` in vista giorno). Vedi `day-notes.md`.
 
 - Web-only, titolari/segretarie (gli istruttori usano il mobile).
 - L'anteprima è una **ricostruzione fedele dei dati**, non uno screenshot della griglia interattiva (che, essendo a scroll orizzontale con sotto-colonne istruttore, non si stamperebbe bene). Contiene gli stessi eventi che l'utente vede.

@@ -110,4 +110,11 @@ describe("blocchi guide annullate (REG-623)", () => {
     // I dati di partenza (la cache) non si toccano.
     expect(data.appointments[0].agendaNote).toBe("proposta a Rossi e Bianchi");
   });
+
+  it("anche le note del giorno arrivano solo all'ufficio (REG-632)", () => {
+    const data = { appointments: [], dayNotes: [{ date: "2026-11-16", text: "Genova quiz" }], meta: {} };
+    expect(withOfficeNotes(data, true).dayNotes).toEqual(data.dayNotes);
+    expect("dayNotes" in withOfficeNotes(data, false)).toBe(false);
+    expect(data.dayNotes).toHaveLength(1);
+  });
 });

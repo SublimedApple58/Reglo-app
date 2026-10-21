@@ -13,7 +13,7 @@ Prenotazioni) that materializes recurring Italian holidays as holiday rows.
 - `components/pages/Autoscuole/tabs/SettingsTab.tsx` — UI pane Prenotazioni (banner + `NationalHolidaysCard` con toggle per festività)
 
 ## Agenda UI (Segna festivo)
-- `components/pages/Autoscuole/dialogs/HolidayModal.tsx` — modale "Segna festivo" in agenda (replica del prototipo): tab **Singolo/Multiplo**, calendario a due mesi, selezione giorno o **intervallo** (click o trascinamento), step di conferma con scelta **mantieni/cancella guide**. Aperto dal menu "+" (tutte le viste) e dal click sulla cella-giorno. POST `from`/`to` a `/api/autoscuole/holidays`.
+- `components/pages/Autoscuole/dialogs/HolidayModal.tsx` — modale "Segna festivo" in agenda (replica del prototipo): tab **Singolo/Multiplo**, calendario a due mesi, selezione giorno o **intervallo** (click o trascinamento), step di conferma con scelta **mantieni/cancella guide**. Aperto dal menu "+" (tutte le viste) e dal tasto destro sull'intestazione della data, che dal 22/10/2026 apre un menu «Nota del giorno» / «Segna festivo» (REG-632, vedi `day-notes.md`). POST `from`/`to` a `/api/autoscuole/holidays`.
 - `AutoscuoleAgendaPage.tsx` — rendering festivo **ambra** (non più rosso): colonna crema `#fffbf3` + **badge 🌴 sticky** (resta fisso in scroll; hover → X per rimuovere) in vista settimana; banner ambra in vista giorno; `formatBlockReason`/`blockTint` per le etichette+tinta dei blocchi istruttore (Malattia arancio, Ferie teal).
 
 ## Key functions

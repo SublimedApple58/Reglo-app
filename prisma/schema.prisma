@@ -242,6 +242,7 @@ model Company {
   mobileTokens                         MobileAccessToken[]
   pushDevices                          MobilePushDevice[]
   autoscuolaHolidays                   AutoscuolaHoliday[]
+  autoscuolaDayNotes                   AutoscuolaDayNote[]
   autoscuolaInstructorPublishedWeeks   AutoscuolaInstructorPublishedWeek[]
   autoscuolaNotifications              AutoscuolaNotification[]
   quizSessions                         QuizSession[]
@@ -1033,6 +1034,23 @@ model AutoscuolaDailyAvailabilityOverride {
   @@unique([companyId, ownerType, ownerId, date], map: "AutoscuolaDailyAvailabilityOverride_company_owner_date_key")
   @@index([companyId, ownerType, ownerId], map: "AutoscuolaDailyAvailabilityOverride_company_owner_idx")
   @@index([ownerId, date])
+}
+
+/// REG-632: nota del giorno dell'agenda («Genova quiz»), per tutta l'autoscuola.
+/// Solo un'etichetta per l'ufficio: a differenza dei festivi non blocca niente.
+model AutoscuolaDayNote {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  date      DateTime @db.Date
+  text      String
+  createdBy String?  @db.Uuid
+  updatedBy String?  @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt @db.Timestamp(6)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, date])
 }
 
 model AutoscuolaHoliday {

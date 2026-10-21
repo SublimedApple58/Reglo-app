@@ -154,13 +154,16 @@ export function lateCancellationLabel(action: string | null | undefined) {
  * web (`officeNotes=1`) di titolare e segreteria; all'app e agli istruttori la
  * rotta bootstrap la toglie. La cache resta una per autoscuola: il filtro sta
  * dopo la cache, e `meta.officeNotes` dice al client se può scriverla.
+ * Vale anche per le note del giorno (REG-632): fuori dall'ufficio spariscono.
  */
 export function withOfficeNotes<T extends { appointments?: unknown[]; meta?: Record<string, unknown> }>(
   data: T,
   officeNotes: boolean,
 ): T {
+  const { dayNotes, ...rest } = data as T & { dayNotes?: unknown };
   return {
-    ...data,
+    ...(rest as T),
+    ...(officeNotes && dayNotes !== undefined ? { dayNotes } : {}),
     appointments: officeNotes
       ? data.appointments
       : data.appointments?.map((row) => {

@@ -17,6 +17,7 @@
 | Payments & Credits | [payments.md](features/payments.md) | `payments.ts`, `stripe-connect.ts` |
 | Swaps | [swaps.md](features/swaps.md) | `autoscuole-swap.actions.ts` |
 | Holidays | [holidays.md](features/holidays.md) | `autoscuole-holidays.actions.ts` |
+| Nota del giorno in agenda (REG-632) + mese nelle intestazioni (REG-631) | [day-notes.md](features/day-notes.md) | `autoscuole-day-notes.actions.ts`, `dialogs/DayNoteDialog.tsx`, `AutoscuoleAgendaPage.tsx` (`DayNoteChip`, menu tasto destro), `AgendaPrintDialog.tsx`, migration `20261022120000_autoscuola_day_note` |
 | Locations (Sede e luoghi, incl. luogo per tipo di patente REG-409) | [locations.md](features/locations.md) | `api/autoscuole/locations/*`, `locations/LocationsSection.tsx`, `locations/LocationFormDialog.tsx`, `lib/autoscuole/location-for-license.ts`, `lib/autoscuole/locations.ts` (`setLocationLicenseCategories`), `AutoscuoleAgendaPage.tsx` (precompile Luogo) |
 | Notifications | [notifications.md](features/notifications.md) | `push.ts`, `notifications/route.ts` |
 | Instructor Absences (Malattia / Ferie) | [instructor-absences.md](features/instructor-absences.md) | `instructor-sick-leave/route.ts`, `instructor-vacation/route.ts`, `InstructorsTab.tsx` (`MalattiaTab`/`FerieTab`), `operational-cancellation.ts` |
