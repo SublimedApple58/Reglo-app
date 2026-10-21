@@ -4835,13 +4835,24 @@ export function AutoscuoleAgendaPage({
                       <span className={cn("text-[10px] font-semibold uppercase tracking-[0.5px]", isDayHoliday ? "text-amber-500" : "text-[#aaaaaa]")}>
                         {day.toLocaleDateString("it-IT", { weekday: "short" })}
                       </span>
+                      {/* REG-631: il mese su ogni colonna («lun 16 nov»): il
+                          numero comanda, il mese lo segue più leggero. */}
                       <span
+                        data-testid="agenda-day-date"
                         className={cn(
-                          "flex size-[26px] items-center justify-center rounded-full text-[13px] font-bold",
+                          "flex h-[26px] items-baseline justify-center gap-[3px] rounded-full px-2 leading-[26px]",
                           isDayToday ? "bg-[#222222] text-white" : isDayHoliday ? "text-amber-600" : isWeekendDay ? "text-[#999999]" : "text-foreground",
                         )}
                       >
-                        {day.getDate()}
+                        <span className="text-[13px] font-bold tabular-nums">{day.getDate()}</span>
+                        <span
+                          className={cn(
+                            "text-[11px] font-medium",
+                            isDayToday ? "text-white/70" : isDayHoliday ? "text-amber-500" : "text-[#9a9a9a]",
+                          )}
+                        >
+                          {day.toLocaleDateString("it-IT", { month: "short" })}
+                        </span>
                       </span>
                       {isDayHoliday && <span className="absolute right-1.5 top-1 text-[9px] font-semibold uppercase tracking-[0.3px] text-amber-500">{dayHolidayLabel || "festivo"}</span>}
                     </div>
