@@ -25,6 +25,7 @@ import { isWhatsAppCapable, normalizeToE164 } from "@/lib/phone-e164";
 import {
   buildTemplateParameters,
   getWhatsAppTemplate,
+  sendableTemplateName,
   type WhatsAppTemplateKind,
 } from "@/lib/autoscuole/whatsapp-templates";
 
@@ -80,7 +81,7 @@ class CloudApiSender implements WhatsAppSender {
           to: to.replace(/^\+/, ""), // la Cloud API vuole E.164 senza il +
           type: "template",
           template: {
-            name: template.name,
+            name: sendableTemplateName(template) ?? template.name,
             language: { code: languageCode },
             components: parameters.length
               ? [
@@ -234,7 +235,7 @@ class TelnyxSender implements WhatsAppSender {
         whatsapp_message: {
           type: "template",
           template: {
-            name: template.name,
+            name: sendableTemplateName(template) ?? template.name,
             // "deterministic" = manda esattamente questa lingua o fallisci. Il
             // fallback automatico di Meta sceglierebbe una lingua a caso fra
             // quelle approvate, e l'allievo si vedrebbe arrivare l'inglese.

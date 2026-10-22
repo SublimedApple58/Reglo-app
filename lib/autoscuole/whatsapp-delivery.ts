@@ -35,6 +35,7 @@ import {
 import { externalSendsDisabled } from "@/lib/app-env";
 import {
   WHATSAPP_TEMPLATES,
+  sendableTemplateName,
   type WhatsAppTemplate,
   type WhatsAppTemplateKind,
 } from "@/lib/autoscuole/whatsapp-templates";
@@ -68,14 +69,16 @@ export function whatsAppSkipReason(input: {
     return `nessun template approvato per "${input.templateKind}": fuori dalle 24 ore Meta non consente testo libero`;
   }
   const template: WhatsAppTemplate = input.template ?? WHATSAPP_TEMPLATES[input.templateKind];
-  if (template.approval !== "approved") {
-    return `template "${template.name}" non ancora approvato da Meta (${template.approval})`;
-  }
-  // Meta può riclassificare marketing un template sottomesso come utility:
-  // costa di più, chiede un opt-in esplicito e ha limiti di consegna per
-  // utente. Non lo mandiamo: la cascata ripiega sull'email (decisione 22/10).
-  if (template.category !== "utility") {
-    return `template "${template.name}" classificato ${template.category} da Meta: si mandano solo template utility`;
+  // Si manda la versione corrente se è approvata e utility, se no la
+  // precedente alle stesse condizioni. Meta può riclassificare marketing un
+  // template sottomesso come utility: costa di più, chiede un opt-in esplicito
+  // e ha limiti di consegna per utente — non lo mandiamo, la cascata ripiega
+  // sull'email (decisione 22/10).
+  if (!sendableTemplateName(template)) {
+    const versions = [template, ...(template.previous ? [template.previous] : [])]
+      .map((v) => `${v.name}: ${v.approval === "approved" ? v.category : v.approval}`)
+      .join(", ");
+    return `nessuna versione approvata e utility del template (${versions})`;
   }
   if (input.optedOut) return "l'utente ha revocato il consenso WhatsApp";
   return null;

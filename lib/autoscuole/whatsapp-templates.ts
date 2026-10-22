@@ -78,6 +78,16 @@ export type WhatsAppTemplate = {
    * che come motivo leggibile.
    */
   approval: WhatsAppTemplateApproval;
+  /**
+   * La versione precedente su Meta, da usare finché questa non è approvata
+   * (22/10: i `_v3` in attesa, gli 8 `_v2` utility già approvati). Stesse
+   * variabili nello stesso ordine — se no non è un ripiego, è un altro template.
+   */
+  previous?: {
+    name: string;
+    category: WhatsAppTemplateCategory;
+    approval: WhatsAppTemplateApproval;
+  };
   /** Variabili {{1}}, {{2}}… nell'ordine esatto in cui Meta le sostituisce. */
   variables: readonly string[];
   /** Testo italiano sottomesso per l'approvazione (documentazione, non runtime). */
@@ -93,6 +103,7 @@ export const WHATSAPP_TEMPLATES = {
     name: "promemoria_guida_allievo_v3",
     category: "utility",
     approval: "pending",
+    previous: { name: "promemoria_guida_allievo_v2", category: "utility", approval: "approved" },
     variables: ["nome", "quando", "durata"],
     body:
       "Ciao {{1}}, ti ricordiamo la tua guida di {{2}}, della durata di {{3}} minuti. " +
@@ -102,6 +113,7 @@ export const WHATSAPP_TEMPLATES = {
     name: "promemoria_guida_mattutino_v3",
     category: "utility",
     approval: "pending",
+    previous: { name: "promemoria_guida_mattutino_v2", category: "marketing", approval: "approved" },
     variables: ["nome", "ora"],
     // `_v2` («oggi hai la guida alle {{2}}. Ci vediamo!») è stato riclassificato
     // marketing: troppo colloquiale, nessun legame esplicito con la prenotazione.
@@ -113,6 +125,7 @@ export const WHATSAPP_TEMPLATES = {
     name: "promemoria_guida_giorno_prima_v3",
     category: "utility",
     approval: "pending",
+    previous: { name: "promemoria_guida_giorno_prima_v2", category: "utility", approval: "approved" },
     variables: ["nome", "quando"],
     body: "Ciao {{1}}, domani hai la guida: {{2}}. A domani!",
   },
@@ -122,6 +135,7 @@ export const WHATSAPP_TEMPLATES = {
     name: "promemoria_esame_allievo_v3",
     category: "utility",
     approval: "pending",
+    previous: { name: "promemoria_esame_allievo_v2", category: "utility", approval: "approved" },
     variables: ["nome", "data"],
     body:
       "Ciao {{1}}, il {{2}} hai l'esame di guida. Orario e luogo ti verranno " +
@@ -131,6 +145,7 @@ export const WHATSAPP_TEMPLATES = {
     name: "promemoria_guida_istruttore_v3",
     category: "utility",
     approval: "pending",
+    previous: { name: "promemoria_guida_istruttore_v2", category: "utility", approval: "approved" },
     variables: ["nome_istruttore", "nome_allievo", "quando", "durata"],
     body:
       "Ciao {{1}}, hai una guida con {{2}} il {{3}}, della durata di {{4}} minuti. " +
@@ -154,6 +169,7 @@ export const WHATSAPP_TEMPLATES = {
     name: "guida_annullata_allievo_v3",
     category: "utility",
     approval: "pending",
+    previous: { name: "guida_annullata_allievo_v2", category: "utility", approval: "approved" },
     variables: ["nome", "appuntamento"],
     body:
       "Ciao {{1}}, {{2}} non si terrà più. " +
@@ -163,6 +179,7 @@ export const WHATSAPP_TEMPLATES = {
     name: "guida_spostata_allievo_v3",
     category: "utility",
     approval: "pending",
+    previous: { name: "guida_spostata_allievo_v2", category: "marketing", approval: "approved" },
     variables: ["nome", "appuntamento", "prima", "adesso"],
     // Riscritto il 22/10: `_v2` («… si sposta … Ci vediamo nel nuovo orario!»)
     // era stato riclassificato marketing. Ora parla di prenotazione aggiornata.
@@ -174,6 +191,7 @@ export const WHATSAPP_TEMPLATES = {
     name: "guida_cambio_luogo_v3",
     category: "utility",
     approval: "pending",
+    previous: { name: "guida_cambio_luogo_v2", category: "utility", approval: "approved" },
     variables: ["nome", "appuntamento", "luogo"],
     body:
       "Ciao {{1}}, cambia il luogo di ritrovo per {{2}}: ora è {{3}}. " +
@@ -185,6 +203,7 @@ export const WHATSAPP_TEMPLATES = {
     name: "esame_fissato_allievo_v3",
     category: "utility",
     approval: "pending",
+    previous: { name: "esame_fissato_allievo_v2", category: "utility", approval: "approved" },
     variables: ["nome", "quando"],
     body:
       "Ciao {{1}}, il tuo esame di guida è fissato: {{2}}. " +
@@ -194,6 +213,7 @@ export const WHATSAPP_TEMPLATES = {
     name: "scadenza_documento_allievo_v3",
     category: "utility",
     approval: "pending",
+    previous: { name: "scadenza_documento_allievo_v2", category: "utility", approval: "approved" },
     variables: ["nome", "documento", "data"],
     body:
       "Ciao {{1}}, il tuo {{2}} scade il {{3}}. Passa in segreteria per il rinnovo.",
@@ -216,6 +236,22 @@ export const PUSH_ONLY_KINDS = [
   "empty_slot_notification",
   "waitlist_offer",
 ] as const;
+
+/**
+ * Il nome da mandare a Meta per questo messaggio: la versione corrente se è
+ * approvata e utility, altrimenti la precedente alle stesse condizioni.
+ * `null` = nessuna versione si può mandare (la cascata passa all'email).
+ */
+export function sendableTemplateName(template: WhatsAppTemplate): string | null {
+  const candidates = [
+    { name: template.name, category: template.category, approval: template.approval },
+    ...(template.previous ? [template.previous] : []),
+  ];
+  const usable = candidates.find(
+    (candidate) => candidate.approval === "approved" && candidate.category === "utility",
+  );
+  return usable?.name ?? null;
+}
 
 export function getWhatsAppTemplate(kind: WhatsAppTemplateKind): WhatsAppTemplate {
   return WHATSAPP_TEMPLATES[kind];

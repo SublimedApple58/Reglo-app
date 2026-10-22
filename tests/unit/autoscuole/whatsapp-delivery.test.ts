@@ -50,10 +50,10 @@ describe("quando NON si manda", () => {
     expect(whatsAppSkipReason({ ...base, optedOut: true })).toMatch(/revocato/);
   });
 
-  it("template ancora in approvazione su Meta", () => {
+  it("template in approvazione e nessuna versione precedente utilizzabile", () => {
     expect(
       whatsAppSkipReason({ ...base, template: { ...approvedUtility, approval: "pending" } }),
-    ).toMatch(/non ancora approvato/);
+    ).toMatch(/nessuna versione approvata/);
   });
 
   // 22/10: Meta ha riclassificato marketing due template sottomessi come
@@ -65,6 +65,19 @@ describe("quando NON si manda", () => {
     ).toMatch(/marketing/);
   });
 
+  it("v3 in attesa e v2 marketing: i due ex-marketing ripiegano sull'email", () => {
+    expect(
+      whatsAppSkipReason({
+        ...base,
+        template: {
+          ...approvedUtility,
+          approval: "pending",
+          previous: { name: "guida_spostata_allievo_v2", category: "marketing", approval: "approved" },
+        },
+      }),
+    ).toMatch(/marketing/);
+  });
+
   it("destinatario mancante", () => {
     expect(whatsAppSkipReason({ ...base, recipient: "" })).toMatch(/destinatario/);
   });
@@ -73,6 +86,19 @@ describe("quando NON si manda", () => {
 describe("quando si manda", () => {
   it("canale acceso, template approvato, consenso valido", () => {
     expect(whatsAppSkipReason(base)).toBeNull();
+  });
+
+  it("v3 in attesa ma v2 utility approvato: si manda il v2", () => {
+    expect(
+      whatsAppSkipReason({
+        ...base,
+        template: {
+          ...approvedUtility,
+          approval: "pending",
+          previous: { name: "promemoria_guida_allievo_v2", category: "utility", approval: "approved" },
+        },
+      }),
+    ).toBeNull();
   });
 
   it.each([

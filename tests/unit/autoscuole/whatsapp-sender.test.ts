@@ -2,7 +2,9 @@ import {
   buildTemplateParameters,
   PUSH_ONLY_KINDS,
   WHATSAPP_FOOTER,
+  sendableTemplateName,
   WHATSAPP_TEMPLATES,
+  type WhatsAppTemplate,
   type WhatsAppTemplateKind,
 } from "@/lib/autoscuole/whatsapp-templates";
 import {
@@ -274,7 +276,7 @@ describe("sendWhatsAppTemplate", () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.to).toBe("393331234567"); // E.164 senza il +, come vuole la Cloud API
     expect(body.type).toBe("template");
-    expect(body.template.name).toBe("promemoria_guida_mattutino_v3");
+    expect(body.template.name).toBe(sendableTemplateName(WHATSAPP_TEMPLATES.morning_reminder_student) ?? "promemoria_guida_mattutino_v3");
     expect(body.template.components[0].parameters.map((p: { text: string }) => p.text))
       .toEqual(["Marco", "10:00"]);
   });
@@ -384,7 +386,7 @@ describe("sendWhatsAppTemplate", () => {
     // non è SMS-enabled, quindi il profilo non si deduce dal numero.
     expect(body.messaging_profile_id).toBe("00000000-0000-0000-0000-000000000000");
     expect(body.whatsapp_message.type).toBe("template");
-    expect(body.whatsapp_message.template.name).toBe("promemoria_guida_mattutino_v3");
+    expect(body.whatsapp_message.template.name).toBe(sendableTemplateName(WHATSAPP_TEMPLATES.morning_reminder_student) ?? "promemoria_guida_mattutino_v3");
     expect(body.whatsapp_message.template.language).toEqual({
       policy: "deterministic",
       code: "it",
@@ -506,5 +508,29 @@ describe("lista bianca di staging (REG-500)", () => {
 
   it("senza lista non passa nessuno", () => {
     expect(isStagingTestRecipient("3331234567", {} as unknown as NodeJS.ProcessEnv)).toBe(false);
+  });
+});
+
+describe("quale versione del template si manda (22/10)", () => {
+  it("finché i _v3 sono in attesa, gli 8 utility partono col _v2", () => {
+    const kinds = Object.keys(WHATSAPP_TEMPLATES) as WhatsAppTemplateKind[];
+    for (const kind of kinds) {
+      const t: WhatsAppTemplate = WHATSAPP_TEMPLATES[kind];
+      const sendable = sendableTemplateName(t);
+      if (t.approval === "approved" && t.category === "utility") {
+        expect(sendable).toBe(t.name);
+      } else if (t.previous?.approval === "approved" && t.previous.category === "utility") {
+        expect(sendable).toBe(t.previous.name);
+      } else {
+        expect(sendable).toBeNull();
+      }
+    }
+  });
+
+  it("i due ex-marketing non hanno una versione mandabile finché il _v3 non è approvato", () => {
+    for (const kind of ["morning_reminder_student", "appointment_rescheduled"] as const) {
+      const t: WhatsAppTemplate = WHATSAPP_TEMPLATES[kind];
+      if (t.approval !== "approved") expect(sendableTemplateName(t)).toBeNull();
+    }
   });
 });
