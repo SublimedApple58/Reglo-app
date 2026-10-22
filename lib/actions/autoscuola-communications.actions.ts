@@ -27,7 +27,15 @@ const createRuleSchema = z.object({
   type: z.enum(["APPOINTMENT_BEFORE", "CASE_STATUS_CHANGED", "CASE_DEADLINE_BEFORE"]),
   active: z.boolean(),
   offsetDays: z.number().int().min(0).max(365),
-  channel: z.enum(["email", "whatsapp", "sms"]),
+  // REG-500: le regole sono testo libero, e su WhatsApp Meta accetta testo
+  // libero solo entro 24 ore da un messaggio dell'allievo. Una regola WhatsApp
+  // non consegnerebbe mai niente: le nuove nascono solo email. Le vecchie
+  // restano leggibili (`updateRuleSchema`) finché la segreteria non le passa.
+  channel: z.literal("email", {
+    errorMap: () => ({
+      message: "I messaggi personalizzati si mandano via email: WhatsApp accetta solo testi approvati.",
+    }),
+  }),
   target: z.enum(["student", "staff"]),
   appointmentType: z.string().optional().nullable(),
   deadlineType: z.string().optional().nullable(),

@@ -150,6 +150,13 @@ export function AutoscuoleCommunicationsPage({
                   <span className="glass-chip">
                     Canale: {rule.channel === "whatsapp" ? "WHATSAPP" : rule.channel.toUpperCase()}
                   </span>
+                  {rule.channel !== "email" ? (
+                    // REG-500: testo libero su WhatsApp non parte mai (Meta
+                    // accetta solo template approvati fuori dalle 24 ore).
+                    <span className="rounded-full bg-[#111111] px-2 py-[3px] text-[11px] font-semibold text-white">
+                      Non viene inviato: modifica e passa a Email
+                    </span>
+                  ) : null}
                   <span className="glass-chip">Target: {rule.target}</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -163,7 +170,9 @@ export function AutoscuoleCommunicationsPage({
                         type: rule.type,
                         active: rule.active,
                         offsetDays: rule.offsetDays,
-                        channel: rule.channel,
+                        // REG-500: una regola WhatsApp si apre già su Email, il
+                        // solo canale su cui un testo libero arriva davvero.
+                        channel: "email",
                         target: rule.target,
                         appointmentType: rule.appointmentType ?? "",
                         deadlineType: rule.deadlineType ?? "PINK_SHEET_EXPIRES",
@@ -285,7 +294,6 @@ export function AutoscuoleCommunicationsPage({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="email">Email</SelectItem>
-                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -403,6 +411,7 @@ export function AutoscuoleCommunicationsPage({
                         | "CASE_STATUS_CHANGED"
                         | "CASE_DEADLINE_BEFORE",
                       ...payload,
+                      channel: "email",
                     })
                   : activeRule
                     ? await updateAutoscuolaRule({
