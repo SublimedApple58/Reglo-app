@@ -228,3 +228,31 @@ export async function payRecurringExpense(input: {
     return { success: false as const, message: formatError(error) };
   }
 }
+
+// ── Saldo di partenza ───────────────────────────────────────────────────────
+
+/**
+ * Il saldo di cassa a una data: da lì la Panoramica calcola la cassa di oggi
+ * e i mesi di autonomia. Lo scrive Tiziano dal conto, mai un valore d'esempio.
+ */
+export async function saveFinanceOpeningBalance(input: { balanceCents: number; date: string }) {
+  try {
+    await requireGlobalAdmin();
+    const data = z
+      .object({
+        balanceCents: z.number().int().min(-100_000_000).max(1_000_000_000),
+        date: ymd,
+      })
+      .parse(input);
+    if (data.date > todayYmdRome()) throw new Error("La data del saldo non può essere nel futuro.");
+    const payload = { openingBalanceCents: data.balanceCents, openingDate: ymdToDbDate(data.date) };
+    await prisma.financeSettings.upsert({
+      where: { id: "default" },
+      create: { id: "default", ...payload },
+      update: payload,
+    });
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}

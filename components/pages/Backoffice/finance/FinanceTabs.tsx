@@ -7,8 +7,9 @@ import { cn } from "@/lib/utils";
 
 // Le viste arrivano una fase alla volta: qui solo quelle già pronte.
 const TABS = [
-  { href: "/backoffice/finanza/movimenti", label: "Movimenti" },
-  { href: "/backoffice/finanza/spese-fisse", label: "Spese fisse" },
+  { href: "/backoffice/finanza", label: "Panoramica", exact: true },
+  { href: "/backoffice/finanza/movimenti", label: "Movimenti", exact: false },
+  { href: "/backoffice/finanza/spese-fisse", label: "Spese fisse", exact: false },
 ] as const;
 
 export function FinanceTabs() {
@@ -17,7 +18,7 @@ export function FinanceTabs() {
   return (
     <nav className="mb-7 flex w-max max-w-full gap-1 overflow-x-auto rounded-xl bg-[#f1f1f2] p-1">
       {TABS.map((tab) => {
-        const active = current.startsWith(tab.href);
+        const active = tab.exact ? current === tab.href : current.startsWith(tab.href);
         return (
           <Link
             key={tab.href}

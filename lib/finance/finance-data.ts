@@ -1,5 +1,10 @@
 import { prisma } from "@/db/prisma";
-import { companyKindOf, isExcludedFromKpis, isSeedDemo } from "@/lib/backoffice/kpi-math";
+import {
+  companyKindOf,
+  isExcludedFromKpis,
+  isSeedDemo,
+  planMonthlyCents,
+} from "@/lib/backoffice/kpi-math";
 import {
   dbDateToYmd,
   isRecurringActive,
@@ -73,9 +78,20 @@ export type FinanceEntryRow = {
   notes: string | null;
 };
 
-export async function listFinanceEntries({ from, to }: { from: string; to: string }) {
+export async function listFinanceEntries({
+  from,
+  to,
+  openOnly = false,
+}: {
+  from: string;
+  to: string;
+  openOnly?: boolean;
+}) {
   const rows = await prisma.financeEntry.findMany({
-    where: { date: { gte: ymdToDbDate(from), lte: ymdToDbDate(to) } },
+    where: {
+      date: { gte: ymdToDbDate(from), lte: ymdToDbDate(to) },
+      ...(openOnly ? { status: { not: "settled" } } : {}),
+    },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     include: {
       category: { select: { name: true } },
@@ -176,3 +192,62 @@ export async function listRecurringExpenses() {
     };
   });
 }
+
+export async function getFinanceSettings() {
+  const row = await prisma.financeSettings.findUnique({ where: { id: "default" } });
+  return {
+    openingBalanceCents: row?.openingBalanceCents ?? null,
+    openingDate: row?.openingDate ? dbDateToYmd(row.openingDate) : null,
+  };
+}
+
+/**
+ * Piani delle autoscuole clienti (stessa formula dei KPI, `planMonthlyCents`,
+ * ma senza demo, test e consorziate). Il canone di ogni rinnovo è il mese o
+ * l'anno intero, IVA inclusa (decisione di Tiziano: i prezzi sono IVA inclusa).
+ */
+export async function listFinancePlans(companyIds: string[]) {
+  if (companyIds.length === 0) return [];
+  const plans = await prisma.companyPlan.findMany({
+    where: { companyId: { in: companyIds } },
+    select: {
+      companyId: true,
+      billingPeriod: true,
+      renewsAt: true,
+      instructorSeats: true,
+      instructorSeatPriceCents: true,
+      voiceEnabled: true,
+      voicePriceCents: true,
+      company: { select: { name: true } },
+    },
+  });
+  return plans.map((p) => ({
+    companyId: p.companyId,
+    companyName: p.company.name,
+    billingPeriod: p.billingPeriod,
+    renewsAt: p.renewsAt ? ymdRomeOf(p.renewsAt) : null,
+    periodCents:
+      p.instructorSeats * p.instructorSeatPriceCents + (p.voiceEnabled ? p.voicePriceCents : 0),
+    monthlyCents: planMonthlyCents(p),
+  }));
+}
+
+/** `renewsAt` è un timestamp: il giorno è quello di Roma. */
+const ymdRomeOf = (date: Date) => todayYmdRome(date);
+
+/**
+ * Movimenti per la Panoramica: tutti quelli della finestra, più quelli ancora
+ * da saldare con la data già passata (scaduti, anche se vecchi).
+ */
+export async function listOverviewEntries({ from, to }: { from: string; to: string }) {
+  const [inWindow, olderOpen] = await Promise.all([
+    listFinanceEntries({ from, to }),
+    listFinanceEntries({ from: "2000-01-01", to: addDays(from, -1), openOnly: true }),
+  ]);
+  return [...inWindow, ...olderOpen];
+}
+
+const addDays = (ymd: string, days: number) => {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+};

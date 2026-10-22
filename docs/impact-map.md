@@ -203,10 +203,11 @@ Each entry: **Feature** → list of features it connects to, with reason.
 
 ### Backoffice — Finanza (REG-413)
 - ← **Backoffice KPI**: stessi filtri delle autoscuole di prova (`isExcludedFromKpis`, `isSeedDemo`, `companyKindOf` da `kpi-math.ts`), qui applicati TUTTI (in Finanza anche `seedDemo` e consorziate restano fuori). Se cambia la marcatura delle autoscuole di prova, cambia anche qui
-- ← **Company Plan** (fase 2): MRR e rinnovi letti da `CompanyPlan`, non copiati
+- ← **Company Plan** (fase 2): MRR (formula `planMonthlyCents` dei KPI) e rinnovi previsti letti da `CompanyPlan`, non copiati. `renewsAt` vuoto = piano «da completare», fuori dalla previsione. Se cambia il modo di prezzare un piano (nuove voci oltre a posti e voce), va aggiornato `listFinancePlans` in `lib/finance/finance-data.ts`, oltre a `planMonthlyCents`
 - ← **Backoffice accesso**: `createdById` dei movimenti = admin personale (`getBackofficeIdentity`)
 - → **Company**: `FinanceEntry.companyId` e `SalesDeal.companyId` in `SetNull` (cancellare un'autoscuola non cancella i conti); `CompanyCommercial` in cascade
-- ✗ **Trigger.dev**: nessun job — le spese fisse si proiettano al volo
+- ✗ **Trigger.dev**: nessun job — spese fisse e rinnovi si proiettano al volo
+- → **UI condivisa**: il toast di default (`components/ui/toast.tsx`) è passato da slate a nero #111111 per tutta la web app (decisione di Tiziano, fase 2)
 
 ### Backoffice — KPI
 - ← **Company Plan**: MRR/ARR/ARPA e posti istruttore venduti da `CompanyPlan`; ricavi una tantum da `CompanyLicensePurchase` (nessuna scrittura, sola lettura)

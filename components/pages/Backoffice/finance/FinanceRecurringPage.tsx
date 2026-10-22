@@ -10,13 +10,12 @@ import { cn } from "@/lib/utils";
 
 import type { FinanceCategoryOption } from "./FinanceEntrySheet";
 import { RecurringExpenseSheet, RecurringPaySheet } from "./RecurringExpenseSheets";
+import { RecurringGroupBreakdown, recurringGroups } from "./RecurringSummary";
 import {
-  CATEGORY_GROUP_LABEL,
   FinButton,
   FinCard,
   FinEmpty,
   FinLabel,
-  GREY_RAMP,
   Pill,
   dayMonth,
   euroSmart,
@@ -50,17 +49,7 @@ export function FinanceRecurringPage({
   const inactive = expenses.filter((e) => !e.active);
   const monthlyTotal = active.reduce((sum, e) => sum + e.monthlyCents, 0);
 
-  const groups = useMemo(() => {
-    const map = new Map<string, { key: string; cents: number; names: string[] }>();
-    for (const e of active) {
-      const key = e.categoryGroup ?? "altro";
-      const g = map.get(key) ?? { key, cents: 0, names: [] };
-      g.cents += e.monthlyCents;
-      g.names.push(e.name);
-      map.set(key, g);
-    }
-    return [...map.values()].sort((a, b) => b.cents - a.cents);
-  }, [active]);
+  const groups = useMemo(() => recurringGroups(active), [active]);
 
   const upcoming = useMemo(() => {
     const until = addDays(today, UPCOMING_DAYS);
@@ -146,34 +135,7 @@ export function FinanceRecurringPage({
             <small className="ml-1 text-lg font-medium text-[#a1a1aa]">€ / mese</small>
           </div>
           {monthlyTotal > 0 ? (
-            <>
-              <div className="mb-[18px] mt-4 flex h-3 gap-0.5 overflow-hidden rounded-full">
-                {groups.map((g, i) => (
-                  <i
-                    key={g.key}
-                    style={{ flex: g.cents, background: GREY_RAMP[Math.min(i, GREY_RAMP.length - 1)] }}
-                  />
-                ))}
-              </div>
-              {groups.map((g, i) => (
-                <div
-                  key={g.key}
-                  className="flex items-center justify-between border-t border-[#f2f2f3] py-2.5 text-sm first:border-t-0"
-                >
-                  <div className="flex min-w-0 items-center">
-                    <span
-                      className="mr-2 inline-block h-2 w-2 shrink-0 rounded-[2px]"
-                      style={{ background: GREY_RAMP[Math.min(i, GREY_RAMP.length - 1)] }}
-                    />
-                    {CATEGORY_GROUP_LABEL[g.key] ?? g.key}
-                    <span className="ml-2 truncate text-[13px] text-[#71717a]">
-                      {g.names.length === 1 ? g.names[0] : `${g.names.length} voci`}
-                    </span>
-                  </div>
-                  <b className="font-semibold tabular-nums">{euroSmart(g.cents)}</b>
-                </div>
-              ))}
-            </>
+            <RecurringGroupBreakdown groups={groups} />
           ) : (
             <p className="mt-4 text-[13px] text-[#71717a]">Nessuna spesa fissa attiva oggi.</p>
           )}
