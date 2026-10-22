@@ -1,6 +1,6 @@
 # Ex allievi (REG-629)
 
-**Stato:** branch `feature/reg-629-ex-allievi` (web + backend) e `feature/reg-629-ex-allievi` in `reglo-mobile` (solo testo). Non ancora su staging né in prod.
+**Stato:** web su staging dal 22/10/2026 (migrazione applicata, recupero staging: 0 righe). Non in prod. Mobile (`reglo-mobile`, solo testo) fermo sul branch, va con un OTA da confermare.
 
 ## Perché
 
