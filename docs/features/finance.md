@@ -9,11 +9,11 @@ Si costruisce a fasi (analisi approvata da Tiziano il 2026-10-22):
 
 | Fase | Contenuto | Stato |
 |---|---|---|
-| 0 | Login personali al backoffice | staging |
-| 1 | Migrazione + Movimenti + Spese fisse | staging |
-| 2 | Panoramica (margine, MRR, cassa, IVA, 12 mesi, in arrivo) | staging |
-| 3 | Autoscuole (anagrafica commerciale) | staging |
-| 4 | Vendite (sales, contratti, commissioni) | — |
+| 0 | Login personali al backoffice | staging (approvata) |
+| 1 | Migrazione + Movimenti + Spese fisse | staging (approvata) |
+| 2 | Panoramica (margine, MRR, cassa, IVA, 12 mesi, in arrivo) | staging (approvata) |
+| 3 | Autoscuole (anagrafica commerciale) | staging (approvata) |
+| 4 | Vendite (sales, contratti, commissioni) | staging |
 | 5 | Import dal foglio | — |
 
 ## Regole decise da Tiziano
@@ -33,14 +33,17 @@ Si costruisce a fasi (analisi approvata da Tiziano il 2026-10-22):
 - Partenza da ottobre 2026 con saldo di cassa iniziale (`FinanceSettings`,
   vuoto finché non lo inserisce Tiziano).
 
-## Modello (migrazione `20261026120000_finance`, solo tabelle nuove)
+## Modello
+
+Migrazioni: `20261026120000_finance` (solo tabelle nuove) e
+`20261027120000_finance_sales_payments` (fase 4: due colonne su `FinanceEntry`).
 
 | Tabella | Cosa |
 |---|---|
 | `FinanceCategory` | Categorie in/out; `group` raggruppa le spese (persone, software, …). 12 di partenza dalla migrazione. |
-| `FinanceEntry` | Movimento: `date`, `direction` in/out, `amountCents` IVA incl., `vatRateBps`, `status` settled/due/planned, `settledOn`, `companyId?` (solo entrate), `invoiceNumber?`, `recurringExpenseId?`, `createdById` (admin personale). |
+| `FinanceEntry` | Movimento: `date`, `direction` in/out, `amountCents` IVA incl., `vatRateBps`, `status` settled/due/planned, `settledOn`, `companyId?` (solo entrate), `invoiceNumber?`, `recurringExpenseId?`, `salesAgentId?` (fisso pagato: `date` = 1° del mese di riferimento, `settledOn` = giorno del pagamento), `salesDealId?` (commissione pagata, unico), `createdById` (admin personale). |
 | `RecurringExpense` | Spesa fissa: importo per scadenza, `cadence` monthly/quarterly/annual, `dayOfMonth`, `startsOn`/`endsOn`, archiviabile. |
-| `SalesAgent`, `SalesDeal` | Fase 4. La commissione matura alla firma (`closedOn`), si paga il mese dopo. `companyName` copiato alla firma. |
+| `SalesAgent`, `SalesDeal` | Fase 4. Sales: fisso mensile, % di default, archiviabile. Contratto: firma (`closedOn`), valore, % e importo commissione, `paidOn`. La commissione matura alla firma, si paga entro la fine del mese dopo. `companyName` copiato alla firma. |
 | `CompanyCommercial` | Fase 3. 1:1 con `Company`: P.IVA, regione, stato commerciale, sales. |
 | `FinanceSettings` | Riga unica `default`: saldo e data di partenza. |
 
@@ -85,14 +88,21 @@ Date di calendario `@db.Date` ↔ stringhe `YYYY-MM-DD` (`ymdToDbDate` / `dbDate
   - **IVA da accantonare** del mese e del trimestre solare finora; segnala le
     spese senza aliquota (la loro IVA non si scala).
   - **Spese fisse** per gruppo (componente condiviso `RecurringSummary.tsx`).
-  - Il blocco Vendite del mockup arriva con la fase 4.
+    Comprende il fisso dei sales attivi (gruppo «Persone»), e così l'autonomia
+    calcolata sulle spese fisse (`fixedMonthlyCents`).
+  - **Vendite del mese** in fondo, come nel mockup: la stessa tabella della tab
+    Vendite (`SalesMonthTable`), in sola lettura.
+  - Fissi dei sales (giorno 1 di ogni mese) e commissioni da pagare (una voce
+    per mese di firma, alla scadenza) entrano tra le uscite previste del
+    grafico e in «in arrivo»; le commissioni oltre la scadenza sono scadute.
+    Un fisso passato non pagato non diventa scaduto (come le spese fisse).
 - **Autoscuole** (`/finanza/autoscuole?mese=YYYY-MM`): le autoscuole clienti
   (`listFinanceCompanies`, quindi senza demo/test/consorziate) con
   l'anagrafica commerciale (`CompanyCommercial`) e i numeri d'uso.
   - Stato attiva / in pausa / disdetta (data di disdetta obbligatoria). Senza
     riga `CompanyCommercial` lo stato è **«da completare»**: nessun default
     inventato. P.IVA normalizzata a 11 cifre, regione da elenco, sales da
-    `SalesAgent` (vuoto finché la fase 4 non li crea).
+    `SalesAgent`.
   - Piano letto da `CompanyPlan` (valore/anno IVA inclusa, rinnovo; piano a
     pagamento senza `renewsAt` = «da completare»). Si modifica col dialog
     esistente del backoffice (`BackofficeCompanyPlanDialog`), aperto dal drawer.
@@ -104,14 +114,35 @@ Date di calendario `@db.Date` ↔ stringhe `YYYY-MM-DD` (`ymdToDbDate` / `dbDate
     le disdette non entrano nel valore dei piani. Filtri: stato, sales,
     piano, ricerca. Regole pure in `lib/finance/finance-schools.ts`.
 
+- **Vendite** (`/finanza/vendite?mese=YYYY-MM`). Regole pure in
+  `lib/finance/finance-sales.ts` (test `tests/unit/finance-sales.test.ts`).
+  - Barra: contratti del mese, valore, commissioni maturate (con la scadenza),
+    fissi, compenso.
+  - **Riepilogo per sales**: contratti, valore, commissioni, fisso, compenso
+    (= fisso + commissioni dei contratti firmati nel mese). Nei mesi chiusi il
+    fisso conta solo se pagato davvero; nel mese in corso e nei futuri vale
+    quello atteso. «Segna pagato» sul fisso → `paySalesFixed` crea il
+    movimento (categoria «Stipendi e compensi», un solo fisso per sales e mese).
+  - **Contratti del mese** e **commissioni ancora da pagare** degli altri mesi.
+    Drawer contratto: valore precompilato dal piano dell'autoscuola (€/anno,
+    IVA inclusa) e modificabile, % dal sales, importo ricalcolato ma
+    modificabile. «Pagata il» → `saveSalesDeal` crea/aggiorna il movimento
+    (categoria «Commissioni sales»); togliere la data lo cancella; cancellare
+    il contratto cancella anche il pagamento.
+  - Drawer sales: nome, email, fisso, %, attivo/archiviato. Si cancella solo
+    senza contratti né pagamenti, altrimenti si archivia.
+  - I movimenti nati da Vendite in Movimenti sono in sola lettura (si può solo
+    eliminarli: una commissione eliminata torna «da pagare»).
+
 ## File
 
 | File | Ruolo |
 |---|---|
 | `lib/finance/finance-math.ts` | Puro: scorporo IVA, ricorrenze, totali, parsing euro, mesi (test: `tests/unit/finance-math.test.ts`) |
 | `lib/finance/finance-overview.ts` | Puro: margine, MRR, cassa/autonomia, IVA, grafico, in arrivo (test: `tests/unit/finance-overview.test.ts`) |
+| `lib/finance/finance-sales.ts` | Puro: commissione e scadenza, riepilogo per sales, voci previste di fissi e commissioni (test: `tests/unit/finance-sales.test.ts`) |
 | `lib/finance/finance-schools.ts` | Puro: P.IVA, stato «da completare», totali della tab Autoscuole (test: `tests/unit/finance-schools.test.ts`) |
-| `lib/finance/finance-data.ts` | Letture (non "use server", senza guardia): autoscuole valide, categorie, movimenti, spese fisse, piani, impostazioni, anagrafica + numeri d'uso (`listFinanceSchools`), sales |
+| `lib/finance/finance-data.ts` | Letture (non "use server", senza guardia): autoscuole valide, categorie, movimenti, spese fisse, piani, impostazioni, anagrafica + numeri d'uso (`listFinanceSchools`), sales, contratti, fissi pagati |
 | `lib/actions/finance.actions.ts` | Scritture con `requireGlobalAdmin` |
-| `app/[locale]/backoffice/finanza/` | `layout.tsx` (titolo + tab), `page.tsx`, `movimenti/`, `spese-fisse/`, `autoscuole/` |
-| `components/pages/Backoffice/finance/` | `finance-ui.tsx` (primitivi dal mockup), `FinanceTabs`, `FinanceMovementsPage`, `FinanceEntrySheet`, `FinanceRecurringPage`, `RecurringExpenseSheets`, `FinanceOverviewPage`, `FinanceChart` (SVG a mano), `OpeningBalanceSheet`, `RecurringSummary`, `FinanceSchoolsPage`, `SchoolSheet` |
+| `app/[locale]/backoffice/finanza/` | `layout.tsx` (titolo + tab), `page.tsx`, `movimenti/`, `spese-fisse/`, `autoscuole/`, `vendite/` |
+| `components/pages/Backoffice/finance/` | `finance-ui.tsx` (primitivi dal mockup), `FinanceTabs`, `FinanceMovementsPage`, `FinanceEntrySheet`, `FinanceRecurringPage`, `RecurringExpenseSheets`, `FinanceOverviewPage`, `FinanceChart` (SVG a mano), `OpeningBalanceSheet`, `RecurringSummary`, `FinanceSchoolsPage`, `SchoolSheet`, `FinanceSalesPage`, `SalesSheets` (sales, contratto, fisso), `SalesMonthTable` |
