@@ -348,7 +348,11 @@ export function SelectBox(props: React.SelectHTMLAttributes<HTMLSelectElement>) 
 
 /** Centesimi → testo per un campo importo («1.200» o «12,50»). */
 export const centsToInput = (cents: number) =>
-  (cents / 100).toLocaleString("it-IT", { minimumFractionDigits: cents % 100 ? 2 : 0 });
+  new Intl.NumberFormat("it-IT", {
+    useGrouping: "always",
+    minimumFractionDigits: cents % 100 ? 2 : 0,
+    maximumFractionDigits: 2,
+  }).format(cents / 100);
 
 /** Punti base → testo per un campo percentuale («12,5»). */
 export const bpsToInput = (bps: number) =>

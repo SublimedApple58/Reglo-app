@@ -44,6 +44,9 @@ export type OverviewEntry = {
   companyName: string | null;
   invoiceNumber: string | null;
   recurringExpenseId: string | null;
+  /** Pagamenti ai sales (fisso o commissione): compensi, niente IVA da scalare. */
+  salesAgentId?: string | null;
+  salesDealId?: string | null;
 };
 
 export type OverviewRecurring = RecurringLike & {
@@ -423,7 +426,9 @@ export function vatSummary(input: OverviewInput): VatSummary {
       lastYm: q.lastYm,
       toSetAsideCents: vatOf(quarter, "in") - vatOf(quarter, "out"),
     },
-    outWithoutVatCount: month.filter((e) => e.direction === "out" && e.vatRateBps === null).length,
+    outWithoutVatCount: month.filter(
+      (e) => e.direction === "out" && e.vatRateBps === null && !e.salesAgentId && !e.salesDealId,
+    ).length,
     hasData: month.length > 0,
   };
 }
