@@ -26,7 +26,10 @@ export const FIN = {
 export const GREY_RAMP = ["#111111", "#52525b", "#a1a1aa", "#c9c9cf", "#e4e4e7", "#f1f1f2"];
 
 export const euro = (cents: number, opts: { sign?: boolean; precise?: boolean } = {}) => {
+  // `useGrouping: "always"`: in italiano Intl non separa le migliaia sotto i
+  // 10.000 ("1220 €"); in una colonna di importi il punto serve sempre.
   const value = new Intl.NumberFormat("it-IT", {
+    useGrouping: "always",
     minimumFractionDigits: opts.precise ? 2 : 0,
     maximumFractionDigits: opts.precise ? 2 : 0,
   }).format(Math.abs(cents) / 100);
