@@ -127,6 +127,29 @@ si legge con `GET /v2/whatsapp/message_templates` su Telnyx).
 API mobile `GET/PATCH /api/mobile/me/whatsapp`; casella in creazione allievo
 web (consorziata, consorzio).
 
+## Pilota
+
+`WHATSAPP_PILOT_COMPANY_IDS` (id separati da virgola, vuota = tutte):
+`isWhatsAppEnabledForCompany` limita WhatsApp a quelle autoscuole. Le altre
+vedono «Non disponibile» in Impostazioni e gli invii sono `skipped` col motivo.
+
+## Revoche: STOP e START (anche su Telnyx)
+
+Telnyx tiene **una sua revoca per messaging profile**: dopo uno STOP ogni invio
+a quel numero torna `40300 Blocked due to STOP message`, e il blocco si toglie
+**solo** quando la persona scrive START o UNSTOP (nessuna API per toglierlo,
+`GET /v2/messaging_optouts` per leggerlo). Quindi:
+
+- webhook: START/UNSTOP (parola esatta, controllata **prima** della revoca —
+  «unstop» contiene «stop») → `recordWhatsAppOptIn` toglie la nostra revoca;
+- invio: un `40300` (`blockedByOptOut`) riporta la revoca da noi e non si
+  riprova;
+- app: riaccendere non toglie la revoca; `PATCH /api/mobile/me/whatsapp`
+  risponde `needsStart` + `startUrl` (`wa.me/<numero>?text=START`).
+
+Il testo in arrivo da Telnyx sta in `payload.body.text.body`, e Telnyx marca
+le parole chiave con `autoresponse_type` (`STOP`/`START`): li leggiamo entrambi.
+
 ## Staging
 
 Gli invii esterni su staging sono spenti; `WHATSAPP_STAGING_ALLOWLIST`
