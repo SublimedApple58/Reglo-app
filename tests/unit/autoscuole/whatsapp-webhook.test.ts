@@ -394,3 +394,44 @@ describe("parseTelnyxWebhook", () => {
     expect(parseTelnyxWebhook(null)).toEqual([]);
   });
 });
+
+describe("parseTelnyxWebhook — STOP reale (22/10)", () => {
+  // Il payload vero di uno STOP mandato da telefono al numero di Reglo.
+  // Il primo parser leggeva `payload.text`: vuoto, quindi la revoca non
+  // scattava e l'allievo avrebbe continuato a ricevere messaggi.
+  const realStop = {
+    data: {
+      event_type: "message.received",
+      id: "6075b5f3-8421-4c81-9aaf-843c2d680e93",
+      payload: {
+        autoresponse_type: "STOP",
+        body: { from: "+393459191272", text: { body: "STOP" }, type: "text" },
+        direction: "inbound",
+        from: { carrier: "", line_type: "", phone_number: "+393459191272" },
+        id: "3f30e939-cdde-4fcd-b58e-ece5b5be8af8",
+        to: "+390280781316",
+        type: "WHATSAPP",
+      },
+    },
+  };
+
+  it("legge il testo da body.text.body e riconosce la revoca", () => {
+    expect(parseTelnyxWebhook(realStop)).toEqual([
+      {
+        type: "inbound",
+        from: "+393459191272",
+        text: "STOP",
+        providerMessageId: "3f30e939-cdde-4fcd-b58e-ece5b5be8af8",
+        isOptOut: true,
+      },
+    ]);
+  });
+
+  it("una risposta qualunque arriva col suo testo e non revoca", () => {
+    const reply = JSON.parse(JSON.stringify(realStop));
+    reply.data.payload.autoresponse_type = null;
+    reply.data.payload.body.text.body = "Posso spostare la guida a giovedì?";
+    const [event] = parseTelnyxWebhook(reply);
+    expect(event).toMatchObject({ text: "Posso spostare la guida a giovedì?", isOptOut: false });
+  });
+});

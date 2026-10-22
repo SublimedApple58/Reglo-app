@@ -278,6 +278,14 @@ type TelnyxWebhookBody = {
     payload?: {
       id?: string;
       text?: string;
+      /**
+       * Il messaggio WhatsApp in arrivo, nella forma che Telnyx manda davvero
+       * (misurata il 22/10 su uno STOP reale): il testo sta in `body.text.body`,
+       * non in `text`.
+       */
+      body?: { text?: { body?: string } | string; type?: string };
+      /** Telnyx riconosce da sé le parole di revoca: `"STOP"` per esempio. */
+      autoresponse_type?: string | null;
       from?: { phone_number?: string };
       to?: Array<{ phone_number?: string; status?: string }>;
       errors?: Array<{ code?: string; title?: string; detail?: string }>;
@@ -311,7 +319,9 @@ export function parseTelnyxWebhook(body: unknown): WhatsAppEvent[] {
 
   if (data?.event_type === "message.received") {
     const from = payload.from?.phone_number;
-    const text = payload.text ?? payload.whatsapp?.text ?? "";
+    const bodyText =
+      typeof payload.body?.text === "string" ? payload.body.text : payload.body?.text?.body;
+    const text = bodyText ?? payload.text ?? payload.whatsapp?.text ?? "";
     if (!from || !payload.id) return [];
     return [
       {
@@ -319,7 +329,8 @@ export function parseTelnyxWebhook(body: unknown): WhatsAppEvent[] {
         from,
         text,
         providerMessageId: payload.id,
-        isOptOut: isOptOutText(text),
+        // Due segnali, basta uno: il nostro elenco di parole e quello di Telnyx.
+        isOptOut: isOptOutText(text) || payload.autoresponse_type?.toUpperCase() === "STOP",
       },
     ];
   }
