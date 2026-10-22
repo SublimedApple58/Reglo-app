@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { ChevronDown } from "lucide-react";
 
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { DatePickerInput } from "@/components/ui/date-picker";
@@ -22,7 +23,17 @@ type Draft = {
   notes: string;
 };
 
-const selectClass = `${inputClass} cursor-pointer appearance-none bg-[url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%2371717a' stroke-width='1.6'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E")] bg-[position:right_12px_center] bg-no-repeat pr-9`;
+const selectClass = `${inputClass} cursor-pointer appearance-none pr-9`;
+
+/** Select nativo con la freccia disegnata (appearance-none la toglie). */
+function SelectBox(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <div className="relative">
+      <select {...props} className={`${selectClass} ${props.className ?? ""}`} />
+      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#71717a]" />
+    </div>
+  );
+}
 
 export function SchoolSheet({
   open,
@@ -71,7 +82,10 @@ export function SchoolSheet({
     });
   }, [open, school]);
 
-  const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => ({ ...d, [key]: value }));
+  const set = <K extends keyof Draft>(key: K, value: Draft[K]) => {
+    setError(null);
+    setDraft((d) => ({ ...d, [key]: value }));
+  };
 
   const handleSave = () => {
     if (!school) return;
@@ -158,11 +172,10 @@ export function SchoolSheet({
                 />
               </Field>
               <Field label="Regione" htmlFor="school-region">
-                <select
+                <SelectBox
                   id="school-region"
                   value={draft.region}
                   onChange={(e) => set("region", e.target.value)}
-                  className={selectClass}
                 >
                   <option value="">—</option>
                   {ITALIAN_REGIONS.map((r) => (
@@ -170,7 +183,7 @@ export function SchoolSheet({
                       {r}
                     </option>
                   ))}
-                </select>
+                </SelectBox>
               </Field>
             </div>
 
@@ -179,12 +192,12 @@ export function SchoolSheet({
               htmlFor="school-agent"
               hint={agents.length === 0 ? "Nessun sales ancora: si aggiungono nella sezione Vendite." : undefined}
             >
-              <select
+              <SelectBox
                 id="school-agent"
                 value={draft.agentId}
                 onChange={(e) => set("agentId", e.target.value)}
                 disabled={agents.length === 0}
-                className={`${selectClass} disabled:cursor-not-allowed disabled:bg-[#fafafa] disabled:text-[#a1a1aa]`}
+                className="disabled:cursor-not-allowed disabled:bg-[#fafafa] disabled:text-[#a1a1aa]"
               >
                 <option value="">Nessuno</option>
                 {activeAgents.map((a) => (
@@ -193,7 +206,7 @@ export function SchoolSheet({
                     {a.archived ? " (archiviato)" : ""}
                   </option>
                 ))}
-              </select>
+              </SelectBox>
             </Field>
 
             {/* Piano: si legge da qui, si cambia col dialog del backoffice */}

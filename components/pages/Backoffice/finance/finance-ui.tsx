@@ -309,14 +309,16 @@ export function FinTotal({
   value,
   note,
   empty,
+  className,
 }: {
   label: string;
   value: string;
   note?: ReactNode;
   empty?: boolean;
+  className?: string;
 }) {
   return (
-    <div className="border-b border-[#f2f2f3] px-5 py-4 md:border-b-0">
+    <div className={cn("border-b border-[#f2f2f3] px-5 py-4 md:border-b-0", className)}>
       <FinLabel>{label}</FinLabel>
       <div
         className={cn(

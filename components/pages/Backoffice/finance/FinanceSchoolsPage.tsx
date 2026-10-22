@@ -128,7 +128,7 @@ export function FinanceSchoolsPage({
             <FinTotal
               label="Autoscuole"
               value={nf(all.count)}
-              note={`${all.active} attive · ${all.paused} in pausa · ${all.churned} disdette`}
+              note={`${all.active} ${all.active === 1 ? "attiva" : "attive"} · ${all.paused} in pausa · ${all.churned} ${all.churned === 1 ? "disdetta" : "disdette"}`}
             />
             <FinTotal
               label="Valore piani"
@@ -150,6 +150,7 @@ export function FinanceSchoolsPage({
               note={`${nf(all.activeStudentsMonth)} con guide a ${name}`}
             />
             <FinTotal
+              className="col-span-2 md:col-span-1"
               label={`Guide di ${name}`}
               value={nf(all.lessonsMonth)}
               note={`${nf(all.lessonsTotal)} in totale`}
@@ -232,7 +233,7 @@ export function FinanceSchoolsPage({
                 )}
               >
                 <div>
-                  Totale <span className="font-normal text-[#71717a]">· {filtered.length} autoscuole</span>
+                  Totale <span className="font-normal text-[#71717a]">· {filtered.length} {filtered.length === 1 ? "autoscuola" : "autoscuole"}</span>
                 </div>
                 <div className="hidden lg:block" />
                 <div className="hidden lg:block" />
@@ -310,9 +311,9 @@ function SchoolRow({
       <div className="min-w-0">
         <div className="truncate text-sm font-medium text-[#111111]">{s.name}</div>
         <div className="truncate text-[12.5px] text-[#71717a]">
-          {sub || <span className="text-[#a1a1aa]">anagrafica da completare</span>}
+          {sub || (s.commercial ? null : <span className="text-[#a1a1aa]">anagrafica da completare</span>)}
           <span className="lg:hidden">
-            {" · "}
+            {sub || !s.commercial ? " · " : null}
             {s.lessonsMonth} guide nel mese
           </span>
         </div>
