@@ -15,8 +15,6 @@ import { signImpersonationGrant } from "@/lib/impersonation-grant";
 import { normalizeCompanyServices, type ServiceKey } from "@/lib/services";
 import { getTwilioClient, VOICE_WEBHOOK_BASE_URL } from "@/lib/twilio";
 import { telnyxFetch, TELNYX_WEBHOOK_BASE_URL } from "@/lib/telnyx";
-import { GLOBAL_ADMIN_EMAIL, GLOBAL_ADMIN_PASSWORD } from "@/lib/constants";
-import { setBackofficeCookie, clearBackofficeCookie } from "@/lib/backoffice-auth";
 
 const updateCompanyServiceSchema = z.object({
   companyId: z.string().min(1),
@@ -49,11 +47,6 @@ const assignAutoscuolaVoiceLineSchema = z.object({
 
 const unassignAutoscuolaVoiceLineSchema = z.object({
   companyId: z.string().uuid(),
-});
-
-const backofficeSignInSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
 });
 
 export type BackofficeCompany = {
@@ -631,28 +624,6 @@ export async function deactivateTeoriaWithResolution(
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
-}
-
-export async function backofficeSignIn(input: z.infer<typeof backofficeSignInSchema>) {
-  try {
-    const payload = backofficeSignInSchema.parse(input);
-    const isValid =
-      payload.email === GLOBAL_ADMIN_EMAIL &&
-      payload.password === GLOBAL_ADMIN_PASSWORD;
-
-    if (!isValid) {
-      return { success: false, message: "Credenziali non valide." };
-    }
-
-    await setBackofficeCookie();
-    return { success: true };
-  } catch (error) {
-    return { success: false, message: formatError(error) };
-  }
-}
-
-export async function backofficeSignOut() {
-  await clearBackofficeCookie();
 }
 
 export async function getVoiceLineDisplayNumber(lineId: string) {

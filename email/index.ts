@@ -13,11 +13,23 @@ import {
   type EmailHighlight,
 } from "./template";
 
-const getResend = () => {
+/**
+ * Destinatari interni (staff Reglo): l'unica eccezione al kill switch di
+ * staging. Il blocco esiste perché il DB di staging contiene i contatti veri
+ * delle autoscuole; una mail a un indirizzo @reglo.it non raggiunge nessun
+ * cliente. Il controllo sta qui, non nel chiamante: anche passando l'opzione
+ * per errore, un indirizzo esterno resta muto.
+ */
+const isInternalRecipient = (to: string | string[]) =>
+  (Array.isArray(to) ? to : [to]).every((address) =>
+    address.trim().toLowerCase().endsWith("@reglo.it"),
+  );
+
+const getResend = ({ allowInternal = false }: { allowInternal?: boolean } = {}) => {
   // On staging (or with the kill switch) every email send is a no-op: the
   // staging DB holds real contacts and must never receive real mail. This single
   // point covers all senders in this module.
-  if (externalSendsDisabled()) {
+  if (externalSendsDisabled() && !allowInternal) {
     return {
       emails: {
         send: async (payload: { to?: unknown; subject?: unknown }) => {
@@ -59,6 +71,7 @@ export const sendDynamicEmail = async ({
   highlight,
   footerNote,
   preheader,
+  internalStaffOnly = false,
 }: {
   /** Uno o più destinatari (Resend accetta nativamente string | string[]). */
   to: string | string[];
@@ -74,6 +87,11 @@ export const sendDynamicEmail = async ({
   highlight?: EmailHighlight | null;
   footerNote?: string | null;
   preheader?: string | null;
+  /**
+   * Mail per lo staff Reglo (es. accesso al backoffice): parte anche su
+   * staging, ma solo se TUTTI i destinatari sono @reglo.it.
+   */
+  internalStaffOnly?: boolean;
 }) => {
   const content = {
     subject,
@@ -86,7 +104,7 @@ export const sendDynamicEmail = async ({
     footerNote,
     preheader,
   };
-  const resend = getResend();
+  const resend = getResend({ allowInternal: internalStaffOnly && isInternalRecipient(to) });
   await resend.emails.send({
     from: formatSender(from),
     to,

@@ -4,8 +4,7 @@ import { authConfig } from './auth.config';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import { prisma } from '@/db/prisma';
 import { cookies } from 'next/headers';
-import { compare, hash } from './lib/encrypt';
-import { GLOBAL_ADMIN_EMAIL, GLOBAL_ADMIN_PASSWORD } from '@/lib/constants';
+import { compare } from './lib/encrypt';
 import { verifyImpersonationGrant } from '@/lib/impersonation-grant';
 import CredentialsProvider from 'next-auth/providers/credentials';
 
@@ -35,29 +34,9 @@ export const config = {
           },
         });
 
-        // Auto-provision global admin (first access)
-        if (!user) {
-          const isGlobalAdmin =
-            (credentials.email as string) === GLOBAL_ADMIN_EMAIL &&
-            (credentials.password as string) === GLOBAL_ADMIN_PASSWORD;
-
-          if (isGlobalAdmin) {
-            const created = await prisma.user.create({
-              data: {
-                email: GLOBAL_ADMIN_EMAIL,
-                password: await hash(GLOBAL_ADMIN_PASSWORD),
-                role: 'admin',
-                name: GLOBAL_ADMIN_EMAIL.split('@')[0] ?? 'admin',
-              },
-            });
-            return {
-              id: created.id,
-              name: created.name,
-              email: created.email,
-              role: created.role,
-            };
-          }
-        }
+        // Qui c'era l'auto-creazione di un utente admin con la credenziale
+        // unica del backoffice: tolta col REG-413 insieme alla password di
+        // riserva nel codice.
 
         // Check if user exists and if the password matches
         if (user && user.password) {

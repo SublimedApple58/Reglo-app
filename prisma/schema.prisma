@@ -2156,3 +2156,54 @@ model AutoscuolaAppointmentEvaluation {
   @@unique([appointmentId, itemId])
   @@index([itemId])
 }
+
+/// Persone con accesso al backoffice Reglo (REG-413): un login personale per
+/// ciascuno al posto della credenziale unica. Le righe nascono dalla migrazione
+/// (o da `scripts/backoffice-admin.ts`); la password la sceglie la persona dal
+/// link di attivazione che riceve via email — nel codice non ce n'è nessuna.
+model BackofficeAdmin {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email             String    @unique
+  name              String
+  /// `scrypt$<salt>$<hash>`; null finché la persona non ha attivato l'accesso.
+  passwordHash      String?
+  passwordSetAt     DateTime? @db.Timestamp(6)
+  /// Tentativi sbagliati di fila: oltre la soglia l'accesso si blocca per un po'.
+  failedLoginCount  Int       @default(0)
+  lockedUntil       DateTime? @db.Timestamp(6)
+  lastLoginAt       DateTime? @db.Timestamp(6)
+  disabledAt        DateTime? @db.Timestamp(6)
+  createdAt         DateTime  @default(now()) @db.Timestamp(6)
+
+  tokens   BackofficeAdminToken[]
+  sessions BackofficeSession[]
+}
+
+/// Link di attivazione / nuova password: monouso, a scadenza, salvato solo come hash.
+model BackofficeAdminToken {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  adminId    String    @db.Uuid
+  tokenHash  String    @unique
+  expiresAt  DateTime  @db.Timestamp(6)
+  consumedAt DateTime? @db.Timestamp(6)
+  createdAt  DateTime  @default(now()) @db.Timestamp(6)
+
+  admin BackofficeAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+}
+
+/// Sessione del backoffice: il cookie porta un token casuale, qui c'è solo l'hash.
+/// Cancellare la riga = uscire (anche da remoto).
+model BackofficeSession {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  adminId    String    @db.Uuid
+  tokenHash  String    @unique
+  expiresAt  DateTime  @db.Timestamp(6)
+  lastUsedAt DateTime? @db.Timestamp(6)
+  createdAt  DateTime  @default(now()) @db.Timestamp(6)
+
+  admin BackofficeAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+}

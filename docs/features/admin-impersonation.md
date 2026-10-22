@@ -15,7 +15,7 @@ Si entra usando l'account **admin/owner già esistente** dell'autoscuola → inv
 ## Sicurezza
 - Grant coniato **solo** dopo `requireGlobalAdmin`; firmato HMAC; `exp` 60s; `purpose` fisso. `authorize` ri-verifica firma+scadenza **e** ri-deriva dal DB che il target è ancora admin di quella company → hit diretti a `/api/auth/callback/impersonation` sono inutili senza grant valido.
 - Invisibilità: si agisce come owner reale → nessuna lista/conteggio/notifica cambia; sessioni JWT stateless (nessuna "sessioni attive" visibile); nessun `lastLogin` su `User`.
-- Attore grezzo: il cookie backoffice è un'unica credenziale condivisa (`GLOBAL_ADMIN_EMAIL:PASSWORD`), quindi non c'è identità per-operatore.
+- Attore: dal REG-413 il backoffice ha login personali (`getBackofficeIdentity()` in `lib/backoffice-auth.ts`), ma il grant non registra ancora chi impersona.
 
 ## Uscita
 Nessuna UI dedicata (scelta "minimo"): il **logout normale** dell'app chiude la sessione di impersonazione. Per tornare al backoffice basta andare su `/backoffice` (cookie backoffice ancora valido).

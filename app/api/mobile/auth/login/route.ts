@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/db/prisma";
-import { compare, hash } from "@/lib/encrypt";
-import { GLOBAL_ADMIN_EMAIL, GLOBAL_ADMIN_PASSWORD } from "@/lib/constants";
+import { compare } from "@/lib/encrypt";
 import { buildMobileAuthPayload } from "@/lib/mobile-auth-payload";
 
 export async function POST(request: Request) {
@@ -16,22 +15,10 @@ export async function POST(request: Request) {
     );
   }
 
-  let user = await prisma.user.findFirst({ where: { email } });
-
-  if (!user) {
-    const isGlobalAdmin =
-      email === GLOBAL_ADMIN_EMAIL && password === GLOBAL_ADMIN_PASSWORD;
-    if (isGlobalAdmin) {
-      user = await prisma.user.create({
-        data: {
-          email: GLOBAL_ADMIN_EMAIL,
-          password: await hash(GLOBAL_ADMIN_PASSWORD),
-          role: "admin",
-          name: GLOBAL_ADMIN_EMAIL.split("@")[0] ?? "admin",
-        },
-      });
-    }
-  }
+  // Qui c'era una scorciatoia che, con la credenziale unica del backoffice,
+  // creava al volo un utente admin: tolta col REG-413 insieme alla password
+  // di riserva nel codice.
+  const user = await prisma.user.findFirst({ where: { email } });
 
   if (!user || !user.password) {
     return NextResponse.json(

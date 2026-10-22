@@ -5,10 +5,12 @@ export const APP_DESCRIPTION =
 export const SERVER_URL =
   process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000';
 
+// Destinatario delle notifiche di assistenza e email della vecchia credenziale
+// unica del backoffice. La password NON ha più un valore di riserva nel codice:
+// vive solo in env (GLOBAL_ADMIN_PASSWORD) e serve solo finché esiste il vecchio
+// accesso — vedi `lib/backoffice-auth.ts` (REG-413).
 export const GLOBAL_ADMIN_EMAIL =
   process.env.GLOBAL_ADMIN_EMAIL || 'tiziano.difelice@reglo.it';
-export const GLOBAL_ADMIN_PASSWORD =
-  process.env.GLOBAL_ADMIN_PASSWORD || 'Reglo2026!';
 
 export const signInDefaultValues = {
   email: 'admin@example.com',

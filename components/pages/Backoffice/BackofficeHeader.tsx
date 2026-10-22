@@ -9,7 +9,8 @@ import { LogOut } from "lucide-react";
 import { RegloMark } from "@/components/ui/reglo-mark";
 import {
   backofficeSignOut,
-} from "@/lib/actions/backoffice.actions";
+  getBackofficeWhoAmI,
+} from "@/lib/actions/backoffice-access.actions";
 import { getBackofficeSupportUnreadTotal } from "@/lib/actions/support.actions";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +26,11 @@ export function BackofficeHeader() {
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
   const [supportUnread, setSupportUnread] = React.useState(0);
+  const [whoAmI, setWhoAmI] = React.useState<Awaited<ReturnType<typeof getBackofficeWhoAmI>>>(null);
+
+  React.useEffect(() => {
+    void getBackofficeWhoAmI().then(setWhoAmI);
+  }, []);
 
   React.useEffect(() => {
     let active = true;
@@ -93,16 +99,36 @@ export function BackofficeHeader() {
           ))}
         </nav>
 
-        {/* Logout */}
-        <button
-          type="button"
-          onClick={handleLogout}
-          disabled={isPending}
-          className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-gray-100 hover:text-foreground"
-        >
-          <LogOut className="h-4 w-4" />
-          <span className="hidden sm:inline">Esci</span>
-        </button>
+        {/* Chi è dentro + logout */}
+        <div className="flex items-center gap-1">
+          {whoAmI ? (
+            <span
+              title={whoAmI.email}
+              className="hidden items-center gap-2 rounded-full py-1 pl-1 pr-3 text-sm text-[#222222] md:flex"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#111111] text-[11px] font-semibold text-white">
+                {whoAmI.kind === "personal"
+                  ? whoAmI.name
+                      .split(" ")
+                      .map((part) => part[0])
+                      .slice(0, 2)
+                      .join("")
+                      .toUpperCase()
+                  : "R"}
+              </span>
+              {whoAmI.kind === "personal" ? whoAmI.name.split(" ")[0] : "Accesso condiviso"}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={isPending}
+            className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-gray-100 hover:text-foreground"
+          >
+            <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">Esci</span>
+          </button>
+        </div>
       </div>
     </header>
   );

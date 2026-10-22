@@ -195,6 +195,12 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Backoffice**: pannello "Link investor" dentro la pagina KPI (crea/copia/revoca, contatore aperture)
 - Modello `InvestorKpiLink` (token, label, revoca, scadenza, viste): nessuna relazione con Company/User, è un oggetto di livello Reglo
 
+### Backoffice — accesso personale (REG-413)
+- → **Tutto il backoffice**: `requireGlobalAdmin` / `validateBackofficeCookie` accettano la sessione personale (`BackofficeSession`) o, finché `GLOBAL_ADMIN_PASSWORD` è in env, la vecchia credenziale condivisa
+- → **Email template**: mail di accesso con `internalStaffOnly` (parte anche su staging, solo verso `@reglo.it`)
+- → **Login web/mobile**: tolta l'auto-creazione dell'utente admin con la credenziale condivisa (`auth.ts`, `api/mobile/auth/login`)
+- → **Assistenza**: `GLOBAL_ADMIN_EMAIL` resta come destinatario delle notifiche
+
 ### Backoffice — KPI
 - ← **Company Plan**: MRR/ARR/ARPA e posti istruttore venduti da `CompanyPlan`; ricavi una tantum da `CompanyLicensePurchase` (nessuna scrittura, sola lettura)
 - ← **Appointments**: volume ed esiti per `startsAt`, domanda e canale per `createdAt` + `bookingSource`. Se cambiano gli stati o si aggiunge un `bookingSource`, aggiornare `lib/backoffice/kpi-math.ts` (`DONE_STATUSES`, `SOURCE_BUCKETS`) o il nuovo canale finisce in "Storico"
