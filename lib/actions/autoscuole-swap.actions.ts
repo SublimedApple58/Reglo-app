@@ -1,5 +1,6 @@
 "use server";
 
+import { OFFER_CHANNELS } from "@/lib/autoscuole/channel-cascade";
 import { z } from "zod";
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
@@ -31,20 +32,7 @@ import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 
 const AUTOSCUOLA_TIMEZONE = "Europe/Rome";
-const DEFAULT_SLOT_FILL_CHANNELS = ["push", "whatsapp", "email"] as const;
 
-const normalizeChannels = (
-  value: unknown,
-  fallback: readonly ("push" | "whatsapp" | "email")[],
-) => {
-  if (!Array.isArray(value)) return [...fallback];
-  const channels = value.filter(
-    (item): item is "push" | "whatsapp" | "email" =>
-      item === "push" || item === "whatsapp" || item === "email",
-  );
-  const unique = Array.from(new Set(channels));
-  return unique.length ? unique : [...fallback];
-};
 
 const formatItalianDate = (date: Date) =>
   date.toLocaleDateString("it-IT", { timeZone: AUTOSCUOLA_TIMEZONE });
@@ -385,10 +373,9 @@ export async function createSwapOffer(
       where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
       select: { limits: true },
     });
-    const channels = normalizeChannels(
-      (service?.limits as Record<string, unknown> | null)?.slotFillChannels,
-      DEFAULT_SLOT_FILL_CHANNELS,
-    );
+    // REG-500: le offerte escono solo come push, a prescindere da
+  // `slotFillChannels` (vedi `OFFER_CHANNELS`).
+  const channels = OFFER_CHANNELS;
 
     const requesterName = appointment.student?.name ?? "Un allievo";
     const formattedDate = formatItalianDate(appointment.startsAt);
@@ -409,8 +396,7 @@ export async function createSwapOffer(
         kind: "swap_offer",
         audience: "student",
         channels,
-        supports: ["push", "email", "whatsapp"],
-        whatsapp: { logKind: "swap_offer_student", values: {} },
+        supports: OFFER_CHANNELS,
         title,
         body: message,
         appointmentId: appointment.id,

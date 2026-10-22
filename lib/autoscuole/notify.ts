@@ -31,12 +31,24 @@ import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import { sendDynamicEmail } from "@/email";
 import type { ChannelAudience } from "@/lib/autoscuole/reminder-channels";
 import { resolveChannels } from "@/lib/autoscuole/reminder-channels";
+import { deliverByCascade } from "@/lib/autoscuole/channel-cascade";
 
 /** I canali tecnicamente possibili oggi per un messaggio-evento. */
 export const EVENT_CHANNELS = ["push", "email"] as const;
 
 /** Messaggi che esistono solo come push: non c'è un'email da mandare. */
 export const PUSH_ONLY = ["push"] as const;
+
+/**
+ * I messaggi-evento che hanno un template Meta approvato (decisione del 16/10:
+ * guida annullata, spostata, cambio luogo, esame fissato).
+ *
+ * Esiste come costante e non come lista scritta a mano nei punti di invio
+ * perché la domanda «quali messaggi possono finire su WhatsApp?» deve avere una
+ * risposta sola e leggibile. Il secondo cancello — «esiste il template?» — lo
+ * tiene `deliverWhatsApp`.
+ */
+export const EVENT_CHANNELS_WITH_WHATSAPP = ["push", "email", "whatsapp"] as const;
 
 export type NotifyRecipient = {
   userId: string;
@@ -63,12 +75,10 @@ export type NotifyInput = {
    * dell'impostazione.
    *
    * Serve ai tre messaggi di **offerta** — posto libero, invito a guida di
-   * gruppo, richiesta di sostituzione — che hanno un'impostazione propria,
-   * `slotFillChannels`, e la rispettavano già da prima di REG-604. Tirarli
-   * sotto `studentReminderChannels` sarebbe stato annullare una scelta di
-   * prodotto deliberata (le offerte hanno un'economia di canale diversa dai
-   * promemoria: vedi `PUSH_ONLY_KINDS`). Passano da qui per avere un solo
-   * percorso di invio e il registro, non per cambiare canale.
+   * gruppo, richiesta di sostituzione — che dal 22/10 (REG-500) escono solo
+   * come push (`OFFER_CHANNELS`): sono proposte, non impegni presi. Prima
+   * seguivano `slotFillChannels`, esposta in UI come «Cancellazioni» — nome
+   * sbagliato per quello che faceva, tolta.
    */
   channels?: readonly DeliveryChannel[];
   /**
@@ -98,7 +108,8 @@ export type NotifyInput = {
 const pushOnlyKinds = new Set<string>(PUSH_ONLY_KINDS);
 
 /**
- * Manda il messaggio sui canali attivi. **Non lancia mai**: un canale caduto
+ * Manda il messaggio sul primo canale attivo che consegna (App → WhatsApp →
+ * Email, vedi `channel-cascade.ts`). **Non lancia mai**: un canale caduto
  * non deve fermare gli altri né l'operazione che l'ha generato.
  */
 export async function notifyAutoscuolaUser(input: NotifyInput): Promise<void> {
@@ -116,50 +127,56 @@ export async function notifyAutoscuolaUser(input: NotifyInput): Promise<void> {
     body: input.body,
   };
 
-  if (channels.includes("push")) {
-    await deliverAndLog(
-      { ...attempt, channel: "push", recipient: input.recipient.userId },
-      (userId) =>
-        sendAutoscuolaPushToUsers({
-          companyId: input.companyId,
-          userIds: [userId],
-          title: input.title,
-          body: input.body,
-          data: { kind: input.kind, ...(input.data ?? {}) },
-        }),
-    );
-  }
-
-  if (channels.includes("email")) {
-    await deliverAndLog(
-      { ...attempt, channel: "email", recipient: input.recipient.email ?? "" },
-      (to) =>
-        sendDynamicEmail({
-          to,
-          subject: input.emailSubject ?? input.title,
-          body: input.body,
-        }),
-    );
-  }
-
-  // Un cancello oltre ai canali: i messaggi esclusi da WhatsApp per scelta —
-  // gli inviti, decisione del 21/09 per costo e rischio di segnalazione. Il
-  // secondo cancello, «esiste un template approvato?», lo tiene già
-  // `deliverWhatsApp`, che in caso negativo registra il motivo invece di
-  // sbattere contro il fornitore.
-  if (channels.includes("whatsapp") && input.whatsapp && !pushOnlyKinds.has(input.kind)) {
-    await deliverWhatsApp(
-      {
-        ...attempt,
-        kind: input.whatsapp.logKind ?? input.kind,
-        recipient: input.recipient.phone ?? "",
-      },
-      {
-        values: input.whatsapp.values,
-        ...(input.whatsapp.templateKind ? { templateKind: input.whatsapp.templateKind } : {}),
-      },
-    );
-  }
+  // REG-500: cascata, non ventaglio. Prima ogni canale attivo partiva per
+  // conto suo, e chi aveva l'app riceveva anche email (e domani WhatsApp)
+  // dello stesso evento. Ora ci si ferma al primo canale che consegna.
+  await deliverByCascade(channels, {
+    push: () =>
+      deliverAndLog(
+        { ...attempt, channel: "push", recipient: input.recipient.userId },
+        (userId) =>
+          sendAutoscuolaPushToUsers({
+            companyId: input.companyId,
+            userIds: [userId],
+            title: input.title,
+            body: input.body,
+            data: { kind: input.kind, ...(input.data ?? {}) },
+          }),
+      ),
+    // Un cancello oltre ai canali: i messaggi esclusi da WhatsApp per scelta —
+    // gli inviti, decisione del 21/09 per costo e rischio di segnalazione. Il
+    // secondo cancello, «esiste un template approvato?», lo tiene già
+    // `deliverWhatsApp`, che in caso negativo registra il motivo invece di
+    // sbattere contro il fornitore.
+    ...(input.whatsapp && !pushOnlyKinds.has(input.kind)
+      ? {
+          whatsapp: () =>
+            deliverWhatsApp(
+              {
+                ...attempt,
+                kind: input.whatsapp!.logKind ?? input.kind,
+                recipient: input.recipient.phone ?? "",
+              },
+              {
+                values: input.whatsapp!.values,
+                ...(input.whatsapp!.templateKind
+                  ? { templateKind: input.whatsapp!.templateKind }
+                  : {}),
+              },
+            ),
+        }
+      : {}),
+    email: () =>
+      deliverAndLog(
+        { ...attempt, channel: "email", recipient: input.recipient.email ?? "" },
+        (to) =>
+          sendDynamicEmail({
+            to,
+            subject: input.emailSubject ?? input.title,
+            body: input.body,
+          }),
+      ),
+  });
 }
 
 /**

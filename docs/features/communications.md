@@ -47,7 +47,7 @@ Message templates, reminder rules, appointment reminders, case deadline notifica
 `{{student.firstName}}`, `{{student.lastName}}`, `{{appointment.date}}`, `{{case.deadlineLabel}}`, etc.
 
 ## Channels
-push, email, WhatsApp
+push, WhatsApp, email — **in cascata** (REG-500, 22/10/2026): vedi sotto.
 
 ## DB models
 - `AutoscuolaMessageTemplate` — message bodies
@@ -90,6 +90,81 @@ da regola, le offerte di scambio, gli slot liberati e gli inviti alle guide di
 gruppo: sono testo libero, e fuori dalle 24 ore Meta non lo accetta. Quelle
 restano `skipped` finché qualcuno non sottomette un template.
 
-**Fuori dal codice** restano: registrare il numero su WhatsApp lato Telnyx
-(oggi `/v2/whatsapp/phone_numbers` risponde 0), collegare il WhatsApp Business
-Account e far approvare i template da Meta.
+## La cascata: un messaggio, un canale (REG-500, 22/10/2026)
+
+`lib/autoscuole/channel-cascade.ts` → `deliverByCascade(channels, steps)` scende
+**App → WhatsApp → Email** (ordine fisso) e si ferma al primo gradino che
+consegna. Lo usano i 4 blocchi dei promemoria in `communications.ts` e
+`notifyAutoscuolaUser` (`notify.ts`). Prima partivano **tutti** i canali
+spuntati, mentre la UI prometteva «una volta sola».
+
+- Una push conta come consegnata solo se `sent > 0` (`pushReachedADevice`):
+  `deliverAndLog` registra `skipped`/`failed` una push senza dispositivi, e la
+  cascata passa al gradino dopo.
+- **Offerte** (posto libero, invito guida di gruppo, sostituzione) = solo push
+  (`OFFER_CHANNELS`). `slotFillChannels` non viene più letta.
+- **Una scelta per tutti**: la UI scrive `studentReminderChannels` **e**
+  `instructorReminderChannels` con lo stesso valore. Script
+  `scripts/reg-500-align-channels.ts` (a vuoto di default) per allineare chi le
+  aveva diverse.
+
+## Template: versioni, categoria, footer STOP
+
+`whatsapp-templates.ts`: ogni voce ha `name` (oggi `_v3`, con footer
+`WHATSAPP_FOOTER` «Rispondi STOP…»), `category` **assegnata da Meta**,
+`approval`, e `previous` (il `_v2`). `sendableTemplateName` sceglie la prima
+versione **approvata e utility**; se nessuna lo è, `deliverWhatsApp` registra
+`skipped` e la cascata ripiega sull'email. Al 22/10: 8 `_v2` utility in uso, i
+due ex-marketing (mattutino, guida spostata) su email finché il `_v3` non è
+approvato. **Quando Meta approva un `_v3`, aggiornare `approval` qui** (lo stato
+si legge con `GET /v2/whatsapp/message_templates` su Telnyx).
+
+## Consenso
+
+`User.whatsappConsentAt` / `whatsappConsentSource` (`app_registrazione`,
+`app_profilo`, `autoscuola`). Il cancello resta la revoca
+(`whatsappOptOutAt`): per chi era già in anagrafica il consenso è implicito.
+API mobile `GET/PATCH /api/mobile/me/whatsapp`; casella in creazione allievo
+web (consorziata, consorzio).
+
+## Pilota
+
+`WHATSAPP_PILOT_COMPANY_IDS` (id separati da virgola, vuota = tutte):
+`isWhatsAppEnabledForCompany` limita WhatsApp a quelle autoscuole. Le altre
+vedono «Non disponibile» in Impostazioni e gli invii sono `skipped` col motivo.
+
+## Revoche: STOP e START (anche su Telnyx)
+
+Telnyx tiene **una sua revoca per messaging profile**: dopo uno STOP ogni invio
+a quel numero torna `40300 Blocked due to STOP message`, e il blocco si toglie
+**solo** quando la persona scrive START o UNSTOP (nessuna API per toglierlo,
+`GET /v2/messaging_optouts` per leggerlo). Quindi:
+
+- webhook: START/UNSTOP (parola esatta, controllata **prima** della revoca —
+  «unstop» contiene «stop») → `recordWhatsAppOptIn` toglie la nostra revoca;
+- invio: un `40300` (`blockedByOptOut`) riporta la revoca da noi e non si
+  riprova;
+- app: riaccendere non toglie la revoca; `PATCH /api/mobile/me/whatsapp`
+  risponde `needsStart` + `startUrl` (`wa.me/<numero>?text=START`).
+
+Il testo in arrivo da Telnyx sta in `payload.body.text.body`, e Telnyx marca
+le parole chiave con `autoresponse_type` (`STOP`/`START`): li leggiamo entrambi.
+
+## Staging
+
+Gli invii esterni su staging sono spenti; `WHATSAPP_STAGING_ALLOWLIST`
+(E.164 separati da virgola) li accende **solo** verso quei numeri
+(`isStagingTestRecipient`).
+
+## «Ultimi invii»
+
+`lib/autoscuole/recent-deliveries.ts` raggruppa i tentativi della cascata in
+messaggi (stesso `kind`/guida/allievo entro 2 minuti) e traduce i motivi;
+`getRecentDeliveriesAction` lo serve a `RecentDeliveries.tsx` in
+Impostazioni → Promemoria e notifiche.
+
+## Comunicazioni da regola
+
+Testo libero → solo email: `createRuleSchema` accetta solo `email`. Le regole
+WhatsApp esistenti restano (4 attive in prod al 22/10) con l'avviso «Non viene
+inviato» in pagina.

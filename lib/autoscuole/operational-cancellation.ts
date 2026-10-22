@@ -4,7 +4,11 @@ import { prisma as defaultPrisma } from "@/db/prisma";
 import { sendDynamicEmail } from "@/email";
 // REG-604: nome, orario e punto di invio unico.
 import { describeWhen, isExamType } from "@/lib/autoscuole/exam-notifications";
-import { notifyAutoscuolaUser } from "@/lib/autoscuole/notify";
+import {
+  EVENT_CHANNELS_WITH_WHATSAPP,
+  notifyAutoscuolaUser,
+} from "@/lib/autoscuole/notify";
+import { firstNameFor } from "@/lib/autoscuole/whatsapp-delivery";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
@@ -195,7 +199,8 @@ const notifyOperationalCancellation = async ({
   const [studentUser, instructor] = await Promise.all([
     defaultPrisma.user.findUnique({
       where: { id: studentId },
-      select: { email: true, phone: true },
+      // `name` serve alla variabile `nome` del template WhatsApp.
+      select: { name: true, email: true, phone: true },
     }),
     instructorId
       ? defaultPrisma.autoscuolaInstructor.findFirst({
@@ -221,11 +226,20 @@ const notifyOperationalCancellation = async ({
     isExam ? "Per la nuova data ti contatterà l'autoscuola." : undefined,
   );
 
+  const { subject } = describeWhen({ type: type ?? null, startsAt, endsAt: endsAt ?? null });
+
   await notifyAutoscuolaUser({
     companyId,
     kind: "appointment_cancelled",
     audience: "student",
+    supports: EVENT_CHANNELS_WITH_WHATSAPP,
     recipient: { userId: studentId, email: studentUser?.email, phone: studentUser?.phone },
+    whatsapp: {
+      values: {
+        nome: firstNameFor(studentUser ?? {}),
+        appuntamento: `${subject} di ${when}`,
+      },
+    },
     title,
     body,
     data: {

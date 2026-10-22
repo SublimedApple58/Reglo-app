@@ -44,6 +44,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { WhatsAppConsentField } from "@/components/pages/Autoscuole/WhatsAppConsentField";
 import { DatePickerInput } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { InlineToggle } from "@/components/ui/inline-toggle";
@@ -916,6 +917,7 @@ export function AutoscuoleStudentsPage({
       email: "",
       password: "",
       phone: "",
+      whatsappConsent: true,
       licenseCategory: "B",
       transmission: "manual",
       assignedInstructorId: "__none__",
@@ -2088,6 +2090,7 @@ export function AutoscuoleStudentsPage({
           firstName,
           lastName,
           phone: createForm.phone.trim(),
+          whatsappConsent: createForm.whatsappConsent,
           licenseCategory: createForm.licenseCategory,
           transmission: createForm.transmission,
         });
@@ -4234,6 +4237,11 @@ export function AutoscuoleStudentsPage({
                   value={createForm.phone}
                   onChange={(event) => setCreateForm((p) => ({ ...p, phone: event.target.value }))}
                   required
+                />
+                <WhatsAppConsentField
+                  id="create-whatsapp-consent"
+                  checked={createForm.whatsappConsent}
+                  onCheckedChange={(next) => setCreateForm((p) => ({ ...p, whatsappConsent: next }))}
                 />
               </div>
             ) : (

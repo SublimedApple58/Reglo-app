@@ -29,6 +29,11 @@ export type WhatsAppEvent =
       providerMessageId: string;
       /** L'utente ha chiesto di non essere più contattato. */
       isOptOut: boolean;
+      /**
+       * L'utente ha scritto START o UNSTOP: torna a ricevere. Sono le parole
+       * con cui Telnyx toglie la sua revoca, quindi le stesse tolgono la nostra.
+       */
+      isOptIn: boolean;
     };
 
 /**
@@ -49,7 +54,27 @@ const OPT_OUT_WORDS = [
   "rimuovimi",
 ];
 
+/**
+ * Le parole che **tolgono** la revoca. Esatte, non contenute: sono quelle che
+ * Telnyx usa per togliere il suo blocco (START, UNSTOP), e «unstop» contiene
+ * «stop» — controllarle dopo la revoca la farebbe scattare al contrario.
+ */
+const OPT_IN_WORDS = ["start", "unstop"];
+
+const normalizeKeyword = (text: string) =>
+  text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z\s]/g, "")
+    .trim();
+
+export function isOptInText(text: string): boolean {
+  return OPT_IN_WORDS.includes(normalizeKeyword(text));
+}
+
 export function isOptOutText(text: string): boolean {
+  if (isOptInText(text)) return false;
   const normalized = text
     .toLowerCase()
     .normalize("NFD")
@@ -223,6 +248,7 @@ export function parseMetaWebhook(body: unknown): WhatsAppEvent[] {
           text,
           providerMessageId: message.id,
           isOptOut: isOptOutText(text),
+          isOptIn: isOptInText(text),
         });
       }
     }
@@ -263,6 +289,7 @@ export function parseTwilioWebhook(params: Record<string, string>): WhatsAppEven
         text: params.Body,
         providerMessageId: params.MessageSid,
         isOptOut: isOptOutText(params.Body),
+        isOptIn: isOptInText(params.Body),
       },
     ];
   }
@@ -278,6 +305,14 @@ type TelnyxWebhookBody = {
     payload?: {
       id?: string;
       text?: string;
+      /**
+       * Il messaggio WhatsApp in arrivo, nella forma che Telnyx manda davvero
+       * (misurata il 22/10 su uno STOP reale): il testo sta in `body.text.body`,
+       * non in `text`.
+       */
+      body?: { text?: { body?: string } | string; type?: string };
+      /** Telnyx riconosce da sé le parole di revoca: `"STOP"` per esempio. */
+      autoresponse_type?: string | null;
       from?: { phone_number?: string };
       to?: Array<{ phone_number?: string; status?: string }>;
       errors?: Array<{ code?: string; title?: string; detail?: string }>;
@@ -311,7 +346,9 @@ export function parseTelnyxWebhook(body: unknown): WhatsAppEvent[] {
 
   if (data?.event_type === "message.received") {
     const from = payload.from?.phone_number;
-    const text = payload.text ?? payload.whatsapp?.text ?? "";
+    const bodyText =
+      typeof payload.body?.text === "string" ? payload.body.text : payload.body?.text?.body;
+    const text = bodyText ?? payload.text ?? payload.whatsapp?.text ?? "";
     if (!from || !payload.id) return [];
     return [
       {
@@ -319,7 +356,11 @@ export function parseTelnyxWebhook(body: unknown): WhatsAppEvent[] {
         from,
         text,
         providerMessageId: payload.id,
-        isOptOut: isOptOutText(text),
+        // Due segnali, basta uno: il nostro elenco di parole e quello di Telnyx.
+        isOptOut:
+          !isOptInText(text) &&
+          (isOptOutText(text) || payload.autoresponse_type?.toUpperCase() === "STOP"),
+        isOptIn: isOptInText(text) || payload.autoresponse_type?.toUpperCase() === "START",
       },
     ];
   }

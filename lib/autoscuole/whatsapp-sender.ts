@@ -25,6 +25,7 @@ import { isWhatsAppCapable, normalizeToE164 } from "@/lib/phone-e164";
 import {
   buildTemplateParameters,
   getWhatsAppTemplate,
+  sendableTemplateName,
   type WhatsAppTemplateKind,
 } from "@/lib/autoscuole/whatsapp-templates";
 
@@ -39,7 +40,17 @@ export type WhatsAppSendInput = {
 
 export type WhatsAppSendResult =
   | { ok: true; providerMessageId: string | null; skipped?: "ambiente" }
-  | { ok: false; reason: string; retriable: boolean };
+  | {
+      ok: false;
+      reason: string;
+      retriable: boolean;
+      /**
+       * Il fornitore ha una revoca per quel numero (Telnyx `40300` «Blocked
+       * due to STOP message»): la persona ha scritto STOP e non ha ancora
+       * scritto START. Non si riprova, e la revoca va riportata da noi.
+       */
+      blockedByOptOut?: boolean;
+    };
 
 export interface WhatsAppSender {
   readonly providerName: string;
@@ -80,7 +91,7 @@ class CloudApiSender implements WhatsAppSender {
           to: to.replace(/^\+/, ""), // la Cloud API vuole E.164 senza il +
           type: "template",
           template: {
-            name: template.name,
+            name: sendableTemplateName(template) ?? template.name,
             language: { code: languageCode },
             components: parameters.length
               ? [
@@ -206,6 +217,10 @@ class TelnyxSender implements WhatsAppSender {
       apiKey: string;
       /** Numero mittente registrato su WhatsApp, in E.164. */
       from: string;
+      /**
+       * Messaging profile Telnyx, obbligatorio: vedi `resolveWhatsAppSender`.
+       */
+      messagingProfileId: string;
       baseUrl: string;
     },
   ) {}
@@ -222,10 +237,15 @@ class TelnyxSender implements WhatsAppSender {
       body: JSON.stringify({
         from: this.config.from,
         to,
+        // Senza questo Telnyx rifiuta l'invio con `40305 Invalid 'from' address`
+        // (misurato il 16/10/2026): il mittente è un geografico italiano e non
+        // è SMS-enabled, quindi il profilo non si deduce dal numero. Vedi
+        // `resolveWhatsAppSender`.
+        messaging_profile_id: this.config.messagingProfileId,
         whatsapp_message: {
           type: "template",
           template: {
-            name: template.name,
+            name: sendableTemplateName(template) ?? template.name,
             // "deterministic" = manda esattamente questa lingua o fallisci. Il
             // fallback automatico di Meta sceglierebbe una lingua a caso fra
             // quelle approvate, e l'allievo si vedrebbe arrivare l'inglese.
@@ -256,10 +276,44 @@ class TelnyxSender implements WhatsAppSender {
         ok: false as const,
         reason: `telnyx ${res.status}: ${message}${first?.code ? ` (${first.code})` : ""}`,
         retriable: res.status >= 500 || res.status === 429,
+        ...(first?.code === TELNYX_OPT_OUT_BLOCK ? { blockedByOptOut: true } : {}),
       };
     }
     return { ok: true as const, providerMessageId: payload?.data?.id ?? null };
   }
+}
+
+/**
+ * Telnyx tiene una sua lista di revoche per messaging profile: dopo uno STOP
+ * ogni invio a quel numero torna `40300` finché la persona non scrive START o
+ * UNSTOP. L'API non permette di toglierla (22/10/2026, verificato).
+ */
+export const TELNYX_OPT_OUT_BLOCK = "40300";
+
+/**
+ * Il numero WhatsApp di Reglo in forma `wa.me` (solo cifre), per aprire la
+ * chat con «START» già scritto. `null` se il canale non è configurato.
+ */
+export function whatsAppStartUrl(env: NodeJS.ProcessEnv = process.env): string | null {
+  const from = (env.TELNYX_WHATSAPP_FROM ?? "").replace(/\D/g, "");
+  return from ? `https://wa.me/${from}?text=START` : null;
+}
+
+/**
+ * Pilota (REG-500): finché `WHATSAPP_PILOT_COMPANY_IDS` ha degli id, WhatsApp
+ * è acceso solo per quelle autoscuole. Vuota = tutte. Serve a partire da una
+ * sola autoscuola (Robatto) senza toccare le impostazioni delle altre.
+ */
+export function isWhatsAppEnabledForCompany(
+  companyId: string,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (!isWhatsAppChannelAvailable(env)) return false;
+  const pilot = (env.WHATSAPP_PILOT_COMPANY_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  return pilot.length === 0 || pilot.includes(companyId);
 }
 
 /* ──────────────────────────── Scelta del sender ──────────────────────────── */
@@ -317,11 +371,28 @@ export function resolveWhatsAppSender(env: NodeJS.ProcessEnv = process.env): Sen
           "TELNYX_WHATSAPP_FROM non configurata (il numero mittente registrato su WhatsApp, in E.164)",
       };
     }
+    // Il messaging profile è obbligatorio, e non è una formalità del portale:
+    // `POST /messages/whatsapp` lo pretende nel corpo quando il numero mittente
+    // non è SMS-enabled, e il nostro non lo è né lo può diventare. Il mittente
+    // è un geografico italiano (+39 02 …) — in Italia Telnyx non vende mobili —
+    // e assegnarlo a un profilo è rifiutato con `40323 Messaging activation
+    // failed`. Senza il profilo nel corpo, ogni invio muore con `40305 Invalid
+    // 'from' address`: meglio dirlo qui, una volta, che farlo scoprire a un
+    // allievo che non riceve il promemoria.
+    const messagingProfileId = env.TELNYX_MESSAGING_PROFILE_ID;
+    if (!messagingProfileId) {
+      return {
+        configured: false,
+        reason:
+          "TELNYX_MESSAGING_PROFILE_ID non configurata (il messaging profile Telnyx: senza, l'invio viene rifiutato con 40305)",
+      };
+    }
     return {
       configured: true,
       sender: new TelnyxSender({
         apiKey,
         from,
+        messagingProfileId,
         baseUrl: env.TELNYX_API_BASE_URL ?? "https://api.telnyx.com/v2",
       }),
     };
@@ -357,6 +428,26 @@ export function resolveWhatsAppSender(env: NodeJS.ProcessEnv = process.env): Sen
   };
 }
 
+/**
+ * Su staging gli invii esterni sono spenti (il DB è una copia con numeri veri).
+ * Per provare WhatsApp end-to-end si accendono **solo** verso i numeri in
+ * `WHATSAPP_STAGING_ALLOWLIST` (E.164 separati da virgola): i telefoni di chi
+ * fa QA. Fuori da staging la lista non conta niente.
+ */
+export function isStagingTestRecipient(
+  phone: string,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  const raw = env.WHATSAPP_STAGING_ALLOWLIST ?? "";
+  if (!raw.trim()) return false;
+  const normalized = normalizeToE164(phone);
+  if (!normalized.ok) return false;
+  return raw
+    .split(",")
+    .map((item) => normalizeToE164(item.trim()))
+    .some((item) => item.ok && item.e164 === normalized.e164);
+}
+
 /** True se il canale WhatsApp può essere offerto alle autoscuole in UI. */
 export function isWhatsAppChannelAvailable(env: NodeJS.ProcessEnv = process.env): boolean {
   return resolveWhatsAppSender(env).configured;
@@ -370,7 +461,7 @@ export async function sendWhatsAppTemplate(
   input: WhatsAppSendInput,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<WhatsAppSendResult> {
-  if (externalSendsDisabled()) {
+  if (externalSendsDisabled() && !isStagingTestRecipient(input.to, env)) {
     return { ok: true, providerMessageId: null, skipped: "ambiente" };
   }
   const normalized = normalizeToE164(input.to);

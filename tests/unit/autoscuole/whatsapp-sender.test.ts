@@ -1,15 +1,41 @@
 import {
   buildTemplateParameters,
   PUSH_ONLY_KINDS,
+  WHATSAPP_FOOTER,
+  sendableTemplateName,
   WHATSAPP_TEMPLATES,
+  type WhatsAppTemplate,
+  type WhatsAppTemplateKind,
 } from "@/lib/autoscuole/whatsapp-templates";
 import {
+  isStagingTestRecipient,
   isWhatsAppChannelAvailable,
+  isWhatsAppEnabledForCompany,
+  whatsAppStartUrl,
   resolveWhatsAppSender,
   sendWhatsAppTemplate,
 } from "@/lib/autoscuole/whatsapp-sender";
 
 jest.mock("@/lib/app-env", () => ({ externalSendsDisabled: () => false }));
+
+/** I quattro messaggi-evento collegati il 16/10 (decisione 6 + 4). */
+const EVENT_KINDS = [
+  "appointment_cancelled",
+  "appointment_rescheduled",
+  "appointment_location_changed",
+  "exam_scheduled",
+] as const;
+
+/**
+ * Il testo come lo vedrà l'allievo: Meta sostituisce {{n}} con i parametri
+ * nell'ordine del registro. Serve a leggere la frase finita, che è l'unica cosa
+ * che conta davvero quando si valuta una copy.
+ */
+const render = (kind: WhatsAppTemplateKind, values: Record<string, string>) =>
+  buildTemplateParameters(kind, values).reduce(
+    (text, value, index) => text.replaceAll(`{{${index + 1}}}`, value),
+    WHATSAPP_TEMPLATES[kind].body,
+  );
 
 const CLOUD_ENV = {
   WHATSAPP_PROVIDER: "cloud",
@@ -31,6 +57,7 @@ const TELNYX_ENV = {
   WHATSAPP_PROVIDER: "telnyx",
   TELNYX_API_KEY: "KEY0123-finta",
   TELNYX_WHATSAPP_FROM: "+390000000000",
+  TELNYX_MESSAGING_PROFILE_ID: "00000000-0000-0000-0000-000000000000",
 } as unknown as NodeJS.ProcessEnv;
 
 describe("registro dei template", () => {
@@ -50,10 +77,111 @@ describe("registro dei template", () => {
     }
   });
 
+  it("nessun testo chiude in modo colloquiale nei due riscritti (22/10)", () => {
+    // `_v2` di questi due è stato riclassificato marketing da Meta: chiuse
+    // come «Ci vediamo!» spingono il classificatore lontano da utility.
+    for (const kind of ["morning_reminder_student", "appointment_rescheduled"] as const) {
+      const body = WHATSAPP_TEMPLATES[kind].body;
+      expect(body).not.toMatch(/ci vediamo/i);
+      expect(body).toMatch(/prenota/);
+    }
+  });
+
+  it("il piè di pagina STOP sta nei limiti di Meta (60 caratteri)", () => {
+    expect(WHATSAPP_FOOTER.length).toBeLessThanOrEqual(60);
+    expect(WHATSAPP_FOOTER).toMatch(/STOP/);
+  });
+
   it("il promemoria esame non contiene l'orario", () => {
     const body = WHATSAPP_TEMPLATES.exam_reminder_student.body.toLowerCase();
-    expect(body).toContain("orario e luogo di presentazione");
+    expect(body).toContain("orario e luogo ti verranno comunicati dall'autoscuola");
     expect(WHATSAPP_TEMPLATES.exam_reminder_student.variables).not.toContain("ora");
+  });
+
+  it("i quattro messaggi-evento hanno il nome e la categoria concordati (16/10)", () => {
+    // `_v3` è il nome vero su Meta (22/10: risottomessi col piè di pagina
+    // STOP). Il nome è la chiave dell'invio: cambiarlo qui senza un template
+    // approvato con quel nome fa fallire ogni messaggio.
+    expect(WHATSAPP_TEMPLATES.appointment_cancelled.name).toBe("guida_annullata_allievo_v3");
+    expect(WHATSAPP_TEMPLATES.appointment_rescheduled.name).toBe("guida_spostata_allievo_v3");
+    expect(WHATSAPP_TEMPLATES.appointment_location_changed.name).toBe("guida_cambio_luogo_v3");
+    expect(WHATSAPP_TEMPLATES.exam_scheduled.name).toBe("esame_fissato_allievo_v3");
+    for (const kind of EVENT_KINDS) {
+      expect(WHATSAPP_TEMPLATES[kind].category).toBe("utility");
+    }
+  });
+
+  it("nessun testo comincia o finisce con una variabile", () => {
+    // Meta li rifiuta: `2388299` «Leading or Trailing Params Not Allowed».
+    // Ha respinto tutti e dieci i template alla prima sottomissione, e un punto
+    // finale dopo la variabile non basta — dopo ci vogliono parole.
+    for (const template of Object.values(WHATSAPP_TEMPLATES)) {
+      const body = template.body.trim();
+      expect(body.startsWith("{{")).toBe(false);
+      expect(/\{\{\d+\}\}[\s.!?,;:]*$/.test(body)).toBe(false);
+    }
+  });
+
+  it("nessun messaggio è firmato dall'autoscuola", () => {
+    // Decisione di Tiziano del 16/10, e viene prima delle regole di Meta: il
+    // mittente nel telefono dell'allievo è già «Reglo», aggiungere il nome
+    // della scuola in coda faceva sembrare il messaggio una firma commerciale.
+    // «l'autoscuola» come parola fissa va bene (è chi gli dirà l'orario); come
+    // variabile no.
+    for (const template of Object.values(WHATSAPP_TEMPLATES)) {
+      expect(template.variables).not.toContain("autoscuola");
+    }
+  });
+
+  it("i verbi dei messaggi-evento reggono sia la guida sia l'esame", () => {
+    // Il soggetto è una variabile, quindi il verbo non può concordare: «non si
+    // terrà più» e «la prenotazione per …» valgono per entrambi, «è stata
+    // annullata» no.
+    const subjects = ["la tua guida", "il tuo esame di guida"];
+    for (const subject of subjects) {
+      const annullata = render("appointment_cancelled", {
+        nome: "Marco",
+        appuntamento: `${subject} di giovedì 23 ottobre alle 15:00`,
+      });
+      expect(annullata).toContain(`${subject} di giovedì 23 ottobre alle 15:00 non si terrà più`);
+      const spostata = render("appointment_rescheduled", {
+        nome: "Marco",
+        appuntamento: subject,
+        prima: "giovedì 23 ottobre alle 15:00",
+        adesso: "venerdì 24 ottobre alle 10:00",
+      });
+      expect(spostata).toContain(`la prenotazione per ${subject}:`);
+      expect(spostata).toContain(
+        "passa da giovedì 23 ottobre alle 15:00 a venerdì 24 ottobre alle 10:00",
+      );
+    }
+  });
+
+  it("l'esame fissato non promette un orario che il codice non ha", () => {
+    // `describeWhen` mette l'ora solo quando c'è: il testo approvato non deve
+    // contenere la parola "orario" in nessun altro punto.
+    const body = WHATSAPP_TEMPLATES.exam_scheduled.body;
+    expect(body).not.toMatch(/\balle\b/);
+    expect(body).toContain("Il luogo ti verrà comunicato dall'autoscuola");
+    expect(
+      render("exam_scheduled", { nome: "Marco", quando: "venerdì 24 ottobre" }),
+    ).toBe(
+      "Ciao Marco, il tuo esame di guida è fissato: venerdì 24 ottobre. " +
+        "Il luogo ti verrà comunicato dall'autoscuola. In bocca al lupo!",
+    );
+  });
+
+  it("il cambio luogo dice dove si va, senza rompere la frase", () => {
+    expect(
+      render("appointment_location_changed", {
+        nome: "Marco",
+        appuntamento: "la tua guida di giovedì 23 ottobre alle 15:00",
+        luogo: "Piazzale Roma 12",
+      }),
+    ).toBe(
+      "Ciao Marco, cambia il luogo di ritrovo per la tua guida di giovedì 23 ottobre " +
+        "alle 15:00: ora è Piazzale Roma 12. Ci vediamo lì!",
+    );
   });
 
   it("i broadcast NON hanno un template: restano su push", () => {
@@ -75,18 +203,17 @@ describe("buildTemplateParameters", () => {
   });
 
   it("schiaccia gli a capo, che Meta rifiuta", () => {
-    const params = buildTemplateParameters("morning_reminder_student", {
+    const params = buildTemplateParameters("appointment_cancelled", {
       nome: "Marco\nRossi",
-      ora: "10:00",
-      autoscuola: "  Autoscuola  Reglo ",
+      appuntamento: "  la tua guida  di giovedì 23 ottobre ",
     });
-    expect(params).toEqual(["Marco Rossi", "10:00", "Autoscuola Reglo"]);
+    expect(params).toEqual(["Marco Rossi", "la tua guida di giovedì 23 ottobre"]);
   });
 
   it("si ferma se manca una variabile invece di mandare un buco", () => {
     expect(() =>
-      buildTemplateParameters("morning_reminder_student", { nome: "Marco", ora: "10:00" }),
-    ).toThrow(/autoscuola/);
+      buildTemplateParameters("morning_reminder_student", { nome: "Marco" }),
+    ).toThrow(/ora/);
   });
 });
 
@@ -142,7 +269,7 @@ describe("sendWhatsAppTemplate", () => {
       {
         to: "333 1234567",
         kind: "morning_reminder_student",
-        values: { nome: "Marco", ora: "10:00", autoscuola: "Reglo" },
+        values: { nome: "Marco", ora: "10:00" },
       },
       CLOUD_ENV,
     );
@@ -151,9 +278,9 @@ describe("sendWhatsAppTemplate", () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.to).toBe("393331234567"); // E.164 senza il +, come vuole la Cloud API
     expect(body.type).toBe("template");
-    expect(body.template.name).toBe("promemoria_guida_mattutino");
+    expect(body.template.name).toBe(sendableTemplateName(WHATSAPP_TEMPLATES.morning_reminder_student) ?? "promemoria_guida_mattutino_v3");
     expect(body.template.components[0].parameters.map((p: { text: string }) => p.text))
-      .toEqual(["Marco", "10:00", "Reglo"]);
+      .toEqual(["Marco", "10:00"]);
   });
 
   it("non prova nemmeno a mandare a un fisso", async () => {
@@ -163,7 +290,7 @@ describe("sendWhatsAppTemplate", () => {
       {
         to: "0445060017",
         kind: "morning_reminder_student",
-        values: { nome: "Marco", ora: "10:00", autoscuola: "Reglo" },
+        values: { nome: "Marco", ora: "10:00" },
       },
       CLOUD_ENV,
     );
@@ -205,7 +332,7 @@ describe("sendWhatsAppTemplate", () => {
       {
         to: "3331234567",
         kind: "morning_reminder_student",
-        values: { nome: "Marco", ora: "10:00", autoscuola: "Reglo" },
+        values: { nome: "Marco", ora: "10:00" },
       },
       TWILIO_ENV,
     );
@@ -216,7 +343,6 @@ describe("sendWhatsAppTemplate", () => {
     expect(JSON.parse(form.get("ContentVariables") as string)).toEqual({
       "1": "Marco",
       "2": "10:00",
-      "3": "Reglo",
     });
   });
 
@@ -233,6 +359,27 @@ describe("sendWhatsAppTemplate", () => {
     if (!res.ok) expect(res.reason).toContain("ContentSid");
   });
 
+  it("Telnyx 40300 = revoca dopo uno STOP: non si riprova e lo si segnala", async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        errors: [
+          {
+            code: "40300",
+            title: "Blocked due to STOP message",
+            detail: "Messages cannot be sent from '+390280781316' to '+393331234567'.",
+          },
+        ],
+      }),
+    }) as unknown as typeof fetch;
+    const res = await sendWhatsAppTemplate(
+      { to: "3331234567", kind: "appointment_cancelled", values: { nome: "Marco", appuntamento: "la tua guida" } },
+      TELNYX_ENV,
+    );
+    expect(res).toMatchObject({ ok: false, retriable: false, blockedByOptOut: true });
+  });
+
   it("su Telnyx manda il template nella busta Telnyx, col + davanti al numero", async () => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
@@ -244,7 +391,7 @@ describe("sendWhatsAppTemplate", () => {
       {
         to: "333 1234567",
         kind: "morning_reminder_student",
-        values: { nome: "Marco", ora: "10:00", autoscuola: "Reglo" },
+        values: { nome: "Marco", ora: "10:00" },
       },
       TELNYX_ENV,
     );
@@ -258,8 +405,11 @@ describe("sendWhatsAppTemplate", () => {
     // Telnyx vuole il +, la Cloud API no: è la differenza che si sbaglia per prima.
     expect(body.to).toBe("+393331234567");
     expect(body.from).toBe("+390000000000");
+    // Senza il profilo nel corpo Telnyx risponde 40305: il mittente italiano
+    // non è SMS-enabled, quindi il profilo non si deduce dal numero.
+    expect(body.messaging_profile_id).toBe("00000000-0000-0000-0000-000000000000");
     expect(body.whatsapp_message.type).toBe("template");
-    expect(body.whatsapp_message.template.name).toBe("promemoria_guida_mattutino");
+    expect(body.whatsapp_message.template.name).toBe(sendableTemplateName(WHATSAPP_TEMPLATES.morning_reminder_student) ?? "promemoria_guida_mattutino_v3");
     expect(body.whatsapp_message.template.language).toEqual({
       policy: "deterministic",
       code: "it",
@@ -268,7 +418,7 @@ describe("sendWhatsAppTemplate", () => {
       body.whatsapp_message.template.components[0].parameters.map(
         (p: { text: string }) => p.text,
       ),
-    ).toEqual(["Marco", "10:00", "Reglo"]);
+    ).toEqual(["Marco", "10:00"]);
   });
 
   it("su Telnyx riporta l'errore del fornitore invece di inghiottirlo", async () => {
@@ -321,11 +471,118 @@ describe("sendWhatsAppTemplate", () => {
     ).toBe(false);
   });
 
+  it("senza TELNYX_MESSAGING_PROFILE_ID il canale non risulta collegato", () => {
+    const env = {
+      WHATSAPP_PROVIDER: "telnyx",
+      TELNYX_API_KEY: "KEY0123-finta",
+      TELNYX_WHATSAPP_FROM: "+390000000000",
+    } as unknown as NodeJS.ProcessEnv;
+
+    const res = resolveWhatsAppSender(env);
+    expect(res.configured).toBe(false);
+    if (!res.configured) expect(res.reason).toContain("TELNYX_MESSAGING_PROFILE_ID");
+    // In UI il canale non va offerto: meglio non prometterlo che vederlo
+    // rifiutare dal fornitore con un 40305 che nessuno legge.
+    expect(isWhatsAppChannelAvailable(env)).toBe(false);
+  });
+
+  it("senza il profilo non tenta nemmeno la chiamata al fornitore", async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const res = await sendWhatsAppTemplate(
+      {
+        to: "+393331234567",
+        kind: "morning_reminder_student",
+        values: { nome: "M", ora: "1", autoscuola: "R" },
+      },
+      {
+        WHATSAPP_PROVIDER: "telnyx",
+        TELNYX_API_KEY: "KEY0123-finta",
+        TELNYX_WHATSAPP_FROM: "+390000000000",
+      } as unknown as NodeJS.ProcessEnv,
+    );
+
+    expect(res).toMatchObject({ ok: false, retriable: false });
+    if (!res.ok) expect(res.reason).toContain("TELNYX_MESSAGING_PROFILE_ID");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("senza provider configurato non lancia: torna un motivo da scrivere a log", async () => {
     const res = await sendWhatsAppTemplate(
       { to: "+393331234567", kind: "morning_reminder_student", values: { nome: "M", ora: "1", autoscuola: "R" } },
       {} as NodeJS.ProcessEnv,
     );
     expect(res).toMatchObject({ ok: false, retriable: false });
+  });
+});
+
+describe("lista bianca di staging (REG-500)", () => {
+  const env = { WHATSAPP_STAGING_ALLOWLIST: "+39 333 123 4567, 3401112222" } as unknown as NodeJS.ProcessEnv;
+
+  it("riconosce i numeri in lista, in qualunque formato siano scritti", () => {
+    expect(isStagingTestRecipient("3331234567", env)).toBe(true);
+    expect(isStagingTestRecipient("+393401112222", env)).toBe(true);
+  });
+
+  it("tutti gli altri restano spenti", () => {
+    expect(isStagingTestRecipient("+393339999999", env)).toBe(false);
+  });
+
+  it("senza lista non passa nessuno", () => {
+    expect(isStagingTestRecipient("3331234567", {} as unknown as NodeJS.ProcessEnv)).toBe(false);
+  });
+});
+
+describe("quale versione del template si manda (22/10)", () => {
+  it("finché i _v3 sono in attesa, gli 8 utility partono col _v2", () => {
+    const kinds = Object.keys(WHATSAPP_TEMPLATES) as WhatsAppTemplateKind[];
+    for (const kind of kinds) {
+      const t: WhatsAppTemplate = WHATSAPP_TEMPLATES[kind];
+      const sendable = sendableTemplateName(t);
+      if (t.approval === "approved" && t.category === "utility") {
+        expect(sendable).toBe(t.name);
+      } else if (t.previous?.approval === "approved" && t.previous.category === "utility") {
+        expect(sendable).toBe(t.previous.name);
+      } else {
+        expect(sendable).toBeNull();
+      }
+    }
+  });
+
+  it("i due ex-marketing non hanno una versione mandabile finché il _v3 non è approvato", () => {
+    for (const kind of ["morning_reminder_student", "appointment_rescheduled"] as const) {
+      const t: WhatsAppTemplate = WHATSAPP_TEMPLATES[kind];
+      if (t.approval !== "approved") expect(sendableTemplateName(t)).toBeNull();
+    }
+  });
+});
+
+describe("pilota e START (REG-500, 22/10)", () => {
+  const configured = {
+    WHATSAPP_PROVIDER: "telnyx",
+    TELNYX_API_KEY: "k",
+    TELNYX_WHATSAPP_FROM: "+390280781316",
+    TELNYX_MESSAGING_PROFILE_ID: "p",
+  } as unknown as NodeJS.ProcessEnv;
+
+  it("senza pilota WhatsApp vale per tutte le autoscuole", () => {
+    expect(isWhatsAppEnabledForCompany("robatto", configured)).toBe(true);
+  });
+
+  it("col pilota vale solo per le autoscuole in elenco", () => {
+    const env = { ...configured, WHATSAPP_PILOT_COMPANY_IDS: " robatto , altra " } as NodeJS.ProcessEnv;
+    expect(isWhatsAppEnabledForCompany("robatto", env)).toBe(true);
+    expect(isWhatsAppEnabledForCompany("macchiavello", env)).toBe(false);
+  });
+
+  it("il pilota non accende un canale non configurato", () => {
+    const env = { WHATSAPP_PILOT_COMPANY_IDS: "robatto" } as unknown as NodeJS.ProcessEnv;
+    expect(isWhatsAppEnabledForCompany("robatto", env)).toBe(false);
+  });
+
+  it("il link START apre la chat di Reglo col testo pronto", () => {
+    expect(whatsAppStartUrl(configured)).toBe("https://wa.me/390280781316?text=START");
+    expect(whatsAppStartUrl({} as unknown as NodeJS.ProcessEnv)).toBeNull();
   });
 });

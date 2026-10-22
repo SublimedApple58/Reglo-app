@@ -1,5 +1,34 @@
 # REG-500 — WhatsApp come canale vero + scelta del canale una volta per tutte
 
+## Cosa è stato fatto il 22/10/2026 (fasi 0-4, fino a staging)
+
+- **Meta/Telnyx**: WABA ACTIVE + verified (l'INACTIVE era un dato vecchio della
+  lista Telnyx); numero 800 816 971 scollegato dalla WABA; 10 template `_v3`
+  creati via API (utility, footer «Rispondi STOP…», i due riclassificati
+  marketing riscritti). Finché i `_v3` non sono approvati si usano gli 8 `_v2`
+  utility; i 2 ex-marketing ripiegano sull'email.
+- **Backend**: cascata vera App → WhatsApp → Email (`channel-cascade.ts`) nei
+  promemoria e nei messaggi-evento — prima partivano tutti i canali spuntati;
+  push senza dispositivi = non consegnata; offerte solo push; guardia di
+  categoria/approvazione; lista bianca staging (`WHATSAPP_STAGING_ALLOWLIST`).
+- **Consenso**: `User.whatsappConsentAt/Source` (migrazione
+  `20261024120000_whatsapp_consent`), API `/api/mobile/me/whatsapp`, consenso
+  in registrazione app, casella nei form web che raccolgono il telefono.
+- **UI** Impostazioni → Promemoria e notifiche: anteprima v2 approvata da
+  Tiziano (tre righe senza numeri né filo), «Ultimi invii», via «Personalizza».
+  Comunicazioni da regola: solo email (4 regole WhatsApp in prod lasciate con
+  avviso, decisione Tiziano).
+- **Mobile** (branch `feature/reg-500-whatsapp-consent`, NON rilasciato):
+  interruttore nel profilo + frase di consenso in registrazione.
+- Script `scripts/reg-500-align-channels.ts` (9 autoscuole su 21 in prod) da
+  lanciare con `--apply` solo al rilascio prod.
+
+Decisioni di Tiziano del 22/10: template ex-marketing → utility `_v3`;
+consenso pregressi implicito + STOP; istruttori stessa cascata; pilota prod
+Robatto; 800 scollegato; informativa da rivedere prima della pubblicazione.
+
+---
+
 **Stato:** aggiornato 2026-09-22. Fase 0 implementata su **staging** (prod non
 toccata). **Provider scelto: Telnyx.** Il codice è pronto lato invio, webhook e
 UI; manca solo l'attivazione manuale del mittente → vedi §7.
@@ -458,13 +487,18 @@ fatti. Sono tutti dal portale Telnyx e da Meta, in quest'ordine.
 1. **Comprare un numero su Telnyx** (portale → Numbers → Buy Numbers). In Italia
    ci sono solo **geografici**, niente mobili: va bene, WhatsApp Business supporta
    ufficialmente i fissi. **Non** un numero già usato su WhatsApp.
-2. **Assegnargli un messaging profile** (Messaging → Messaging Profiles). Senza
-   questo l'Embedded Signup rifiuta il numero.
+2. **Creare un messaging profile** (Messaging → Messaging Profiles).
+   *Aggiornamento 16/10:* fatto (`Reglo WhatsApp`, `4001a145-397f-48f5-abad-8ef9cdb2e549`).
+   Il numero **non** gli si può assegnare — un geografico italiano non è
+   SMS-enabled e Telnyx risponde `40323` — quindi il profilo va passato
+   **nel corpo dell'invio** (`TELNYX_MESSAGING_PROFILE_ID`): senza, ogni
+   `POST /messages/whatsapp` muore con `40305 Invalid 'from' address`.
 3. **Copiare la chiave pubblica dei webhook**: portale → Account Settings → Keys &
    Credentials → Public Key. Serve per `TELNYX_PUBLIC_KEY`.
 4. **Impostare su Vercel** (progetto `reglo`, ambienti staging e production):
    - `WHATSAPP_PROVIDER=telnyx`
    - `TELNYX_WHATSAPP_FROM=<numero in E.164, es. +39…>`
+   - `TELNYX_MESSAGING_PROFILE_ID=<id del messaging profile>` (obbligatoria, vedi punto 2)
    - `TELNYX_PUBLIC_KEY=<chiave pubblica>`
    `TELNYX_API_KEY` c'è già: è la stessa della voce, non va toccata.
 5. **Puntare il webhook WhatsApp** su `https://app.reglo.it/api/webhooks/whatsapp`
@@ -492,9 +526,52 @@ fatti. Sono tutti dal portale Telnyx e da Meta, in quest'ordine.
 7. **Verifica del Meta Business** — documenti aziendali (visura, P.IVA, sito,
    email di dominio). Non blocca la partenza: fino a verifica si mandano 250
    messaggi business-initiated ogni 24 ore, e il fabbisogno di Reglo è ~73/giorno.
-8. **Sottomissione dei template** a Meta: i testi sono già scritti in
-   `lib/autoscuole/whatsapp-templates.ts`, vanno incollati nel portale e attesa
-   l'approvazione (di solito minuti-ore per la categoria *utility*).
+8. ~~**Sottomissione dei template** a Meta~~ → **fatta il 16/10**: tutti e
+   **dieci** sottomessi via `POST /v2/whatsapp/message_templates` (UTILITY,
+   lingua `it`), partendo dal registro in `lib/autoscuole/whatsapp-templates.ts`.
+
+   I dieci sono i 6 promemoria più i **4 messaggi-evento** decisi da Tiziano il
+   16/10 (guida annullata, spostata, cambio luogo, esame fissato). Gli inviti
+   — guide di gruppo, posti liberi, scambi, posti liberi domani, lista d'attesa
+   — **restano su push**: sono proposte, non impegni presi, e da soli valgono
+   più di tutti i promemoria in bolletta.
+
+   > ⚠️ **Meta ha respinto la prima stesura di tutti e dieci**, per due regole
+   > che non erano scritte da nessuna parte qui:
+   > - `2388299` «Leading or Trailing Params Not Allowed»: una variabile non può
+   >   stare a inizio o fine corpo, e il punto finale non basta. Tutti i testi
+   >   chiudevano con «… {{n}}.» (il nome dell'autoscuola) → riscritti con una
+   >   coda fissa: «{{n}} ti aspetta!».
+   > - `2388293` «Params Words Ratio Exceeds Limit»: troppe variabili per la
+   >   lunghezza del testo. Ha colpito il promemoria all'istruttore (4 variabili
+   >   in 11 parole) e la guida spostata (5 variabili) → allungati.
+   >
+   > I testi definitivi sono quelli del registro, e il test
+   > «nessun testo comincia o finisce con una variabile» impedisce la ricaduta.
+
+   **Seconda stesura, 16/10 (Tiziano): i messaggi non sono firmati
+   dall'autoscuola.** La chiusa «{{n}} ti aspetta!» col nome della scuola è
+   stata bocciata: il mittente nel telefono dell'allievo è già «Reglo», e
+   aggiungere il nome in coda faceva sembrare il messaggio una firma
+   commerciale. La variabile `autoscuola` **non esiste più in nessun template**;
+   le chiuse sono neutre («A presto!», «Ci vediamo!», «In bocca al lupo!») e
+   dove serve dire chi darà un'informazione si scrive «l'autoscuola» come parola
+   fissa. `deliverWhatsApp` riempie `autoscuola` solo se un template la
+   dichiara, quindi oggi non fa più la query per nessun invio.
+
+   Per sostituire i testi i dieci sono stati **ritirati e risottomessi**: Meta
+   non lascia modificare un template in attesa (`2388003` «Message templates can
+   only be edited if they have been rejected»), e dopo la cancellazione rifiuta
+   per circa un minuto il riuso dello stesso nome (`2388023`, transitorio) — lo
+   script ha riprovato per **oltre venti minuti e sei giri** senza che il blocco
+   cadesse, quindi — come concordato — i dieci sono stati risottomessi col
+   suffisso **`_v2`** (`promemoria_guida_mattutino_v2`, …). È il nome vero su
+   Meta ed è quello che sta nel registro: rinominarli vorrebbe dire creare
+   dieci template nuovi da far approvare.
+
+   Nessuno dei dieci è stato respinto per il rapporto variabili/parole: i testi
+   sono **esattamente** quelli approvati da Tiziano, nonostante due siano più
+   corti di prima (via «ti ricordiamo che» e «ti avvisiamo che»).
 
 Quando 1-5 sono fatti posso verificare il collegamento su staging **senza
 mandare niente a nessuno**: `APP_ENV=staging` rende gli invii esterni no-op, e

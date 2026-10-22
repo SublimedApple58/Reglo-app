@@ -26,7 +26,13 @@ import {
   examCreatedText,
   examTimeSetText,
 } from "@/lib/autoscuole/exam-notifications";
-import { notifyAutoscuolaUser, notifyAutoscuolaUsers, PUSH_ONLY } from "@/lib/autoscuole/notify";
+import {
+  EVENT_CHANNELS_WITH_WHATSAPP,
+  notifyAutoscuolaUser,
+  notifyAutoscuolaUsers,
+  PUSH_ONLY,
+} from "@/lib/autoscuole/notify";
+import { firstNameFor } from "@/lib/autoscuole/whatsapp-delivery";
 import { appointmentBusyInstructorIds } from "@/lib/autoscuole/appointment-busy";
 import { fetchGroupLessonBusyRows } from "@/lib/autoscuole/group-lesson-busy";
 import { resolveGroupLessonLocationId } from "@/lib/autoscuole/locations";
@@ -570,7 +576,8 @@ const notifyStudentAppointmentCancelled = async ({
   const [studentUser, instructor] = await Promise.all([
     prisma.user.findUnique({
       where: { id: appointment.studentId },
-      select: { email: true, phone: true },
+      // `name` serve alla variabile `nome` del template WhatsApp.
+      select: { name: true, email: true, phone: true },
     }),
     appointment.instructorId
       ? prisma.autoscuolaInstructor.findFirst({
@@ -600,14 +607,23 @@ const notifyStudentAppointmentCancelled = async ({
     permanent: cancellationKind === "permanent_cancel",
   });
 
+  const cancelled = describeWhen(appointment);
+
   await notifyAutoscuolaUser({
     companyId,
     kind: "appointment_cancelled",
     audience: "student",
+    supports: EVENT_CHANNELS_WITH_WHATSAPP,
     recipient: {
       userId: appointment.studentId,
       email: studentUser?.email,
       phone: studentUser?.phone,
+    },
+    whatsapp: {
+      values: {
+        nome: firstNameFor(studentUser ?? {}),
+        appuntamento: `${cancelled.subject} di ${cancelled.when}`,
+      },
     },
     title,
     body,
@@ -664,7 +680,8 @@ const notifyAppointmentRescheduled = async ({
   const [studentUser, instructor] = await Promise.all([
     prisma.user.findUnique({
       where: { id: appointment.studentId },
-      select: { email: true, phone: true },
+      // `name` serve alla variabile `nome` del template WhatsApp.
+      select: { name: true, email: true, phone: true },
     }),
     appointment.instructorId
       ? prisma.autoscuolaInstructor.findFirst({
@@ -688,14 +705,31 @@ const notifyAppointmentRescheduled = async ({
   // senza orario rimasto nello stesso giorno): mandare "spostato dal 14 al 14"
   // sarebbe peggio del silenzio.
   if (shouldNotifyStudent && text) {
+    // Non si chiamano `before`/`after`: `after` è l'import di `next/server`
+    // usato in questo file, e ombreggiarlo qui dentro è un tranello.
+    const fromWhen = describeWhen({
+      type: appointment.type,
+      startsAt: oldStartsAt,
+      endsAt: oldEndsAt,
+    });
+    const toWhen = describeWhen(appointment);
     await notifyAutoscuolaUser({
       companyId,
       kind: "appointment_rescheduled",
       audience: "student",
+      supports: EVENT_CHANNELS_WITH_WHATSAPP,
       recipient: {
         userId: appointment.studentId,
         email: studentUser?.email,
         phone: studentUser?.phone,
+      },
+      whatsapp: {
+        values: {
+          nome: firstNameFor(studentUser ?? {}),
+          appuntamento: toWhen.subject,
+          prima: fromWhen.when,
+          adesso: toWhen.when,
+        },
       },
       title: text.title,
       body: text.body,
@@ -6684,12 +6718,32 @@ export async function updateAutoscuolaAppointmentDetails(
       // che l'autoscuola comunica a voce il giorno prima.
       const text = locationChangedText(appointment, newName);
       if (appointment.studentId) {
+        // Il telefono non serviva: questo messaggio era solo push. Ora che ha
+        // un template, va letto anche da chi l'app non ce l'ha — ed è proprio
+        // il luogo la cosa che fa presentare un allievo nel posto sbagliato.
+        const studentUser = await prisma.user.findUnique({
+          where: { id: appointment.studentId },
+          select: { name: true, email: true, phone: true },
+        });
+        const changedWhen = describeWhen(appointment);
         await notifyAutoscuolaUser({
           companyId: membership.companyId,
           kind: "appointment_location_changed",
           audience: "student",
-          recipient: { userId: appointment.studentId },
-          supports: PUSH_ONLY,
+          recipient: {
+            userId: appointment.studentId,
+            phone: studentUser?.phone,
+          },
+          // Niente email: questo avviso non ne ha mai mandata una, e aggiungerla
+          // sarebbe un'altra decisione, non questa.
+          supports: ["push", "whatsapp"],
+          whatsapp: {
+            values: {
+              nome: firstNameFor(studentUser ?? {}),
+              appuntamento: `${changedWhen.subject} di ${changedWhen.when}`,
+              luogo: newName,
+            },
+          },
           title: text.title,
           body: text.body,
           appointmentId: appointment.id,
@@ -9600,14 +9654,44 @@ const notifyExamStudents = async ({
   if (!studentIds.length) return;
   const users = await prisma.user.findMany({
     where: { id: { in: studentIds } },
-    select: { id: true, email: true, phone: true },
+    // `name` serve alla variabile `nome` dei template WhatsApp.
+    select: { id: true, name: true, email: true, phone: true },
   });
-  await notifyAutoscuolaUsers(
-    users.map((user) => ({ userId: user.id, email: user.email, phone: user.phone })),
-    {
+
+  /**
+   * WhatsApp solo per due dei tre `kind`, e il terzo non è una dimenticanza.
+   *
+   * - `exam_scheduled` → «il tuo esame di guida è fissato: …»
+   * - `appointment_cancelled` → «… non si terrà più»
+   * - `appointment_rescheduled` qui **non** vuol dire spostato: è l'orario che
+   *   viene definito o ritirato a data invariata (`reason: "time_set"`, o
+   *   `movedText` che sceglie da sé fra i tre casi). Il template approvato dice
+   *   «si sposta: da X a Y», che in quel caso sarebbe falso. Resta push+email
+   *   finché non ha un template suo.
+   */
+  const whatsappValues = (user: {
+    name: string | null;
+    email: string | null;
+  }): Record<string, string> | null => {
+    const examWhen = describeWhen({ type: "esame", startsAt, endsAt });
+    const nome = firstNameFor(user);
+    if (kind === "exam_scheduled") return { nome, quando: examWhen.when };
+    if (kind === "appointment_cancelled") {
+      return { nome, appuntamento: `${examWhen.subject} di ${examWhen.when}` };
+    }
+    return null;
+  };
+
+  // Uno per uno e non `notifyAutoscuolaUsers`: le variabili del template
+  // cambiano per destinatario (il nome), quindi un `input` condiviso non basta.
+  for (const user of users) {
+    const values = whatsappValues(user);
+    await notifyAutoscuolaUser({
       companyId,
       kind,
       audience: "student",
+      recipient: { userId: user.id, email: user.email, phone: user.phone },
+      ...(values ? { supports: EVENT_CHANNELS_WITH_WHATSAPP, whatsapp: { values } } : {}),
       title: text.title,
       body: text.body,
       appointmentId: appointmentId ?? null,
@@ -9618,8 +9702,8 @@ const notifyExamStudents = async ({
         ...(reason ? { reason } : {}),
         ...(appointmentId ? { appointmentId } : {}),
       },
-    },
-  );
+    });
+  }
 };
 
 /**

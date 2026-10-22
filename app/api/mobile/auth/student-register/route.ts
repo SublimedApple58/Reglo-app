@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/db/prisma";
 import { toStoredPhone } from "@/lib/phone-e164";
+import { whatsAppConsentFields } from "@/lib/autoscuole/whatsapp-consent";
 import { studentRegisterSchema } from "@/lib/validators";
 import { hash } from "@/lib/encrypt";
 import { releaseEmailIfOrphaned } from "@/lib/account-deletion";
@@ -144,6 +145,7 @@ export async function POST(request: Request) {
           password: passwordHash,
           role: "user",
           activeCompanyId: company.id,
+          ...whatsAppConsentFields(parsed.whatsappConsent, "app_registrazione"),
         },
       });
 

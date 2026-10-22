@@ -65,6 +65,13 @@ model User {
   /// Null = può riceverli. Onorarla non e' cortesia: ignorare una revoca fa
   /// scendere la quality rating di Meta e alla lunga fa bloccare il mittente.
   whatsappOptOutAt                     DateTime?                              @db.Timestamp(6)
+  /// Quando l'utente ha dato il consenso agli avvisi di servizio su WhatsApp
+  /// (REG-500). Null per chi era già in anagrafica: per loro il consenso è
+  /// implicito nel rapporto con l'autoscuola, e la revoca sta scritta in ogni
+  /// messaggio («Rispondi STOP…»). Non è un cancello: il cancello è la revoca.
+  whatsappConsentAt                    DateTime?                              @db.Timestamp(6)
+  /// Da dove viene il consenso: `app_registrazione`, `app_profilo`, `autoscuola`.
+  whatsappConsentSource                String?
   createdAt                            DateTime                               @default(now()) @db.Timestamp(6)
   updatedAt                            DateTime                               @updatedAt
   account                              Account[]
