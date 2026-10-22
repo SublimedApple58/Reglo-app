@@ -13,11 +13,22 @@ import {
  * WhatsApp come "In arrivo". Il cancello stava davanti, il retro era aperto.
  */
 
+const approvedUtility = {
+  name: "promemoria_guida_allievo_v3",
+  category: "utility",
+  approval: "approved",
+  variables: ["nome", "quando", "durata"],
+  body: "",
+} as const;
+
+// I test non dipendono dallo stato di approvazione di oggi su Meta: il
+// template approvato è esplicito, i casi "pending" e "marketing" pure.
 const base = {
   recipient: "+393331234567",
   templateKind: "appointment_reminder_student",
   channelAvailable: true,
   optedOut: false,
+  template: approvedUtility,
 };
 
 describe("quando NON si manda", () => {
@@ -37,6 +48,21 @@ describe("quando NON si manda", () => {
 
   it("l'utente ha revocato il consenso", () => {
     expect(whatsAppSkipReason({ ...base, optedOut: true })).toMatch(/revocato/);
+  });
+
+  it("template ancora in approvazione su Meta", () => {
+    expect(
+      whatsAppSkipReason({ ...base, template: { ...approvedUtility, approval: "pending" } }),
+    ).toMatch(/non ancora approvato/);
+  });
+
+  // 22/10: Meta ha riclassificato marketing due template sottomessi come
+  // utility. Costano di più e chiedono un opt-in esplicito: non si mandano, la
+  // cascata ripiega sull'email.
+  it("template riclassificato marketing da Meta", () => {
+    expect(
+      whatsAppSkipReason({ ...base, template: { ...approvedUtility, category: "marketing" } }),
+    ).toMatch(/marketing/);
   });
 
   it("destinatario mancante", () => {

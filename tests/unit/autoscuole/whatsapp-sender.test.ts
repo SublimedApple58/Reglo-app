@@ -1,10 +1,12 @@
 import {
   buildTemplateParameters,
   PUSH_ONLY_KINDS,
+  WHATSAPP_FOOTER,
   WHATSAPP_TEMPLATES,
   type WhatsAppTemplateKind,
 } from "@/lib/autoscuole/whatsapp-templates";
 import {
+  isStagingTestRecipient,
   isWhatsAppChannelAvailable,
   resolveWhatsAppSender,
   sendWhatsAppTemplate,
@@ -71,6 +73,21 @@ describe("registro dei template", () => {
     }
   });
 
+  it("nessun testo chiude in modo colloquiale nei due riscritti (22/10)", () => {
+    // `_v2` di questi due è stato riclassificato marketing da Meta: chiuse
+    // come «Ci vediamo!» spingono il classificatore lontano da utility.
+    for (const kind of ["morning_reminder_student", "appointment_rescheduled"] as const) {
+      const body = WHATSAPP_TEMPLATES[kind].body;
+      expect(body).not.toMatch(/ci vediamo/i);
+      expect(body).toMatch(/prenota/);
+    }
+  });
+
+  it("il piè di pagina STOP sta nei limiti di Meta (60 caratteri)", () => {
+    expect(WHATSAPP_FOOTER.length).toBeLessThanOrEqual(60);
+    expect(WHATSAPP_FOOTER).toMatch(/STOP/);
+  });
+
   it("il promemoria esame non contiene l'orario", () => {
     const body = WHATSAPP_TEMPLATES.exam_reminder_student.body.toLowerCase();
     expect(body).toContain("orario e luogo ti verranno comunicati dall'autoscuola");
@@ -78,12 +95,13 @@ describe("registro dei template", () => {
   });
 
   it("i quattro messaggi-evento hanno il nome e la categoria concordati (16/10)", () => {
-    // `_v2` è il nome vero su Meta: i nomi senza suffisso sono rimasti
-    // bloccati dopo il ritiro del 16/10 (vedi il commento su `name`).
-    expect(WHATSAPP_TEMPLATES.appointment_cancelled.name).toBe("guida_annullata_allievo_v2");
-    expect(WHATSAPP_TEMPLATES.appointment_rescheduled.name).toBe("guida_spostata_allievo_v2");
-    expect(WHATSAPP_TEMPLATES.appointment_location_changed.name).toBe("guida_cambio_luogo_v2");
-    expect(WHATSAPP_TEMPLATES.exam_scheduled.name).toBe("esame_fissato_allievo_v2");
+    // `_v3` è il nome vero su Meta (22/10: risottomessi col piè di pagina
+    // STOP). Il nome è la chiave dell'invio: cambiarlo qui senza un template
+    // approvato con quel nome fa fallire ogni messaggio.
+    expect(WHATSAPP_TEMPLATES.appointment_cancelled.name).toBe("guida_annullata_allievo_v3");
+    expect(WHATSAPP_TEMPLATES.appointment_rescheduled.name).toBe("guida_spostata_allievo_v3");
+    expect(WHATSAPP_TEMPLATES.appointment_location_changed.name).toBe("guida_cambio_luogo_v3");
+    expect(WHATSAPP_TEMPLATES.exam_scheduled.name).toBe("esame_fissato_allievo_v3");
     for (const kind of EVENT_KINDS) {
       expect(WHATSAPP_TEMPLATES[kind].category).toBe("utility");
     }
@@ -113,7 +131,8 @@ describe("registro dei template", () => {
 
   it("i verbi dei messaggi-evento reggono sia la guida sia l'esame", () => {
     // Il soggetto è una variabile, quindi il verbo non può concordare: «non si
-    // terrà più» e «si sposta» valgono per entrambi, «è stata annullata» no.
+    // terrà più» e «la prenotazione per …» valgono per entrambi, «è stata
+    // annullata» no.
     const subjects = ["la tua guida", "il tuo esame di guida"];
     for (const subject of subjects) {
       const annullata = render("appointment_cancelled", {
@@ -127,8 +146,10 @@ describe("registro dei template", () => {
         prima: "giovedì 23 ottobre alle 15:00",
         adesso: "venerdì 24 ottobre alle 10:00",
       });
-      expect(spostata).toContain(`${subject} si sposta`);
-      expect(spostata).toContain("non più giovedì 23 ottobre alle 15:00, ma venerdì 24 ottobre");
+      expect(spostata).toContain(`la prenotazione per ${subject}:`);
+      expect(spostata).toContain(
+        "passa da giovedì 23 ottobre alle 15:00 a venerdì 24 ottobre alle 10:00",
+      );
     }
   });
 
@@ -253,7 +274,7 @@ describe("sendWhatsAppTemplate", () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.to).toBe("393331234567"); // E.164 senza il +, come vuole la Cloud API
     expect(body.type).toBe("template");
-    expect(body.template.name).toBe("promemoria_guida_mattutino_v2");
+    expect(body.template.name).toBe("promemoria_guida_mattutino_v3");
     expect(body.template.components[0].parameters.map((p: { text: string }) => p.text))
       .toEqual(["Marco", "10:00"]);
   });
@@ -363,7 +384,7 @@ describe("sendWhatsAppTemplate", () => {
     // non è SMS-enabled, quindi il profilo non si deduce dal numero.
     expect(body.messaging_profile_id).toBe("00000000-0000-0000-0000-000000000000");
     expect(body.whatsapp_message.type).toBe("template");
-    expect(body.whatsapp_message.template.name).toBe("promemoria_guida_mattutino_v2");
+    expect(body.whatsapp_message.template.name).toBe("promemoria_guida_mattutino_v3");
     expect(body.whatsapp_message.template.language).toEqual({
       policy: "deterministic",
       code: "it",
@@ -468,5 +489,22 @@ describe("sendWhatsAppTemplate", () => {
       {} as NodeJS.ProcessEnv,
     );
     expect(res).toMatchObject({ ok: false, retriable: false });
+  });
+});
+
+describe("lista bianca di staging (REG-500)", () => {
+  const env = { WHATSAPP_STAGING_ALLOWLIST: "+39 333 123 4567, 3401112222" } as unknown as NodeJS.ProcessEnv;
+
+  it("riconosce i numeri in lista, in qualunque formato siano scritti", () => {
+    expect(isStagingTestRecipient("3331234567", env)).toBe(true);
+    expect(isStagingTestRecipient("+393401112222", env)).toBe(true);
+  });
+
+  it("tutti gli altri restano spenti", () => {
+    expect(isStagingTestRecipient("+393339999999", env)).toBe(false);
+  });
+
+  it("senza lista non passa nessuno", () => {
+    expect(isStagingTestRecipient("3331234567", {} as unknown as NodeJS.ProcessEnv)).toBe(false);
   });
 });

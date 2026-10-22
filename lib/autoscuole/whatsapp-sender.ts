@@ -383,6 +383,26 @@ export function resolveWhatsAppSender(env: NodeJS.ProcessEnv = process.env): Sen
   };
 }
 
+/**
+ * Su staging gli invii esterni sono spenti (il DB è una copia con numeri veri).
+ * Per provare WhatsApp end-to-end si accendono **solo** verso i numeri in
+ * `WHATSAPP_STAGING_ALLOWLIST` (E.164 separati da virgola): i telefoni di chi
+ * fa QA. Fuori da staging la lista non conta niente.
+ */
+export function isStagingTestRecipient(
+  phone: string,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  const raw = env.WHATSAPP_STAGING_ALLOWLIST ?? "";
+  if (!raw.trim()) return false;
+  const normalized = normalizeToE164(phone);
+  if (!normalized.ok) return false;
+  return raw
+    .split(",")
+    .map((item) => normalizeToE164(item.trim()))
+    .some((item) => item.ok && item.e164 === normalized.e164);
+}
+
 /** True se il canale WhatsApp può essere offerto alle autoscuole in UI. */
 export function isWhatsAppChannelAvailable(env: NodeJS.ProcessEnv = process.env): boolean {
   return resolveWhatsAppSender(env).configured;
@@ -396,7 +416,7 @@ export async function sendWhatsAppTemplate(
   input: WhatsAppSendInput,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<WhatsAppSendResult> {
-  if (externalSendsDisabled()) {
+  if (externalSendsDisabled() && !isStagingTestRecipient(input.to, env)) {
     return { ok: true, providerMessageId: null, skipped: "ambiente" };
   }
   const normalized = normalizeToE164(input.to);

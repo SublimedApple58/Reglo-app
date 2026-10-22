@@ -13,6 +13,7 @@
  * parte è un allievo che non viene avvisato.
  */
 import { prisma } from "@/db/prisma";
+import { pushReachedADevice } from "@/lib/autoscuole/channel-cascade";
 
 export type DeliveryChannel = "push" | "whatsapp" | "email";
 
@@ -82,6 +83,14 @@ export async function deliverAndLog(
   }
   try {
     const result = await send(attempt.recipient);
+    // Una push che non trova dispositivi non lancia: torna `sent: 0`. Prima
+    // finiva a registro come `sent` e la cascata si fermava lì, lasciando
+    // senza avviso proprio chi l'app non ce l'ha (REG-500).
+    if (attempt.channel === "push" && !pushReachedADevice(result)) {
+      const failed = Boolean((result as { failed?: number } | null)?.failed);
+      await write(attempt, failed ? "failed" : "skipped", { error: pushSkipReason(result) });
+      return false;
+    }
     const providerMessageId =
       result && typeof result === "object" && "providerMessageId" in result
         ? ((result as { providerMessageId?: string | null }).providerMessageId ?? null)
@@ -96,6 +105,13 @@ export async function deliverAndLog(
     console.error(`[${attempt.kind}] ${attempt.channel} fallito`, error);
     return false;
   }
+}
+
+function pushSkipReason(result: unknown): string {
+  const r = (result ?? {}) as { skipped?: number; failed?: number; errorMessages?: string[] };
+  if (r.failed) return `push non consegnata (${r.errorMessages?.[0] ?? "errore Expo"})`;
+  if (r.skipped) return "push non inviata (ambiente o dispositivi non validi)";
+  return "nessun dispositivo con l'app attiva";
 }
 
 /** Canale acceso ma senza recapito per quella persona: va registrato lo stesso. */

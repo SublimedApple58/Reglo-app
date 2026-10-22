@@ -28,11 +28,14 @@ import {
 } from "@/lib/autoscuole/delivery-log";
 import { findUserByPhone } from "@/lib/autoscuole/whatsapp-consent";
 import {
+  isStagingTestRecipient,
   isWhatsAppChannelAvailable,
   sendWhatsAppTemplate,
 } from "@/lib/autoscuole/whatsapp-sender";
+import { externalSendsDisabled } from "@/lib/app-env";
 import {
   WHATSAPP_TEMPLATES,
+  type WhatsAppTemplate,
   type WhatsAppTemplateKind,
 } from "@/lib/autoscuole/whatsapp-templates";
 
@@ -54,6 +57,8 @@ export function whatsAppSkipReason(input: {
   templateKind: string;
   channelAvailable: boolean;
   optedOut: boolean;
+  /** Solo per i test: il template da valutare al posto di quello del registro. */
+  template?: WhatsAppTemplate;
 }): string | null {
   if (!input.recipient) return "destinatario mancante";
   if (!input.channelAvailable) {
@@ -61,6 +66,16 @@ export function whatsAppSkipReason(input: {
   }
   if (!hasWhatsAppTemplate(input.templateKind)) {
     return `nessun template approvato per "${input.templateKind}": fuori dalle 24 ore Meta non consente testo libero`;
+  }
+  const template: WhatsAppTemplate = input.template ?? WHATSAPP_TEMPLATES[input.templateKind];
+  if (template.approval !== "approved") {
+    return `template "${template.name}" non ancora approvato da Meta (${template.approval})`;
+  }
+  // Meta può riclassificare marketing un template sottomesso come utility:
+  // costa di più, chiede un opt-in esplicito e ha limiti di consegna per
+  // utente. Non lo mandiamo: la cascata ripiega sull'email (decisione 22/10).
+  if (template.category !== "utility") {
+    return `template "${template.name}" classificato ${template.category} da Meta: si mandano solo template utility`;
   }
   if (input.optedOut) return "l'utente ha revocato il consenso WhatsApp";
   return null;
@@ -158,6 +173,13 @@ export async function deliverWhatsApp(
   const values = needsCompanyName
     ? { ...input.values, autoscuola: await companyName(logged.companyId) }
     : input.values;
+
+  // Staging: senza questo, l'invio "riuscito" in modalità no-op fermerebbe la
+  // cascata come se il messaggio fosse arrivato.
+  if (externalSendsDisabled() && !isStagingTestRecipient(logged.recipient)) {
+    await logSkipped(logged, "invii esterni disattivati in questo ambiente");
+    return false;
+  }
 
   return deliverAndLog(logged, async (to) => {
     const result = await sendWhatsAppTemplate({ to, kind: templateKind, values });

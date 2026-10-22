@@ -1,5 +1,6 @@
 "use server";
 
+import { OFFER_CHANNELS } from "@/lib/autoscuole/channel-cascade";
 import { randomUUID } from "crypto";
 import { after } from "next/server";
 import { z } from "zod";
@@ -183,7 +184,6 @@ const getWaitlistOffersSchema = z.object({
 const SLOT_MINUTES = 30;
 const DEFAULT_MAX_DAYS = 4;
 const DURATION_PRIORITY = [60, 45, 30, 90, 120] as const;
-const DEFAULT_SLOT_FILL_CHANNELS = ["push", "whatsapp", "email"] as const;
 const AUTOSCUOLA_TIMEZONE = "Europe/Rome";
 const WEEKDAY_TO_INDEX: Record<string, number> = {
   Sun: 0,
@@ -268,18 +268,6 @@ const toTimeZoneDate = (
   return new Date(timestamp);
 };
 
-const normalizeChannels = (
-  value: unknown,
-  fallback: readonly ("push" | "whatsapp" | "email")[],
-) => {
-  if (!Array.isArray(value)) return [...fallback];
-  const channels = value.filter(
-    (item): item is "push" | "whatsapp" | "email" =>
-      item === "push" || item === "whatsapp" || item === "email",
-  );
-  const unique = Array.from(new Set(channels));
-  return unique.length ? unique : [...fallback];
-};
 
 const pickSuggestedDuration = (durations: number[]) => {
   for (const preferred of DURATION_PRIORITY) {
@@ -4652,10 +4640,9 @@ export async function broadcastWaitlistOffer({
   });
   if (!availableStudents.length) return offer;
 
-  const channels = normalizeChannels(
-    (service?.limits as Record<string, unknown> | null)?.slotFillChannels,
-    DEFAULT_SLOT_FILL_CHANNELS,
-  );
+  // REG-500: le offerte escono solo come push, a prescindere da
+  // `slotFillChannels` (vedi `OFFER_CHANNELS`).
+  const channels = OFFER_CHANNELS;
 
   const formattedDate = slot.startsAt.toLocaleDateString("it-IT", {
     timeZone: AUTOSCUOLA_TIMEZONE,
@@ -4682,8 +4669,7 @@ export async function broadcastWaitlistOffer({
       kind: "slot_fill_offer",
       audience: "student",
       channels,
-      supports: ["push", "email", "whatsapp"],
-      whatsapp: { logKind: "waitlist_slot_student", values: {} },
+      supports: OFFER_CHANNELS,
       title,
       body: message,
       data: {
@@ -4900,10 +4886,9 @@ export async function broadcastGroupLessonInvite({
   });
   if (!eligible.length) return { invite, recipients: 0 };
 
-  const channels = normalizeChannels(
-    (service?.limits as Record<string, unknown> | null)?.slotFillChannels,
-    DEFAULT_SLOT_FILL_CHANNELS,
-  );
+  // REG-500: le offerte escono solo come push, a prescindere da
+  // `slotFillChannels` (vedi `OFFER_CHANNELS`).
+  const channels = OFFER_CHANNELS;
   const formattedDate = gl.startsAt.toLocaleDateString("it-IT", { timeZone: AUTOSCUOLA_TIMEZONE });
   const formattedTime = gl.startsAt.toLocaleTimeString("it-IT", {
     timeZone: AUTOSCUOLA_TIMEZONE,
@@ -4930,8 +4915,7 @@ export async function broadcastGroupLessonInvite({
       kind: "group_lesson_invite",
       audience: "student",
       channels,
-      supports: ["push", "email", "whatsapp"],
-      whatsapp: { logKind: "group_lesson_invite_student", values: {} },
+      supports: OFFER_CHANNELS,
       title,
       body: message,
       data: {
