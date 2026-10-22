@@ -261,6 +261,9 @@ model Company {
   documents                            CompanyDocument[]
   plan                                 CompanyPlan?
   licensePurchases                     CompanyLicensePurchase[]
+  financeEntries                       FinanceEntry[]
+  salesDeals                           SalesDeal[]
+  commercial                           CompanyCommercial?
   consorzioSchools                     ConsorzioSchool[]                      @relation("ConsorzioSchools")
   consorzioSchoolLinks                 ConsorzioSchool[]                      @relation("ConsorzioSchoolLinkedCompany")
   consorzioAccountingCodes             ConsorzioAccountingCode[]              @relation("ConsorzioAccountingCodes")
@@ -2206,4 +2209,151 @@ model BackofficeSession {
   admin BackofficeAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
   @@index([adminId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Finanza di Reglo (REG-413) — i conti DI Reglo, non delle autoscuole.
+// Importi in centesimi e IVA INCLUSA (i prezzi di piani e preventivi lo sono);
+// l'IVA si scorpora con `vatRateBps` (2200 = 22%). Percentuali in punti base.
+// Date di calendario come `@db.Date`: niente fusi orari su un movimento.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model FinanceCategory {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  /// "in" | "out"
+  direction  String
+  /// Gruppo per il riquadro spese fisse (es. "persone", "software").
+  group      String?
+  sortOrder  Int       @default(0)
+  archivedAt DateTime? @db.Timestamp(6)
+  createdAt  DateTime  @default(now()) @db.Timestamp(6)
+
+  entries   FinanceEntry[]
+  recurring RecurringExpense[]
+
+  @@unique([name, direction])
+}
+
+/// Un movimento: incasso, pagamento, fattura da incassare o uscita prevista.
+model FinanceEntry {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  date               DateTime  @db.Date
+  description        String
+  categoryId         String    @db.Uuid
+  /// "in" | "out"
+  direction          String
+  /// "recurring" | "one_off"
+  nature             String    @default("one_off")
+  /// IVA inclusa, sempre positivo (il segno lo dà `direction`).
+  amountCents        Int
+  /// Aliquota IVA in punti base; null = IVA non registrata (non entra nel conto IVA).
+  vatRateBps         Int?
+  /// "settled" (incassato/pagato) | "due" (da incassare/da pagare) | "planned" (previsto)
+  status             String    @default("settled")
+  /// Quando è stato davvero incassato/pagato (status "settled").
+  settledOn          DateTime? @db.Date
+  companyId          String?   @db.Uuid
+  invoiceNumber      String?
+  recurringExpenseId String?   @db.Uuid
+  notes              String?
+  createdById        String?   @db.Uuid
+  createdAt          DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt          DateTime  @updatedAt
+
+  category         FinanceCategory   @relation(fields: [categoryId], references: [id])
+  company          Company?          @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  recurringExpense RecurringExpense? @relation(fields: [recurringExpenseId], references: [id], onDelete: SetNull)
+
+  @@index([date])
+  @@index([settledOn])
+  @@index([companyId])
+  @@index([recurringExpenseId])
+}
+
+/// Spesa fissa: NON genera righe in anticipo, la previsione la proietta al volo
+/// (niente job programmati). Il pagamento vero si registra come FinanceEntry.
+model RecurringExpense {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  categoryId  String    @db.Uuid
+  amountCents Int
+  vatRateBps  Int?
+  /// "monthly" | "quarterly" | "annual"
+  cadence     String
+  startsOn    DateTime  @db.Date
+  endsOn      DateTime? @db.Date
+  /// Giorno del mese in cui cade (1-28; oltre si usa l'ultimo giorno).
+  dayOfMonth  Int       @default(1)
+  notes       String?
+  archivedAt  DateTime? @db.Timestamp(6)
+  createdAt   DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt   DateTime  @updatedAt
+
+  category FinanceCategory @relation(fields: [categoryId], references: [id])
+  entries  FinanceEntry[]
+}
+
+model SalesAgent {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                 String
+  email                String?
+  monthlyFixedCents    Int       @default(0)
+  defaultCommissionBps Int       @default(0)
+  archivedAt           DateTime? @db.Timestamp(6)
+  createdAt            DateTime  @default(now()) @db.Timestamp(6)
+
+  deals     SalesDeal[]
+  companies CompanyCommercial[]
+}
+
+/// Contratto chiuso da un sales. La commissione matura alla firma
+/// (`closedOn`) e si paga il mese dopo.
+model SalesDeal {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId          String?   @db.Uuid
+  /// Nome al momento della firma: resta anche se l'autoscuola viene cancellata.
+  companyName        String
+  agentId            String    @db.Uuid
+  closedOn           DateTime  @db.Date
+  contractValueCents Int
+  commissionBps      Int
+  commissionCents    Int
+  paidOn             DateTime? @db.Date
+  notes              String?
+  createdAt          DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt          DateTime  @updatedAt
+
+  company Company?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  agent   SalesAgent @relation(fields: [agentId], references: [id])
+
+  @@index([closedOn])
+  @@index([agentId])
+}
+
+/// Anagrafica commerciale dell'autoscuola, 1:1 con Company (tabella a parte per
+/// non toccare `Company`).
+model CompanyCommercial {
+  companyId  String    @id @db.Uuid
+  vatNumber  String?
+  region     String?
+  /// "active" | "paused" | "churned"
+  status     String    @default("active")
+  acquiredOn DateTime? @db.Date
+  churnedOn  DateTime? @db.Date
+  agentId    String?   @db.Uuid
+  notes      String?
+  updatedAt  DateTime  @updatedAt
+
+  company Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  agent   SalesAgent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+}
+
+/// Impostazioni della sezione (una riga sola, id "default").
+model FinanceSettings {
+  id                  String    @id @default("default")
+  /// Saldo di cassa alla data di partenza (la cassa di Panoramica parte da qui).
+  openingBalanceCents Int?
+  openingDate         DateTime? @db.Date
+  updatedAt           DateTime  @updatedAt
 }

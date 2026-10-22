@@ -201,6 +201,13 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Login web/mobile**: tolta l'auto-creazione dell'utente admin con la credenziale condivisa (`auth.ts`, `api/mobile/auth/login`)
 - → **Assistenza**: `GLOBAL_ADMIN_EMAIL` resta come destinatario delle notifiche
 
+### Backoffice — Finanza (REG-413)
+- ← **Backoffice KPI**: stessi filtri delle autoscuole di prova (`isExcludedFromKpis`, `isSeedDemo`, `companyKindOf` da `kpi-math.ts`), qui applicati TUTTI (in Finanza anche `seedDemo` e consorziate restano fuori). Se cambia la marcatura delle autoscuole di prova, cambia anche qui
+- ← **Company Plan** (fase 2): MRR e rinnovi letti da `CompanyPlan`, non copiati
+- ← **Backoffice accesso**: `createdById` dei movimenti = admin personale (`getBackofficeIdentity`)
+- → **Company**: `FinanceEntry.companyId` e `SalesDeal.companyId` in `SetNull` (cancellare un'autoscuola non cancella i conti); `CompanyCommercial` in cascade
+- ✗ **Trigger.dev**: nessun job — le spese fisse si proiettano al volo
+
 ### Backoffice — KPI
 - ← **Company Plan**: MRR/ARR/ARPA e posti istruttore venduti da `CompanyPlan`; ricavi una tantum da `CompanyLicensePurchase` (nessuna scrittura, sola lettura)
 - ← **Appointments**: volume ed esiti per `startsAt`, domanda e canale per `createdAt` + `bookingSource`. Se cambiano gli stati o si aggiunge un `bookingSource`, aggiornare `lib/backoffice/kpi-math.ts` (`DONE_STATUSES`, `SOURCE_BUCKETS`) o il nuovo canale finisce in "Storico"
