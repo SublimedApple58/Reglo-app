@@ -78,6 +78,7 @@ export function FinanceMovementsPage({
   const totals = useMemo(() => totalsOf(filtered), [filtered]);
   const overdue = filtered.filter((e) => e.status === "due" && e.date < today);
   const isFiltered = direction !== "all" || status !== "all" || categoryId !== "all" || !!query.trim();
+  const noData = entries.length === 0;
   const defaultDate = today.startsWith(month) ? today : `${month}-01`;
 
   const openNew = () => {
@@ -153,16 +154,19 @@ export function FinanceMovementsPage({
         </div>
       </div>
 
-      {/* Totali del mese (dei movimenti filtrati) */}
+      {/* Totali del mese (dei movimenti filtrati). Mese senza movimenti: niente
+          «0 €» finti in fila, ma un trattino — il dato non c'è ancora. */}
       <FinCard className="grid grid-cols-2 divide-[#f2f2f3] md:grid-cols-5 md:divide-x">
-        <Total label="Incassato" value={euroSmart(totals.inSettledCents)} />
-        <Total label="Pagato" value={euroSmart(totals.outSettledCents)} />
+        <Total empty={noData} label="Incassato" value={euroSmart(totals.inSettledCents)} />
+        <Total empty={noData} label="Pagato" value={euroSmart(totals.outSettledCents)} />
         <Total
+          empty={noData}
           label="Saldo"
           value={euroSmart(totals.balanceCents, { sign: true })}
           note="incassato − pagato"
         />
         <Total
+          empty={noData}
           label="Da incassare"
           value={euroSmart(totals.inDueCents)}
           note={
@@ -176,6 +180,7 @@ export function FinanceMovementsPage({
           }
         />
         <Total
+          empty={noData}
           label="IVA da accantonare"
           value={euroSmart(totals.vatToSetAsideCents)}
           note="sugli incassi, meno quella sulle spese"
@@ -394,12 +399,27 @@ function StatusPill({ entry, overdue }: { entry: FinanceEntryRow; overdue: boole
   return <Pill tone="dashed">{text}</Pill>;
 }
 
-function Total({ label, value, note }: { label: string; value: string; note?: React.ReactNode }) {
+function Total({
+  label,
+  value,
+  note,
+  empty,
+}: {
+  label: string;
+  value: string;
+  note?: React.ReactNode;
+  empty?: boolean;
+}) {
   return (
     <div className="border-b border-[#f2f2f3] px-5 py-4 md:border-b-0">
       <FinLabel>{label}</FinLabel>
-      <div className="mt-2 text-[22px] font-semibold tracking-[-0.02em] text-[#111111] tabular-nums">
-        {value}
+      <div
+        className={cn(
+          "mt-2 text-[22px] font-semibold tracking-[-0.02em] tabular-nums",
+          empty ? "text-[#d4d4d8]" : "text-[#111111]",
+        )}
+      >
+        {empty ? "—" : value}
       </div>
       <div className="mt-0.5 min-h-[18px] text-xs text-[#71717a]">{note ?? ""}</div>
     </div>
