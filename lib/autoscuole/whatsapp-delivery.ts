@@ -26,10 +26,11 @@ import {
   logSkipped,
   type DeliveryAttempt,
 } from "@/lib/autoscuole/delivery-log";
-import { findUserByPhone } from "@/lib/autoscuole/whatsapp-consent";
+import { findUserByPhone, recordWhatsAppOptOut } from "@/lib/autoscuole/whatsapp-consent";
 import {
   isStagingTestRecipient,
   isWhatsAppChannelAvailable,
+  isWhatsAppEnabledForCompany,
   sendWhatsAppTemplate,
 } from "@/lib/autoscuole/whatsapp-sender";
 import { externalSendsDisabled } from "@/lib/app-env";
@@ -58,12 +59,17 @@ export function whatsAppSkipReason(input: {
   templateKind: string;
   channelAvailable: boolean;
   optedOut: boolean;
+  /** Il pilota esclude questa autoscuola (`WHATSAPP_PILOT_COMPANY_IDS`). */
+  outsidePilot?: boolean;
   /** Solo per i test: il template da valutare al posto di quello del registro. */
   template?: WhatsAppTemplate;
 }): string | null {
   if (!input.recipient) return "destinatario mancante";
   if (!input.channelAvailable) {
     return "canale WhatsApp non configurato (WHATSAPP_PROVIDER e credenziali del fornitore)";
+  }
+  if (input.outsidePilot) {
+    return "WhatsApp in pilota su altre autoscuole (WHATSAPP_PILOT_COMPANY_IDS)";
   }
   if (!hasWhatsAppTemplate(input.templateKind)) {
     return `nessun template approvato per "${input.templateKind}": fuori dalle 24 ore Meta non consente testo libero`;
@@ -155,6 +161,7 @@ export async function deliverWhatsApp(
     templateKind: wanted,
     channelAvailable,
     optedOut,
+    outsidePilot: channelAvailable && !isWhatsAppEnabledForCompany(logged.companyId),
   });
   if (reason) {
     await logSkipped(logged, reason);
@@ -188,7 +195,13 @@ export async function deliverWhatsApp(
     const result = await sendWhatsAppTemplate({ to, kind: templateKind, values });
     // `deliverAndLog` distingue riuscito/fallito dall'eccezione: il risultato
     // negativo del fornitore va trasformato, se no finirebbe a log come `sent`.
-    if (!result.ok) throw new Error(result.reason);
+    if (!result.ok) {
+      // Telnyx ha una revoca che noi non avevamo (uno STOP arrivato quando
+      // il webhook non lo leggeva, o un'altra via): la riportiamo, così i
+      // prossimi messaggi vengono saltati prima di spendere un tentativo.
+      if (result.blockedByOptOut) await recordWhatsAppOptOut(to);
+      throw new Error(result.reason);
+    }
     return result;
   });
 }

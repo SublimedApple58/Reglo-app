@@ -78,6 +78,10 @@ describe("quando NON si manda", () => {
     ).toMatch(/marketing/);
   });
 
+  it("autoscuola fuori dal pilota", () => {
+    expect(whatsAppSkipReason({ ...base, outsidePilot: true })).toMatch(/pilota/);
+  });
+
   it("destinatario mancante", () => {
     expect(whatsAppSkipReason({ ...base, recipient: "" })).toMatch(/destinatario/);
   });

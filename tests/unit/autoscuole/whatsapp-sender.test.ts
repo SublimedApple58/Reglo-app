@@ -10,6 +10,8 @@ import {
 import {
   isStagingTestRecipient,
   isWhatsAppChannelAvailable,
+  isWhatsAppEnabledForCompany,
+  whatsAppStartUrl,
   resolveWhatsAppSender,
   sendWhatsAppTemplate,
 } from "@/lib/autoscuole/whatsapp-sender";
@@ -357,6 +359,27 @@ describe("sendWhatsAppTemplate", () => {
     if (!res.ok) expect(res.reason).toContain("ContentSid");
   });
 
+  it("Telnyx 40300 = revoca dopo uno STOP: non si riprova e lo si segnala", async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        errors: [
+          {
+            code: "40300",
+            title: "Blocked due to STOP message",
+            detail: "Messages cannot be sent from '+390280781316' to '+393331234567'.",
+          },
+        ],
+      }),
+    }) as unknown as typeof fetch;
+    const res = await sendWhatsAppTemplate(
+      { to: "3331234567", kind: "appointment_cancelled", values: { nome: "Marco", appuntamento: "la tua guida" } },
+      TELNYX_ENV,
+    );
+    expect(res).toMatchObject({ ok: false, retriable: false, blockedByOptOut: true });
+  });
+
   it("su Telnyx manda il template nella busta Telnyx, col + davanti al numero", async () => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
@@ -532,5 +555,34 @@ describe("quale versione del template si manda (22/10)", () => {
       const t: WhatsAppTemplate = WHATSAPP_TEMPLATES[kind];
       if (t.approval !== "approved") expect(sendableTemplateName(t)).toBeNull();
     }
+  });
+});
+
+describe("pilota e START (REG-500, 22/10)", () => {
+  const configured = {
+    WHATSAPP_PROVIDER: "telnyx",
+    TELNYX_API_KEY: "k",
+    TELNYX_WHATSAPP_FROM: "+390280781316",
+    TELNYX_MESSAGING_PROFILE_ID: "p",
+  } as unknown as NodeJS.ProcessEnv;
+
+  it("senza pilota WhatsApp vale per tutte le autoscuole", () => {
+    expect(isWhatsAppEnabledForCompany("robatto", configured)).toBe(true);
+  });
+
+  it("col pilota vale solo per le autoscuole in elenco", () => {
+    const env = { ...configured, WHATSAPP_PILOT_COMPANY_IDS: " robatto , altra " } as NodeJS.ProcessEnv;
+    expect(isWhatsAppEnabledForCompany("robatto", env)).toBe(true);
+    expect(isWhatsAppEnabledForCompany("macchiavello", env)).toBe(false);
+  });
+
+  it("il pilota non accende un canale non configurato", () => {
+    const env = { WHATSAPP_PILOT_COMPANY_IDS: "robatto" } as unknown as NodeJS.ProcessEnv;
+    expect(isWhatsAppEnabledForCompany("robatto", env)).toBe(false);
+  });
+
+  it("il link START apre la chat di Reglo col testo pronto", () => {
+    expect(whatsAppStartUrl(configured)).toBe("https://wa.me/390280781316?text=START");
+    expect(whatsAppStartUrl({} as unknown as NodeJS.ProcessEnv)).toBeNull();
   });
 });

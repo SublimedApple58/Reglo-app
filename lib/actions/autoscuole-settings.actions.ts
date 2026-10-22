@@ -1127,11 +1127,13 @@ export async function getAutoscuolaSettings() {
 export async function getChannelReachAction() {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    const [reach, { isWhatsAppChannelAvailable }] = await Promise.all([
+    const [reach, { isWhatsAppEnabledForCompany }] = await Promise.all([
       getChannelReach(membership.companyId),
       import("@/lib/autoscuole/whatsapp-sender"),
     ]);
-    const whatsappAvailable = isWhatsAppChannelAvailable();
+    // Col pilota acceso, le autoscuole fuori dal pilota vedono WhatsApp come
+    // «Non disponibile»: per loro infatti non parte niente.
+    const whatsappAvailable = isWhatsAppEnabledForCompany(membership.companyId);
     return {
       success: true as const,
       data: {

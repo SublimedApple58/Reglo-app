@@ -3,12 +3,19 @@ import { z } from "zod";
 import { prisma } from "@/db/prisma";
 import { parseBearerToken, getMobileToken } from "@/lib/mobile-auth";
 import { setWhatsAppPreference } from "@/lib/autoscuole/whatsapp-consent";
+import { whatsAppStartUrl } from "@/lib/autoscuole/whatsapp-sender";
 import { formatError } from "@/lib/utils";
 
 /**
- * Avvisi su WhatsApp dal profilo dell'app (REG-500): l'utente li accende o li
- * spegne da sé. Spegnere scrive la revoca — lo stesso effetto di rispondere
- * STOP al numero di Reglo — e da lì nessun WhatsApp parte più verso di lui.
+ * Avvisi su WhatsApp dal profilo dell'app (REG-500).
+ *
+ * Spegnere scrive la revoca — come rispondere STOP — e da lì nessun WhatsApp
+ * parte più. **Riaccendere non la toglie da qui**: Telnyx tiene una sua revoca
+ * per ogni STOP ricevuto e la toglie solo quando la persona scrive START o
+ * UNSTOP (l'API non permette altro, verificato il 22/10). Se togliessimo la
+ * nostra, ogni invio andrebbe a sbattere contro il blocco di Telnyx. Quindi
+ * l'app riceve `startUrl` e apre WhatsApp con «START» già scritto: quando lo
+ * START arriva al webhook, la revoca sparisce da entrambe le parti insieme.
  */
 async function authenticate(request: Request) {
   const token = parseBearerToken(request.headers.get("authorization"));
@@ -31,7 +38,11 @@ export async function GET(request: Request) {
   }
   return NextResponse.json({
     success: true,
-    data: { enabled: !user.whatsappOptOutAt, hasPhone: Boolean(user.phone) },
+    data: {
+      enabled: !user.whatsappOptOutAt,
+      hasPhone: Boolean(user.phone),
+      startUrl: whatsAppStartUrl(),
+    },
   });
 }
 
@@ -42,8 +53,23 @@ export async function PATCH(request: Request) {
   if (!mobileToken) return unauthorized();
   try {
     const { enabled } = patchSchema.parse(await request.json());
-    await setWhatsAppPreference(mobileToken.userId, enabled, "app_profilo");
-    return NextResponse.json({ success: true, data: { enabled } });
+    if (!enabled) {
+      await setWhatsAppPreference(mobileToken.userId, false, "app_profilo");
+      return NextResponse.json({ success: true, data: { enabled: false } });
+    }
+    const user = await prisma.user.findUnique({
+      where: { id: mobileToken.userId },
+      select: { whatsappOptOutAt: true },
+    });
+    if (user?.whatsappOptOutAt) {
+      // Revoca in corso: si toglie solo con uno START dalla chat di Reglo.
+      return NextResponse.json({
+        success: true,
+        data: { enabled: false, needsStart: true, startUrl: whatsAppStartUrl() },
+      });
+    }
+    await setWhatsAppPreference(mobileToken.userId, true, "app_profilo");
+    return NextResponse.json({ success: true, data: { enabled: true } });
   } catch (error) {
     return NextResponse.json({ success: false, message: formatError(error) }, { status: 400 });
   }

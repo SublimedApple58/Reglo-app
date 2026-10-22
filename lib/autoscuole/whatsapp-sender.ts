@@ -40,7 +40,17 @@ export type WhatsAppSendInput = {
 
 export type WhatsAppSendResult =
   | { ok: true; providerMessageId: string | null; skipped?: "ambiente" }
-  | { ok: false; reason: string; retriable: boolean };
+  | {
+      ok: false;
+      reason: string;
+      retriable: boolean;
+      /**
+       * Il fornitore ha una revoca per quel numero (Telnyx `40300` «Blocked
+       * due to STOP message»): la persona ha scritto STOP e non ha ancora
+       * scritto START. Non si riprova, e la revoca va riportata da noi.
+       */
+      blockedByOptOut?: boolean;
+    };
 
 export interface WhatsAppSender {
   readonly providerName: string;
@@ -266,10 +276,44 @@ class TelnyxSender implements WhatsAppSender {
         ok: false as const,
         reason: `telnyx ${res.status}: ${message}${first?.code ? ` (${first.code})` : ""}`,
         retriable: res.status >= 500 || res.status === 429,
+        ...(first?.code === TELNYX_OPT_OUT_BLOCK ? { blockedByOptOut: true } : {}),
       };
     }
     return { ok: true as const, providerMessageId: payload?.data?.id ?? null };
   }
+}
+
+/**
+ * Telnyx tiene una sua lista di revoche per messaging profile: dopo uno STOP
+ * ogni invio a quel numero torna `40300` finché la persona non scrive START o
+ * UNSTOP. L'API non permette di toglierla (22/10/2026, verificato).
+ */
+export const TELNYX_OPT_OUT_BLOCK = "40300";
+
+/**
+ * Il numero WhatsApp di Reglo in forma `wa.me` (solo cifre), per aprire la
+ * chat con «START» già scritto. `null` se il canale non è configurato.
+ */
+export function whatsAppStartUrl(env: NodeJS.ProcessEnv = process.env): string | null {
+  const from = (env.TELNYX_WHATSAPP_FROM ?? "").replace(/\D/g, "");
+  return from ? `https://wa.me/${from}?text=START` : null;
+}
+
+/**
+ * Pilota (REG-500): finché `WHATSAPP_PILOT_COMPANY_IDS` ha degli id, WhatsApp
+ * è acceso solo per quelle autoscuole. Vuota = tutte. Serve a partire da una
+ * sola autoscuola (Robatto) senza toccare le impostazioni delle altre.
+ */
+export function isWhatsAppEnabledForCompany(
+  companyId: string,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (!isWhatsAppChannelAvailable(env)) return false;
+  const pilot = (env.WHATSAPP_PILOT_COMPANY_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  return pilot.length === 0 || pilot.includes(companyId);
 }
 
 /* ──────────────────────────── Scelta del sender ──────────────────────────── */

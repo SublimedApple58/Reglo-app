@@ -53,7 +53,10 @@ export function friendlyReason(channel: string, error: string | null): string | 
     return null;
   }
   if (channel === "whatsapp") {
-    if (text.includes("revocato") || text.includes("non ricevere")) return "ha chiesto di non ricevere WhatsApp";
+    if (text.includes("revocato") || text.includes("non ricevere") || text.includes("40300")) {
+      return "ha chiesto di non ricevere WhatsApp";
+    }
+    if (text.includes("pilota")) return "WhatsApp non ancora attivo per la tua autoscuola";
     if (text.includes("destinatario mancante")) return "nessun numero in anagrafica";
     if (text.includes("numero")) return "numero non valido per WhatsApp";
     return null;

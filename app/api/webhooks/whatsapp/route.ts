@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/db/prisma";
 import {
   findUserByPhone,
+  recordWhatsAppOptIn,
   recordWhatsAppOptOut,
 } from "@/lib/autoscuole/whatsapp-consent";
 import { createWhatsAppReplyNotification } from "@/lib/autoscuole/notifications";
@@ -143,6 +144,15 @@ async function handleEvents(events: WhatsAppEvent[]) {
           id: event.providerMessageId,
           status: event.status,
           ...(event.error ? { error: event.error } : {}),
+        });
+        continue;
+      }
+
+      if (event.isOptIn) {
+        const found = await recordWhatsAppOptIn(event.from);
+        console.info("[whatsapp-webhook] consenso ripristinato (START)", {
+          from: event.from,
+          utenteTrovato: found,
         });
         continue;
       }
