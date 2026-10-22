@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { ChevronDown } from "lucide-react";
 
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { DatePickerInput } from "@/components/ui/date-picker";
@@ -11,7 +10,18 @@ import type { CommercialStatus, FinanceSchoolRow } from "@/lib/finance/finance-d
 import { ITALIAN_REGIONS, planNeedsRenewal } from "@/lib/finance/finance-schools";
 
 import type { SalesAgentOption } from "./FinanceSchoolsPage";
-import { Field, FinButton, FinLabel, Pill, Segmented, euroSmart, fullDate, inputClass, monthName } from "./finance-ui";
+import {
+  Field,
+  FinButton,
+  FinLabel,
+  Pill,
+  Segmented,
+  SelectBox,
+  euroSmart,
+  fullDate,
+  inputClass,
+  monthName,
+} from "./finance-ui";
 
 type Draft = {
   status: CommercialStatus;
@@ -22,18 +32,6 @@ type Draft = {
   agentId: string;
   notes: string;
 };
-
-const selectClass = `${inputClass} cursor-pointer appearance-none pr-9`;
-
-/** Select nativo con la freccia disegnata (appearance-none la toglie). */
-function SelectBox(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <div className="relative">
-      <select {...props} className={`${selectClass} ${props.className ?? ""}`} />
-      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#71717a]" />
-    </div>
-  );
-}
 
 export function SchoolSheet({
   open,
@@ -190,7 +188,7 @@ export function SchoolSheet({
             <Field
               label="Sales"
               htmlFor="school-agent"
-              hint={agents.length === 0 ? "Nessun sales ancora: si aggiungono nella sezione Vendite." : undefined}
+              hint={agents.length === 0 ? "Nessun sales ancora: si aggiungono nella tab Vendite." : undefined}
             >
               <SelectBox
                 id="school-agent"

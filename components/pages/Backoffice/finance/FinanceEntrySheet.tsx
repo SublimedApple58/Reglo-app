@@ -78,6 +78,7 @@ export function FinanceEntrySheet({
   onSaved: () => void;
 }) {
   const toast = useFeedbackToast();
+  const fromSales = Boolean(entry?.salesDealId || entry?.salesAgentId);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -195,6 +196,13 @@ export function FinanceEntrySheet({
         </div>
 
         <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+          {fromSales ? (
+            <div className="rounded-xl border border-[#e9e9eb] bg-[#fafafa] px-4 py-3 text-[13px] leading-relaxed text-[#3f3f46]">
+              {entry?.salesDealId ? "Pagamento di una commissione" : "Pagamento del fisso di un sales"}: si
+              modifica dalla tab Vendite. Da qui si può solo eliminare
+              {entry?.salesDealId ? " (il contratto torna «da pagare»)." : "."}
+            </div>
+          ) : null}
           <Segmented
             value={draft.direction}
             onChange={switchDirection}
@@ -348,7 +356,7 @@ export function FinanceEntrySheet({
             <FinButton variant="ghost" onClick={() => onOpenChange(false)} disabled={isPending}>
               Annulla
             </FinButton>
-            <FinButton onClick={handleSave} disabled={isPending}>
+            <FinButton onClick={handleSave} disabled={isPending || fromSales}>
               {isPending ? "Salvo…" : "Salva"}
             </FinButton>
           </div>

@@ -5,12 +5,12 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 
-// Le viste arrivano una fase alla volta: qui solo quelle già pronte.
 const TABS = [
   { href: "/backoffice/finanza", label: "Panoramica", exact: true },
   { href: "/backoffice/finanza/movimenti", label: "Movimenti", exact: false },
   { href: "/backoffice/finanza/spese-fisse", label: "Spese fisse", exact: false },
   { href: "/backoffice/finanza/autoscuole", label: "Autoscuole", exact: false },
+  { href: "/backoffice/finanza/vendite", label: "Vendite", exact: false },
 ] as const;
 
 export function FinanceTabs() {

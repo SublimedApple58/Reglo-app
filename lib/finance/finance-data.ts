@@ -17,6 +17,7 @@ import {
   type FinanceStatus,
   type RecurringCadence,
 } from "@/lib/finance/finance-math";
+import type { FixedPayment, SalesAgentLite, SalesDealLite } from "@/lib/finance/finance-sales";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Letture della sezione Finanza (REG-413). Modulo NON "use server": nessuna
@@ -76,6 +77,9 @@ export type FinanceEntryRow = {
   invoiceNumber: string | null;
   recurringExpenseId: string | null;
   recurringExpenseName: string | null;
+  /** Pagamento di un fisso o di una commissione (si gestisce da Vendite). */
+  salesAgentId: string | null;
+  salesDealId: string | null;
   notes: string | null;
 };
 
@@ -118,6 +122,8 @@ export async function listFinanceEntries({
       invoiceNumber: e.invoiceNumber,
       recurringExpenseId: e.recurringExpenseId,
       recurringExpenseName: e.recurringExpense?.name ?? null,
+      salesAgentId: e.salesAgentId,
+      salesDealId: e.salesDealId,
       notes: e.notes,
     }),
   );
@@ -417,7 +423,63 @@ export async function listFinanceSchools({ from, to }: { from: string; to: strin
     .sort((a, b) => a.name.localeCompare(b.name, "it"));
 }
 
-export async function listSalesAgents() {
-  const rows = await prisma.salesAgent.findMany({ orderBy: [{ archivedAt: "asc" }, { name: "asc" }] });
-  return rows.map((a) => ({ id: a.id, name: a.name, archived: a.archivedAt !== null }));
+// ── Vendite (fase 4) ────────────────────────────────────────────────────────
+
+export type SalesAgentRow = SalesAgentLite & {
+  email: string | null;
+  dealsCount: number;
+};
+
+export async function listSalesAgents(): Promise<SalesAgentRow[]> {
+  const rows = await prisma.salesAgent.findMany({
+    orderBy: [{ archivedAt: "asc" }, { name: "asc" }],
+    include: { _count: { select: { deals: true } } },
+  });
+  return rows.map((a) => ({
+    id: a.id,
+    name: a.name,
+    email: a.email,
+    monthlyFixedCents: a.monthlyFixedCents,
+    defaultCommissionBps: a.defaultCommissionBps,
+    archived: a.archivedAt !== null,
+    dealsCount: a._count.deals,
+  }));
+}
+
+export type SalesDealRow = SalesDealLite & { notes: string | null };
+
+/** Tutti i contratti (pochi: uno per autoscuola acquisita), dal più recente. */
+export async function listSalesDeals(): Promise<SalesDealRow[]> {
+  const rows = await prisma.salesDeal.findMany({
+    orderBy: [{ closedOn: "desc" }, { createdAt: "desc" }],
+    include: { agent: { select: { name: true } } },
+  });
+  return rows.map((d) => ({
+    id: d.id,
+    agentId: d.agentId,
+    agentName: d.agent.name,
+    companyId: d.companyId,
+    companyName: d.companyName,
+    closedOn: dbDateToYmd(d.closedOn),
+    contractValueCents: d.contractValueCents,
+    commissionBps: d.commissionBps,
+    commissionCents: d.commissionCents,
+    paidOn: d.paidOn ? dbDateToYmd(d.paidOn) : null,
+    notes: d.notes,
+  }));
+}
+
+/** I fissi pagati: movimenti legati a un sales, `date` = 1° del mese di riferimento. */
+export async function listFixedPayments(): Promise<FixedPayment[]> {
+  const rows = await prisma.financeEntry.findMany({
+    where: { salesAgentId: { not: null } },
+    select: { id: true, salesAgentId: true, date: true, settledOn: true, amountCents: true },
+  });
+  return rows.map((e) => ({
+    entryId: e.id,
+    agentId: e.salesAgentId as string,
+    month: dbDateToYmd(e.date).slice(0, 7),
+    amountCents: e.amountCents,
+    paidOn: dbDateToYmd(e.settledOn ?? e.date),
+  }));
 }

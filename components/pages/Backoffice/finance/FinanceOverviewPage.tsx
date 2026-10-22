@@ -3,12 +3,13 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowDownRight, ArrowUpRight, BarChart3, CalendarClock, Plus, Repeat } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, BarChart3, CalendarClock, Plus, Repeat, Users } from "lucide-react";
 
 import {
   UPCOMING_DAYS,
   cashSummary,
   chartMonths,
+  fixedMonthlyCents,
   monthSummary,
   mrrSummary,
   upcomingItems,
@@ -17,12 +18,14 @@ import {
   type OverviewInput,
 } from "@/lib/finance/finance-overview";
 import { shiftMonth } from "@/lib/finance/finance-math";
+import { salesMonthSummary } from "@/lib/finance/finance-sales";
 import { cn } from "@/lib/utils";
 
 import { FinanceChart } from "./FinanceChart";
 import { FinanceEntrySheet, type FinanceCategoryOption } from "./FinanceEntrySheet";
 import { OpeningBalanceSheet } from "./OpeningBalanceSheet";
 import { RecurringGroupBreakdown, recurringGroups } from "./RecurringSummary";
+import { SalesMonthTable } from "./SalesMonthTable";
 import {
   FinButton,
   FinCard,
@@ -64,9 +67,29 @@ export function FinanceOverviewPage({
   const vat = useMemo(() => vatSummary(input), [input]);
   const months = useMemo(() => chartMonths(input), [input]);
   const upcoming = useMemo(() => upcomingItems(input), [input]);
-  const activeRecurring = useMemo(() => input.recurring.filter((r) => r.active), [input.recurring]);
-  const groups = useMemo(() => recurringGroups(activeRecurring), [activeRecurring]);
-  const fixedMonthly = activeRecurring.reduce((total, r) => total + r.monthlyCents, 0);
+  // Spese fisse: le ricorrenti attive più il fisso dei sales attivi (gruppo «Persone»).
+  const groups = useMemo(
+    () =>
+      recurringGroups([
+        ...input.recurring.filter((r) => r.active),
+        ...input.agents
+          .filter((a) => !a.archived && a.monthlyFixedCents > 0)
+          .map((a) => ({ name: `Fisso ${a.name}`, categoryGroup: "persone", monthlyCents: a.monthlyFixedCents })),
+      ]),
+    [input.recurring, input.agents],
+  );
+  const fixedMonthly = fixedMonthlyCents(input);
+  const sales = useMemo(
+    () =>
+      salesMonthSummary({
+        month: input.month,
+        today: input.today,
+        agents: input.agents,
+        deals: input.deals,
+        fixedPayments: input.fixedPayments,
+      }),
+    [input],
+  );
 
   const goMonth = (delta: number) =>
     startTransition(() => router.push(`/backoffice/finanza?mese=${shiftMonth(input.month, delta)}`));
@@ -102,7 +125,8 @@ export function FinanceOverviewPage({
           <div>
             <h3 className="mb-1 text-base font-semibold text-[#111111]">Entrate e uscite, 12 mesi</h3>
             <div className="text-[13px] text-[#71717a]">
-              Sei mesi chiusi, sei di previsione (rinnovi dei piani e spese fisse).
+              Sei mesi chiusi, sei di previsione (rinnovi dei piani, spese fisse, fissi e commissioni dei
+              sales).
               {input.openingBalanceCents !== null ? " Cassa sull'asse di destra." : ""}
             </div>
           </div>
@@ -150,7 +174,9 @@ export function FinanceOverviewPage({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="mb-1 text-base font-semibold text-[#111111]">Spese fisse</h3>
-                <div className="text-[13px] text-[#71717a]">Ricorrenti attive, riportate al mese</div>
+                <div className="text-[13px] text-[#71717a]">
+                  Ricorrenti attive e fissi dei sales, riportate al mese
+                </div>
               </div>
               <Link
                 href="/backoffice/finanza/spese-fisse"
@@ -178,6 +204,8 @@ export function FinanceOverviewPage({
           </FinCard>
         </div>
       </section>
+
+      <SalesCard summary={sales} hasAgents={input.agents.length > 0} />
 
       <FinanceEntrySheet
         open={entryOpen}
@@ -503,7 +531,7 @@ function UpcomingCard({ items, today }: { items: ForecastItem[]; today: string }
           compact
           icon={<CalendarClock className="h-5 w-5" />}
           title="Niente in arrivo"
-          body={`Nessun incasso atteso, spesa fissa o rinnovo nei prossimi ${UPCOMING_DAYS} giorni.`}
+          body={`Nessun incasso atteso, spesa fissa, rinnovo o compenso dei sales nei prossimi ${UPCOMING_DAYS} giorni.`}
         />
       ) : (
         <>
@@ -528,7 +556,11 @@ function UpcomingRow({ item, today }: { item: ForecastItem; today: string }) {
       ? "rinnovo stimato"
       : item.kind === "recurring"
         ? "spesa fissa"
-        : item.status === "planned"
+        : item.kind === "commission"
+          ? "commissioni"
+          : item.kind === "salary"
+            ? "fisso sales"
+            : item.status === "planned"
           ? item.direction === "in"
             ? "previsto"
             : "prevista"
@@ -544,7 +576,11 @@ function UpcomingRow({ item, today }: { item: ForecastItem; today: string }) {
       ? `/backoffice/finanza/movimenti?mese=${item.date.slice(0, 7)}`
       : item.kind === "recurring"
         ? "/backoffice/finanza/spese-fisse"
-        : null;
+        : item.kind === "commission"
+          ? `/backoffice/finanza/vendite?mese=${item.key.replace("com-", "")}`
+          : item.kind === "salary"
+            ? `/backoffice/finanza/vendite?mese=${item.date.slice(0, 7)}`
+            : null;
 
   const body = (
     <>
@@ -594,5 +630,55 @@ function LegendDot({ style, children }: { style: React.CSSProperties; children: 
       <span className="mr-1.5 inline-block h-2 w-2 rounded-[2px]" style={style} />
       {children}
     </span>
+  );
+}
+
+function SalesCard({
+  summary,
+  hasAgents,
+}: {
+  summary: ReturnType<typeof salesMonthSummary>;
+  hasAgents: boolean;
+}) {
+  const name = monthName(summary.month);
+  const href = `/backoffice/finanza/vendite?mese=${summary.month}`;
+  return (
+    <FinCard className="px-5 pb-3 pt-[22px] sm:px-[26px]">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="mb-1 text-base font-semibold text-[#111111]">Vendite di {name}</h3>
+          <div className="mb-3 text-[13px] text-[#71717a]">
+            Compenso = fisso mensile + commissioni sui contratti chiusi nel mese.
+          </div>
+        </div>
+        <div className="flex items-center gap-4 text-[13px] text-[#71717a]">
+          {hasAgents && summary.totals.dealsCount > 0 ? (
+            <span>
+              {summary.totals.dealsCount} {summary.totals.dealsCount === 1 ? "contratto" : "contratti"} ·{" "}
+              <b className="font-semibold text-[#111111] tabular-nums">{euroSmart(summary.totals.valueCents)}</b> di
+              valore
+            </span>
+          ) : null}
+          <Link
+            href={href}
+            className="whitespace-nowrap font-semibold text-[#111111] underline-offset-2 hover:underline"
+          >
+            Gestisci
+          </Link>
+        </div>
+      </div>
+      {!hasAgents ? (
+        <FinEmpty
+          compact
+          icon={<Users className="h-5 w-5" />}
+          title="Nessun sales registrato"
+          body="Con i sales e i contratti firmati, qui compaiono commissioni, fissi e compenso del mese."
+        />
+      ) : summary.rows.length === 0 ? (
+        <p className="pb-3 text-[13px] text-[#71717a]">Nessun sales attivo a {name}.</p>
+      ) : (
+        <SalesMonthTable summary={summary} />
+      )}
+    </FinCard>
   );
 }

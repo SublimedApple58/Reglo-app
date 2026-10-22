@@ -322,6 +322,7 @@ export function FinanceMovementsPage({
                         e.companyName,
                         e.invoiceNumber ? `fattura ${e.invoiceNumber}` : null,
                         e.recurringExpenseName ? "spesa fissa" : null,
+                        e.salesDealId ? "da Vendite" : e.salesAgentId ? "fisso sales" : null,
                       ]
                         .filter(Boolean)
                         .join(" · ")}

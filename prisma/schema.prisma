@@ -2256,6 +2256,11 @@ model FinanceEntry {
   companyId          String?   @db.Uuid
   invoiceNumber      String?
   recurringExpenseId String?   @db.Uuid
+  /// Pagamento del fisso di un sales: `date` = 1° del mese a cui si riferisce,
+  /// `settledOn` = quando è stato pagato davvero.
+  salesAgentId       String?   @db.Uuid
+  /// Pagamento della commissione di un contratto (uno a uno).
+  salesDealId        String?   @unique @db.Uuid
   notes              String?
   createdById        String?   @db.Uuid
   createdAt          DateTime  @default(now()) @db.Timestamp(6)
@@ -2264,11 +2269,14 @@ model FinanceEntry {
   category         FinanceCategory   @relation(fields: [categoryId], references: [id])
   company          Company?          @relation(fields: [companyId], references: [id], onDelete: SetNull)
   recurringExpense RecurringExpense? @relation(fields: [recurringExpenseId], references: [id], onDelete: SetNull)
+  salesAgent       SalesAgent?       @relation(fields: [salesAgentId], references: [id], onDelete: SetNull)
+  salesDeal        SalesDeal?        @relation(fields: [salesDealId], references: [id], onDelete: SetNull)
 
   @@index([date])
   @@index([settledOn])
   @@index([companyId])
   @@index([recurringExpenseId])
+  @@index([salesAgentId])
 }
 
 /// Spesa fissa: NON genera righe in anticipo, la previsione la proietta al volo
@@ -2305,6 +2313,7 @@ model SalesAgent {
 
   deals     SalesDeal[]
   companies CompanyCommercial[]
+  payments  FinanceEntry[]
 }
 
 /// Contratto chiuso da un sales. La commissione matura alla firma
@@ -2326,6 +2335,7 @@ model SalesDeal {
 
   company Company?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
   agent   SalesAgent @relation(fields: [agentId], references: [id])
+  payment FinanceEntry?
 
   @@index([closedOn])
   @@index([agentId])

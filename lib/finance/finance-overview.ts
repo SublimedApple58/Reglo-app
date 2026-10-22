@@ -11,6 +11,14 @@ import {
   type FinanceStatus,
   type RecurringLike,
 } from "@/lib/finance/finance-math";
+import {
+  commissionItems,
+  salaryItems,
+  type FixedPayment,
+  type SalesAgentLite,
+  type SalesDealLite,
+  type SalesForecastItem,
+} from "@/lib/finance/finance-sales";
 
 /**
  * Panoramica della sezione Finanza (REG-413, fase 2). File puro: riceve i dati
@@ -70,6 +78,10 @@ export type OverviewInput = {
   companiesCount: number;
   openingBalanceCents: number | null;
   openingDate: string | null;
+  /** Sales, contratti e fissi pagati (fase 4). */
+  agents: SalesAgentLite[];
+  deals: SalesDealLite[];
+  fixedPayments: FixedPayment[];
 };
 
 export type ForecastItem = {
@@ -77,7 +89,7 @@ export type ForecastItem = {
   date: string;
   direction: FinanceDirection;
   amountCents: number;
-  kind: "open" | "recurring" | "renewal";
+  kind: "open" | "recurring" | "renewal" | "commission" | "salary";
   title: string;
   sub: string | null;
   status: FinanceStatus | null;
@@ -211,8 +223,27 @@ export function forecastBetween(input: OverviewInput, from: string, to: string):
     }
   }
 
+  for (const s of [
+    ...salaryItems(input.agents, input.fixedPayments, from, to),
+    ...commissionItems(input.deals, input.today).filter((c) => c.date >= from && c.date <= to),
+  ]) {
+    items.push(salesItem(s));
+  }
+
   return items.sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key));
 }
+
+const salesItem = (s: SalesForecastItem): ForecastItem => ({
+  key: s.key,
+  date: s.date,
+  direction: "out",
+  amountCents: s.amountCents,
+  kind: s.kind,
+  title: s.title,
+  sub: s.sub,
+  status: null,
+  overdue: s.overdue,
+});
 
 function openItem(e: OverviewEntry, today: string): ForecastItem {
   const sub = e.direction === "in" ? (e.companyName ?? e.categoryName) : e.categoryName;
@@ -229,12 +260,19 @@ function openItem(e: OverviewEntry, today: string): ForecastItem {
   };
 }
 
-/** Movimenti non saldati con la data già passata: soldi che si aspettano ancora. */
+/**
+ * Già scaduto e non saldato: movimenti con la data passata e commissioni
+ * oltre la fine del mese dopo la firma.
+ */
 export const overdueItems = (input: OverviewInput) =>
-  input.entries
-    .filter((e) => e.status !== "settled" && e.date < input.today)
-    .map((e) => openItem(e, input.today))
-    .sort((a, b) => a.date.localeCompare(b.date));
+  [
+    ...input.entries
+      .filter((e) => e.status !== "settled" && e.date < input.today)
+      .map((e) => openItem(e, input.today)),
+    ...commissionItems(input.deals, input.today)
+      .filter((c) => c.overdue)
+      .map(salesItem),
+  ].sort((a, b) => a.date.localeCompare(b.date));
 
 const sum = (items: Array<{ amountCents: number }>) =>
   items.reduce((total, i) => total + i.amountCents, 0);
@@ -311,6 +349,11 @@ export function cashAt(input: OverviewInput, at: string): number | null {
   return cash;
 }
 
+/** Spese fisse attive riportate al mese, fissi dei sales compresi. */
+export const fixedMonthlyCents = (input: Pick<OverviewInput, "recurring" | "agents">) =>
+  input.recurring.filter((r) => r.active).reduce((total, r) => total + r.monthlyCents, 0) +
+  input.agents.filter((a) => !a.archived).reduce((total, a) => total + a.monthlyFixedCents, 0);
+
 export type CashSummary = {
   balanceCents: number;
   /** Spesa media al mese e da dove viene; null se non c'è niente su cui calcolarla. */
@@ -339,9 +382,7 @@ export function cashSummary(input: OverviewInput): CashSummary | null {
     avg = Math.round(closed.reduce((a, b) => a + b, 0) / closed.length);
     basis = { kind: "history", months: closed.length };
   } else {
-    const fixed = input.recurring
-      .filter((r) => r.active)
-      .reduce((total, r) => total + r.monthlyCents, 0);
+    const fixed = fixedMonthlyCents(input);
     if (fixed > 0) {
       avg = fixed;
       basis = { kind: "fixed" };

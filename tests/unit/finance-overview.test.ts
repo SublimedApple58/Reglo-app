@@ -38,6 +38,9 @@ const base = (over: Partial<OverviewInput> = {}): OverviewInput => ({
   companiesCount: 5,
   openingBalanceCents: null,
   openingDate: null,
+  agents: [],
+  deals: [],
+  fixedPayments: [],
   ...over,
 });
 

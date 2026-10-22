@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -329,6 +329,66 @@ export function FinTotal({
         {empty ? "—" : value}
       </div>
       <div className="mt-0.5 min-h-[18px] text-xs text-[#71717a]">{note ?? ""}</div>
+    </div>
+  );
+}
+
+/** Select nativo con la freccia disegnata (appearance-none la toglie). */
+export function SelectBox(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <div className="relative">
+      <select
+        {...props}
+        className={cn(inputClass, "cursor-pointer appearance-none pr-9", props.className)}
+      />
+      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#71717a]" />
+    </div>
+  );
+}
+
+/** Centesimi → testo per un campo importo («1.200» o «12,50»). */
+export const centsToInput = (cents: number) =>
+  (cents / 100).toLocaleString("it-IT", { minimumFractionDigits: cents % 100 ? 2 : 0 });
+
+/** Punti base → testo per un campo percentuale («12,5»). */
+export const bpsToInput = (bps: number) =>
+  (bps / 100).toLocaleString("it-IT", { maximumFractionDigits: 2 });
+
+/** «12,5» / «12.5» / «12,5%» → 1250 punti base. null se non valido o oltre 100. */
+export function parsePercentToBps(input: string): number | null {
+  const raw = input.trim().replace(/\s|%/g, "").replace(",", ".");
+  if (!raw) return null;
+  if (!/^\d+(\.\d{1,2})?$/.test(raw)) return null;
+  const bps = Math.round(Number(raw) * 100);
+  return bps > 10000 ? null : bps;
+}
+
+/** Campo importo con «€» a destra. */
+export function EuroInput({
+  id,
+  value,
+  onChange,
+  placeholder = "0",
+  autoFocus,
+}: {
+  id?: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  autoFocus?: boolean;
+}) {
+  return (
+    <div className="relative">
+      <input
+        id={id}
+        inputMode="decimal"
+        autoFocus={autoFocus}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={cn(inputClass, "pr-8 text-right font-semibold tabular-nums")}
+      />
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#a1a1aa]">€</span>
     </div>
   );
 }
