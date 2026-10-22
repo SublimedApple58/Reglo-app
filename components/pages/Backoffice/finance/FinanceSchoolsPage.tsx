@@ -132,9 +132,12 @@ export function FinanceSchoolsPage({
             />
             <FinTotal
               label="Valore piani"
-              value={`${euroSmart(all.planAnnualCents)}`}
+              value={euroSmart(all.planAnnualCents)}
+              empty={!schools.some((s) => s.plan)}
               note={
-                all.plansToComplete > 0 ? (
+                !schools.some((s) => s.plan) ? (
+                  "nessun piano registrato"
+                ) : all.plansToComplete > 0 ? (
                   <span>
                     l&apos;anno · <b className="font-semibold text-[#111111]">{all.plansToComplete}</b> senza rinnovo
                   </span>
