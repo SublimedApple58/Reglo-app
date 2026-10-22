@@ -1,5 +1,34 @@
 # REG-500 — WhatsApp come canale vero + scelta del canale una volta per tutte
 
+## Cosa è stato fatto il 22/10/2026 (fasi 0-4, fino a staging)
+
+- **Meta/Telnyx**: WABA ACTIVE + verified (l'INACTIVE era un dato vecchio della
+  lista Telnyx); numero 800 816 971 scollegato dalla WABA; 10 template `_v3`
+  creati via API (utility, footer «Rispondi STOP…», i due riclassificati
+  marketing riscritti). Finché i `_v3` non sono approvati si usano gli 8 `_v2`
+  utility; i 2 ex-marketing ripiegano sull'email.
+- **Backend**: cascata vera App → WhatsApp → Email (`channel-cascade.ts`) nei
+  promemoria e nei messaggi-evento — prima partivano tutti i canali spuntati;
+  push senza dispositivi = non consegnata; offerte solo push; guardia di
+  categoria/approvazione; lista bianca staging (`WHATSAPP_STAGING_ALLOWLIST`).
+- **Consenso**: `User.whatsappConsentAt/Source` (migrazione
+  `20261024120000_whatsapp_consent`), API `/api/mobile/me/whatsapp`, consenso
+  in registrazione app, casella nei form web che raccolgono il telefono.
+- **UI** Impostazioni → Promemoria e notifiche: anteprima v2 approvata da
+  Tiziano (tre righe senza numeri né filo), «Ultimi invii», via «Personalizza».
+  Comunicazioni da regola: solo email (4 regole WhatsApp in prod lasciate con
+  avviso, decisione Tiziano).
+- **Mobile** (branch `feature/reg-500-whatsapp-consent`, NON rilasciato):
+  interruttore nel profilo + frase di consenso in registrazione.
+- Script `scripts/reg-500-align-channels.ts` (9 autoscuole su 21 in prod) da
+  lanciare con `--apply` solo al rilascio prod.
+
+Decisioni di Tiziano del 22/10: template ex-marketing → utility `_v3`;
+consenso pregressi implicito + STOP; istruttori stessa cascata; pilota prod
+Robatto; 800 scollegato; informativa da rivedere prima della pubblicazione.
+
+---
+
 **Stato:** aggiornato 2026-09-22. Fase 0 implementata su **staging** (prod non
 toccata). **Provider scelto: Telnyx.** Il codice è pronto lato invio, webhook e
 UI; manca solo l'attivazione manuale del mittente → vedi §7.
