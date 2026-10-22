@@ -644,7 +644,7 @@ function SalesCard({
   const href = `/backoffice/finanza/vendite?mese=${summary.month}`;
   return (
     <FinCard className="px-5 pb-3 pt-[22px] sm:px-[26px]">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="mb-1 text-base font-semibold text-[#111111]">Vendite di {name}</h3>
           <div className="mb-3 text-[13px] text-[#71717a]">
@@ -653,7 +653,7 @@ function SalesCard({
         </div>
         <div className="flex items-center gap-4 text-[13px] text-[#71717a]">
           {hasAgents && summary.totals.dealsCount > 0 ? (
-            <span>
+            <span className="hidden sm:inline">
               {summary.totals.dealsCount} {summary.totals.dealsCount === 1 ? "contratto" : "contratti"} ·{" "}
               <b className="font-semibold text-[#111111] tabular-nums">{euroSmart(summary.totals.valueCents)}</b> di
               valore

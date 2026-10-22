@@ -13,8 +13,8 @@ Si costruisce a fasi (analisi approvata da Tiziano il 2026-10-22):
 | 1 | Migrazione + Movimenti + Spese fisse | staging (approvata) |
 | 2 | Panoramica (margine, MRR, cassa, IVA, 12 mesi, in arrivo) | staging (approvata) |
 | 3 | Autoscuole (anagrafica commerciale) | staging (approvata) |
-| 4 | Vendite (sales, contratti, commissioni) | staging |
-| 5 | Import dal foglio | — |
+| 4 | Vendite (sales, contratti, commissioni) | staging (mostrata) |
+| 5 | Rifinitura + elenco dei dati di partenza (nessun import: i dati veri li inseriscono Tiziano e Gabriele) | staging |
 
 ## Regole decise da Tiziano
 
@@ -83,7 +83,8 @@ Date di calendario `@db.Date` ↔ stringhe `YYYY-MM-DD` (`ymdToDbDate` / `dbDate
     ogni mese/anno; canone dell'intero periodo, IVA inclusa). Un rinnovo non
     si conta se nello stesso mese c'è già un'entrata di quell'autoscuola. Le
     scadute finiscono nel mese in corso. Cassa sull'asse destro (tratteggiata
-    nel futuro); i mesi prima della partenza restano vuoti, non a zero.
+    nel futuro); i mesi prima della partenza restano vuoti, non a zero. Sul
+    telefono il grafico scorre in orizzontale e si apre centrato sul mese in corso.
   - **In arrivo 90 giorni**: scadute in cima (arancio), poi per data.
   - **IVA da accantonare** del mese e del trimestre solare finora; segnala le
     spese senza aliquota (la loro IVA non si scala).

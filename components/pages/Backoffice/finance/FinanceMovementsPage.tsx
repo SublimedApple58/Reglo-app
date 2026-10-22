@@ -237,7 +237,7 @@ export function FinanceMovementsPage({
               .map((c) => [c.id, c.name] as [string, string]),
           ]}
         />
-        <div className="relative ml-auto w-full sm:w-64">
+        <div className="relative ml-auto w-full sm:w-80">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#a1a1aa]" />
           <input
             value={query}

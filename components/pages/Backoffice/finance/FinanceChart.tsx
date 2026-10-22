@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { ChartMonth } from "@/lib/finance/finance-overview";
 
@@ -85,9 +85,18 @@ export function FinanceChart({ months }: { months: ChartMonth[] }) {
 
   const hovered = hover !== null ? months[hover] : null;
 
+  // Sul telefono il grafico scorre in orizzontale: si apre centrato sul mese
+  // in corso, non sui mesi più vecchi (spesso vuoti, prima della partenza).
+  const scroller = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || el.scrollWidth <= el.clientWidth || currentIndex < 0) return;
+    el.scrollLeft = (todayX / W) * el.scrollWidth - el.clientWidth / 2;
+  }, [currentIndex, todayX]);
+
   return (
     <div className="relative">
-      <div className="overflow-x-auto">
+      <div ref={scroller} className="overflow-x-auto">
         <svg
           viewBox={`0 0 ${W} ${H}`}
           className="block h-auto w-full min-w-[720px] tabular-nums"
@@ -189,6 +198,9 @@ export function FinanceChart({ months }: { months: ChartMonth[] }) {
                     fill="#111111"
                     fontWeight={600}
                     fontSize="11.5"
+                    stroke="#ffffff"
+                    strokeWidth={4}
+                    paintOrder="stroke"
                   >
                     +{euroSmart(m.renewalsInCents)} rinnovi
                   </text>

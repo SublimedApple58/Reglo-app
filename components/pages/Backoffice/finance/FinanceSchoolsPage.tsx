@@ -199,7 +199,7 @@ export function FinanceSchoolsPage({
                 ["renewal", "Rinnovo da completare"],
               ]}
             />
-            <div className="relative ml-auto w-full sm:w-64">
+            <div className="relative ml-auto w-full sm:w-72">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#a1a1aa]" />
               <input
                 value={query}
@@ -357,7 +357,7 @@ function SchoolRow({
         )}
       </div>
       <Num value={s.instructors} />
-      <div className="hidden text-right text-sm tabular-nums lg:block">
+      <div className={cn("hidden text-right text-sm tabular-nums lg:block", s.students === 0 && "text-[#a1a1aa]")}>
         {nf(s.students)}
         {s.activeStudentsMonth > 0 ? (
           <div className="text-[11.5px] text-[#a1a1aa]">{nf(s.activeStudentsMonth)} attivi</div>
