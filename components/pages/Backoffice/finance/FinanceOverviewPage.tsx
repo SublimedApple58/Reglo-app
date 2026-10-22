@@ -306,7 +306,7 @@ function MrrCard({ mrr }: { mrr: ReturnType<typeof mrrSummary> }) {
       ? "tutti i piani sono annuali"
       : mrr.annualCount === 0
         ? "tutti i piani sono mensili"
-        : `${mrr.annualCount} annuali, ${mrr.monthlyCount} mensili`;
+        : `${mrr.annualCount} ${mrr.annualCount === 1 ? "annuale" : "annuali"}, ${mrr.monthlyCount} ${mrr.monthlyCount === 1 ? "mensile" : "mensili"}`;
   return (
     <FinCard className="px-[26px] py-6">
       <FinLabel>MRR</FinLabel>
