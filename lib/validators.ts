@@ -31,6 +31,9 @@ export const studentRegisterSchema = z
     confirmPassword: z.string().min(6, 'Confirm password must be at least 6 characters'),
     schoolCode: z.string().length(6, 'School code must be exactly 6 characters'),
     phone: z.string().min(6, 'Phone number is required'),
+    // REG-500: consenso agli avvisi di servizio su WhatsApp, dato in
+    // registrazione. Le app precedenti non lo mandano: resta implicito.
+    whatsappConsent: z.boolean().optional(),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match",

@@ -19,6 +19,7 @@ import { getAutoscuolaInstructors } from "@/lib/actions/autoscuole.actions";
 import { companyAtom } from "@/atoms/company.store";
 import { TRANSMISSIONS, TRANSMISSION_LABELS } from "@/lib/autoscuole/license";
 import { cn } from "@/lib/utils";
+import { WhatsAppConsentField } from "@/components/pages/Autoscuole/WhatsAppConsentField";
 import { useAtomValue } from "jotai";
 
 /**
@@ -123,6 +124,7 @@ export function ConsorzioStudentCreateDialog({
   const [firstName, setFirstName] = React.useState("");
   const [lastName, setLastName] = React.useState("");
   const [phone, setPhone] = React.useState("");
+  const [whatsappConsent, setWhatsappConsent] = React.useState(true);
   const [licenseCategory, setLicenseCategory] = React.useState(defaultLicenseCategory);
   const [transmission, setTransmission] = React.useState("manual");
   const [instructorId, setInstructorId] = React.useState(NO_INSTRUCTOR);
@@ -141,6 +143,7 @@ export function ConsorzioStudentCreateDialog({
     setFirstName("");
     setLastName("");
     setPhone("");
+    setWhatsappConsent(true);
     setLicenseCategory(defaultLicenseCategory);
     setTransmission("manual");
     setInstructorId(NO_INSTRUCTOR);
@@ -192,6 +195,7 @@ export function ConsorzioStudentCreateDialog({
         name: `${firstName.trim()} ${lastName.trim()}`,
         ...(email.trim() ? { email: email.trim(), password } : {}),
         phone: phone.trim(),
+        whatsappConsent,
         autoscuolaRole: "STUDENT",
         licenseCategory,
         transmission,
@@ -289,6 +293,11 @@ export function ConsorzioStudentCreateDialog({
                 È il recapito dell&apos;allievo: senza accesso all&apos;app resta l&apos;unico modo
                 per avvisarlo.
               </p>
+              <WhatsAppConsentField
+                id="consorzio-student-whatsapp-consent"
+                checked={whatsappConsent}
+                onCheckedChange={setWhatsappConsent}
+              />
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3">

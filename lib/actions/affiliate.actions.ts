@@ -19,6 +19,7 @@
  * scuola, così due consorziate dello stesso consorzio non si vedono fra loro.
  */
 
+import { whatsAppConsentFields } from "@/lib/autoscuole/whatsapp-consent";
 import { z } from "zod";
 
 import { prisma } from "@/db/prisma";
@@ -83,6 +84,8 @@ const createSchema = z.object({
     .regex(/^[+()\-\s\d]{5,25}$/, "Numero di telefono non valido."),
   licenseCategory: z.string().trim().optional(),
   transmission: z.string().trim().optional(),
+  /** REG-500: l'allievo ha accettato gli avvisi di servizio su WhatsApp. */
+  whatsappConsent: z.boolean().optional(),
 });
 
 export async function listAffiliateStudents() {
@@ -198,6 +201,7 @@ export async function createAffiliateStudent(input: z.infer<typeof createSchema>
           password: null,
           phone: payload.phone,
           role: "user",
+          ...whatsAppConsentFields(payload.whatsappConsent, "autoscuola"),
         },
         select: { id: true },
       });

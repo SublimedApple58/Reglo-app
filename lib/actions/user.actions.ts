@@ -11,6 +11,7 @@ import { isRedirectError } from 'next/dist/client/components/redirect-error';
 import { hash } from '../encrypt';
 import { prisma } from '@/db/prisma';
 import { toStoredPhone } from "@/lib/phone-e164";
+import { whatsAppConsentFields } from "@/lib/autoscuole/whatsapp-consent";
 import { syncInstructorName } from '../sync-instructor-name';
 import { formatError } from '../utils';
 import { z } from 'zod';
@@ -595,6 +596,12 @@ export async function createCompanyUser(input: {
   password?: string;
   /** Telefono dell'allievo — l'unico recapito quando l'email non c'è. */
   phone?: string;
+  /**
+   * REG-500: l'allievo ha accettato gli avvisi di servizio su WhatsApp?
+   * Lo dichiara l'autoscuola quando inserisce il numero al posto suo.
+   * Omesso = nessuna scelta registrata (consenso implicito).
+   */
+  whatsappConsent?: boolean;
   autoscuolaRole: 'OWNER' | 'INSTRUCTOR_OWNER' | 'INSTRUCTOR' | 'STUDENT';
   // Student-only (ignored for other roles): license path + optional
   // assignment to an autonomous instructor.
@@ -767,6 +774,7 @@ export async function createCompanyUser(input: {
           phone: toStoredPhone(typedPhone),
           role: 'user',
           activeCompanyId: input.companyId,
+          ...(typedPhone ? whatsAppConsentFields(input.whatsappConsent, 'autoscuola') : {}),
         },
       });
 

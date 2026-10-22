@@ -71,3 +71,36 @@ export async function sendWhatsAppToPhone(
   }
   return sendWhatsAppTemplate(input);
 }
+
+export type WhatsAppConsentSource = "app_registrazione" | "app_profilo" | "autoscuola";
+
+/**
+ * La scelta esplicita dell'utente (o dell'autoscuola per lui) sugli avvisi
+ * WhatsApp (REG-500). `true` registra il consenso e toglie un'eventuale
+ * revoca; `false` registra la revoca, che è il cancello vero degli invii.
+ */
+export async function setWhatsAppPreference(
+  userId: string,
+  enabled: boolean,
+  source: WhatsAppConsentSource,
+): Promise<void> {
+  const now = new Date();
+  await prisma.user.update({
+    where: { id: userId },
+    data: enabled
+      ? { whatsappOptOutAt: null, whatsappConsentAt: now, whatsappConsentSource: source }
+      : { whatsappOptOutAt: now },
+  });
+}
+
+/** I campi da scrivere alla creazione di un utente, data la sua scelta. */
+export function whatsAppConsentFields(
+  consent: boolean | undefined,
+  source: WhatsAppConsentSource,
+): { whatsappConsentAt?: Date; whatsappConsentSource?: string; whatsappOptOutAt?: Date } {
+  if (consent === undefined) return {};
+  const now = new Date();
+  return consent
+    ? { whatsappConsentAt: now, whatsappConsentSource: source }
+    : { whatsappOptOutAt: now };
+}
