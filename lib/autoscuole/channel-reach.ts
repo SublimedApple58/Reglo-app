@@ -46,13 +46,17 @@ export async function getChannelReach(companyId: string): Promise<ChannelReachMa
   let push = 0;
   let whatsapp = 0;
   let email = 0;
+  let noApp = 0;
 
   for (const student of students) {
     const user = student.user;
     if (user._count.pushDevices > 0) push += 1;
 
-    // WhatsApp: numero convertibile, non un fisso, e non ha detto STOP.
-    if (!user.whatsappOptOutAt) {
+    // WhatsApp: conta solo per chi non ha l'app — nella cascata è il secondo
+    // gradino, chi ha l'app si ferma al primo (REG-500). Numero convertibile,
+    // non un fisso, e non ha detto STOP.
+    if (user._count.pushDevices === 0) noApp += 1;
+    if (user._count.pushDevices === 0 && !user.whatsappOptOutAt) {
       const normalized = normalizeToE164(user.phone);
       if (normalized.ok && isWhatsAppCapable(normalized.e164)) whatsapp += 1;
     }
@@ -62,7 +66,7 @@ export async function getChannelReach(companyId: string): Promise<ChannelReachMa
 
   return {
     push: { reachable: push, total },
-    whatsapp: { reachable: whatsapp, total },
+    whatsapp: { reachable: whatsapp, total: noApp },
     email: { reachable: email, total },
   };
 }

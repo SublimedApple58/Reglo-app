@@ -703,6 +703,7 @@ export function AutoscuoleResourcesPage({
     { push: { reachable: number; total: number }; whatsapp: { reachable: number; total: number }; email: { reachable: number; total: number } } | undefined
   >(undefined);
   const [whatsappAvailable, setWhatsappAvailable] = React.useState(false);
+  const [whatsappSender, setWhatsappSender] = React.useState<string | null>(null);
   const channelReachRequested = React.useRef(false);
 
   React.useEffect(() => {
@@ -713,6 +714,7 @@ export function AutoscuoleResourcesPage({
       if (!res.success || !res.data) return;
       setChannelReach(res.data.reach);
       setWhatsappAvailable(res.data.whatsappAvailable);
+      setWhatsappSender(res.data.whatsappSender);
     });
   }, [affiliateReduced, configTab]);
 
@@ -2207,6 +2209,7 @@ export function AutoscuoleResourcesPage({
             studentReminderChannels={studentReminderChannels}
             instructorReminderChannels={instructorReminderChannels}
             whatsappAvailable={whatsappAvailable}
+            whatsappSender={whatsappSender}
             channelReach={channelReach}
             updateReminderSettings={updateReminderSettings}
             emptySlotNotificationEnabled={emptySlotNotificationEnabled}

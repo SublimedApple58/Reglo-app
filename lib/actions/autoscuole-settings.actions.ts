@@ -1131,9 +1131,89 @@ export async function getChannelReachAction() {
       getChannelReach(membership.companyId),
       import("@/lib/autoscuole/whatsapp-sender"),
     ]);
+    const whatsappAvailable = isWhatsAppChannelAvailable();
     return {
       success: true as const,
-      data: { reach, whatsappAvailable: isWhatsAppChannelAvailable() },
+      data: {
+        reach,
+        whatsappAvailable,
+        // Il numero da cui partono i WhatsApp, mostrato sotto la riga: è
+        // quello che l'allievo vede nel telefono.
+        whatsappSender: whatsappAvailable
+          ? formatItalianNumber(process.env.TELNYX_WHATSAPP_FROM ?? "")
+          : null,
+      },
+    };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+/** `+390280781316` → `+39 02 8078 1316`. Altri formati restano come sono. */
+function formatItalianNumber(e164: string): string | null {
+  if (!e164) return null;
+  const match = /^\+39(\d{2})(\d{4})(\d{2,4})$/.exec(e164);
+  return match ? `+39 ${match[1]} ${match[2]} ${match[3]}` : e164;
+}
+
+/**
+ * «Ultimi invii» (REG-500): i messaggi degli ultimi giorni, già raggruppati
+ * per tentativi della cascata. Solo promemoria e messaggi-evento — le offerte
+ * sono push e hanno volumi che coprirebbero tutto il resto.
+ */
+export async function getRecentDeliveriesAction(limit = 20) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (!canManageSettings(membership.role, membership.autoscuolaRole)) {
+      throw new Error("Operazione non consentita.");
+    }
+    const { groupDeliveries, deliveryKindLabel } = await import(
+      "@/lib/autoscuole/recent-deliveries"
+    );
+    const kinds = [
+      "appointment_reminder_student",
+      "morning_reminder_student",
+      "day_before_reminder_student",
+      "appointment_reminder_instructor",
+      "appointment_cancelled",
+      "appointment_rescheduled",
+      "appointment_location_changed",
+      "exam_scheduled",
+      "case_deadline",
+    ].filter((kind) => deliveryKindLabel(kind) !== "Avviso");
+    const rows = await prisma.autoscuolaMessageLog.findMany({
+      where: { companyId: membership.companyId, kind: { in: kinds } },
+      orderBy: { sentAt: "desc" },
+      take: Math.min(limit, 50) * 4,
+      select: {
+        kind: true,
+        channel: true,
+        status: true,
+        error: true,
+        appointmentId: true,
+        studentId: true,
+        recipient: true,
+        sentAt: true,
+      },
+    });
+    const logRows = rows.map(({ sentAt, kind, ...row }) => ({
+      ...row,
+      kind: kind ?? "",
+      createdAt: sentAt,
+    }));
+    const studentIds = Array.from(
+      new Set(rows.map((row) => row.studentId).filter((id): id is string => Boolean(id))),
+    );
+    const users = studentIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: studentIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const names = new Map(users.map((user) => [user.id, user.name ?? ""]));
+    return {
+      success: true as const,
+      data: groupDeliveries(logRows, names, Math.min(limit, 50)),
     };
   } catch (error) {
     return { success: false as const, message: formatError(error) };

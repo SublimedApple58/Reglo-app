@@ -38,6 +38,7 @@ import {
   ChannelCascade,
   type ChannelReach,
 } from "@/components/pages/Autoscuole/settings/ChannelCascade";
+import { RecentDeliveries } from "@/components/pages/Autoscuole/settings/RecentDeliveries";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -133,6 +134,8 @@ export type SettingsTabProps = {
   instructorReminderChannels: ChannelValue[];
   /** WhatsApp è collegato davvero? Se no, la riga non è accendibile (REG-500). */
   whatsappAvailable?: boolean;
+  /** Il numero da cui partono i WhatsApp, mostrato sotto la riga. */
+  whatsappSender?: string | null;
   /** Quanti allievi raggiunge ogni canale; omessi, le righe mostrano il testo generico. */
   channelReach?: Partial<Record<ChannelValue, ChannelReach>>;
   updateReminderSettings: (patch: {
@@ -270,88 +273,6 @@ function PolicySwitch({
         )}
       </div>
       <InlineToggle checked={checked} onChange={onChange} size="lg" />
-    </div>
-  );
-}
-
-/** Card "Modalità di invio" del proto: canali con check circolari near-black. */
-function ChannelCard({
-  title,
-  info,
-  value,
-  onChange,
-  disabled,
-}: {
-  title: string;
-  /** Testo del tooltip info accanto al titolo (stile proto, dark). */
-  info?: string;
-  value: ChannelValue[];
-  onChange: (next: ChannelValue[]) => void;
-  /** Attenua la card quando il promemoria relativo è disattivato. */
-  disabled?: boolean;
-}) {
-  const [infoOpen, setInfoOpen] = React.useState(false);
-  return (
-    <div
-      className={cn(
-        "rounded-[12px] border border-[#e8e8e8] bg-white p-4",
-        disabled && "pointer-events-none opacity-45",
-      )}
-    >
-      <div className="mb-3 flex items-center gap-1.5">
-        <span className="text-[13px] font-semibold text-[#222222]">{title}</span>
-        {info && (
-          <span
-            className="relative inline-flex items-center"
-            onMouseEnter={() => setInfoOpen(true)}
-            onMouseLeave={() => setInfoOpen(false)}
-            onClick={() => setInfoOpen((prev) => !prev)}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-none cursor-pointer">
-              <circle cx="7" cy="7" r="6" stroke="#b0b0b0" strokeWidth="1.2" />
-              <path d="M7 6.2v3.3" stroke="#b0b0b0" strokeWidth="1.4" strokeLinecap="round" />
-              <circle cx="7" cy="4.2" r="0.85" fill="#b0b0b0" />
-            </svg>
-            {infoOpen && (
-              <div className="absolute bottom-[calc(100%+8px)] left-1/2 z-[300] w-[210px] -translate-x-1/2 rounded-[8px] bg-[#222222] px-[11px] py-[9px] text-[11.5px] font-normal leading-[1.45] text-white shadow-[0_4px_14px_rgba(0,0,0,0.18)]">
-                {info}
-                <span className="absolute left-1/2 top-full -translate-x-1/2 border-[5px] border-transparent border-t-[#222222]" />
-              </div>
-            )}
-          </span>
-        )}
-      </div>
-      <div className="flex flex-col gap-2.5">
-        {CHANNEL_OPTIONS.map((channel) => {
-          const checked = value.includes(channel.value);
-          return (
-            <div key={channel.value} className="flex items-center justify-between">
-              <span className="text-[13px] font-medium text-[#555555]">{channel.label}</span>
-              <button
-                type="button"
-                role="checkbox"
-                aria-checked={checked}
-                aria-label={`${channel.label} — ${title}`}
-                onClick={() =>
-                  onChange(
-                    checked
-                      ? value.filter((item) => item !== channel.value)
-                      : [...value, channel.value],
-                  )
-                }
-                className={cn(
-                  "flex size-[22px] shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors",
-                  checked
-                    ? "bg-[#222222]"
-                    : "border-[1.5px] border-[#d6d6d6] bg-white hover:border-[#929292]",
-                )}
-              >
-                {checked && <Check className="size-3 text-white" strokeWidth={2.6} />}
-              </button>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -593,10 +514,9 @@ function SettingsTab({
   studentReminderDayBeforeTime,
   instructorReminderMinutes,
   instructorReminderEnabled,
-  slotFillChannels,
   studentReminderChannels,
-  instructorReminderChannels,
   whatsappAvailable = false,
+  whatsappSender = null,
   channelReach,
   updateReminderSettings,
   emptySlotNotificationEnabled,
@@ -722,44 +642,30 @@ function SettingsTab({
               />
             </div>
 
-            {/* ── Come avvisiamo gli allievi: la cascata (REG-500) ──
-                Sostituisce le tre card a spunte. La vecchia matrice resta sotto
-                "Personalizza", per chi davvero vuole canali diversi per
-                istruttori e cancellazioni: le tre chiavi salvate non cambiano,
-                quindi nessuna migrazione e nessuna autoscuola da riconfigurare. */}
-            <div className="mt-6">
+            {/* ── Come avvisiamo allievi e istruttori: la cascata (REG-500) ──
+                Una scelta sola per tutti: scrive sia i canali degli allievi sia
+                quelli degli istruttori, così le due chiavi non divergono più.
+                La vecchia matrice («Personalizza») è sparita, con la card
+                «Cancellazioni» che in realtà comandava le offerte — ora sempre
+                e solo push (`OFFER_CHANNELS`). Disegno: anteprima v2 del 22/10. */}
+            <div className="mt-[22px]">
               <ChannelCascade
                 value={studentReminderChannels}
-                onChange={(next) => updateReminderSettings({ studentReminderChannels: next })}
-                whatsapp={{ state: whatsappAvailable ? "ready" : "not_configured" }}
+                onChange={(next) =>
+                  updateReminderSettings({
+                    studentReminderChannels: next,
+                    instructorReminderChannels: next,
+                  })
+                }
+                whatsapp={
+                  whatsappAvailable
+                    ? { state: "ready", sender: whatsappSender }
+                    : { state: "not_configured" }
+                }
                 reach={channelReach}
               />
+              <RecentDeliveries />
             </div>
-
-            <details className="group border-b border-[#ebebeb]">
-              <summary className="flex cursor-pointer list-none items-center justify-between py-[18px] text-[15px] font-semibold text-[#222222]">
-                Personalizza per tipo di messaggio
-                <ChevronDown
-                  className="size-[17px] text-[#b4b4b4] transition-transform duration-200 group-open:rotate-180"
-                  strokeWidth={2}
-                  aria-hidden
-                />
-              </summary>
-              <div className="grid gap-3 pb-[18px] sm:grid-cols-2">
-                <ChannelCard
-                  title="Promemoria istruttore"
-                  value={instructorReminderChannels}
-                  onChange={(next) => updateReminderSettings({ instructorReminderChannels: next })}
-                  disabled={!instructorReminderEnabled}
-                />
-                <ChannelCard
-                  title="Cancellazioni"
-                  info="Quando un allievo annulla una guida, invia una notifica per riempire lo slot rimasto libero."
-                  value={slotFillChannels}
-                  onChange={(next) => updateReminderSettings({ slotFillChannels: next })}
-                />
-              </div>
-            </details>
 
             {/* Rimando a Invia comunicato (flat come nel proto, niente box) */}
             <div className="mt-6 flex flex-wrap items-center gap-2 text-sm font-medium text-[#6a6a6a]">
