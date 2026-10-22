@@ -1,6 +1,6 @@
 # Ex allievi (REG-629)
 
-**Stato:** web su staging dal 22/10/2026 (migrazione applicata, recupero staging: 0 righe). Non in prod. Mobile (`reglo-mobile`, solo testo) fermo sul branch, va con un OTA da confermare.
+**Stato:** in prod dal 22/10/2026 (web + migrazione + recupero). Mobile (`reglo-mobile`, solo testo) fermo sul branch, va con un OTA da confermare.
 
 ## Perché
 
@@ -50,9 +50,9 @@ Solo il testo dell'alert «Elimina account» per gli allievi (`reglo-mobile/src/
 
 ## Recupero dei casi precedenti
 
-`scripts/reg-629-recover-former-students.ts` (senza `--apply` = prova, solo conteggi; rifiuta `.env.prod`). Ricostruisce autoscuola (guide + `AccountDeletionAudit`), motivo (audit, altrimenti `unknown`), nome (solo da `AutoscuolaNotification.studentName`), percorso (ultimo `AutoscuolaLicensePath`). `createMany` + `skipDuplicates`: idempotente, non tocca righe esistenti.
+`scripts/reg-629-recover-former-students.ts` (senza `--apply` = prova, solo conteggi; rifiuta `.env.prod`). Ricostruisce l'autoscuola **solo dalle guide** (chi non ha nemmeno una guida lì non si recupera, escluse le `record_cleanup`; decisione di Tiziano, 22/10/2026), motivo (audit, altrimenti `unknown`), nome (solo da `AutoscuolaNotification.studentName`), percorso (ultimo `AutoscuolaLicensePath`). `createMany` + `skipDuplicates`: idempotente, non tocca righe esistenti.
 
-Stima prod (lettura del 22/10/2026): 142 account eliminati, 100 con autoscuola ricostruibile, nome recuperabile per 4 → gli altri compaiono «Ex allievo senza nome» e l'ufficio li riconosce dallo storico guide. **Su prod non si lancia finché Tiziano non lo dice.**
+Eseguito su prod il 22/10/2026: **73 ex allievi** in 8 autoscuole (Macchiavello 25, Ricca 16, Robatto 13, Maltese 8, Montreal 5, New Drive 4, Saba 1, Solferino 1); nome recuperato per 4, gli altri 69 compaiono «Ex allievo senza nome» e l'ufficio li riconosce dallo storico guide. Rilanciato: 0 righe (idempotente). Su prod serve `--prod`.
 
 ## Test
 

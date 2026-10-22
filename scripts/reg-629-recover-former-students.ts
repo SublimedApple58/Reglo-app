@@ -7,7 +7,10 @@
  * Questo script ricrea la riga `AutoscuolaFormerStudent` per ogni account
  * eliminato di cui si ricostruisce l'autoscuola:
  *
- * - autoscuola: dalle guide dell'allievo e dal registro `AccountDeletionAudit`;
+ * - autoscuola: dalle guide dell'allievo. Chi non ha nemmeno una guida in
+ *   quell'autoscuola non si recupera (decisione di Tiziano, 2026-10-22): senza
+ *   storico l'ufficio non avrebbe niente da riconoscere né da incassare. Le
+ *   guide tolte come pulizia (`record_cleanup`) non contano, come nella scheda;
  * - motivo: dal registro (self_delete → «Ha eliminato l'account»,
  *   directory_removal → «Rimosso dall'ufficio»), altrimenti «unknown»;
  * - nome: solo se sopravvive nelle notifiche all'ufficio (`studentName`);
@@ -60,7 +63,10 @@ async function main() {
     const [lessonPairs, audits, notifications, paths, existing, members] = await Promise.all([
       prisma.autoscuolaAppointment.groupBy({
         by: ["companyId", "studentId"],
-        where: { studentId: { in: ids } },
+        where: {
+          studentId: { in: ids },
+          OR: [{ cancellationKind: null }, { cancellationKind: { not: "record_cleanup" } }],
+        },
         _min: { createdAt: true },
       }),
       prisma.accountDeletionAudit.findMany({
@@ -107,15 +113,9 @@ async function main() {
       });
     }
     const auditByUser = new Map<string, (typeof audits)[number]>();
+    // Il registro dà solo il motivo e la data: non aggiunge autoscuole.
     for (const a of audits) {
       if (!auditByUser.has(a.deletedUserId)) auditByUser.set(a.deletedUserId, a);
-      if (a.companyId && !candidates.has(key(a.companyId, a.deletedUserId))) {
-        candidates.set(key(a.companyId, a.deletedUserId), {
-          companyId: a.companyId,
-          userId: a.deletedUserId,
-          joinedAt: null,
-        });
-      }
     }
     const nameByPair = new Map<string, string>();
     for (const n of notifications) {
@@ -162,6 +162,21 @@ async function main() {
     console.log(`    con nome recuperato:      ${rows.filter((r) => r.name).length}`);
     console.log(`    senza nome (assegna nome): ${rows.filter((r) => !r.name).length}`);
     console.log(`  autoscuole coinvolte:       ${new Set(rows.map((r) => r.companyId)).size}`);
+    const companies = await prisma.company.findMany({
+      where: { id: { in: [...new Set(rows.map((r) => r.companyId))] } },
+      select: { id: true, name: true },
+    });
+    const companyName = new Map(companies.map((c) => [c.id, c.name]));
+    const perCompany = new Map<string, { total: number; named: number }>();
+    for (const r of rows) {
+      const entry = perCompany.get(r.companyId) ?? { total: 0, named: 0 };
+      entry.total += 1;
+      if (r.name) entry.named += 1;
+      perCompany.set(r.companyId, entry);
+    }
+    for (const [id, c] of [...perCompany.entries()].sort((a, b) => b[1].total - a[1].total)) {
+      console.log(`    ${companyName.get(id) ?? id}: ${c.total} (con nome ${c.named})`);
+    }
 
     if (!apply) {
       console.log("→ Prova finita. Rilancia con --apply per scrivere.");
