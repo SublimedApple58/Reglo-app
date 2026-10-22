@@ -274,3 +274,59 @@ export const CATEGORY_GROUP_LABEL: Record<string, string> = {
   iva: "IVA",
   altro: "Altro",
 };
+
+/** Select dei filtri: bordo nero quando filtra qualcosa (`"all"` = nessun filtro). */
+export function FilterSelect({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<[string, string]>;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={cn(
+        "h-10 cursor-pointer rounded-xl border bg-white px-3 pr-8 text-sm outline-none focus:border-[#111111]",
+        value === "all" ? "border-[#e9e9eb] text-[#3f3f46]" : "border-[#111111] font-medium text-[#111111]",
+      )}
+    >
+      {options.map(([v, label]) => (
+        <option key={v} value={v}>
+          {label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** Una cella della barra dei totali. Senza dato: trattino, mai «0» finto. */
+export function FinTotal({
+  label,
+  value,
+  note,
+  empty,
+}: {
+  label: string;
+  value: string;
+  note?: ReactNode;
+  empty?: boolean;
+}) {
+  return (
+    <div className="border-b border-[#f2f2f3] px-5 py-4 md:border-b-0">
+      <FinLabel>{label}</FinLabel>
+      <div
+        className={cn(
+          "mt-2 text-[22px] font-semibold tracking-[-0.02em] tabular-nums",
+          empty ? "text-[#d4d4d8]" : "text-[#111111]",
+        )}
+      >
+        {empty ? "—" : value}
+      </div>
+      <div className="mt-0.5 min-h-[18px] text-xs text-[#71717a]">{note ?? ""}</div>
+    </div>
+  );
+}

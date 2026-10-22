@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 
 import { FinanceEntrySheet, type FinanceCategoryOption } from "./FinanceEntrySheet";
 import {
+  FilterSelect,
+  FinTotal,
   FinCard,
   FinButton,
   FinEmpty,
@@ -157,15 +159,15 @@ export function FinanceMovementsPage({
       {/* Totali del mese (dei movimenti filtrati). Mese senza movimenti: niente
           «0 €» finti in fila, ma un trattino — il dato non c'è ancora. */}
       <FinCard className="grid grid-cols-2 divide-[#f2f2f3] md:grid-cols-5 md:divide-x">
-        <Total empty={noData} label="Incassato" value={euroSmart(totals.inSettledCents)} />
-        <Total empty={noData} label="Pagato" value={euroSmart(totals.outSettledCents)} />
-        <Total
+        <FinTotal empty={noData} label="Incassato" value={euroSmart(totals.inSettledCents)} />
+        <FinTotal empty={noData} label="Pagato" value={euroSmart(totals.outSettledCents)} />
+        <FinTotal
           empty={noData}
           label="Saldo"
           value={euroSmart(totals.balanceCents, { sign: true })}
           note="incassato − pagato"
         />
-        <Total
+        <FinTotal
           empty={noData}
           label="Da incassare"
           value={euroSmart(totals.inDueCents)}
@@ -179,7 +181,7 @@ export function FinanceMovementsPage({
             ) : undefined
           }
         />
-        <Total
+        <FinTotal
           empty={noData}
           label="IVA da accantonare"
           value={euroSmart(totals.vatToSetAsideCents)}
@@ -397,58 +399,4 @@ function StatusPill({ entry, overdue }: { entry: FinanceEntryRow; overdue: boole
   if (entry.status === "settled") return <Pill>{text}</Pill>;
   if (entry.status === "due") return <Pill tone="outline">{text}</Pill>;
   return <Pill tone="dashed">{text}</Pill>;
-}
-
-function Total({
-  label,
-  value,
-  note,
-  empty,
-}: {
-  label: string;
-  value: string;
-  note?: React.ReactNode;
-  empty?: boolean;
-}) {
-  return (
-    <div className="border-b border-[#f2f2f3] px-5 py-4 md:border-b-0">
-      <FinLabel>{label}</FinLabel>
-      <div
-        className={cn(
-          "mt-2 text-[22px] font-semibold tracking-[-0.02em] tabular-nums",
-          empty ? "text-[#d4d4d8]" : "text-[#111111]",
-        )}
-      >
-        {empty ? "—" : value}
-      </div>
-      <div className="mt-0.5 min-h-[18px] text-xs text-[#71717a]">{note ?? ""}</div>
-    </div>
-  );
-}
-
-function FilterSelect({
-  value,
-  onChange,
-  options,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: Array<[string, string]>;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn(
-        "h-10 cursor-pointer rounded-xl border bg-white px-3 pr-8 text-sm outline-none focus:border-[#111111]",
-        value === "all" ? "border-[#e9e9eb] text-[#3f3f46]" : "border-[#111111] font-medium text-[#111111]",
-      )}
-    >
-      {options.map(([v, label]) => (
-        <option key={v} value={v}>
-          {label}
-        </option>
-      ))}
-    </select>
-  );
 }

@@ -8,6 +8,7 @@ import { getBackofficeIdentity } from "@/lib/backoffice-auth";
 import { formatError } from "@/lib/utils";
 import { listFinanceCompanies } from "@/lib/finance/finance-data";
 import { isYmd, todayYmdRome, ymdToDbDate } from "@/lib/finance/finance-math";
+import { ITALIAN_REGIONS, normalizeVatNumber } from "@/lib/finance/finance-schools";
 
 /**
  * Scritture della sezione Finanza (REG-413). Ogni azione passa da
@@ -249,6 +250,56 @@ export async function saveFinanceOpeningBalance(input: { balanceCents: number; d
     await prisma.financeSettings.upsert({
       where: { id: "default" },
       create: { id: "default", ...payload },
+      update: payload,
+    });
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+// ── Anagrafica commerciale delle autoscuole ─────────────────────────────────
+
+const commercialSchema = z
+  .object({
+    companyId: z.string().uuid(),
+    status: z.enum(["active", "paused", "churned"]),
+    vatNumber: z.string().nullable().optional(),
+    region: z.enum(ITALIAN_REGIONS).nullable().optional(),
+    acquiredOn: ymd.nullable().optional(),
+    churnedOn: ymd.nullable().optional(),
+    agentId: z.string().uuid().nullable().optional(),
+    notes: optionalText(1000),
+  })
+  .refine((v) => v.status !== "churned" || Boolean(v.churnedOn), {
+    message: "Indica la data della disdetta.",
+  })
+  .refine((v) => !v.acquiredOn || !v.churnedOn || v.churnedOn >= v.acquiredOn, {
+    message: "La disdetta non può venire prima dell'acquisizione.",
+  });
+
+export async function saveCompanyCommercial(input: z.input<typeof commercialSchema>) {
+  try {
+    await requireGlobalAdmin();
+    const data = commercialSchema.parse(input);
+    await assertFinanceCompany(data.companyId);
+    if (data.agentId) {
+      const agent = await prisma.salesAgent.findUnique({ where: { id: data.agentId } });
+      if (!agent) throw new Error("Sales non trovato.");
+    }
+    const payload = {
+      status: data.status,
+      vatNumber: normalizeVatNumber(data.vatNumber),
+      region: data.region ?? null,
+      acquiredOn: data.acquiredOn ? ymdToDbDate(data.acquiredOn) : null,
+      // La data di disdetta ha senso solo per una disdetta.
+      churnedOn: data.status === "churned" && data.churnedOn ? ymdToDbDate(data.churnedOn) : null,
+      agentId: data.agentId ?? null,
+      notes: data.notes,
+    };
+    await prisma.companyCommercial.upsert({
+      where: { companyId: data.companyId },
+      create: { companyId: data.companyId, ...payload },
       update: payload,
     });
     return { success: true as const };

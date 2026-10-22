@@ -204,6 +204,8 @@ Each entry: **Feature** → list of features it connects to, with reason.
 ### Backoffice — Finanza (REG-413)
 - ← **Backoffice KPI**: stessi filtri delle autoscuole di prova (`isExcludedFromKpis`, `isSeedDemo`, `companyKindOf` da `kpi-math.ts`), qui applicati TUTTI (in Finanza anche `seedDemo` e consorziate restano fuori). Se cambia la marcatura delle autoscuole di prova, cambia anche qui
 - ← **Company Plan** (fase 2): MRR (formula `planMonthlyCents` dei KPI) e rinnovi previsti letti da `CompanyPlan`, non copiati. `renewsAt` vuoto = piano «da completare», fuori dalla previsione. Se cambia il modo di prezzare un piano (nuove voci oltre a posti e voce), va aggiornato `listFinancePlans` in `lib/finance/finance-data.ts`, oltre a `planMonthlyCents`
+- ← **Appointments / Instructors / Members** (fase 3): la tab Autoscuole conta istruttori, allievi e guide con le stesse regole dei KPI (`isDoneStatus`, filtro istruttori in agenda). Se cambiano gli stati delle guide o il filtro degli istruttori in `kpi-compute.ts`, va allineato `listFinanceSchools`
+- ↔ **Company Plan dialog**: la tab Autoscuole riusa `BackofficeCompanyPlanDialog` per modificare il piano
 - ← **Backoffice accesso**: `createdById` dei movimenti = admin personale (`getBackofficeIdentity`)
 - → **Company**: `FinanceEntry.companyId` e `SalesDeal.companyId` in `SetNull` (cancellare un'autoscuola non cancella i conti); `CompanyCommercial` in cascade
 - ✗ **Trigger.dev**: nessun job — spese fisse e rinnovi si proiettano al volo

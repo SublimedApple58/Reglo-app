@@ -1,6 +1,7 @@
 import { prisma } from "@/db/prisma";
 import {
   companyKindOf,
+  isDoneStatus,
   isExcludedFromKpis,
   isSeedDemo,
   planMonthlyCents,
@@ -251,3 +252,172 @@ const addDays = (ymd: string, days: number) => {
   const [y, m, d] = ymd.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 };
+
+// ── Autoscuole (fase 3) ─────────────────────────────────────────────────────
+
+export type CommercialStatus = "active" | "paused" | "churned";
+
+export type FinanceSchoolRow = {
+  id: string;
+  name: string;
+  registeredOn: string;
+  serviceActive: boolean;
+  /** null = anagrafica commerciale mai compilata («da completare»). */
+  commercial: {
+    status: CommercialStatus;
+    vatNumber: string | null;
+    region: string | null;
+    acquiredOn: string | null;
+    churnedOn: string | null;
+    agentId: string | null;
+    agentName: string | null;
+    notes: string | null;
+  } | null;
+  plan: {
+    billingPeriod: "monthly" | "annual";
+    annualCents: number;
+    renewsAt: string | null;
+  } | null;
+  instructors: number;
+  students: number;
+  activeStudentsMonth: number;
+  lessonsMonth: number;
+  lessonsTotal: number;
+};
+
+/** Mezzanotte di Roma del giorno `ymd`, come istante UTC. */
+function romeMidnight(ymd: string) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const guess = new Date(Date.UTC(y, m - 1, d));
+  const offset = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Rome", timeZoneName: "shortOffset" })
+    .formatToParts(guess)
+    .find((p) => p.type === "timeZoneName")?.value; // "GMT+2"
+  const hours = Number(offset?.replace("GMT", "") || 0);
+  return new Date(guess.getTime() - hours * 3_600_000);
+}
+
+/**
+ * L'anagrafica commerciale delle autoscuole clienti (fuori demo, test e
+ * consorziate), con i numeri d'uso contati con le regole dei KPI:
+ * - istruttori: quelli che possono stare in agenda (attivi, con utente e ruolo
+ *   istruttore), come la saturazione dei KPI;
+ * - allievi: iscritti con ruolo allievo; «attivi» = con almeno una guida fatta
+ *   nel mese;
+ * - guide: svolte (`isDoneStatus`), per data della guida.
+ */
+export async function listFinanceSchools({ from, to }: { from: string; to: string }) {
+  const companies = await listFinanceCompanies();
+  const ids = companies.map((c) => c.id);
+  if (ids.length === 0) return [];
+  const monthRange = { gte: romeMidnight(from), lt: romeMidnight(addDays(to, 1)) };
+
+  const [rows, instructors, students, lessonsAll, lessonsMonth] = await Promise.all([
+    prisma.company.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        services: { where: { serviceKey: "AUTOSCUOLE" }, select: { status: true } },
+        commercial: { include: { agent: { select: { name: true } } } },
+        plan: true,
+      },
+    }),
+    prisma.autoscuolaInstructor.findMany({
+      where: {
+        companyId: { in: ids },
+        status: { not: "inactive" },
+        userId: { not: null },
+        user: {
+          companyMembers: {
+            some: { autoscuolaRole: { in: ["INSTRUCTOR", "INSTRUCTOR_OWNER"] } },
+          },
+        },
+      },
+      select: { companyId: true },
+    }),
+    prisma.companyMember.groupBy({
+      by: ["companyId"],
+      where: { companyId: { in: ids }, autoscuolaRole: "STUDENT" },
+      _count: { _all: true },
+    }),
+    prisma.autoscuolaAppointment.groupBy({
+      by: ["companyId", "status"],
+      where: { companyId: { in: ids } },
+      _count: { _all: true },
+    }),
+    prisma.autoscuolaAppointment.groupBy({
+      by: ["companyId", "status", "studentId"],
+      where: { companyId: { in: ids }, startsAt: monthRange },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const tally = <K extends string>(list: Array<K>) => {
+    const map = new Map<K, number>();
+    for (const key of list) map.set(key, (map.get(key) ?? 0) + 1);
+    return map;
+  };
+  const instructorsBy = tally(instructors.map((i) => i.companyId));
+  const studentsBy = new Map(students.map((s) => [s.companyId, s._count._all]));
+  const totalBy = new Map<string, number>();
+  for (const g of lessonsAll) {
+    if (!isDoneStatus((g.status ?? "").toLowerCase())) continue;
+    totalBy.set(g.companyId, (totalBy.get(g.companyId) ?? 0) + g._count._all);
+  }
+  const monthBy = new Map<string, number>();
+  const activeBy = new Map<string, Set<string>>();
+  for (const g of lessonsMonth) {
+    if (!isDoneStatus((g.status ?? "").toLowerCase())) continue;
+    monthBy.set(g.companyId, (monthBy.get(g.companyId) ?? 0) + g._count._all);
+    if (g.studentId) {
+      const set = activeBy.get(g.companyId) ?? new Set<string>();
+      set.add(g.studentId);
+      activeBy.set(g.companyId, set);
+    }
+  }
+
+  return rows
+    .map((c): FinanceSchoolRow => {
+      const plan = c.plan;
+      const periodCents = plan
+        ? plan.instructorSeats * plan.instructorSeatPriceCents + (plan.voiceEnabled ? plan.voicePriceCents : 0)
+        : 0;
+      return {
+        id: c.id,
+        name: c.name,
+        registeredOn: todayYmdRome(c.createdAt),
+        serviceActive: c.services[0]?.status === "ACTIVE",
+        commercial: c.commercial
+          ? {
+              status: c.commercial.status as CommercialStatus,
+              vatNumber: c.commercial.vatNumber,
+              region: c.commercial.region,
+              acquiredOn: c.commercial.acquiredOn ? dbDateToYmd(c.commercial.acquiredOn) : null,
+              churnedOn: c.commercial.churnedOn ? dbDateToYmd(c.commercial.churnedOn) : null,
+              agentId: c.commercial.agentId,
+              agentName: c.commercial.agent?.name ?? null,
+              notes: c.commercial.notes,
+            }
+          : null,
+        plan: plan
+          ? {
+              billingPeriod: plan.billingPeriod === "monthly" ? "monthly" : "annual",
+              annualCents: plan.billingPeriod === "monthly" ? periodCents * 12 : periodCents,
+              renewsAt: plan.renewsAt ? todayYmdRome(plan.renewsAt) : null,
+            }
+          : null,
+        instructors: instructorsBy.get(c.id) ?? 0,
+        students: studentsBy.get(c.id) ?? 0,
+        activeStudentsMonth: activeBy.get(c.id)?.size ?? 0,
+        lessonsMonth: monthBy.get(c.id) ?? 0,
+        lessonsTotal: totalBy.get(c.id) ?? 0,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "it"));
+}
+
+export async function listSalesAgents() {
+  const rows = await prisma.salesAgent.findMany({ orderBy: [{ archivedAt: "asc" }, { name: "asc" }] });
+  return rows.map((a) => ({ id: a.id, name: a.name, archived: a.archivedAt !== null }));
+}

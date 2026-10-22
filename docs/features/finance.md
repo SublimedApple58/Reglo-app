@@ -12,7 +12,7 @@ Si costruisce a fasi (analisi approvata da Tiziano il 2026-10-22):
 | 0 | Login personali al backoffice | staging |
 | 1 | Migrazione + Movimenti + Spese fisse | staging |
 | 2 | Panoramica (margine, MRR, cassa, IVA, 12 mesi, in arrivo) | staging |
-| 3 | Autoscuole (anagrafica commerciale) | — |
+| 3 | Autoscuole (anagrafica commerciale) | staging |
 | 4 | Vendite (sales, contratti, commissioni) | — |
 | 5 | Import dal foglio | — |
 
@@ -86,6 +86,23 @@ Date di calendario `@db.Date` ↔ stringhe `YYYY-MM-DD` (`ymdToDbDate` / `dbDate
     spese senza aliquota (la loro IVA non si scala).
   - **Spese fisse** per gruppo (componente condiviso `RecurringSummary.tsx`).
   - Il blocco Vendite del mockup arriva con la fase 4.
+- **Autoscuole** (`/finanza/autoscuole?mese=YYYY-MM`): le autoscuole clienti
+  (`listFinanceCompanies`, quindi senza demo/test/consorziate) con
+  l'anagrafica commerciale (`CompanyCommercial`) e i numeri d'uso.
+  - Stato attiva / in pausa / disdetta (data di disdetta obbligatoria). Senza
+    riga `CompanyCommercial` lo stato è **«da completare»**: nessun default
+    inventato. P.IVA normalizzata a 11 cifre, regione da elenco, sales da
+    `SalesAgent` (vuoto finché la fase 4 non li crea).
+  - Piano letto da `CompanyPlan` (valore/anno IVA inclusa, rinnovo; piano a
+    pagamento senza `renewsAt` = «da completare»). Si modifica col dialog
+    esistente del backoffice (`BackofficeCompanyPlanDialog`), aperto dal drawer.
+  - Numeri automatici con le regole dei KPI: istruttori che possono stare in
+    agenda (attivi, con utente e ruolo istruttore), allievi iscritti (attivi =
+    con una guida svolta nel mese), guide svolte (`isDoneStatus`) nel mese
+    (mezzanotte di Roma) e in totale.
+  - Barra dei totali in alto (tutte), riga dei totali in fondo (filtrate);
+    le disdette non entrano nel valore dei piani. Filtri: stato, sales,
+    piano, ricerca. Regole pure in `lib/finance/finance-schools.ts`.
 
 ## File
 
@@ -93,7 +110,8 @@ Date di calendario `@db.Date` ↔ stringhe `YYYY-MM-DD` (`ymdToDbDate` / `dbDate
 |---|---|
 | `lib/finance/finance-math.ts` | Puro: scorporo IVA, ricorrenze, totali, parsing euro, mesi (test: `tests/unit/finance-math.test.ts`) |
 | `lib/finance/finance-overview.ts` | Puro: margine, MRR, cassa/autonomia, IVA, grafico, in arrivo (test: `tests/unit/finance-overview.test.ts`) |
-| `lib/finance/finance-data.ts` | Letture (non "use server", senza guardia): autoscuole valide, categorie, movimenti, spese fisse, piani, impostazioni |
+| `lib/finance/finance-schools.ts` | Puro: P.IVA, stato «da completare», totali della tab Autoscuole (test: `tests/unit/finance-schools.test.ts`) |
+| `lib/finance/finance-data.ts` | Letture (non "use server", senza guardia): autoscuole valide, categorie, movimenti, spese fisse, piani, impostazioni, anagrafica + numeri d'uso (`listFinanceSchools`), sales |
 | `lib/actions/finance.actions.ts` | Scritture con `requireGlobalAdmin` |
-| `app/[locale]/backoffice/finanza/` | `layout.tsx` (titolo + tab), `page.tsx`, `movimenti/`, `spese-fisse/` |
-| `components/pages/Backoffice/finance/` | `finance-ui.tsx` (primitivi dal mockup), `FinanceTabs`, `FinanceMovementsPage`, `FinanceEntrySheet`, `FinanceRecurringPage`, `RecurringExpenseSheets`, `FinanceOverviewPage`, `FinanceChart` (SVG a mano), `OpeningBalanceSheet`, `RecurringSummary` |
+| `app/[locale]/backoffice/finanza/` | `layout.tsx` (titolo + tab), `page.tsx`, `movimenti/`, `spese-fisse/`, `autoscuole/` |
+| `components/pages/Backoffice/finance/` | `finance-ui.tsx` (primitivi dal mockup), `FinanceTabs`, `FinanceMovementsPage`, `FinanceEntrySheet`, `FinanceRecurringPage`, `RecurringExpenseSheets`, `FinanceOverviewPage`, `FinanceChart` (SVG a mano), `OpeningBalanceSheet`, `RecurringSummary`, `FinanceSchoolsPage`, `SchoolSheet` |
