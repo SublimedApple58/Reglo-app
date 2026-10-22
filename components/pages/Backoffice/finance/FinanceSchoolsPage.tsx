@@ -241,8 +241,14 @@ export function FinanceSchoolsPage({
                 <div className="hidden lg:block" />
                 <div className="hidden lg:block" />
                 <div className="text-right">
-                  {euroSmart(shown.planAnnualCents)}
-                  <span className="font-normal text-[#71717a] lg:hidden"> l&apos;anno</span>
+                  {filtered.some((s) => s.plan) ? (
+                    <>
+                      {euroSmart(shown.planAnnualCents)}
+                      <span className="font-normal text-[#71717a] lg:hidden"> l&apos;anno</span>
+                    </>
+                  ) : (
+                    <span className="font-normal text-[#a1a1aa]">—</span>
+                  )}
                 </div>
                 <div className="hidden lg:block" />
                 <div className="hidden text-right lg:block">{nf(shown.instructors)}</div>
