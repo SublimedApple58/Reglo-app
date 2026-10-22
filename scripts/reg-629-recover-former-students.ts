@@ -18,7 +18,7 @@
  * una riga esistente — un nome già assegnato dall'ufficio resta com'è.
  * Senza `--apply` non scrive niente: stampa solo i conteggi.
  *
- * Decisione di Tiziano (2026-10-22): SOLO dev e staging finché non dice lui.
+ * Su prod serve anche `--prod` (ok di Tiziano al rilascio, 2026-10-22).
  *
  *   DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config \
  *     npx tsx scripts/reg-629-recover-former-students.ts          # prova
@@ -44,8 +44,8 @@ const realName = (name: string | null | undefined) => {
 async function main() {
   const prisma = new PrismaClient();
   const host = (process.env.DATABASE_URL ?? "").replace(/^.*@/, "").replace(/\/.*$/, "");
-  if (/prod/i.test(process.env.DOTENV_CONFIG_PATH ?? "")) {
-    throw new Error("REG-629: su prod lo script non si lancia, né in prova né sul serio.");
+  if (/prod/i.test(process.env.DOTENV_CONFIG_PATH ?? "") && !process.argv.includes("--prod")) {
+    throw new Error("REG-629: su prod serve anche --prod.");
   }
   console.log(`→ ${apply ? "ESECUZIONE" : "PROVA (nessuna scrittura)"} su ${host}`);
 
