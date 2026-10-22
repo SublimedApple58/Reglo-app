@@ -1,7 +1,18 @@
+import { DeleteObjectCommand } from "@aws-sdk/client-s3";
+
 import { prisma } from "@/db/prisma";
 import { cancelOpenLessonsForDeletedStudent } from "@/lib/autoscuole/operational-cancellation";
+import {
+  archiveFormerStudentMemberships,
+  DELETED_USER_NAME,
+  type FormerStudentReason,
+} from "@/lib/autoscuole/former-students";
+import { getR2Bucket, getR2Client } from "@/lib/storage/r2";
 
-const DELETED_USER_NAME = "Account eliminato";
+const FORMER_STUDENT_REASON_BY_TRIGGER: Record<string, FormerStudentReason> = {
+  self_delete: "self_delete",
+  directory_removal: "office_removed",
+};
 
 /** Chi/cosa ha innescato la cancellazione — per l'audit e la diagnostica. */
 export type AccountDeletionContext = {
@@ -48,6 +59,8 @@ export async function deleteAndAnonymizeUserAccount(
     select: {
       id: true,
       email: true,
+      image: true,
+      signatureKey: true,
     },
   });
 
@@ -74,6 +87,15 @@ export async function deleteAndAnonymizeUserAccount(
     await tx.mobilePushDevice.deleteMany({ where: { userId } });
     await tx.session.deleteMany({ where: { userId } });
     await tx.account.deleteMany({ where: { userId } });
+
+    // REG-629: prima di togliere il legame, l'allievo diventa «ex allievo» di
+    // ogni autoscuola in cui era iscritto, così l'ufficio ne vede ancora nome,
+    // scheda, storico guide e saldo.
+    await archiveFormerStudentMemberships(tx, {
+      userId,
+      reason: FORMER_STUDENT_REASON_BY_TRIGGER[context?.trigger ?? ""] ?? "unknown",
+      actorUserId: context?.actorUserId ?? null,
+    });
 
     await tx.companyMember.deleteMany({ where: { userId } });
 
@@ -102,6 +124,7 @@ export async function deleteAndAnonymizeUserAccount(
         email: buildDeletedEmail(userId),
         password: null,
         image: null,
+        signatureKey: null,
         phone: null,
         paymentMethod: null,
         activeCompanyId: null,
@@ -110,6 +133,17 @@ export async function deleteAndAnonymizeUserAccount(
       },
     });
   });
+
+  // Foto e firma si cancellano davvero (REG-629), non solo il riferimento.
+  // Best-effort: un oggetto orfano su R2 non deve far fallire la cancellazione.
+  for (const key of [existingUser.image, existingUser.signatureKey]) {
+    if (!key || /^https?:\/\//.test(key)) continue;
+    try {
+      await getR2Client().send(new DeleteObjectCommand({ Bucket: getR2Bucket(), Key: key }));
+    } catch (error) {
+      console.error("Account deletion: cancellazione file R2 fallita", error);
+    }
+  }
 
   // Audit best-effort: chi ha innescato la cancellazione e quante guide ha
   // annullato. Serve a scoprire la fonte reale delle "Account eliminato".

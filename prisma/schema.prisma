@@ -102,6 +102,7 @@ model User {
   consorzioGuideRequests               ConsorzioGuideRequest[]                @relation("ConsorzioGuideRequestStudent")
   supportMessages                      SupportMessage[]
   productFeedback                      ProductFeedback[]
+  autoscuolaFormerStudents             AutoscuolaFormerStudent[]
 
   @@index([phone])
 }
@@ -243,6 +244,7 @@ model Company {
   pushDevices                          MobilePushDevice[]
   autoscuolaHolidays                   AutoscuolaHoliday[]
   autoscuolaDayNotes                   AutoscuolaDayNote[]
+  autoscuolaFormerStudents             AutoscuolaFormerStudent[]
   autoscuolaInstructorPublishedWeeks   AutoscuolaInstructorPublishedWeek[]
   autoscuolaNotifications              AutoscuolaNotification[]
   quizSessions                         QuizSession[]
@@ -1051,6 +1053,42 @@ model AutoscuolaDayNote {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, date])
+}
+
+/// Ex allievo (REG-629): chi ha lasciato l'autoscuola (cancellando l'account
+/// dall'app o rimosso dall'ufficio) resta qui, così l'ufficio ne vede ancora
+/// nome, storico guide e saldo e può recuperare quanto dovuto.
+///
+/// Tabella SEPARATA, non un flag su CompanyMember: le ~150 query sui membri
+/// continuano a escludere l'ex allievo da sole (liste, prenotazioni, notifiche,
+/// conteggi, job). Il nome vive qui e non su User: l'account resta anonimizzato
+/// («Account eliminato»), il nome lo vede solo l'autoscuola di provenienza.
+/// Contatti, login, foto e firma NON si conservano.
+model AutoscuolaFormerStudent {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId       String    @db.Uuid
+  userId          String    @db.Uuid
+  /// Nome al momento dell'uscita. Null = perso (casi precedenti a REG-629):
+  /// l'ufficio può assegnarlo a mano dalla scheda.
+  name            String?
+  /// "self_delete" (account eliminato dall'app) | "office_removed" (rimosso
+  /// dall'ufficio) | "unknown" (recuperato senza traccia del motivo).
+  reason          String
+  leftAt          DateTime  @db.Timestamp(6)
+  actorUserId     String?   @db.Uuid
+  joinedAt        DateTime? @db.Timestamp(6)
+  licenseCategory String?
+  transmission    String?
+  /// Chi ha assegnato il nome a mano («Assegna nome»); null = nome originale.
+  nameAssignedBy  String?   @db.Uuid
+  createdAt       DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamp(6)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId])
+  @@index([companyId, leftAt])
 }
 
 model AutoscuolaHoliday {

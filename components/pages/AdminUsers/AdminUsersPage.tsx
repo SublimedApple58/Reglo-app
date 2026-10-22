@@ -941,7 +941,9 @@ function UserDetailPanelContent({
           <AlertDialogHeader>
             <AlertDialogTitle>Eliminare {user.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              L&apos;utente verrà rimosso dall&apos;autoscuola. L&apos;operazione non è reversibile.
+              {(user.autoscuolaRole ?? "STUDENT") === "STUDENT"
+                ? "L'allievo verrà rimosso dall'autoscuola e passerà tra gli Ex allievi: nome, guide e saldo restano visibili all'ufficio."
+                : "L'utente verrà rimosso dall'autoscuola. L'operazione non è reversibile."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

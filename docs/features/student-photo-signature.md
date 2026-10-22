@@ -53,3 +53,4 @@ Ogni avatar a iniziali mostra la foto profilo se presente, via **risoluzione bat
 - **Avatar web esistente** (`app/api/uploads/avatar`, `lib/actions/storage.actions.ts`): stesso campo `User.image` — un upload dall'app sostituisce l'avatar mostrato ovunque (voluto).
 - **Storage R2**: `lib/storage/r2.ts` condiviso con avatar/logo/company-documents.
 - **Mobile**: tipi `UserPublic.photoUrl/signatureUrl`, `UploadMediaPayload`, `UploadSignatureInput` in `reglo-mobile/src/types/regloApi.ts`.
+- **Cancellazione account (REG-629)**: `deleteAndAnonymizeUserAccount` azzera `image` e `signatureKey` e cancella i due file da R2 (best-effort). Vedi [former-students.md](former-students.md).

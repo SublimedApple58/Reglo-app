@@ -41,6 +41,9 @@ const AMMESSI: Record<string, string> = {
   "scripts/seed-e2e.ts":
     "fixture degli e2e: crea membri da zero, non modifica un percorso esistente. " +
     "Il percorso gli viene creato da ensureActivePath alla prima operazione utile",
+  "scripts/seed-reg629.ts":
+    "fixture solo-dev degli e2e REG-629 (ex allievi): crea da zero membro E riga del " +
+    "percorso con gli stessi valori, non modifica un percorso esistente",
 };
 
 const SORGENTI = ["lib", "app", "scripts"];

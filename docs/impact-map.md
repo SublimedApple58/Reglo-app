@@ -163,6 +163,14 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Istruttori/Agenda**: `deleteUser` di un istruttore → `AutoscuolaInstructor` inactive + guide future annullate (`operationallyCancelAppointmentsByResource`)
 - → **Registrazione (tutti i canali)**: `releaseEmailIfOrphaned` chiamato in `createCompanyUser`, `signUpUser`, `acceptCompanyInviteAndRegister`, mobile `invites/[token]/accept`, mobile `student-register` — un account orfano (0 membership) non blocca mai il riuso dell'email
 - → **Mobile auth**: self-deletion mobile usa lo stesso `deleteAndAnonymizeUserAccount`
+- → **Ex allievi (REG-629)**: `deleteAndAnonymizeUserAccount` e `deleteUser` scrivono `AutoscuolaFormerStudent` PRIMA di togliere la `CompanyMember`; la cancellazione ora azzera anche `signatureKey` e cancella i file R2 di foto e firma
+
+### Ex allievi (REG-629)
+- → **Users Directory / Mobile self-deletion**: unica fonte delle righe (`archiveFormerStudentMemberships`)
+- → **Payments & Credits**: saldo = `isLessonUnpaid` + `isCompanyManualMode` (`unpaid-auto-block.ts`), importo da `priceAmount`/`penaltyAmount`; il pagamento si registra con `setManualPaymentStatus`
+- → **Lista Allievi**: tab «Ex allievi» in `AutoscuoleStudentsPage` (`PhaseTab = "ex"`), fuori da filtri e selezione multipla
+- → **Percorsi patente (REG-458)**: snapshot di categoria/cambio dalla `CompanyMember`; lo script di recupero li legge da `AutoscuolaLicensePath`
+- ✗ **Nessun impatto** su liste/prenotazioni/notifiche/conteggi/job: l'ex allievo non ha `CompanyMember`
 
 ### Company Plan
 - → **Backoffice**: dialog piano nella lista companies (auth cookie); NON sincronizza i CompanyService.limits (attivazione operativa separata in "Gestisci")

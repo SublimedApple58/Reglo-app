@@ -22,6 +22,7 @@ import { getDefaultAutoscuolaRole, deriveCompanyMemberRole, isInstructor } from 
 import { isLicenseCategory, isTransmission } from '@/lib/autoscuole/license';
 import { operationallyCancelAppointmentsByResource } from '@/lib/autoscuole/operational-cancellation';
 import { deleteAndAnonymizeUserAccount, releaseEmailIfOrphaned } from '@/lib/account-deletion';
+import { archiveFormerStudentMemberships } from '@/lib/autoscuole/former-students';
 import { buildPlaceholderEmail } from '@/lib/users/placeholder-email';
 
 // Sign in the user with credentials
@@ -403,6 +404,15 @@ export async function deleteUser(id: string) {
     }
 
     await prisma.$transaction(async (tx) => {
+      // REG-629: un allievo rimosso resta visibile all'ufficio come «ex allievo»
+      // (nome, scheda, storico guide, saldo). No-op per titolari e istruttori.
+      await archiveFormerStudentMemberships(tx, {
+        userId: id,
+        reason: "office_removed",
+        actorUserId: context.userId,
+        companyIds: [context.companyId],
+      });
+
       await tx.companyMember.delete({
         where: {
           companyId_userId: {

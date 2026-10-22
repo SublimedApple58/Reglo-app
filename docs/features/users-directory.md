@@ -53,3 +53,4 @@ Nella lista **Allievi** (`AutoscuoleStudentsPage`) esiste lo stesso toggle A-Z m
 - **Istruttori**: `deleteUser` di un istruttore → record `AutoscuolaInstructor` `inactive` + `userId: null`, guide future annullate operativamente (`operationallyCancelAppointmentsByResource`).
 - **Allievi**: gli allievi si gestiscono SOLO dalla Directory (le vecchie `createAutoscuolaStudent`/`importAutoscuolaStudents` sono disattivate e rimandano alla Directory).
 - **Mobile self-deletion**: usa lo stesso `deleteAndAnonymizeUserAccount`.
+- **Ex allievi (REG-629)**: prima di togliere la membership, l'allievo viene archiviato in `AutoscuolaFormerStudent` (nome, motivo, percorso) e resta visibile all'ufficio nel tab «Ex allievi». La cancellazione azzera anche `signatureKey` e cancella da R2 foto e firma. Vedi [former-students.md](former-students.md).

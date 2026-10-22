@@ -148,7 +148,7 @@ export function resolveUnpaidAutoBlock(
 
 const normalizeStatus = (value: string) => value.trim().toLowerCase();
 
-function isCompanyManualMode(config: {
+export function isCompanyManualMode(config: {
   enabled: boolean;
   lessonCreditFlowEnabled: boolean;
   lessonCreditsRequired: boolean;

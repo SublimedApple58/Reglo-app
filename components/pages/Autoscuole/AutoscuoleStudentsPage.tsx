@@ -109,6 +109,15 @@ import {
 } from "@/lib/autoscuole/license-paths";
 import type { StudentLicensePathDto } from "@/lib/actions/autoscuole-license-paths.actions";
 import { InviteCodeDialog } from "@/components/pages/Autoscuole/dialogs/InviteCodeDialog";
+import {
+  FormerStudentPanel,
+  FormerStudentsRows,
+  FormerStudentsSummary,
+} from "@/components/pages/Autoscuole/FormerStudents";
+import {
+  getAutoscuolaFormerStudents,
+  type FormerStudentRow,
+} from "@/lib/actions/autoscuole-former-students.actions";
 import { ToolbarFilters } from "@/components/pages/Autoscuole/filters/ToolbarFilters";
 import {
   formatStudentName,
@@ -772,7 +781,8 @@ function TablePager({
   );
 }
 
-type PhaseTab = "attesa" | "teoria" | "pratica" | "patentati";
+/** "ex" = ex allievi (REG-629): non è una fase, ma vive accanto alle fasi. */
+type PhaseTab = "attesa" | "teoria" | "pratica" | "patentati" | "ex";
 /** Tab del drawer allievo. "quiz" = REG-445. */
 type DrawerTab = "summary" | "quiz" | "lessons" | "notes";
 type PraticaSubTab = "lista" | "cancellazioni";
@@ -782,6 +792,7 @@ const PHASE_SUBTITLES: Record<PhaseTab, string> = {
   teoria: "In preparazione all'esame teorico",
   pratica: "In preparazione all'esame pratico",
   patentati: "Percorso completato",
+  ex: "Hanno lasciato l'autoscuola",
 };
 
 export function AutoscuoleStudentsPage({
@@ -941,6 +952,7 @@ export function AutoscuoleStudentsPage({
     teoria: 1,
     pratica: 1,
     patentati: 1,
+    ex: 1,
   });
 
   // ── Selezione multipla + blocco prenotazioni in bulk (REG-442) ──────────
@@ -1362,7 +1374,7 @@ export function AutoscuoleStudentsPage({
   }, [search]);
 
   React.useEffect(() => {
-    setPages({ attesa: 1, teoria: 1, pratica: 1, patentati: 1 });
+    setPages({ attesa: 1, teoria: 1, pratica: 1, patentati: 1, ex: 1 });
   }, [debouncedSearch]);
 
   // Cambio tab / ricerca / sotto-tab → via la selezione (vedi sopra).
@@ -1407,6 +1419,28 @@ export function AutoscuoleStudentsPage({
     setLoading(false);
     setSearching(false);
   }, [affiliate, company, debouncedSearch, toast]);
+
+  // REG-629 — ex allievi: li restituisce solo all'ufficio (per gli altri la
+  // lista è vuota e il tab non compare). La vista ridotta non li ha.
+  const [formerStudents, setFormerStudents] = React.useState<FormerStudentRow[]>([]);
+  const [formerPanel, setFormerPanel] = React.useState<{ userId: string; assignName: boolean } | null>(null);
+  const loadFormerStudents = React.useCallback(async () => {
+    if (!company || affiliate) return;
+    const res = await getAutoscuolaFormerStudents();
+    if (res.success) setFormerStudents(res.data);
+  }, [affiliate, company]);
+  React.useEffect(() => {
+    void loadFormerStudents();
+  }, [loadFormerStudents]);
+  const visibleFormerStudents = React.useMemo(() => {
+    const term = debouncedSearch.trim().toLowerCase();
+    const list = term
+      ? formerStudents.filter((row) => (row.name ?? "").toLowerCase().includes(term))
+      : formerStudents;
+    return sortMode === "name"
+      ? [...list].sort((a, b) => (a.name ?? "~").localeCompare(b.name ?? "~", "it"))
+      : list;
+  }, [debouncedSearch, formerStudents, sortMode]);
 
   const selectedStudent = React.useMemo(
     () => students.find((student) => student.id === selectedStudentId) ?? null,
@@ -2183,8 +2217,11 @@ export function AutoscuoleStudentsPage({
     if (studentsByPhase.patentato.length > 0) {
       options.push({ value: "patentati", label: "Patentati", count: studentsByPhase.patentato.length });
     }
+    if (formerStudents.length > 0) {
+      options.push({ value: "ex", label: "Ex allievi", count: formerStudents.length });
+    }
     return options;
-  }, [studentsByPhase, theoryPhaseEnabled]);
+  }, [formerStudents.length, studentsByPhase, theoryPhaseEnabled]);
 
   // Se il tab attivo sparisce (es. nessun patentato dopo un refetch) torna a Pratica
   React.useEffect(() => {
@@ -3786,9 +3823,11 @@ export function AutoscuoleStudentsPage({
             subtitle={[
               // Con i filtri attivi il totale da solo mentirebbe: la lista ne
               // mostra meno e il numero in testata direbbe un'altra cosa.
-              filtersActive
-                ? `${filteredStudents.length} di ${students.length} allievi`
-                : `${students.length} allievi`,
+              phaseTab === "ex"
+                ? `${formerStudents.length} ex allievi`
+                : filtersActive
+                  ? `${filteredStudents.length} di ${students.length} allievi`
+                  : `${students.length} allievi`,
               phaseTab === "pratica" && praticaSubTab === "cancellazioni"
                 ? "Cancellazioni tardive da gestire"
                 : PHASE_SUBTITLES[phaseTab],
@@ -3805,7 +3844,9 @@ export function AutoscuoleStudentsPage({
                 {!(phaseTab === "pratica" && praticaSubTab === "cancellazioni") &&
                   (() => {
                     const activeList =
-                      phaseTab === "attesa"
+                      phaseTab === "ex"
+                        ? visibleFormerStudents
+                        : phaseTab === "attesa"
                         ? studentsByPhase.awaiting
                         : phaseTab === "teoria"
                           ? studentsByPhase.teoria
@@ -3884,7 +3925,7 @@ export function AutoscuoleStudentsPage({
                   aria-pressed={sortMode === "name"}
                   onClick={() => {
                     setSortMode((prev) => (prev === "name" ? "recent" : "name"));
-                    setPages({ attesa: 1, teoria: 1, pratica: 1, patentati: 1 });
+                    setPages({ attesa: 1, teoria: 1, pratica: 1, patentati: 1, ex: 1 });
                   }}
                   className={cn(
                     "flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors",
@@ -3914,11 +3955,13 @@ export function AutoscuoleStudentsPage({
                 >
                   <UserRoundPlus className="size-[21px]" strokeWidth={1.8} />
                 </button>
-                <ToolbarFilters
-                  groups={filterGroups}
-                  onApply={applyStudentFilter}
-                  onClearAll={clearStudentFilters}
-                />
+                {phaseTab !== "ex" && (
+                  <ToolbarFilters
+                    groups={filterGroups}
+                    onApply={applyStudentFilter}
+                    onClearAll={clearStudentFilters}
+                  />
+                )}
                 <ExpandingSearch
                   open={searchOpen}
                   onOpenChange={setSearchOpen}
@@ -3972,6 +4015,21 @@ export function AutoscuoleStudentsPage({
                     <AutoscuoleLateCancellationsPanel onCountChange={setLateCancellationsCount} />
                   )}
                   {phaseTab === "patentati" && renderPatentatiRows()}
+                  {phaseTab === "ex" &&
+                    (visibleFormerStudents.length === 0 ? (
+                      <EmptyList subtitle="Nessun ex allievo trovato" />
+                    ) : (
+                      <div className="space-y-5">
+                        <FormerStudentsSummary rows={formerStudents} />
+                        <FormerStudentsRows
+                          rows={pageSlice(visibleFormerStudents, pages.ex)}
+                          listButtonClass={listButtonClass}
+                          onOpen={(userId, opts) =>
+                            setFormerPanel({ userId, assignName: Boolean(opts?.assignName) })
+                          }
+                        />
+                      </div>
+                    ))}
                 </div>
               </div>
             </FadeIn>
@@ -4353,6 +4411,13 @@ export function AutoscuoleStudentsPage({
       })()}
 
       {/* ── Detail panel ── */}
+      <FormerStudentPanel
+        userId={formerPanel?.userId ?? null}
+        focusAssignName={formerPanel?.assignName ?? false}
+        onClose={() => setFormerPanel(null)}
+        onChanged={() => void loadFormerStudents()}
+      />
+
       <DetailPanel
         open={panelOpen}
         onOpenChange={(next) => {
