@@ -63,11 +63,12 @@ export function BackofficeHeader() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/60 bg-white/90 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 lg:px-6">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4 lg:px-6">
         {/* Brand */}
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           <RegloMark size={32} />
-          <div className="flex items-center gap-2.5">
+          {/* Sul telefono resta solo il simbolo: lo spazio serve al menu. */}
+          <div className="hidden items-center gap-2.5 lg:flex">
             <span className="text-sm font-semibold text-foreground">
               Reglo Autoscuole
             </span>
@@ -78,13 +79,13 @@ export function BackofficeHeader() {
         </div>
 
         {/* Nav */}
-        <nav className="flex items-center gap-1">
+        <nav className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
           {NAV_ITEMS.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 isActive(item.href)
                   ? "bg-gray-100 text-foreground"
                   : "text-muted-foreground hover:bg-gray-50 hover:text-foreground",
@@ -101,7 +102,7 @@ export function BackofficeHeader() {
         </nav>
 
         {/* Chi è dentro + logout */}
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {whoAmI ? (
             <span
               title={whoAmI.email}
