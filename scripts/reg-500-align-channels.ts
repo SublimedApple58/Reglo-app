@@ -11,6 +11,7 @@
  * `slotFillChannels` non si tocca: il backend la ignora (offerte solo push).
  *
  * Idempotente. A vuoto di default; `--apply` per scrivere.
+ * `--company=<id>` limita a una sola autoscuola (pilota).
  *
  *   DOTENV_CONFIG_PATH=.env.staging NODE_OPTIONS=--require=dotenv/config \
  *     npx ts-node --transpile-only \
@@ -40,6 +41,7 @@ const {
 export {};
 
 const APPLY = process.argv.includes("--apply");
+const COMPANY_ID = process.argv.find((arg) => arg.startsWith("--company="))?.slice("--company=".length);
 const ORDER = ["push", "whatsapp", "email"];
 
 const normalize = (value: unknown): string[] => {
@@ -49,7 +51,7 @@ const normalize = (value: unknown): string[] => {
 
 async function main() {
   const services = await prisma.companyService.findMany({
-    where: { serviceKey: "AUTOSCUOLE" },
+    where: { serviceKey: "AUTOSCUOLE", ...(COMPANY_ID ? { companyId: COMPANY_ID } : {}) },
     select: { id: true, companyId: true, limits: true, company: { select: { name: true } } },
   });
 
