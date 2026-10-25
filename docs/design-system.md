@@ -244,9 +244,13 @@ CSS variables per animazioni in `globals.css`:
 
 ---
 
-## 8b. Responsive e mobile (REGOLA PERMANENTE, dal 2026-10-25)
+## 8b. Backoffice interno: responsive e mobile (REGOLA PERMANENTE, dal 2026-10-25)
 
-**Ogni modifica o pagina nuova della web app deve essere responsive e curata anche da telefono, non solo da desktop.** Vale per le pagine delle autoscuole (titolari e segreteria) e per il backoffice interno `/backoffice`. Su mobile deve sembrare un'app vera, non un sito rimpicciolito.
+**Ogni modifica o pagina nuova del backoffice interno di Reglo deve essere responsive e curata anche da telefono, non solo da desktop.** Su mobile deve sembrare un'app vera, non un sito rimpicciolito.
+
+**Ambito:** `app/[locale]/backoffice/**`, `app/[locale]/backoffice-sign-in/**` e `components/pages/Backoffice/**`. La regola **non** si applica alla web app delle autoscuole (agenda, allievi, `Autoscuole*`).
+
+> Nota: il 25/10/2026 (commit `2e9fe67`) alcuni adattamenti mobile sono finiti anche fuori dal backoffice e restano in prod: `Dialog` di `components/ui/dialog.tsx` come sheet dal basso sotto 640px (classe `reglo-dialog` in `globals.css`), tab bar in basso di `AutoscuoleNav` sotto `md`, agenda in vista Giorno su telefono, lista Allievi a card. Sono comportamenti esistenti da conoscere, non un obbligo per la web app delle autoscuole.
 
 ### Breakpoint (Tailwind di default)
 
@@ -262,25 +266,24 @@ Si scrive **mobile-first**: classi base per il telefono, `md:`/`lg:` per allarga
 
 ### Pattern
 
-- **Navigazione**: sotto `md` le tab dell'header (`AutoscuoleNav`) spariscono e diventano una **barra in basso** fissa (`AutoscuoleNav variant="bottom"`, icone + etichetta, safe-area iOS). Il menu ☰ resta in alto a destra. Nel backoffice interno le voci di navigazione non devono sbordare (menu o barra che scorre).
-- **Tabelle / liste**: sotto `md` ogni riga diventa una **card impilata** (nome in evidenza su una riga intera, metadati sotto, azione principale a destra o come tap sulla card). Lo scroll orizzontale è ammesso solo dentro un contenitore dichiarato (`overflow-x-auto`) per dati davvero tabellari (es. agenda, griglie numeriche), mai sulla pagina.
-- **Dialog**: sotto `sm` il `Dialog` di `components/ui/dialog.tsx` diventa da solo uno **sheet dal basso** (classe `reglo-dialog` + regole in `globals.css`): tutta larghezza, angoli in alto, `max-h` 92dvh scrollabile, `DialogFooter` con bottoni impilati a tutta larghezza. Gli `AlertDialog` restano centrati con 16px di margine. I modali custom (non `DialogContent`) vanno controllati a mano.
-- **Toolbar**: sotto `md` le azioni secondarie (stampa, zoom, info, schermo intero…) vanno in un menu «⋯»; restano visibili solo navigazione data, filtro e azione primaria.
-- **Tab di pagina / segmented**: se non ci stanno, scorrono in orizzontale (`overflow-x-auto`, niente scrollbar visibile) senza troncare le etichette.
-- **Form**: campi a tutta larghezza, label sopra il campo; i select non si troncano («4…» è un bug).
-- **Agenda**: su telefono apre in vista **Giorno**, colonne ≥128px che scorrono in orizzontale dentro la griglia; gli strumenti secondari della toolbar sono solo da `md`.
+- **Navigazione** (`BackofficeHeader`): sotto `md` marchio + esci sulla prima riga, voci del menu a tutta larghezza sulla seconda, che scorrono in orizzontale invece di troncare.
+- **Tabelle**: sotto `md` restano solo le colonne essenziali (`hidden md:table-cell` sulle altre); le informazioni chiave tolte (es. stato, accesso) vanno sotto il nome; le azioni restano raggiungibili (colonna azioni o tap sulla riga). Nomi con `whitespace-normal` sotto `md`.
+- **Contatori / stat card**: griglia a 2 o 3 colonne compatte su telefono, non card impilate a tutta altezza.
+- **Barre filtri e ricerca**: ricerca a tutta larghezza sotto `sm`, controlli segmentati in un contenitore `overflow-x-auto` senza scrollbar.
+- **Dialog**: dentro lo schermo con bottone principale raggiungibile (il `Dialog` condiviso lo fa già sotto 640px).
 - **Grafici**: scorrono in orizzontale dentro il loro contenitore (come il grafico Finanza, centrato sul mese in corso).
+- **Decorazioni** posizionate fuori dal bordo (blob, glow): contenitore con `overflow-hidden`, altrimenti allargano la pagina.
 
 ### Minimi
 
 - Target touch **≥ 44×44px** sotto `md` (icone comprese: area cliccabile, non il disegno).
 - Testo ≥ 12px (meta), 14–16px corpo; gli `input` a **16px** su mobile (iOS altrimenti zooma).
 - Gutter laterale 16px; nessun elemento oltre la larghezza dello schermo.
-- `100dvh` invece di `100vh`; `env(safe-area-inset-bottom)` per le barre fisse (viewport `viewportFit: cover` nel layout root).
+- `100dvh` invece di `100vh`.
 
 ### Prima di chiudere un lavoro di UI
 
-1. Playwright a **390px**, **768px** e **1280px** sulle pagine toccate (anche dialog aperti).
+1. Playwright a **390px**, **768px** e **1280px** sulle pagine del backoffice toccate (anche dialog aperti). Login: admin QA su staging via `scripts/backoffice-admin.ts` (add/link, poi disable).
 2. `document.documentElement.scrollWidth === innerWidth` a 390px: **zero scroll orizzontale**.
 3. Nessuna etichetta troncata in modo da perdere significato (nomi allievi, tab, select).
 4. Target touch ≥ 44px, testo leggibile, dialog dentro lo schermo con il bottone principale raggiungibile.
@@ -298,7 +301,7 @@ Si scrive **mobile-first**: classi base per il telefono, `md:`/`lg:` per allarga
 - Usare CVA per varianti componente
 - Focus visible ring su tutti gli elementi interattivi (`.reglo-focus-ring`)
 - Transizioni via `transform` e `opacity` only
-- **Responsive**: ogni pagina/modifica della web app curata anche a 390px (vedi §8b)
+- **Backoffice interno responsive**: ogni pagina/modifica di `/backoffice` curata anche a 390px (vedi §8b)
 
 ### Da NON fare
 - **Non** hardcodare hex — usare CSS variables (`var(--primary)`) o Tailwind classes (`bg-primary`)
