@@ -238,7 +238,7 @@ export function RoundPage({
           {...rise(0.1, reduce)}
           type="button"
           onClick={() => setCreating(true)}
-          className="-mr-2 inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[13.5px] text-[#52525b] transition-colors hover:bg-[#f6ecdf] hover:text-[#111111]"
+          className="-mr-2 inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[13.5px] text-[#52525b] transition-colors hover:bg-[#f0f0f1] hover:text-[#111111]"
         >
           <Plus className="h-4 w-4" />
           Aggiungi
@@ -248,7 +248,7 @@ export function RoundPage({
       <div className="mt-8 grid items-start gap-12 md:mt-6 md:grid-cols-[minmax(0,1fr)_360px] md:gap-14 lg:grid-cols-[minmax(0,1fr)_400px]">
         {/* La ciambella */}
         <div className="flex flex-col items-center">
-          <motion.div {...rise(0.15, reduce)} className="relative inline-flex rounded-full bg-[#f3e9dc] p-1">
+          <motion.div {...rise(0.15, reduce)} className="relative inline-flex rounded-full bg-[#ececee] p-1">
             {(["stato", "tipologia"] as const).map((m) => (
               <button
                 key={m}
@@ -344,7 +344,7 @@ export function RoundPage({
       <Sheet open={!desktop && !!panel} onOpenChange={(o) => !o && closePanel()}>
         <SheetContent
           side="bottom"
-          className="max-h-[82dvh] gap-0 rounded-t-[28px] border-t-0 bg-[#fffaf3] px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 data-[state=open]:animate-[round-sheet-up-in_0.6s_cubic-bezier(0.16,1,0.3,1)] data-[state=closed]:animate-[round-sheet-up-out_0.32s_cubic-bezier(0.4,0,1,1)] [&>button:last-child]:hidden"
+          className="max-h-[82dvh] gap-0 rounded-t-[28px] border-t-0 bg-white px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 data-[state=open]:animate-[round-sheet-up-in_0.6s_cubic-bezier(0.16,1,0.3,1)] data-[state=closed]:animate-[round-sheet-up-out_0.32s_cubic-bezier(0.4,0,1,1)] [&>button:last-child]:hidden"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <SheetTitle className="sr-only">{panelTitle}</SheetTitle>
@@ -431,7 +431,7 @@ function DonutCenter({
           <button
             type="button"
             onClick={() => onOpen(slice.key)}
-            className="pointer-events-auto mt-1 inline-flex h-9 cursor-pointer items-center gap-1 rounded-full px-3 text-[12.5px] font-medium text-[#111111] transition-colors hover:bg-[#f6ecdf] md:hidden"
+            className="pointer-events-auto mt-1 inline-flex h-9 cursor-pointer items-center gap-1 rounded-full px-3 text-[12.5px] font-medium text-[#111111] transition-colors hover:bg-[#f0f0f1] md:hidden"
           >
             Vedi chi sono <ArrowRight className="h-3.5 w-3.5" />
           </button>
@@ -487,7 +487,7 @@ function Legend({
           </motion.li>
         ))}
       </ul>
-      <div className="mt-6 flex items-center justify-between border-t border-[#efe4d6] pt-2 text-[13px]">
+      <div className="mt-6 flex items-center justify-between border-t border-[#ececee] pt-2 text-[13px]">
         <button type="button" onClick={onAll} className="-ml-1 inline-flex h-11 cursor-pointer items-center gap-1.5 px-1 text-[#111111] hover:underline hover:underline-offset-4">
           Vedi tutti <span className="tabular-nums text-[#a1a1aa]">{total}</span>
         </button>
@@ -538,7 +538,7 @@ function ContactList({
           type="button"
           aria-label="Chiudi la lista"
           onClick={onClose}
-          className="-mr-2 flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#71717a] transition-colors hover:bg-[#f6ecdf] hover:text-[#111111]"
+          className="-mr-2 flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#71717a] transition-colors hover:bg-[#f0f0f1] hover:text-[#111111]"
         >
           <X className="h-[18px] w-[18px]" />
         </button>
@@ -552,7 +552,7 @@ function ContactList({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Cerca un nome"
-            className="h-11 w-full border-b border-[#efe4d6] bg-transparent pl-6 text-[14.5px] text-[#111111] outline-none transition-colors placeholder:text-[#b4b4b9] focus:border-[#111111]"
+            className="h-11 w-full border-b border-[#ececee] bg-transparent pl-6 text-[14.5px] text-[#111111] outline-none transition-colors placeholder:text-[#b4b4b9] focus:border-[#111111]"
           />
         </label>
       ) : null}
@@ -568,7 +568,7 @@ function ContactList({
             <button
               type="button"
               onClick={() => onOpen(r.id)}
-              className="flex min-h-[52px] w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-[#f8efe3]"
+              className="flex min-h-[52px] w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-[#f4f4f5]"
             >
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[14.5px] font-medium tracking-[-0.01em] text-[#111111]">{r.name}</span>

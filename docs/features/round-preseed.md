@@ -72,7 +72,7 @@ capisca di volerla vedere». Modello dati invariato, `RoundPage.tsx`. Il 25/10 s
   - Anello spesso, estremità tonde (`stroke-linecap: round`), piccoli spazi tra le fette.
   - Profondità: ombra da sticker piatta e sfocata sotto (ferma), bordo appena più scuro, luce interna tenue. Niente prospettiva né alone.
   - Le fette piccole prendono un minimo fisso (un bollino intero, `MIN_DEG`) e il resto del giro si divide in proporzione: niente sovrapposizioni.
-  - Palette pastello calda: corallo, mandarino, giallo burro, menta, lilla, rosa. «Da contattare» è sabbia. Sfondo crema (`#fffaf3`) nel layout del round. Numeri grandi in Nunito (`next/font`, variabile `--font-round`, caricato solo nel layout del round).
+  - Palette pastello calda: corallo, mandarino, giallo burro, menta, lilla, rosa. «Da contattare» è sabbia. Sfondo quello neutro del backoffice (niente crema: bocciato), schede bianche. Numeri grandi in Nunito (`next/font`, variabile `--font-round`, caricato solo nel layout del round).
   - Un solo loop `useAnimationFrame` con avvicinamento esponenziale (niente overshoot). All'ingresso le fette si gonfiano una dopo l'altra (scala 0.9 → 1) mentre l'anello ruota un poco. Da ferma respira piano, con un filo di parallasse.
   - Cambio vista = morph per slot (9): archi e colori si rimodellano; i posti in più si sgonfiano e spariscono. Per questo la ciambella non va mai rimontata (niente `key={mode}`).
   - Hover: la fetta si ingrandisce appena e le altre si attenuano. La lista entra ed esce con `AnimatePresence`; scheda e foglio dal basso con le keyframe `round-sheet-*`.

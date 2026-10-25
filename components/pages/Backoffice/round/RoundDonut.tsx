@@ -249,14 +249,14 @@ export function RoundDonut({
             </filter>
           </defs>
 
-          {/* Ombra da sticker: piatta, morbida, calda. Ferma, quindi la sfocatura costa una volta sola. */}
+          {/* Ombra da sticker: piatta e morbida, neutra per stare bene sul bianco. Ferma, quindi la sfocatura costa una volta sola. */}
           <circle
             cx={C}
             cy={C + 12}
             r={R}
             fill="none"
-            stroke="#b98b5e"
-            strokeOpacity={0.16 * easeOutCubic(t / 1.2)}
+            stroke="#8c7f74"
+            strokeOpacity={0.14 * easeOutCubic(t / 1.2)}
             strokeWidth={SW + 4}
             filter="url(#rd-soft)"
           />
