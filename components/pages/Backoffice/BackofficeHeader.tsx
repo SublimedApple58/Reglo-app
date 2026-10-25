@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { href: "/backoffice", label: "Autoscuole" },
   { href: "/backoffice/kpi", label: "KPI" },
   { href: "/backoffice/finanza", label: "Finanza" },
+  { href: "/backoffice/round", label: "Round" },
   { href: "/backoffice/support", label: "Assistenza" },
   { href: "/backoffice/feedback", label: "Feedback" },
 ] as const;

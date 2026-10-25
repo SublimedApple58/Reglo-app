@@ -2367,3 +2367,92 @@ model FinanceSettings {
   openingDate         DateTime? @db.Date
   updatedAt           DateTime  @updatedAt
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Round pre-seed — l'outreach agli investitori, solo nel backoffice.
+// Valori a scelta chiusa come TEXT (come in Finanza): l'elenco valido sta in
+// `lib/round/round-constants.ts`. Dati riservati: nessun endpoint pubblico.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Un round di raccolta (oggi uno solo: «Pre-seed 2026»).
+model FundraisingRound {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  targetCents Int
+  createdAt   DateTime @default(now()) @db.Timestamp(6)
+
+  investors RoundInvestor[]
+}
+
+/// Un investitore (persona, club, fondo…) seguito nel round.
+model RoundInvestor {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roundId         String    @db.Uuid
+  /// Chiave stabile dello script di import (null per chi è aggiunto a mano).
+  importKey       String?
+  name            String
+  organization    String?
+  /// business_angel | club_angel | vc_italia | family_office | vc_europa | altro
+  category        String
+  subcategory     String?
+  city            String?
+  email           String?
+  phone           String?
+  linkedinUrl     String?
+  websiteUrl      String?
+  /// linkedin | email | modulo | call | intro | altro
+  channel         String?
+  /// Indirizzo del modulo, nome di chi presenta…
+  channelDetail   String?
+  /// tiziano | gabriele | hiro
+  owner           String?
+  /// da_contattare | contattato | bloccato | risposto | call | interessato | impegno | no | in_pausa
+  status          String    @default("da_contattare")
+  blockedReason   String?
+  /// lead_probabile | lead_possibile | follower
+  leadRole        String?
+  /// A | B | C
+  priority        String?
+  ticket          String?
+  fit             String?
+  source          String?
+  notes           String?
+  commitmentCents Int?
+  lastContactOn   DateTime? @db.Date
+  nextStepOn      DateTime? @db.Date
+  nextStepNote    String?
+  /// Tappe dell'imbuto: restano anche se lo stato poi scende (un «no» dopo la call conta come call).
+  contactedOn     DateTime? @db.Date
+  respondedOn     DateTime? @db.Date
+  callOn          DateTime? @db.Date
+  interestedOn    DateTime? @db.Date
+  committedOn     DateTime? @db.Date
+  /// Escluso: il motivo è obbligatorio (CHECK nel database).
+  excludedAt      DateTime? @db.Timestamp(6)
+  excludedReason  String?
+  updatedByName   String?
+  createdAt       DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt       DateTime  @updatedAt
+
+  round        FundraisingRound   @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  interactions RoundInteraction[]
+
+  @@unique([roundId, importKey])
+  @@index([roundId, status])
+}
+
+/// Storico: un messaggio, una call, una risposta, un cambio di stato.
+model RoundInteraction {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  investorId String   @db.Uuid
+  occurredOn DateTime @db.Date
+  /// messaggio | mail | call | modulo | risposta | nota | stato
+  kind       String
+  body       String
+  authorName String?
+  createdAt  DateTime @default(now()) @db.Timestamp(6)
+
+  investor RoundInvestor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  @@index([investorId, occurredOn])
+}
