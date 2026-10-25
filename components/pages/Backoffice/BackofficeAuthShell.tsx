@@ -6,7 +6,7 @@ import { RegloMark } from "@/components/ui/reglo-mark";
 /** Guscio comune delle pagine di accesso al backoffice (login e attivazione). */
 export function BackofficeAuthShell({ children }: { children: ReactNode }) {
   return (
-    <div className="relative flex min-h-svh items-center justify-center bg-[#fafafa] px-4 py-10 sm:px-6">
+    <div className="relative flex min-h-svh items-center justify-center overflow-hidden bg-[#fafafa] px-4 py-10 sm:px-6">
       <div className="pointer-events-none absolute -left-24 top-12 h-72 w-72 rounded-full bg-[#111111]/[0.06] blur-[100px]" />
       <div className="pointer-events-none absolute -right-24 bottom-12 h-72 w-72 rounded-full bg-[#e6e6e6]/60 blur-[100px]" />
 

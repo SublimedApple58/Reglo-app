@@ -206,7 +206,7 @@ export default function BackofficeConsorzioDetailPage({ detail }: { detail: Cons
       </div>
 
       {/* ── Contatori ── */}
-      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4">
         {[
           { n: detail.totals.schools, l: "autoscuole consorziate" },
           { n: detail.totals.linked, l: "collegate a una Company" },
@@ -215,7 +215,7 @@ export default function BackofficeConsorzioDetailPage({ detail }: { detail: Cons
         ].map((stat) => (
           <div
             key={stat.l}
-            className="rounded-2xl border border-border bg-white px-[18px] py-4 shadow-[var(--shadow-card)]"
+            className="rounded-2xl border border-border bg-white px-3.5 py-3 shadow-[var(--shadow-card)] sm:px-[18px] sm:py-4"
           >
             <p className="text-2xl font-semibold leading-tight text-foreground">{stat.n}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">{stat.l}</p>
@@ -225,7 +225,7 @@ export default function BackofficeConsorzioDetailPage({ detail }: { detail: Cons
 
       {/* ── Barra azioni ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative max-w-sm flex-1">
+        <div className="relative w-full sm:max-w-sm sm:flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
@@ -249,10 +249,10 @@ export default function BackofficeConsorzioDetailPage({ detail }: { detail: Cons
           <TableHeader>
             <TableRow>
               <TableHead>Autoscuola</TableHead>
-              <TableHead>Company Reglo</TableHead>
-              <TableHead>Reglo</TableHead>
-              <TableHead>Accesso titolare</TableHead>
-              <TableHead className="text-right">Allievi</TableHead>
+              <TableHead className="hidden md:table-cell">Company Reglo</TableHead>
+              <TableHead className="hidden md:table-cell">Reglo</TableHead>
+              <TableHead className="hidden md:table-cell">Accesso titolare</TableHead>
+              <TableHead className="hidden text-right md:table-cell">Allievi</TableHead>
               <TableHead className="text-right">Azioni</TableHead>
             </TableRow>
           </TableHeader>
@@ -261,20 +261,25 @@ export default function BackofficeConsorzioDetailPage({ detail }: { detail: Cons
               const busy = busyId === school.schoolId;
               return (
                 <TableRow key={school.schoolId}>
-                  <TableCell>
+                  <TableCell className="whitespace-normal md:whitespace-nowrap">
                     <p className="text-sm font-semibold text-foreground">{school.schoolName}</p>
                     <p className="text-xs text-[#929292]">
                       {[school.city, school.accountingCode].filter(Boolean).join(" · ") || "—"}
                     </p>
+                    {/* Su telefono l'accesso del titolare sta sotto il nome
+                        (le colonne di dettaglio sono solo da md). */}
+                    <div className="mt-1.5 md:hidden">
+                      <Badge tone={ACCESS_TONE[school.access]}>{ACCESS_LABEL[school.access]}</Badge>
+                    </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     {school.companyName ? (
                       <p className="text-sm font-medium text-foreground">{school.companyName}</p>
                     ) : (
                       <p className="text-[13px] text-[#929292]">— nessuna Company</p>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     {school.companyId ? (
                       <Badge
                         tone={
@@ -289,7 +294,7 @@ export default function BackofficeConsorzioDetailPage({ detail }: { detail: Cons
                       <Badge tone="border-[#e2e2e2] bg-[#f6f6f6] text-[#6a6a6a]">—</Badge>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     <Badge tone={ACCESS_TONE[school.access]}>{ACCESS_LABEL[school.access]}</Badge>
                     <p className="mt-1 text-xs text-[#929292]">
                       {school.access === "active"
@@ -305,7 +310,7 @@ export default function BackofficeConsorzioDetailPage({ detail }: { detail: Cons
                               }`}
                     </p>
                   </TableCell>
-                  <TableCell className="text-right font-semibold">{school.studentsCount}</TableCell>
+                  <TableCell className="hidden text-right font-semibold md:table-cell">{school.studentsCount}</TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-2">
                       {busy ? (
