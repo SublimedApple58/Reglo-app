@@ -56,6 +56,7 @@ Dettagli: [docs/architecture/git-flow.md](docs/architecture/git-flow.md) · stag
 - Icons: `@tabler/icons-react` and `lucide-react`
 - Env: `.env.dev`, `.env.staging`, `.env.prod` via `DOTENV_CONFIG_PATH`. Never commit `.env.*`. Staging = isolated DB + `APP_ENV=staging` (external sends no-op). See `docs/architecture/environments.md`.
 - Run `pnpm lint` before PRs
+- **«RIDUCI MOVIMENTO» NON SPEGNE NIENTE (regola fissa di Tiziano, 2026-10-25)**: in tutto lo sviluppo `prefers-reduced-motion` non deve mai spegnere né ridurre animazioni e transizioni. Niente `useReducedMotion()` per decidere se animare, niente `MotionConfig reducedMotion="user"`, niente media query `prefers-reduced-motion` che azzerino `animation`/`transition`, niente `motion-reduce:`. Dettagli e codice vecchio da allineare in `docs/design-system.md` §6.
 - **BACKOFFICE INTERNO RESPONSIVE (regola permanente, 2026-10-25)**: ogni modifica o pagina nuova del **backoffice interno di Reglo** (`app/[locale]/backoffice/**`, `app/[locale]/backoffice-sign-in/**`, `components/pages/Backoffice/**`) deve essere responsive e curata anche da telefono (riferimento 390px): niente scroll orizzontale della pagina, target touch ≥ 44px, tabelle → colonne essenziali o card sotto `md`, navigazione che scorre invece di troncare. La regola non riguarda la web app delle autoscuole. Breakpoint, pattern e checklist in `docs/design-system.md` §8b.
 
 ## Documentation

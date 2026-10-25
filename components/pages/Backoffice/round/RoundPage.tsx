@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Plus, Search, X } from "lucide-react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import {
@@ -74,14 +74,11 @@ const ROUND_FONT = { fontFamily: "var(--font-round), var(--font-geist-sans), san
 
 /** Curva di tutta la pagina: ease-out lungo, niente rimbalzi. */
 const EASE = [0.16, 1, 0.3, 1] as const;
-const rise = (delay: number, reduce: boolean | null) =>
-  reduce
-    ? {}
-    : {
-        initial: { opacity: 0, y: 16, filter: "blur(6px)" },
-        animate: { opacity: 1, y: 0, filter: "blur(0px)" },
-        transition: { duration: 0.9, delay, ease: EASE },
-      };
+const rise = (delay: number) => ({
+  initial: { opacity: 0, y: 16, filter: "blur(6px)" },
+  animate: { opacity: 1, y: 0, filter: "blur(0px)" },
+  transition: { duration: 0.9, delay, ease: EASE },
+});
 
 const LIST_ORDER: RoundStatus[] = [...RING_STATUSES.slice(0, 5), "bloccato", "in_pausa", "da_contattare", "no"];
 const byProgress = (a: RoundInvestorRow, b: RoundInvestorRow) =>
@@ -169,7 +166,6 @@ export function RoundPage({
     });
   }, [mode, summary]);
 
-  const reduce = useReducedMotion();
 
   const switchMode = (m: Mode) => {
     if (m === mode) return;
@@ -228,14 +224,16 @@ export function RoundPage({
   ) : null;
 
   return (
+    // Animazioni sempre accese, anche con «Riduci movimento» del sistema: scelta voluta per questa pagina.
+    <MotionConfig reducedMotion="never">
     <div>
       <header className="flex items-start justify-between gap-4">
-        <motion.div {...rise(0, reduce)}>
+        <motion.div {...rise(0)}>
           <p className="text-[12px] font-medium uppercase tracking-[0.16em] text-[#a1a1aa]">Round</p>
           <h1 className="mt-1.5 text-[22px] font-semibold tracking-[-0.025em] text-[#111111]">{round.name}</h1>
         </motion.div>
         <motion.button
-          {...rise(0.1, reduce)}
+          {...rise(0.1)}
           type="button"
           onClick={() => setCreating(true)}
           className="-mr-2 inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[13.5px] text-[#52525b] transition-colors hover:bg-[#f0f0f1] hover:text-[#111111]"
@@ -248,7 +246,7 @@ export function RoundPage({
       <div className="mt-8 grid items-start gap-12 md:mt-6 md:grid-cols-[minmax(0,1fr)_360px] md:gap-14 lg:grid-cols-[minmax(0,1fr)_400px]">
         {/* La ciambella */}
         <div className="flex flex-col items-center">
-          <motion.div {...rise(0.15, reduce)} className="relative inline-flex rounded-full bg-[#ececee] p-1">
+          <motion.div {...rise(0.15)} className="relative inline-flex rounded-full bg-[#ececee] p-1">
             {(["stato", "tipologia"] as const).map((m) => (
               <button
                 key={m}
@@ -291,7 +289,7 @@ export function RoundPage({
 
           <dl className="mt-2 grid w-full max-w-[460px] grid-cols-4 gap-2">
             {stats.map((s, i) => (
-              <motion.div key={s.label} className="text-center" {...rise(0.55 + i * 0.08, reduce)}>
+              <motion.div key={s.label} className="text-center" {...rise(0.55 + i * 0.08)}>
                 <dt className="sr-only">{s.label}</dt>
                 <dd className="text-[30px] font-extrabold leading-none tabular-nums text-[#3b2f25] md:text-[36px]" style={ROUND_FONT}>
                   <CountUp value={s.value} delay={0.6 + i * 0.08} duration={1.6} />
@@ -308,9 +306,9 @@ export function RoundPage({
           {desktop && list ? (
             <motion.div
               key={`list:${mode}:${panel?.kind}:${panel?.kind === "slice" ? panel.key : ""}`}
-              initial={reduce ? false : { opacity: 0, scale: 0.96, y: 12, filter: "blur(8px)" }}
+              initial={{ opacity: 0, scale: 0.96, y: 12, filter: "blur(8px)" }}
               animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
-              exit={reduce ? undefined : { opacity: 0, scale: 0.97, y: 8, filter: "blur(6px)", transition: { duration: 0.3, ease: [0.4, 0, 1, 1] } }}
+              exit={{ opacity: 0, scale: 0.97, y: 8, filter: "blur(6px)", transition: { duration: 0.3, ease: [0.4, 0, 1, 1] } }}
               transition={{ duration: 0.7, ease: EASE }}
               style={{ transformOrigin: "left center" }}
             >
@@ -319,9 +317,9 @@ export function RoundPage({
           ) : (
             <motion.div
               key={`legend:${mode}`}
-              initial={reduce ? false : { opacity: 0, filter: "blur(6px)" }}
+              initial={{ opacity: 0, filter: "blur(6px)" }}
               animate={{ opacity: 1, filter: "blur(0px)" }}
-              exit={reduce ? undefined : { opacity: 0, filter: "blur(4px)", transition: { duration: 0.25 } }}
+              exit={{ opacity: 0, filter: "blur(4px)", transition: { duration: 0.25 } }}
               transition={{ duration: 0.6, ease: EASE }}
             >
             <Legend
@@ -371,6 +369,7 @@ export function RoundPage({
         }}
       />
     </div>
+    </MotionConfig>
   );
 }
 
@@ -389,11 +388,10 @@ function DonutCenter({
   committed: string | null;
   onOpen: (key: string) => void;
 }) {
-  const reduce = useReducedMotion();
-  const enter = reduce ? false : { opacity: 0, y: 8, scale: 0.94, filter: "blur(6px)" };
-  const leave = reduce ? undefined : { opacity: 0, y: -6, scale: 0.96, filter: "blur(4px)", transition: { duration: 0.18, ease: [0.4, 0, 1, 1] as const } };
+  const enter = { opacity: 0, y: 8, scale: 0.94, filter: "blur(6px)" };
+  const leave = { opacity: 0, y: -6, scale: 0.96, filter: "blur(4px)", transition: { duration: 0.18, ease: [0.4, 0, 1, 1] as const } };
   return (
-    <AnimatePresence mode="wait" initial={!reduce}>
+    <AnimatePresence mode="wait" initial>
       {!slice ? (
         <motion.div
           key="target"
@@ -462,12 +460,11 @@ function Legend({
   onAll: () => void;
   onExcluded: () => void;
 }) {
-  const reduce = useReducedMotion();
   return (
     <div className="md:pt-16" onPointerLeave={(e) => e.pointerType === "mouse" && onActive(null)}>
       <ul className="grid grid-cols-2 gap-x-6 md:grid-cols-1">
         {slices.map((s, i) => (
-          <motion.li key={s.key} {...rise(0.35 + i * 0.05, reduce)}>
+          <motion.li key={s.key} {...rise(0.35 + i * 0.05)}>
             <button
               type="button"
               onPointerEnter={(e) => e.pointerType === "mouse" && onActive(s.key)}
@@ -520,7 +517,6 @@ function ContactList({
   onOpen: (id: string) => void;
   onClose: () => void;
 }) {
-  const reduce = useReducedMotion();
   const [query, setQuery] = useState("");
   const shown = useMemo(() => {
     const q = norm(query.trim());
@@ -561,7 +557,7 @@ function ContactList({
         {shown.map((r, i) => (
           <motion.li
             key={r.id}
-            initial={reduce ? false : { opacity: 0, y: 14, scale: 0.98, filter: "blur(4px)" }}
+            initial={{ opacity: 0, y: 14, scale: 0.98, filter: "blur(4px)" }}
             animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
             transition={{ duration: 0.6, delay: 0.12 + Math.min(i, 16) * 0.035, ease: EASE }}
           >

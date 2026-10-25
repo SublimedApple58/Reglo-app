@@ -198,6 +198,16 @@ CSS variables per animazioni in `globals.css`:
 
 **Regola web:** animare solo `transform` e `opacity` per GPU compositing. Mai `width`, `height`, `padding`, `margin`.
 
+### «Riduci movimento» non spegne niente (REGOLA FISSA di Tiziano, dal 2026-10-25)
+
+`prefers-reduced-motion` / «Riduci movimento» del sistema **non deve mai spegnere né ridurre** animazioni e transizioni, in tutto lo sviluppo (web app, backoffice, pagine pubbliche).
+
+- Niente `useReducedMotion()` per decidere se animare, niente `MotionConfig reducedMotion="user"`.
+- Niente `@media (prefers-reduced-motion: reduce)` che azzeri o accorci `animation`/`transition`, niente classi Tailwind `motion-reduce:` / `motion-safe:`.
+- Con `motion/react` lascia il default o, se serve essere espliciti, `<MotionConfig reducedMotion="never">`.
+- Perché: sul Mac di Tiziano «Riduci movimento» è attivo e con le transizioni spente l'interfaccia andava a scatti (hover della ciambella del Round pre-seed, 25/10).
+- Codice nato prima della regola che la rispetta ancora (da allineare quando ci si passa): `BackofficeKpiPage.tsx`, `kpi/KpiPrimitives.tsx`, `Autoscuole/NeverAccessedNudge.tsx`, `Investor/InvestorKpiPage.tsx`, e le media query di `globals.css` fuori dal Round (es. il megafono).
+
 ---
 
 ## 7. Componenti (`components/ui/`)
@@ -308,6 +318,7 @@ Si scrive **mobile-first**: classi base per il telefono, `md:`/`lg:` per allarga
 - **Non** creare componenti UI da zero — usare quelli in `components/ui/`
 - **Non** usare radii arbitrari — seguire la scala (`rounded-sm/md/lg/pill/card-primary`)
 - **Non** animare `width`/`height`/`padding`/`margin` — usare `transform` e `opacity`
+- **Non** spegnere né ridurre animazioni con `prefers-reduced-motion` («Riduci movimento») — regola fissa, vedi §6
 - **Non** usare ombre inline — usare i preset (`shadow-card`, `shadow-cta`, etc.)
 
 ---

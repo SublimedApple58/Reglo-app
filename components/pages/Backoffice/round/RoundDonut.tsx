@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { animate, useAnimationFrame, useReducedMotion } from "motion/react";
+import { animate, useAnimationFrame } from "motion/react";
 
 /**
  * Ciambella morbida, stile cartoon e clay, in SVG puro.
@@ -16,6 +16,10 @@ import { animate, useAnimationFrame, useReducedMotion } from "motion/react";
  *   Il cambio di vista è un morph: ogni posto rimodella il suo arco e sfuma il
  *   colore. Da ferma respira piano; React ridisegna solo mentre qualcosa si
  *   muove.
+ * - Le animazioni girano sempre, anche con prefers-reduced-motion: scelta voluta.
+ * - L'hover ha una sola zona di aggancio per fetta: un settore d'anello fermo,
+ *   da metà spazio a metà spazio. I settori si toccano senza sovrapporsi, così
+ *   passando da una fetta all'altra lo stato passa diretto, senza resettarsi.
  */
 
 export type DonutSlice = { key: string; label: string; count: number; color: string; dark: string };
@@ -51,20 +55,22 @@ const arcPath = (a0: number, a1: number, r = R) => {
   const end = Math.max(a1, a0 + 0.05);
   return `M ${pt(r, a0)} A ${r} ${r} 0 ${end - a0 > 180 ? 1 : 0} 1 ${pt(r, end)}`;
 };
+const HIT_IN = R - SW / 2 - 10;
+const HIT_OUT = R + SW / 2 + 10;
+/** Settore d'anello pieno da a0 ad a1: la zona di aggancio di una fetta. */
+const sectorPath = (a0: number, a1: number) => {
+  const end = Math.min(a1, a0 + 359.9);
+  const large = end - a0 > 180 ? 1 : 0;
+  return `M ${pt(HIT_OUT, a0)} A ${HIT_OUT} ${HIT_OUT} 0 ${large} 1 ${pt(HIT_OUT, end)} L ${pt(HIT_IN, end)} A ${HIT_IN} ${HIT_IN} 0 ${large} 0 ${pt(HIT_IN, a0)} Z`;
+};
 
 type Slot = { a0: number; a1: number; color: RGB; dark: RGB; pop: number; dim: number };
 
 /** Un numero che conta fino al valore (motion `animate`, ease-out lungo). */
 export function CountUp({ value, duration = 1.4, delay = 0 }: { value: number; duration?: number; delay?: number }) {
-  const reduce = useReducedMotion();
   const [shown, setShown] = useState(0);
   const current = useRef(0);
   useEffect(() => {
-    if (reduce) {
-      current.current = value;
-      setShown(value);
-      return;
-    }
     const controls = animate(current.current, value, {
       duration,
       delay,
@@ -75,7 +81,7 @@ export function CountUp({ value, duration = 1.4, delay = 0 }: { value: number; d
       },
     });
     return () => controls.stop();
-  }, [value, duration, delay, reduce]);
+  }, [value, duration, delay]);
   return <>{shown}</>;
 }
 
@@ -96,8 +102,6 @@ export function RoundDonut({
   onOpen: (key: string) => void;
   center: ReactNode;
 }) {
-  const reduce = useReducedMotion() ?? false;
-
   // Bersagli per posto. I posti in più si richiudono in fondo al giro.
   const targets = useMemo(() => {
     // Le fette piccole prendono il minimo (un bollino intero, senza sovrapporsi);
@@ -147,25 +151,17 @@ export function RoundDonut({
   const wrapRef = useRef<HTMLDivElement>(null);
   const [, setFrame] = useState(0);
 
-  useEffect(() => {
-    if (!reduce) return;
-    intro.current = 10;
-    spin.current = 0;
-    setFrame((n) => n + 1);
-  }, [reduce]);
-
   useAnimationFrame((_, deltaMs) => {
     const dt = Math.min(deltaMs, 64) / 1000;
     clock.current += dt;
     let moving = false;
     const settle = (from: number, to: number, tau: number) => {
-      if (reduce) return to;
       const v = approach(from, to, dt, tau);
       if (Math.abs(v - to) > 0.004) moving = true;
       return Math.abs(v - to) > 0.0005 ? v : to;
     };
 
-    if (!reduce && intro.current < 2.8) {
+    if (intro.current < 2.8) {
       intro.current += dt;
       moving = true;
     }
@@ -185,10 +181,10 @@ export function RoundDonut({
 
     // Vita da ferma: un respiro lento e un filo di parallasse, solo transform.
     const p = pointer.current;
-    p.x = approach(p.x, reduce ? 0 : p.tx, dt, 0.5);
-    p.y = approach(p.y, reduce ? 0 : p.ty, dt, 0.5);
+    p.x = approach(p.x, p.tx, dt, 0.5);
+    p.y = approach(p.y, p.ty, dt, 0.5);
     if (wrapRef.current) {
-      const breathe = reduce ? 0 : Math.sin((clock.current / 6) * Math.PI * 2);
+      const breathe = Math.sin((clock.current / 6) * Math.PI * 2);
       wrapRef.current.style.transform = `translate3d(${(p.x * 5).toFixed(2)}px, ${(p.y * 4 + breathe * 2).toFixed(2)}px, 0) scale(${(1 + breathe * 0.012).toFixed(4)})`;
     }
 
@@ -199,7 +195,7 @@ export function RoundDonut({
   const shapes = slots
     .current!.map((s, i) => {
       // le fette si gonfiano una dopo l'altra
-      const grow = reduce ? 1 : easeOutCubic((t - 0.15 - i * 0.1) / 0.85);
+      const grow = easeOutCubic((t - 0.15 - i * 0.1) / 0.85);
       if (grow <= 0.001 || s.a1 - s.a0 <= 0.05) return null;
       const span = (s.a1 - s.a0) * (0.35 + 0.65 * grow);
       const a0 = s.a0 + spin.current + CAP + GAP / 2;
@@ -277,29 +273,27 @@ export function RoundDonut({
             </g>
           ))}
 
-          {/* Zone di tocco ferme, larghe quanto l'anello */}
-          {shapes.map(({ i, d }) => {
-            const key = slices[i]?.key;
-            if (!key) return null;
-            return (
-              <path
-                key={`hit-${i}`}
-                d={d}
-                fill="none"
-                stroke="transparent"
-                strokeWidth={SW + 8}
-                strokeLinecap="round"
-                className="cursor-pointer"
-                style={{ pointerEvents: "stroke" }}
-                onPointerDown={(e) => (pointerType.current = e.pointerType)}
-                onPointerEnter={(e) => e.pointerType === "mouse" && onActive(key)}
-                onClick={() => {
-                  if (pointerType.current !== "mouse" && active !== key) return onActive(key);
-                  onOpen(key);
-                }}
-              />
-            );
-          })}
+          {/* Zone di aggancio: un settore fermo per fetta, contigui e senza sovrapposizioni */}
+          <g onPointerLeave={(e) => e.pointerType === "mouse" && onActive(null)}>
+            {slices.map((sl, i) => {
+              const tg = targets[i];
+              if (!tg || tg.a1 - tg.a0 <= 0.05) return null;
+              return (
+                <path
+                  key={`hit-${sl.key}`}
+                  d={sectorPath(tg.a0, tg.a1)}
+                  fill="transparent"
+                  className="cursor-pointer"
+                  onPointerDown={(e) => (pointerType.current = e.pointerType)}
+                  onPointerEnter={(e) => e.pointerType === "mouse" && onActive(sl.key)}
+                  onClick={() => {
+                    if (pointerType.current !== "mouse" && active !== sl.key) return onActive(sl.key);
+                    onOpen(sl.key);
+                  }}
+                />
+              );
+            })}
+          </g>
         </svg>
 
         <div

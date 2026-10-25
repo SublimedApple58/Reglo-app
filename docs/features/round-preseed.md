@@ -76,7 +76,7 @@ capisca di volerla vedere». Modello dati invariato, `RoundPage.tsx`. Il 25/10 s
   - Un solo loop `useAnimationFrame` con avvicinamento esponenziale (niente overshoot). All'ingresso le fette si gonfiano una dopo l'altra (scala 0.9 → 1) mentre l'anello ruota un poco. Da ferma respira piano, con un filo di parallasse.
   - Cambio vista = morph per slot (9): archi e colori si rimodellano; i posti in più si sgonfiano e spariscono. Per questo la ciambella non va mai rimontata (niente `key={mode}`).
   - Hover: la fetta si ingrandisce appena e le altre si attenuano. La lista entra ed esce con `AnimatePresence`; scheda e foglio dal basso con le keyframe `round-sheet-*`.
-  - Con `prefers-reduced-motion` tutto è fermo.
+  - Le animazioni girano sempre, anche con `prefers-reduced-motion` (regola fissa, `design-system.md` §6; la pagina è avvolta in `MotionConfig reducedMotion="never"`). L'hover ha una sola zona di aggancio per fetta: un settore d'anello fermo, da metà spazio a metà spazio, contiguo agli altri e senza sovrapposizioni.
 - **Mouse**: al passaggio la fetta si ingrossa e il centro mostra conteggio e
   percentuale (per tipologia anche quanti sono già avviati). Al clic, e solo
   allora, nella colonna destra la lista di quei contatti prende il posto della

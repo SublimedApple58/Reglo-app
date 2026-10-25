@@ -581,7 +581,8 @@
   }
 }
 
-/* Round pre-seed: lista e scheda entrano con profondità (niente rimbalzi). */
+/* Round pre-seed: lista e scheda entrano con profondità (niente rimbalzi).
+   Girano anche con prefers-reduced-motion: scelta voluta per questa pagina. */
 @keyframes round-depth-in {
   from {
     opacity: 0;
@@ -592,11 +593,6 @@
     opacity: 1;
     transform: none;
     filter: blur(0);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  [class*="round-depth-in"] {
-    animation: none !important;
   }
 }
 /* Scheda del Round: entra e esce con profondità. */
@@ -615,9 +611,4 @@
 @keyframes round-sheet-up-out {
   from { opacity: 1; transform: none; filter: blur(0); }
   to { opacity: 0; transform: perspective(1200px) translate3d(0, 50px, -50px) scale(0.98); filter: blur(4px); }
-}
-@media (prefers-reduced-motion: reduce) {
-  [class*="round-sheet-"] {
-    animation-duration: 1ms !important;
-  }
 }
