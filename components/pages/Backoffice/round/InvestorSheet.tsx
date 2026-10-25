@@ -270,7 +270,7 @@ export function InvestorSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 border-l-0 sm:max-w-[520px] data-[state=open]:animate-[round-sheet-in_0.65s_cubic-bezier(0.16,1,0.3,1)] data-[state=closed]:animate-[round-sheet-out_0.34s_cubic-bezier(0.4,0,1,1)]" onOpenAutoFocus={(e) => e.preventDefault()}>
+      <SheetContent className="w-full gap-0 border-l-0 bg-[#fffcf7] sm:max-w-[520px] data-[state=open]:animate-[round-sheet-in_0.65s_cubic-bezier(0.16,1,0.3,1)] data-[state=closed]:animate-[round-sheet-out_0.34s_cubic-bezier(0.4,0,1,1)]" onOpenAutoFocus={(e) => e.preventDefault()}>
         <div className="flex-1 overflow-y-auto px-6 pb-10 pt-12 animate-[round-depth-in_0.8s_cubic-bezier(0.16,1,0.3,1)_both] [animation-delay:120ms] sm:px-10">
           {/* Chi è */}
           <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#a1a1aa]">

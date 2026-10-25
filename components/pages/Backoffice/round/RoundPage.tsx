@@ -45,30 +45,32 @@ const RING_STATUSES: RoundStatus[] = [
   "no",
   "da_contattare",
 ];
-/** Palette viva ma sobria: [chiaro, scuro] di ogni gradiente. */
+/** Pastelli caldi e vivaci: [colore, bordo appena più scuro]. Il «da contattare» è sabbia. */
 const RING_STATUS_COLOR: Record<RoundStatus, [string, string]> = {
-  impegno: ["#6ee7b7", "#047857"],
-  interessato: ["#5eead4", "#0f766e"],
-  call: ["#c4b5fd", "#6d28d9"],
-  risposto: ["#f0abfc", "#c026d3"],
-  contattato: ["#7dd3fc", "#0369a1"],
-  in_pausa: ["#fde68a", "#d97706"],
-  bloccato: ["#fda4af", "#e11d48"],
-  no: ["#e4e4e7", "#a1a1aa"],
-  da_contattare: ["#f6f6f7", "#d4d4d8"],
+  impegno: ["#4fc797", "#3aa87d"],
+  interessato: ["#86ddb4", "#62c497"],
+  call: ["#ffb067", "#f0954a"],
+  risposto: ["#ff9ec4", "#f17fab"],
+  contattato: ["#b9a5f5", "#9d86e8"],
+  in_pausa: ["#fcd877", "#efc154"],
+  bloccato: ["#ff8b7b", "#ef6e5d"],
+  no: ["#ddd2c5", "#cbbdad"],
+  da_contattare: ["#f1e5d4", "#e4d3bd"],
 };
 const RING_CATEGORY_COLOR: Record<RoundCategory, [string, string]> = {
-  business_angel: ["#c4b5fd", "#6d28d9"],
-  club_angel: ["#f9a8d4", "#db2777"],
-  vc_italia: ["#7dd3fc", "#0369a1"],
-  family_office: ["#fde68a", "#d97706"],
-  vc_europa: ["#6ee7b7", "#047857"],
-  altro: ["#fda4af", "#e11d48"],
+  business_angel: ["#b9a5f5", "#9d86e8"],
+  club_angel: ["#ff9ec4", "#f17fab"],
+  vc_italia: ["#ffb067", "#f0954a"],
+  family_office: ["#fcd877", "#efc154"],
+  vc_europa: ["#86ddb4", "#62c497"],
+  altro: ["#ff8b7b", "#ef6e5d"],
 };
 const swatch = (s: { color: string; dark: string }) => ({
-  backgroundImage: `linear-gradient(135deg, ${s.color}, ${s.dark})`,
-  boxShadow: `0 0 0 3px ${s.color}33`,
+  backgroundColor: s.color,
+  boxShadow: `inset 0 0 0 1.5px ${s.dark}, 0 2px 0 ${s.dark}55`,
 });
+/** I numeri grandi in Nunito, tondo e amichevole (caricato nel layout del round). */
+const ROUND_FONT = { fontFamily: "var(--font-round), var(--font-geist-sans), sans-serif" };
 
 /** Curva di tutta la pagina: ease-out lungo, niente rimbalzi. */
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -169,18 +171,6 @@ export function RoundPage({
 
   const reduce = useReducedMotion();
 
-  // Alone sotto l'anello: i colori delle fette, nello stesso ordine.
-  const halo = useMemo(() => {
-    const tot = slices.reduce((a, b) => a + b.count, 0) || 1;
-    let a = 0;
-    const stops = slices.map((s) => {
-      const from = (a / tot) * 360;
-      a += s.count;
-      return `${s.dark} ${from.toFixed(1)}deg ${((a / tot) * 360).toFixed(1)}deg`;
-    });
-    return `conic-gradient(${stops.join(", ")})`;
-  }, [slices]);
-
   const switchMode = (m: Mode) => {
     if (m === mode) return;
     setMode(m);
@@ -248,7 +238,7 @@ export function RoundPage({
           {...rise(0.1, reduce)}
           type="button"
           onClick={() => setCreating(true)}
-          className="-mr-2 inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[13.5px] text-[#52525b] transition-colors hover:bg-[#f4f4f5] hover:text-[#111111]"
+          className="-mr-2 inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[13.5px] text-[#52525b] transition-colors hover:bg-[#f6ecdf] hover:text-[#111111]"
         >
           <Plus className="h-4 w-4" />
           Aggiungi
@@ -258,7 +248,7 @@ export function RoundPage({
       <div className="mt-8 grid items-start gap-12 md:mt-6 md:grid-cols-[minmax(0,1fr)_360px] md:gap-14 lg:grid-cols-[minmax(0,1fr)_400px]">
         {/* La ciambella */}
         <div className="flex flex-col items-center">
-          <motion.div {...rise(0.15, reduce)} className="relative inline-flex rounded-full bg-[#f4f4f5] p-1">
+          <motion.div {...rise(0.15, reduce)} className="relative inline-flex rounded-full bg-[#f3e9dc] p-1">
             {(["stato", "tipologia"] as const).map((m) => (
               <button
                 key={m}
@@ -266,13 +256,13 @@ export function RoundPage({
                 onClick={() => switchMode(m)}
                 className={cn(
                   "relative h-9 cursor-pointer rounded-full px-5 text-[13.5px] transition-colors duration-300",
-                  mode === m ? "font-medium text-[#111111]" : "text-[#71717a] hover:text-[#111111]",
+                  mode === m ? "font-semibold text-[#3b2f25]" : "text-[#8a7a6a] hover:text-[#3b2f25]",
                 )}
               >
                 {mode === m ? (
                   <motion.span
                     layoutId="round-mode-pill"
-                    className="absolute inset-0 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
+                    className="absolute inset-0 rounded-full bg-white shadow-[0_2px_0_rgba(185,139,94,0.18)]"
                     transition={{ duration: 0.55, ease: EASE }}
                   />
                 ) : null}
@@ -283,7 +273,6 @@ export function RoundPage({
 
           <RoundDonut
             slices={slices}
-            halo={halo}
             total={summary.total}
             active={active}
             selected={panel?.kind === "slice" ? panel.key : null}
@@ -304,10 +293,10 @@ export function RoundPage({
             {stats.map((s, i) => (
               <motion.div key={s.label} className="text-center" {...rise(0.55 + i * 0.08, reduce)}>
                 <dt className="sr-only">{s.label}</dt>
-                <dd className="text-[28px] font-medium leading-none tracking-[-0.035em] tabular-nums text-[#111111] md:text-[34px]">
+                <dd className="text-[30px] font-extrabold leading-none tabular-nums text-[#3b2f25] md:text-[36px]" style={ROUND_FONT}>
                   <CountUp value={s.value} delay={0.6 + i * 0.08} duration={1.6} />
                 </dd>
-                <dd className="mt-2 text-[12.5px] text-[#71717a]">{s.label}</dd>
+                <dd className="mt-1.5 text-[12.5px] text-[#8a7a6a]">{s.label}</dd>
               </motion.div>
             ))}
           </dl>
@@ -355,12 +344,12 @@ export function RoundPage({
       <Sheet open={!desktop && !!panel} onOpenChange={(o) => !o && closePanel()}>
         <SheetContent
           side="bottom"
-          className="max-h-[82dvh] gap-0 rounded-t-[28px] border-t-0 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 data-[state=open]:animate-[round-sheet-up-in_0.6s_cubic-bezier(0.16,1,0.3,1)] data-[state=closed]:animate-[round-sheet-up-out_0.32s_cubic-bezier(0.4,0,1,1)] [&>button:last-child]:hidden"
+          className="max-h-[82dvh] gap-0 rounded-t-[28px] border-t-0 bg-[#fffaf3] px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 data-[state=open]:animate-[round-sheet-up-in_0.6s_cubic-bezier(0.16,1,0.3,1)] data-[state=closed]:animate-[round-sheet-up-out_0.32s_cubic-bezier(0.4,0,1,1)] [&>button:last-child]:hidden"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <SheetTitle className="sr-only">{panelTitle}</SheetTitle>
           <SheetDescription className="sr-only">Contatti di questa fetta</SheetDescription>
-          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[#e4e4e7]" />
+          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[#e8dccd]" />
           {!desktop ? list : null}
         </SheetContent>
       </Sheet>
@@ -414,9 +403,9 @@ function DonutCenter({
           transition={{ duration: 0.8, ease: EASE, delay: 0.05 }}
           className="flex flex-col items-center text-center"
         >
-          <span className="text-[30px] font-semibold leading-none tracking-[-0.045em] text-[#111111] md:text-[46px]">{target}</span>
-          <span className="mt-2 text-[12.5px] text-[#71717a] md:text-[13px]">{committed ? `${committed} impegnati` : "obiettivo"}</span>
-          <span className="mt-0.5 text-[12px] tabular-nums text-[#a1a1aa] md:text-[12.5px]">
+          <span className="text-[38px] font-extrabold leading-none tracking-[-0.02em] text-[#3b2f25] md:text-[50px]" style={ROUND_FONT}>{target}</span>
+          <span className="mt-2 text-[12.5px] text-[#8a7a6a] md:text-[13px]">{committed ? `${committed} impegnati` : "obiettivo"}</span>
+          <span className="mt-0.5 text-[12px] tabular-nums text-[#b3a393] md:text-[12.5px]">
             <CountUp value={total} delay={0.5} /> investitori
           </span>
         </motion.div>
@@ -429,20 +418,20 @@ function DonutCenter({
           transition={{ duration: 0.45, ease: EASE }}
           className="flex flex-col items-center text-center"
         >
-          <span className="flex items-center gap-2 text-[12px] font-medium uppercase tracking-[0.14em] text-[#71717a]">
-            <span className="h-2 w-2 rounded-full" style={swatch(slice)} />
+          <span className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-[#8a7a6a]">
+            <span className="h-2.5 w-2.5 rounded-full" style={swatch(slice)} />
             {slice.label}
           </span>
-          <span className="mt-1 text-[32px] font-semibold leading-none tracking-[-0.045em] tabular-nums text-[#111111] md:text-[48px]">
+          <span className="mt-1 text-[40px] font-extrabold leading-none tabular-nums text-[#3b2f25] md:text-[52px]" style={ROUND_FONT}>
             <CountUp value={slice.count} duration={0.7} />
           </span>
-          <span className="mt-1.5 text-[12px] tabular-nums text-[#71717a] md:text-[13px]">
+          <span className="mt-1.5 text-[12px] tabular-nums text-[#8a7a6a] md:text-[13px]">
             {pct(slice.count, total)} del round{slice.hint ? ` · ${slice.hint}` : ""}
           </span>
           <button
             type="button"
             onClick={() => onOpen(slice.key)}
-            className="pointer-events-auto mt-1 inline-flex h-9 cursor-pointer items-center gap-1 rounded-full px-3 text-[12.5px] font-medium text-[#111111] transition-colors hover:bg-[#f4f4f5] md:hidden"
+            className="pointer-events-auto mt-1 inline-flex h-9 cursor-pointer items-center gap-1 rounded-full px-3 text-[12.5px] font-medium text-[#111111] transition-colors hover:bg-[#f6ecdf] md:hidden"
           >
             Vedi chi sono <ArrowRight className="h-3.5 w-3.5" />
           </button>
@@ -498,7 +487,7 @@ function Legend({
           </motion.li>
         ))}
       </ul>
-      <div className="mt-6 flex items-center justify-between border-t border-[#f0f0f1] pt-2 text-[13px]">
+      <div className="mt-6 flex items-center justify-between border-t border-[#efe4d6] pt-2 text-[13px]">
         <button type="button" onClick={onAll} className="-ml-1 inline-flex h-11 cursor-pointer items-center gap-1.5 px-1 text-[#111111] hover:underline hover:underline-offset-4">
           Vedi tutti <span className="tabular-nums text-[#a1a1aa]">{total}</span>
         </button>
@@ -549,7 +538,7 @@ function ContactList({
           type="button"
           aria-label="Chiudi la lista"
           onClick={onClose}
-          className="-mr-2 flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#71717a] transition-colors hover:bg-[#f4f4f5] hover:text-[#111111]"
+          className="-mr-2 flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#71717a] transition-colors hover:bg-[#f6ecdf] hover:text-[#111111]"
         >
           <X className="h-[18px] w-[18px]" />
         </button>
@@ -563,7 +552,7 @@ function ContactList({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Cerca un nome"
-            className="h-11 w-full border-b border-[#f0f0f1] bg-transparent pl-6 text-[14.5px] text-[#111111] outline-none transition-colors placeholder:text-[#b4b4b9] focus:border-[#111111]"
+            className="h-11 w-full border-b border-[#efe4d6] bg-transparent pl-6 text-[14.5px] text-[#111111] outline-none transition-colors placeholder:text-[#b4b4b9] focus:border-[#111111]"
           />
         </label>
       ) : null}
@@ -579,7 +568,7 @@ function ContactList({
             <button
               type="button"
               onClick={() => onOpen(r.id)}
-              className="flex min-h-[52px] w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-[#f7f7f8]"
+              className="flex min-h-[52px] w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-[#f8efe3]"
             >
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[14.5px] font-medium tracking-[-0.01em] text-[#111111]">{r.name}</span>

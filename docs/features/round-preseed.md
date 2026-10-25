@@ -68,14 +68,14 @@ Il 25/10 Tiziano ha giudicato la prima versione, con dashboard e liste per
 tipologia, «troppo complessa». Ha chiesto una pagina totalmente grafica:
 «non voglio vedere liste infinite a meno che tramite interazione l'utente non
 capisca di volerla vedere». Modello dati invariato, `RoundPage.tsx`. Il 25/10 sera la ciambella è diventata tridimensionale e animata, su richiesta di Tiziano («tridimensionale e animato un sacco, ma clean, niente bounce»).
-- **Ciambella tridimensionale e viva** (`RoundDonut.tsx`, SVG puro + `motion/react`, senza librerie 3D), con un selettore «Per stato / Per tipologia» (pill che scivola con `layoutId`).
-  - È un anello in prospettiva con il lato davanti, la parete interna dietro, ombra di contatto e un alone colorato sfocato (conic-gradient, solo transform).
-  - Palette viva ma sobria: smeraldo, turchese, viola, orchidea, cielo, ambra, corallo; ogni fetta ha un gradiente chiaro → scuro. I pallini di stato in `STATUS_COLOR` usano gli stessi toni.
-  - Un solo loop `useAnimationFrame` porta ogni valore al bersaglio con un avvicinamento esponenziale: morbido, senza overshoot, indipendente dal frame rate. React ridisegna solo mentre qualcosa si muove.
-  - **Sigla d'ingresso**: l'anello ruota in posizione e si inclina, le fette crescono una dopo l'altra, i numeri contano (`CountUp` con `animate` di motion), i testi salgono a cascata.
-  - **Da ferma**: respiro lento dell'inclinazione, un riflesso che scorre sull'anello, parallasse interpolata col cursore. Sono transform e attributi via ref, senza render di React.
-  - **Cambio vista = morph**: ogni posto (slot, 9) rimodella il suo arco e sfuma il colore. Per questo la ciambella non va mai rimontata (niente `key={mode}`).
-  - **Al clic** la fetta esce in avanti; la lista entra (e esce) con `AnimatePresence`, righe a cascata con sfocatura. La scheda e il foglio dal basso entrano ed escono in profondità: keyframe `round-sheet-*` in `globals.css`.
+- **Ciambella morbida, stile cartoon/clay** (`RoundDonut.tsx`, SVG puro + `motion/react`). Il 25/10 sera Tiziano ha scartato la versione 3D («spigolosa, futuristica, fredda»).
+  - Anello spesso, estremità tonde (`stroke-linecap: round`), piccoli spazi tra le fette.
+  - Profondità: ombra da sticker piatta e sfocata sotto (ferma), bordo appena più scuro, luce interna tenue. Niente prospettiva né alone.
+  - Le fette piccole prendono un minimo fisso (un bollino intero, `MIN_DEG`) e il resto del giro si divide in proporzione: niente sovrapposizioni.
+  - Palette pastello calda: corallo, mandarino, giallo burro, menta, lilla, rosa. «Da contattare» è sabbia. Sfondo crema (`#fffaf3`) nel layout del round. Numeri grandi in Nunito (`next/font`, variabile `--font-round`, caricato solo nel layout del round).
+  - Un solo loop `useAnimationFrame` con avvicinamento esponenziale (niente overshoot). All'ingresso le fette si gonfiano una dopo l'altra (scala 0.9 → 1) mentre l'anello ruota un poco. Da ferma respira piano, con un filo di parallasse.
+  - Cambio vista = morph per slot (9): archi e colori si rimodellano; i posti in più si sgonfiano e spariscono. Per questo la ciambella non va mai rimontata (niente `key={mode}`).
+  - Hover: la fetta si ingrandisce appena e le altre si attenuano. La lista entra ed esce con `AnimatePresence`; scheda e foglio dal basso con le keyframe `round-sheet-*`.
   - Con `prefers-reduced-motion` tutto è fermo.
 - **Mouse**: al passaggio la fetta si ingrossa e il centro mostra conteggio e
   percentuale (per tipologia anche quanti sono già avviati). Al clic, e solo

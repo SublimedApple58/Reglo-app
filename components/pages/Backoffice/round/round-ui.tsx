@@ -46,7 +46,7 @@ export function StatusDot({ status, className }: { status: RoundStatus; classNam
       className={cn("inline-block h-[7px] w-[7px] shrink-0 rounded-full", className)}
       style={
         hollow
-          ? { boxShadow: "inset 0 0 0 1.25px #a1a1aa" }
+          ? { boxShadow: "inset 0 0 0 1.5px #d9c6ad" }
           : { backgroundColor: STATUS_COLOR[status] }
       }
     />
