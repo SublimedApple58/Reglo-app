@@ -68,14 +68,14 @@ Il 25/10 Tiziano ha giudicato la prima versione, con dashboard e liste per
 tipologia, «troppo complessa». Ha chiesto una pagina totalmente grafica:
 «non voglio vedere liste infinite a meno che tramite interazione l'utente non
 capisca di volerla vedere». Modello dati invariato, `RoundPage.tsx`. Il 25/10 sera la ciambella è diventata tridimensionale e animata, su richiesta di Tiziano («tridimensionale e animato un sacco, ma clean, niente bounce»).
-- **Ciambella morbida, stile cartoon/clay** (`RoundDonut.tsx`, SVG puro + `motion/react`). Il 25/10 sera Tiziano ha scartato la versione 3D («spigolosa, futuristica, fredda»).
-  - Anello spesso, estremità tonde (`stroke-linecap: round`), piccoli spazi tra le fette.
-  - Profondità: ombra da sticker piatta e sfocata sotto (ferma), bordo appena più scuro, luce interna tenue. Niente prospettiva né alone.
-  - Le fette piccole prendono un minimo fisso (un bollino intero, `MIN_DEG`) e il resto del giro si divide in proporzione: niente sovrapposizioni.
-  - Palette pastello calda: corallo, mandarino, giallo burro, menta, lilla, rosa. «Da contattare» è sabbia. Sfondo quello neutro del backoffice (niente crema: bocciato), schede bianche. Numeri grandi in Nunito (`next/font`, variabile `--font-round`, caricato solo nel layout del round).
+- **Ciambella editoriale, nello stile del deck Reglo** (`RoundDonut.tsx`, SVG puro + `motion/react`). Storia: 3D scartata («spigolosa, futuristica, fredda»), poi cartoon/clay a pastelli, poi il 25/10 notte Tiziano ha chiesto «più corporate, premium e pro, tipo il deck» (reglo-deck.vercel.app, sorgente in `~/Developer/reglo-deck-raccolta-2026`).
+  - Anello pieno: ogni fetta è un settore d'anello con gli angoli appena arrotondati (path rientrato di `CORNER` e tratto largo 2·`CORNER` con giunti tondi), spazi sottili tra le fette, ombra discreta e calda sotto (ferma). Niente bordi, riflessi o aloni.
+  - Le fette piccole prendono un minimo fisso (`MIN_DEG`) e il resto del giro si divide in proporzione.
+  - Palette del deck, niente blu: nero e grigi caldi per gli stati freddi (contattato `#1a1a1a`, in pausa `#a39a86`, bloccato `#5d574a`, no `#cfc6b0`, da contattare `#ECE7DC`), tre accenti per quelli che contano (risposto oro `#C9B27C`, call salvia `#B5DBA0`, interessato salvia scura `#6FA05A`, impegno rosso Reglo `#D7222B`). Il rosso è solo dell'«Impegno»: la vista per tipologia usa nero, grigi, salvia e oro. Gli stessi colori sono in `STATUS_COLOR` per i pallini di lista e scheda.
+  - Tipografia del deck: Figtree (il font dell'app), titolo «Pre-seed 2026.» a 500 con tracking stretto, numeri grandi a 400 con tracking −0.05em e cifre tabellari, etichette maiuscole piccole con spaziatura .16em, simbolo Reglo accanto a «Round». Selettore di vista e «Aggiungi» neri come le pillole del deck.
   - Un solo loop `useAnimationFrame` con avvicinamento esponenziale (niente overshoot). All'ingresso le fette si gonfiano una dopo l'altra (scala 0.9 → 1) mentre l'anello ruota un poco. Da ferma respira piano, con un filo di parallasse.
   - Cambio vista = morph per slot (9): archi e colori si rimodellano; i posti in più si sgonfiano e spariscono. Per questo la ciambella non va mai rimontata (niente `key={mode}`).
-  - Hover: la fetta si ingrandisce appena e le altre si attenuano. La lista entra ed esce con `AnimatePresence`; scheda e foglio dal basso con le keyframe `round-sheet-*`.
+  - Hover: la fetta si ingrandisce appena e le altre si attenuano. La sigla, il respiro, la parallasse e il morph sono rimasti uguali in tutti i cambi di stile. La lista entra ed esce con `AnimatePresence`; scheda e foglio dal basso con le keyframe `round-sheet-*`.
   - Le animazioni girano sempre, anche con `prefers-reduced-motion` (regola fissa, `design-system.md` §6; la pagina è avvolta in `MotionConfig reducedMotion="never"`). L'hover ha una sola zona di aggancio per fetta: un settore d'anello fermo, da metà spazio a metà spazio, contiguo agli altri e senza sovrapposizioni.
 - **Mouse**: al passaggio la fetta si ingrossa e il centro mostra conteggio e
   percentuale (per tipologia anche quanti sono già avviati). Al clic, e solo

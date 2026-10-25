@@ -71,15 +71,15 @@ export const STATUS_HINT: Record<RoundStatus, string> = {
 
 /** Colore del pallino di stato: lo stesso tono delle fette della ciambella. */
 export const STATUS_COLOR: Record<RoundStatus, string> = {
-  da_contattare: "#e4d3bd",
-  contattato: "#9d86e8",
-  bloccato: "#ef6e5d",
-  risposto: "#f17fab",
-  call: "#f0954a",
-  interessato: "#62c497",
-  impegno: "#3aa87d",
-  no: "#cbbdad",
-  in_pausa: "#efc154",
+  da_contattare: "#ECE7DC",
+  contattato: "#1a1a1a",
+  bloccato: "#5d574a",
+  risposto: "#C9B27C",
+  call: "#B5DBA0",
+  interessato: "#6FA05A",
+  impegno: "#D7222B",
+  no: "#cfc6b0",
+  in_pausa: "#a39a86",
 };
 
 export const ROUND_OWNERS = ["tiziano", "gabriele", "hiro"] as const;

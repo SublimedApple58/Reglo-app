@@ -20,8 +20,9 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * Primitivi del Round pre-seed: bianco e nero, un pallino di stato e le
- * iniziali di chi se ne occupa. Niente bordi dove basta lo spazio.
+ * Primitivi del Round pre-seed: bianco e nero con i grigi caldi del deck, un
+ * pallino di stato e le iniziali di chi se ne occupa. Niente bordi dove basta
+ * lo spazio.
  */
 
 const MONTHS = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
@@ -46,7 +47,7 @@ export function StatusDot({ status, className }: { status: RoundStatus; classNam
       className={cn("inline-block h-[7px] w-[7px] shrink-0 rounded-full", className)}
       style={
         hollow
-          ? { boxShadow: "inset 0 0 0 1.5px #d9c6ad" }
+          ? { boxShadow: "inset 0 0 0 1.5px #cfc6b0" }
           : { backgroundColor: STATUS_COLOR[status] }
       }
     />
@@ -73,7 +74,7 @@ export function StatusMenu({
           onClick={(e) => e.stopPropagation()}
           className={cn(
             "-mx-2.5 inline-flex h-11 cursor-pointer items-center gap-2 whitespace-nowrap rounded-full px-2.5 text-[13.5px] transition-colors hover:bg-[#f4f4f5] disabled:cursor-wait disabled:opacity-50 md:h-9",
-            value === "bloccato" ? "text-[#be123c]" : value === "no" ? "text-[#a1a1aa]" : "text-[#111111]",
+            value === "bloccato" ? "text-[#5d574a]" : value === "no" ? "text-[#a1a1aa]" : "text-[#111111]",
           )}
         >
           <StatusDot status={value} />

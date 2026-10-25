@@ -76,6 +76,10 @@ Nero pieno `#000000` no: `#111111` lascia spazio a un hover **più chiaro**
 
 ---
 
+### Palette del deck Reglo per grafici del backoffice (Round pre-seed, 2026-10-25)
+
+Per i grafici del backoffice che devono sembrare «corporate, premium, tipo il deck» (riferimento: reglo-deck.vercel.app) si usa la palette del deck, non quella categorica dell'agenda: nero `#1a1a1a` e grigi caldi (`#5d574a`, `#a39a86`, `#cfc6b0`, `#ECE7DC`) come base, più pochi accenti — oro `#C9B27C`, salvia `#B5DBA0` / `#6FA05A`, rosso Reglo `#D7222B` (uno solo, per il dato che conta di più). **Niente blu né navy.** Superfici di supporto in grigio caldo appena accennato (`#f1efeb`), mai crema (bocciato). Esempio vivo: `components/pages/Backoffice/round/RoundPage.tsx`.
+
 ## 3. Typography
 
 CSS utility classes definite in `globals.css`:

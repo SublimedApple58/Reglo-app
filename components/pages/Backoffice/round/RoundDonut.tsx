@@ -4,12 +4,11 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { animate, useAnimationFrame } from "motion/react";
 
 /**
- * Ciambella morbida, stile cartoon e clay, in SVG puro.
+ * Ciambella editoriale, nello stile del deck Reglo, in SVG puro.
  *
- * - Anello spesso e paffuto, estremità arrotondate (`stroke-linecap: round`),
- *   piccoli spazi tra le fette. La profondità è un'ombra piatta e morbida
- *   sotto, come uno sticker, più un bordo appena più scuro e una luce interna
- *   tenue da plastilina. Niente prospettiva, niente riflessi metallici.
+ * - Anello pieno, fette come settori con gli angoli appena arrotondati,
+ *   spazi sottili tra l'una e l'altra, un'ombra discreta sotto.
+ *   Niente bordi, riflessi o aloni.
  * - Un solo loop (`useAnimationFrame`) porta ogni valore al bersaglio con un
  *   avvicinamento esponenziale: morbido, mai oltre il valore finale.
  * - All'ingresso le fette si gonfiano una dopo l'altra (scala 0.9 → 1).
@@ -22,16 +21,16 @@ import { animate, useAnimationFrame } from "motion/react";
  *   passando da una fetta all'altra lo stato passa diretto, senza resettarsi.
  */
 
-export type DonutSlice = { key: string; label: string; count: number; color: string; dark: string };
+export type DonutSlice = { key: string; label: string; count: number; color: string };
 
 const SIZE = 320;
 const H = 336; // spazio per l'ombra sotto
 const C = SIZE / 2;
 const R = 116;
-const SW = 40; // spessore dell'anello
-const GAP = 3.2; // gradi tra le estremità tonde
-const CAP = (SW / 2 / R) * (180 / Math.PI); // quanto sporge il tappo tondo, in gradi
-const MIN_DEG = 2 * CAP + GAP + 0.6; // una fetta da un contatto resta un bel bollino
+const SW = 34; // spessore dell'anello
+const GAP = 1.6; // gradi tra una fetta e l'altra
+const CORNER = 4; // raggio degli angoli delle fette, in px
+const MIN_DEG = 7.5; // una fetta da un contatto resta leggibile
 const SLOTS = 9;
 
 const rad = (deg: number) => (deg * Math.PI) / 180;
@@ -50,10 +49,23 @@ const rgb = (c: number[]) => `rgb(${Math.round(c[0])} ${Math.round(c[1])} ${Math
 
 const pt = (r: number, deg: number) =>
   `${(C + r * Math.sin(rad(deg))).toFixed(2)} ${(C - r * Math.cos(rad(deg))).toFixed(2)}`;
-/** Arco in senso orario da a0 ad a1 (0 = in alto). Lunghezza minima: un bollino. */
-const arcPath = (a0: number, a1: number, r = R) => {
-  const end = Math.max(a1, a0 + 0.05);
-  return `M ${pt(r, a0)} A ${r} ${r} 0 ${end - a0 > 180 ? 1 : 0} 1 ${pt(r, end)}`;
+/**
+ * Settore d'anello da a0 ad a1 (0 = in alto, senso orario), rientrato di
+ * CORNER: disegnato con un tratto largo 2·CORNER e giunti tondi, torna alla
+ * misura piena con gli angoli appena arrotondati.
+ */
+const slicePath = (a0: number, a1: number) => {
+  const ro = R + SW / 2 - CORNER;
+  const ri = R - SW / 2 + CORNER;
+  const inset = (r: number) => (CORNER / r) * (180 / Math.PI);
+  const side = (r: number): [number, number] => {
+    const d = inset(r);
+    return a1 - a0 > 2 * d ? [a0 + d, a1 - d] : [(a0 + a1) / 2, (a0 + a1) / 2];
+  };
+  const [o0, o1] = side(ro);
+  const [i0, i1] = side(ri);
+  const large = (x0: number, x1: number) => (x1 - x0 > 180 ? 1 : 0);
+  return `M ${pt(ro, o0)} A ${ro} ${ro} 0 ${large(o0, o1)} 1 ${pt(ro, o1)} L ${pt(ri, i1)} A ${ri} ${ri} 0 ${large(i0, i1)} 0 ${pt(ri, i0)} Z`;
 };
 const HIT_IN = R - SW / 2 - 10;
 const HIT_OUT = R + SW / 2 + 10;
@@ -64,7 +76,7 @@ const sectorPath = (a0: number, a1: number) => {
   return `M ${pt(HIT_OUT, a0)} A ${HIT_OUT} ${HIT_OUT} 0 ${large} 1 ${pt(HIT_OUT, end)} L ${pt(HIT_IN, end)} A ${HIT_IN} ${HIT_IN} 0 ${large} 0 ${pt(HIT_IN, a0)} Z`;
 };
 
-type Slot = { a0: number; a1: number; color: RGB; dark: RGB; pop: number; dim: number };
+type Slot = { a0: number; a1: number; color: RGB; pop: number; dim: number };
 
 /** Un numero che conta fino al valore (motion `animate`, ease-out lungo). */
 export function CountUp({ value, duration = 1.4, delay = 0 }: { value: number; duration?: number; delay?: number }) {
@@ -121,15 +133,15 @@ export function RoundDonut({
     }
     const sum = weights.reduce((a, b) => a + b, 0) || 1;
     let a = 0;
-    const out: Array<{ a0: number; a1: number; color: RGB; dark: RGB }> = [];
+    const out: Array<{ a0: number; a1: number; color: RGB }> = [];
     for (let i = 0; i < SLOTS; i++) {
       if (i < slices.length) {
         const span = (weights[i] / sum) * 360;
-        out.push({ a0: a, a1: a + span, color: hexToRgb(slices[i].color), dark: hexToRgb(slices[i].dark) });
+        out.push({ a0: a, a1: a + span, color: hexToRgb(slices[i].color) });
         a += span;
       } else {
         const last = out[out.length - 1];
-        out.push({ a0: 360, a1: 360, color: last?.color ?? [239, 227, 211], dark: last?.dark ?? [222, 205, 184] });
+        out.push({ a0: 360, a1: 360, color: last?.color ?? [236, 231, 220] });
       }
     }
     return out;
@@ -141,7 +153,7 @@ export function RoundDonut({
 
   const slots = useRef<Slot[] | null>(null);
   if (!slots.current) {
-    slots.current = targets.map((t) => ({ a0: t.a0, a1: t.a1, color: [...t.color] as RGB, dark: [...t.dark] as RGB, pop: 0, dim: 0 }));
+    slots.current = targets.map((t) => ({ a0: t.a0, a1: t.a1, color: [...t.color] as RGB, pop: 0, dim: 0 }));
   }
   const intro = useRef(0);
   const spin = useRef(-36);
@@ -173,7 +185,6 @@ export function RoundDonut({
       s.a1 = settle(s.a1, t.a1, 0.34);
       for (let c = 0; c < 3; c++) {
         s.color[c] = settle(s.color[c], t.color[c], 0.34);
-        s.dark[c] = settle(s.dark[c], t.dark[c], 0.34);
       }
       s.pop = settle(s.pop, i === focusIdx ? (i === selectedIdx ? 1.4 : 1) : 0, 0.18);
       s.dim = settle(s.dim, focusIdx >= 0 && i !== focusIdx ? 1 : 0, 0.22);
@@ -198,18 +209,17 @@ export function RoundDonut({
       const grow = easeOutCubic((t - 0.15 - i * 0.1) / 0.85);
       if (grow <= 0.001 || s.a1 - s.a0 <= 0.05) return null;
       const span = (s.a1 - s.a0) * (0.35 + 0.65 * grow);
-      const a0 = s.a0 + spin.current + CAP + GAP / 2;
-      const a1 = s.a0 + spin.current + span - CAP - GAP / 2;
+      const a0 = s.a0 + spin.current + GAP / 2;
+      const a1 = s.a0 + spin.current + span - GAP / 2;
       // un posto che si richiude (cambio vista) si sgonfia e sparisce, invece di restare un bollino
       const presence = clamp01((s.a1 - s.a0) / MIN_DEG);
       if (presence < 0.02) return null;
-      const scale = (0.9 + 0.1 * grow) * (1 + 0.045 * s.pop) * (0.6 + 0.4 * presence);
+      const scale = (0.9 + 0.1 * grow) * (1 + 0.035 * s.pop) * (0.6 + 0.4 * presence);
       return {
         i,
         s,
-        d: arcPath(a0, a1),
-        hl: a1 - a0 > 4 ? arcPath(a0 + 1, a1 - 1, R + SW * 0.16) : null,
-        grow: grow * presence,
+        d: slicePath(a0, a1),
+        grow: grow * presence * presence, // chi si richiude sparisce in fretta, senza residui
         scale,
       };
     })
@@ -241,35 +251,30 @@ export function RoundDonut({
         >
           <defs>
             <filter id="rd-soft" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="5" />
+              <feGaussianBlur stdDeviation="7" />
             </filter>
           </defs>
 
-          {/* Ombra da sticker: piatta e morbida, neutra per stare bene sul bianco. Ferma, quindi la sfocatura costa una volta sola. */}
+          {/* Ombra discreta, calda. Ferma, quindi la sfocatura costa una volta sola. */}
           <circle
             cx={C}
-            cy={C + 12}
+            cy={C + 9}
             r={R}
             fill="none"
-            stroke="#8c7f74"
-            strokeOpacity={0.14 * easeOutCubic(t / 1.2)}
-            strokeWidth={SW + 4}
+            stroke="#3d3528"
+            strokeOpacity={0.1 * easeOutCubic(t / 1.2)}
+            strokeWidth={SW}
             filter="url(#rd-soft)"
           />
 
-          {shapes.map(({ i, s, d, hl, grow, scale }) => (
+          {shapes.map(({ i, s, d, grow, scale }) => (
             <g
               key={i}
               className="pointer-events-none"
               transform={`translate(${C} ${C}) scale(${scale.toFixed(4)}) translate(${-C} ${-C})`}
-              opacity={(grow * (1 - s.dim * 0.55)).toFixed(3)}
+              opacity={(grow * (1 - s.dim * 0.62)).toFixed(3)}
             >
-              {/* bordo appena più scuro, poi la pasta, poi la luce interna */}
-              <path d={d} fill="none" stroke={rgb(s.dark)} strokeWidth={SW + 3} strokeLinecap="round" />
-              <path d={d} fill="none" stroke={rgb(s.color)} strokeWidth={SW - 1} strokeLinecap="round" />
-              {hl ? (
-                <path d={hl} fill="none" stroke="#fff" strokeOpacity={0.32} strokeWidth={SW * 0.22} strokeLinecap="round" />
-              ) : null}
+              <path d={d} fill={rgb(s.color)} stroke={rgb(s.color)} strokeWidth={CORNER * 2} strokeLinejoin="round" />
             </g>
           ))}
 
