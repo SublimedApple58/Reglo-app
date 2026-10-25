@@ -355,7 +355,7 @@ export function InvestorSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 sm:max-w-[600px]">
+      <SheetContent className="w-full gap-0 sm:max-w-[600px]" onOpenAutoFocus={(e) => e.preventDefault()}>
         {/* Testata */}
         <div className="border-b border-[#f2f2f3] px-5 pb-4 pt-6 sm:px-7">
           <div className="pr-8 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#71717a]">
@@ -444,12 +444,12 @@ export function InvestorSheet({
                     <EuroInput id="rd-commit" value={draft.commitment} onChange={(v) => set("commitment", v)} />
                   </Field>
                 ) : null}
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-4">
                   <Field label="Lead o follower">
                     <Choice
                       value={draft.leadRole}
                       onChange={(v) => set("leadRole", v)}
-                      options={LEAD_ROLES.map((r) => ({ value: r, label: LEAD_ROLE_LABEL[r].replace("Lead ", "") }))}
+                      options={LEAD_ROLES.map((r) => ({ value: r, label: LEAD_ROLE_LABEL[r] }))}
                       noneLabel="—"
                     />
                   </Field>

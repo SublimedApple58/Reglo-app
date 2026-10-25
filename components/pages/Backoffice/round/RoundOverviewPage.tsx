@@ -55,7 +55,7 @@ export function RoundOverviewPage({
     <div className="space-y-5">
       {/* Obiettivo + numeri chiave */}
       <FinCard className="overflow-hidden">
-        <div className="grid lg:grid-cols-[1.25fr_1fr]">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.25fr_1fr]">
           <div className="border-b border-[#f2f2f3] p-5 sm:p-7 lg:border-b-0 lg:border-r">
             <FinLabel>{round.name} · obiettivo</FinLabel>
             <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -130,7 +130,7 @@ export function RoundOverviewPage({
         </div>
       </FinCard>
 
-      <div className="grid gap-5 lg:grid-cols-[1.25fr_1fr]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.25fr_1fr]">
         {/* Imbuto */}
         <FinCard className="p-5 sm:p-6">
           <SectionTitle aside="ogni tappa resta anche se poi arriva un no">Imbuto</SectionTitle>
@@ -152,7 +152,7 @@ export function RoundOverviewPage({
                         "absolute inset-y-0 flex items-center text-[14px] font-semibold tabular-nums",
                         n / base > 0.12 ? "left-3 text-white" : "text-[#111111]",
                       )}
-                      style={n / base > 0.12 ? undefined : { left: `calc(${(n / base) * 100}% + ${n ? 44 : 12}px)` }}
+                      style={n / base > 0.12 ? undefined : { left: n ? `calc(max(${(n / base) * 100}%, 34px) + 10px)` : 12 }}
                     >
                       {n}
                     </span>
@@ -196,7 +196,7 @@ export function RoundOverviewPage({
         </FinCard>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1.25fr_1fr]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.25fr_1fr]">
         {/* Per tipologia */}
         <FinCard className="p-5 sm:p-6">
           <SectionTitle aside={`${s.total} nel round`}>Per tipologia</SectionTitle>

@@ -265,6 +265,13 @@ export function RoundInvestorsPage({ investors, today }: { investors: RoundInves
               )}
             </div>
 
+            <div className="hidden grid-cols-[minmax(0,1fr)_168px_52px_150px_120px] gap-x-3 border-b border-[#f2f2f3] px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#a1a1aa] md:grid">
+              <span>Investitore</span>
+              <span>Stato</span>
+              <span>Chi</span>
+              <span>Ruolo</span>
+              <span className="whitespace-nowrap text-right">Prossimo passo</span>
+            </div>
             {g.subs.map(([sub, rows]) => (
               <div key={sub || "none"}>
                 <div className="flex items-baseline gap-2 bg-[#fafafa] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#71717a] sm:px-5">
@@ -339,7 +346,7 @@ function InvestorRow({
       onClick={onOpen}
       className={cn(
         "grid cursor-pointer grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2 px-4 py-3 transition-colors hover:bg-[#fafafa] sm:px-5",
-        "md:grid-cols-[minmax(0,1fr)_168px_52px_150px_104px] md:py-2.5",
+        "md:grid-cols-[minmax(0,1fr)_168px_52px_150px_120px] md:py-2.5",
         pending && "opacity-60",
       )}
     >
@@ -357,12 +364,13 @@ function InvestorRow({
         </div>
       </div>
 
-      <div className="col-start-2 row-start-1 justify-self-end md:col-start-auto md:justify-self-start">
-        <StatusMenu value={row.status} onChange={onStatus} disabled={pending} size="sm" />
-      </div>
-
-      <div className="hidden md:block">
-        <OwnerMenu value={row.owner} onChange={onOwner} disabled={pending} />
+      <div className="flex items-center gap-0.5 md:contents" onClick={(e) => e.stopPropagation()}>
+        <div className="md:justify-self-start">
+          <StatusMenu value={row.status} onChange={onStatus} disabled={pending} size="sm" />
+        </div>
+        <div>
+          <OwnerMenu value={row.owner} onChange={onOwner} disabled={pending} />
+        </div>
       </div>
 
       <div className="hidden min-w-0 items-center gap-1.5 md:flex">
@@ -381,16 +389,18 @@ function InvestorRow({
         )}
       </div>
 
-      {/* Telefono: chi, ruolo e prossimo passo su una riga sola */}
-      <div className="col-span-2 flex items-center gap-2 md:hidden" onClick={(e) => e.stopPropagation()}>
-        <OwnerMenu value={row.owner} onChange={onOwner} disabled={pending} showName />
-        <LeadBadge role={row.leadRole} />
-        {row.nextStepOn ? (
-          <span className="ml-auto text-[12.5px]">
-            <NextStep ymd={row.nextStepOn} today={today} compact />
-          </span>
-        ) : null}
-      </div>
+      {/* Telefono: ruolo e prossimo passo sotto il nome, solo se ci sono */}
+      {row.leadRole || row.nextStepOn ? (
+        <div className="col-span-2 -mt-1 flex items-center gap-2 md:hidden">
+          <LeadBadge role={row.leadRole} />
+          {row.nextStepOn ? (
+            <span className="text-[12.5px]">
+              <span className="text-[#a1a1aa]">Prossimo passo </span>
+              <NextStep ymd={row.nextStepOn} today={today} compact />
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </li>
   );
 }

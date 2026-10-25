@@ -201,6 +201,11 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Login web/mobile**: tolta l'auto-creazione dell'utente admin con la credenziale condivisa (`auth.ts`, `api/mobile/auth/login`)
 - → **Assistenza**: `GLOBAL_ADMIN_EMAIL` resta come destinatario delle notifiche
 
+### Backoffice — Round pre-seed
+- ← **Backoffice access**: protezione e autore dello storico da `requireGlobalAdmin` / `getBackofficeIdentity`. Se cambia l'identità del backoffice, cambia `authorName()` in `lib/actions/round.actions.ts`
+- ← **Finanza**: riusa `finance-ui.tsx` (card, campi, filtri) e le date di `finance-math.ts` (`todayYmdRome`, `ymdToDbDate`). Se cambiano quei primitivi, controlla anche le pagine del round
+- Nessun legame con autoscuole, allievi o app mobile: tabelle isolate
+
 ### Backoffice — Finanza (REG-413)
 - ← **Backoffice KPI**: stessi filtri delle autoscuole di prova (`isExcludedFromKpis`, `isSeedDemo`, `companyKindOf` da `kpi-math.ts`), qui applicati TUTTI (in Finanza anche `seedDemo` e consorziate restano fuori). Se cambia la marcatura delle autoscuole di prova, cambia anche qui
 - ← **Company Plan** (fase 2): MRR (formula `planMonthlyCents` dei KPI) e rinnovi previsti letti da `CompanyPlan`, non copiati. `renewsAt` vuoto = piano «da completare», fuori dalla previsione. Se cambia il modo di prezzare un piano (nuove voci oltre a posti e voce), va aggiornato `listFinancePlans` in `lib/finance/finance-data.ts`, oltre a `planMonthlyCents`

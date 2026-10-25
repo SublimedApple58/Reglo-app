@@ -371,7 +371,10 @@ export async function addRoundInteraction(input: z.input<typeof interactionSchem
         if (!last || data.occurredOn > last) update.lastContactOn = ymdToDbDate(data.occurredOn);
         const implied: RoundStatus =
           data.kind === "call" ? "call" : data.kind === "risposta" ? "risposto" : "contattato";
-        Object.assign(update, milestonesData(milestonesAfterStatus(milestonesOf(current), implied, data.occurredOn)));
+        Object.assign(
+          update,
+          milestonesData(milestonesAfterStatus(milestonesOf(current), implied, data.occurredOn, { onlyAdd: true })),
+        );
       }
       await tx.roundInteraction.create({
         data: {

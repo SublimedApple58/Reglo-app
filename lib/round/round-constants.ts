@@ -170,19 +170,36 @@ export const STATUS_IMPLIES: Record<RoundStatus, FunnelStage[]> = {
   in_pausa: [],
 };
 
+/** Stati del percorso principale: tornarci sopra è una correzione. */
+const MAIN_PATH: RoundStatus[] = ["contattato", "risposto", "call", "interessato", "impegno"];
+
 /**
- * Tappe dopo un cambio di stato: si aggiungono quelle implicate (alla data
- * data) senza mai toglierne, tranne il ritorno a «Da contattare», che è una
- * correzione e azzera tutto.
+ * Tappe dopo un cambio di stato. Si aggiungono quelle implicate (alla data
+ * data). Tornare indietro sul percorso principale è una correzione: le tappe
+ * oltre quella dello stato nuovo si tolgono (un clic sbagliato su «Ha
+ * risposto» non resta nell'imbuto). «No», «In pausa» e «Bloccato» invece non
+ * tolgono niente: un «no» dopo la call conta ancora come call. «Da
+ * contattare» azzera tutto. Con `onlyAdd` (una voce di storico) si aggiunge
+ * e basta.
  */
-export function milestonesAfterStatus(current: Milestones, status: RoundStatus, onYmd: string): Milestones {
+export function milestonesAfterStatus(
+  current: Milestones,
+  status: RoundStatus,
+  onYmd: string,
+  opts: { onlyAdd?: boolean } = {},
+): Milestones {
   if (status === "da_contattare") {
     return { contactedOn: null, respondedOn: null, callOn: null, interestedOn: null, committedOn: null };
   }
   const next = { ...current };
-  for (const stage of STATUS_IMPLIES[status]) {
+  const implied = STATUS_IMPLIES[status];
+  for (const stage of implied) {
     const field = MILESTONE_FIELD[stage];
     if (!next[field]) next[field] = onYmd;
+  }
+  if (!opts.onlyAdd && MAIN_PATH.includes(status)) {
+    const highest = Math.max(...implied.map((s) => FUNNEL_STAGES.indexOf(s)));
+    for (const stage of FUNNEL_STAGES.slice(highest + 1)) next[MILESTONE_FIELD[stage]] = null;
   }
   return next;
 }

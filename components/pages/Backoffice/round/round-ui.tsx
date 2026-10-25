@@ -235,7 +235,7 @@ export function NextStep({ ymd, today, compact }: { ymd: string | null; today: s
 
 export function SectionTitle({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between gap-3">
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
       <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-[#111111]">{children}</h2>
       {aside ? <div className="text-[12.5px] text-[#71717a]">{aside}</div> : null}
     </div>

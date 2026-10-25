@@ -38,6 +38,23 @@ describe("round pre-seed: tappe dell'imbuto", () => {
     expect(afterNo).toEqual(afterCall);
   });
 
+  it("tornare indietro sul percorso principale toglie le tappe successive", () => {
+    const afterResp = milestonesAfterStatus(none, "risposto", "2026-10-20");
+    expect(milestonesAfterStatus(afterResp, "contattato", "2026-10-21")).toEqual({ ...none, contactedOn: "2026-10-20" });
+  });
+
+  it("una voce di storico aggiunge tappe e non ne toglie", () => {
+    const afterCall = milestonesAfterStatus(none, "call", "2026-10-20");
+    expect(milestonesAfterStatus(afterCall, "contattato", "2026-10-25", { onlyAdd: true })).toEqual(afterCall);
+  });
+
+  it("interessato dopo una call tiene la call", () => {
+    const afterCall = milestonesAfterStatus(none, "call", "2026-10-20");
+    const after = milestonesAfterStatus(afterCall, "interessato", "2026-10-23");
+    expect(after.callOn).toBe("2026-10-20");
+    expect(after.interestedOn).toBe("2026-10-23");
+  });
+
   it("«Da contattare» è una correzione: azzera le tappe", () => {
     const afterCall = milestonesAfterStatus(none, "call", "2026-10-20");
     expect(milestonesAfterStatus(afterCall, "da_contattare", "2026-10-25")).toEqual(none);
