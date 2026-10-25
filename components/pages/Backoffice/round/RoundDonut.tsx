@@ -202,6 +202,8 @@ export function RoundDonut({
       wrapRef.current.style.transform = `translate3d(0, ${(breathe * 3).toFixed(2)}px, 0) rotateX(${(breathe * 1.8 - p.y * 5).toFixed(2)}deg) rotateY(${(p.x * 7).toFixed(2)}deg)`;
     }
     if (haloRef.current) {
+      // l'alone entra insieme alle fette, non prima
+      haloRef.current.style.opacity = (0.22 * easeOutCubic(reduce ? 1 : (intro.current - 0.5) / 1.4)).toFixed(3);
       haloRef.current.style.transform = `translate3d(${(p.x * -12).toFixed(1)}px, ${(10 - breathe * 3).toFixed(1)}px, 0) scaleY(0.5) rotate(${(spin.current + (reduce ? 0 : time * 5)).toFixed(1)}deg)`;
     }
     if (sheenRef.current) {
@@ -266,7 +268,7 @@ export function RoundDonut({
       <div
         ref={haloRef}
         aria-hidden
-        className="pointer-events-none absolute inset-x-[10%] top-[16%] aspect-square rounded-full opacity-[0.22] blur-[48px] will-change-transform"
+        className="pointer-events-none absolute inset-x-[10%] top-[16%] aspect-square rounded-full opacity-0 blur-[48px] will-change-transform"
         style={{ background: halo }}
       />
       <div ref={wrapRef} className="relative will-change-transform">
