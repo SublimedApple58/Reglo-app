@@ -58,12 +58,51 @@ somma di `commitmentCents` dei soli «Impegno».
 | Costanti, imbuto, conteggi | `lib/round/round-constants.ts` |
 | Letture | `lib/round/round-data.ts` |
 | Scritture | `lib/actions/round.actions.ts` |
-| Pagine | `app/[locale]/backoffice/round/` (Panoramica, Investitori) |
-| UI | `components/pages/Backoffice/round/` (`RoundOverviewPage`, `RoundInvestorsPage`, `InvestorSheet`, `round-ui`) |
+| Pagina | `app/[locale]/backoffice/round/page.tsx` (unica; `/round/investitori` reindirizza qui) |
+| UI | `components/pages/Backoffice/round/` (`RoundPage`, `InvestorSheet`, `round-ui`) |
 | Import | `scripts/round-preseed/export-outreach.py` + `scripts/seed-round-preseed.ts` |
 
-La scheda si apre con `?scheda=<id>` (link dalla dashboard). La lista accetta
-anche `?stato=`, `?tipologia=` e `?ordine=prossimo`.
+## Interfaccia (grafica, 2026-10-25)
+
+Il 25/10 Tiziano ha giudicato la prima versione, con dashboard e liste per
+tipologia, «troppo complessa». Ha chiesto una pagina totalmente grafica:
+«non voglio vedere liste infinite a meno che tramite interazione l'utente non
+capisca di volerla vedere». Modello dati invariato, `RoundPage.tsx`:
+- **Ciambella** al centro con un selettore «Per stato / Per tipologia».
+  - Al centro: l'obiettivo, poi quanto è impegnato (se c'è) e quanti
+    investitori ci sono.
+  - Sotto quattro numeri: contattati, risposte, call, interessati (tappe
+    dell'imbuto).
+  - Le fette hanno una larghezza minima, così anche quella di un solo
+    contatto resta cliccabile. Si disegnano in sequenza al montaggio e a ogni
+    cambio di vista.
+- **Mouse**: al passaggio la fetta si ingrossa e il centro mostra conteggio e
+  percentuale (per tipologia anche quanti sono già avviati). Al clic, e solo
+  allora, nella colonna destra la lista di quei contatti prende il posto della
+  legenda; si chiude con la ×.
+- **Telefono** (sotto `md`): il primo tocco mostra i numeri, il secondo (o «Vedi
+  chi sono») apre la lista come foglio dal basso.
+- **La legenda** sta a destra su desktop e sotto su telefono. Anche le sue voci
+  aprono la lista. In fondo ci sono «Vedi tutti N» e il link discreto
+  «N esclusi»: gli esclusi non compaiono nella ciambella.
+- **La lista** è compatta: nome, organizzazione (oppure il motivo, se bloccato
+  o escluso), stato e chi se ne occupa. Oltre gli 8 nomi compare la ricerca.
+  L'ordine è per avanzamento e poi alfabetico.
+- **La scheda essenziale** (`InvestorSheet`) contiene nome e organizzazione,
+  stato e chi se ne occupa, prossimo passo (data e cosa fare), contatto
+  (email, telefono, LinkedIn) e note.
+  - Il motivo compare solo con «Bloccato», l'importo solo con «Impegno».
+  - Lo storico è in sola lettura, chiuso in fondo.
+  - «Escludi dal round» chiede sempre il motivo.
+  - Canale, lead/follower, priorità, ticket, fit, fonte, città, sito e
+    sottocategoria restano nel DB senza vedersi: il salvataggio li riscrive
+    come sono.
+- `quickUpdateRoundInvestor`, `addRoundInteraction` e `deleteRoundInteraction`
+  restano, ma la UI oggi non li usa.
+- `/backoffice/round/investitori` reindirizza alla pagina unica (porta con sé
+  `?scheda`).
+
+La scheda si apre con `?scheda=<id>`.
 
 ## Import
 

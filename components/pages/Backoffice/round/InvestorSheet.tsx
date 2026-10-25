@@ -1,23 +1,13 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import { ExternalLink, Trash2 } from "lucide-react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { ArrowUpRight, ChevronDown } from "lucide-react";
 
-import {
-  EuroInput,
-  Field,
-  FinButton,
-  FinLabel,
-  SelectBox,
-  centsToInput,
-  inputClass,
-} from "@/components/pages/Backoffice/finance/finance-ui";
+import { EuroInput, FinButton, centsToInput } from "@/components/pages/Backoffice/finance/finance-ui";
 import { DatePickerInput } from "@/components/ui/date-picker";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import {
-  addRoundInteraction,
-  deleteRoundInteraction,
   excludeRoundInvestor,
   getRoundInvestorDetail,
   readmitRoundInvestor,
@@ -26,20 +16,9 @@ import {
 import { parseEuroToCents } from "@/lib/finance/finance-math";
 import {
   CATEGORY_LABEL,
-  CHANNEL_LABEL,
+  CATEGORY_SHORT,
   INTERACTION_LABEL,
-  LEAD_ROLES,
-  LEAD_ROLE_LABEL,
-  MANUAL_INTERACTION_KINDS,
-  OWNER_LABEL,
-  PRIORITIES,
   ROUND_CATEGORIES,
-  ROUND_CHANNELS,
-  ROUND_OWNERS,
-  ROUND_STATUSES,
-  STATUS_HINT,
-  STATUS_LABEL,
-  type InteractionKind,
   type LeadRole,
   type RoundCategory,
   type RoundChannel,
@@ -50,7 +29,13 @@ import {
 import type { RoundInteractionRow, RoundInvestorRow } from "@/lib/round/round-data";
 import { cn } from "@/lib/utils";
 
-import { OwnerAvatar, StatusDot, shortDate } from "./round-ui";
+import { OwnerMenu, StatusMenu, shortDate } from "./round-ui";
+
+/**
+ * La scheda essenziale: contatto, stato, prossimo passo, note. Gli altri campi
+ * (canale, lead, priorità, ticket…) restano nel database e si salvano come
+ * sono, ma non si vedono.
+ */
 
 type Draft = {
   name: string;
@@ -62,7 +47,7 @@ type Draft = {
   phone: string;
   linkedinUrl: string;
   websiteUrl: string;
-  channel: RoundChannel | "";
+  channel: RoundChannel | null;
   channelDetail: string;
   owner: RoundOwner | null;
   status: RoundStatus;
@@ -79,17 +64,17 @@ type Draft = {
   nextStepNote: string;
 };
 
-const blank = (): Draft => ({
+const blank = (category: RoundCategory): Draft => ({
   name: "",
   organization: "",
-  category: "business_angel",
+  category,
   subcategory: "",
   city: "",
   email: "",
   phone: "",
   linkedinUrl: "",
   websiteUrl: "",
-  channel: "",
+  channel: null,
   channelDetail: "",
   owner: null,
   status: "da_contattare",
@@ -116,7 +101,7 @@ const fromRow = (r: RoundInvestorRow): Draft => ({
   phone: r.phone ?? "",
   linkedinUrl: r.linkedinUrl ?? "",
   websiteUrl: r.websiteUrl ?? "",
-  channel: r.channel ?? "",
+  channel: r.channel,
   channelDetail: r.channelDetail ?? "",
   owner: r.owner,
   status: r.status,
@@ -133,116 +118,89 @@ const fromRow = (r: RoundInvestorRow): Draft => ({
   nextStepNote: r.nextStepNote ?? "",
 });
 
-const textarea = `${inputClass} h-auto resize-y py-2.5 leading-relaxed`;
+const asHref = (url: string) => (/^https?:\/\//i.test(url) ? url : `https://${url}`);
 
-/** Una scelta tra pochi valori, a pastiglie (con «nessuno» in fondo). */
-function Choice<T extends string>({
-  value,
-  onChange,
-  options,
-  noneLabel,
-}: {
-  value: T | null;
-  onChange: (value: T | null) => void;
-  options: Array<{ value: T; label: React.ReactNode }>;
-  noneLabel?: string;
-}) {
-  const all: Array<{ value: T | null; label: React.ReactNode }> = noneLabel
-    ? [...options, { value: null, label: noneLabel }]
-    : options;
+/** Campo senza bordo: si vede solo al passaggio e quando lo scrivi. */
+const bare =
+  "h-11 w-full min-w-0 rounded-lg bg-transparent px-3 text-[15px] text-[#111111] outline-none transition-colors placeholder:text-[#c4c4c8] hover:bg-[#f7f7f8] focus:bg-white focus:shadow-[inset_0_0_0_1px_#111111]";
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {all.map((o) => (
-        <button
-          key={o.value ?? "none"}
-          type="button"
-          onClick={() => onChange(o.value)}
-          className={cn(
-            "inline-flex h-10 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-[13.5px] transition-colors",
-            o.value === value
-              ? "border-[#111111] bg-[#111111] font-medium text-white"
-              : "border-[#e4e4e7] bg-white text-[#3f3f46] hover:border-[#a1a1aa]",
-            o.value === null && o.value !== value && "border-dashed text-[#71717a]",
-          )}
-        >
-          {o.label}
-        </button>
-      ))}
+    <section>
+      <h3 className="mb-3 text-[11px] font-medium uppercase tracking-[0.14em] text-[#a1a1aa]">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-2 sm:grid-cols-[104px_minmax(0,1fr)]">
+      <span className="text-[13.5px] text-[#71717a]">{label}</span>
+      <div className="-mx-3 min-w-0">{children}</div>
     </div>
   );
 }
 
-function LinkField({
-  id,
-  label,
+function LinkInput({
   value,
   onChange,
-  placeholder,
   href,
+  placeholder,
+  inputMode,
 }: {
-  id: string;
-  label: string;
   value: string;
   onChange: (v: string) => void;
-  placeholder?: string;
   href?: string;
+  placeholder: string;
+  inputMode?: "email" | "tel" | "url";
 }) {
   return (
-    <Field label={label} htmlFor={id}>
-      <div className="relative">
-        <input
-          id={id}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className={cn(inputClass, href && value ? "pr-11" : "")}
-        />
-        {href && value ? (
-          <a
-            href={href}
-            target="_blank"
-            rel="noreferrer noopener"
-            aria-label={`Apri ${label}`}
-            className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md text-[#71717a] hover:bg-[#f4f4f5] hover:text-[#111111]"
-          >
-            <ExternalLink className="h-4 w-4" />
-          </a>
-        ) : null}
-      </div>
-    </Field>
+    <div className="relative">
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        inputMode={inputMode}
+        className={cn(bare, href && value ? "pr-11" : "")}
+      />
+      {href && value ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer noopener"
+          aria-label="Apri"
+          className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md text-[#a1a1aa] hover:text-[#111111]"
+        >
+          <ArrowUpRight className="h-4 w-4" />
+        </a>
+      ) : null}
+    </div>
   );
 }
-
-const asHref = (url: string) => (/^https?:\/\//i.test(url) ? url : `https://${url}`);
 
 export function InvestorSheet({
   open,
   onOpenChange,
   investor,
+  defaultCategory,
   today,
-  subcategories,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   investor: RoundInvestorRow | null;
+  defaultCategory: RoundCategory;
   today: string;
-  subcategories: string[];
   onSaved: (id: string | null) => void;
 }) {
   const toast = useFeedbackToast();
   const [isPending, startTransition] = useTransition();
-  const [draft, setDraft] = useState<Draft>(blank);
-  const [tab, setTab] = useState<"scheda" | "storico">("scheda");
+  const [draft, setDraft] = useState<Draft>(() => blank(defaultCategory));
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<RoundInteractionRow[] | null>(null);
   const [excluding, setExcluding] = useState(false);
   const [reason, setReason] = useState("");
-  const [entry, setEntry] = useState<{ kind: InteractionKind; occurredOn: string; body: string }>({
-    kind: "messaggio",
-    occurredOn: today,
-    body: "",
-  });
 
   const investorId = investor?.id ?? null;
   const loadHistory = (id: string) =>
@@ -255,9 +213,7 @@ export function InvestorSheet({
     setError(null);
     setExcluding(false);
     setReason("");
-    setTab("scheda");
-    setEntry({ kind: "messaggio", occurredOn: today, body: "" });
-    setDraft(investor ? fromRow(investor) : blank());
+    setDraft(investor ? fromRow(investor) : blank(defaultCategory));
     setHistory(null);
     if (investor) void loadHistory(investor.id);
     // Si reimposta quando si apre un'altra scheda, non a ogni refresh della lista.
@@ -269,37 +225,18 @@ export function InvestorSheet({
   const handleSave = () => {
     setError(null);
     const commitmentCents = draft.commitment.trim() ? parseEuroToCents(draft.commitment) : null;
-    if (draft.commitment.trim() && !commitmentCents) return setError("Importo dell'impegno non valido.");
+    if (draft.commitment.trim() && !commitmentCents) return setError("Importo non valido.");
+    const { commitment: _commitment, ...fields } = draft;
     startTransition(async () => {
       const res = await saveRoundInvestor({
+        ...fields,
         id: investor?.id,
-        name: draft.name,
-        organization: draft.organization,
-        category: draft.category,
-        subcategory: draft.subcategory,
-        city: draft.city,
-        email: draft.email,
-        phone: draft.phone,
-        linkedinUrl: draft.linkedinUrl,
-        websiteUrl: draft.websiteUrl,
-        channel: draft.channel || null,
-        channelDetail: draft.channelDetail,
-        owner: draft.owner,
-        status: draft.status,
-        blockedReason: draft.blockedReason,
-        leadRole: draft.leadRole,
-        priority: draft.priority,
-        ticket: draft.ticket,
-        fit: draft.fit,
-        source: draft.source,
-        notes: draft.notes,
         commitmentCents,
         lastContactOn: draft.lastContactOn || null,
         nextStepOn: draft.nextStepOn || null,
-        nextStepNote: draft.nextStepNote,
       });
       if (!res.success) return setError(res.message ?? "Salvataggio non riuscito.");
-      toast.success({ description: investor ? "Scheda salvata." : "Investitore aggiunto." });
+      toast.success({ description: investor ? "Salvato." : "Investitore aggiunto." });
       if (investor) void loadHistory(investor.id);
       onSaved(investor ? null : res.data.id);
     });
@@ -307,7 +244,7 @@ export function InvestorSheet({
 
   const handleExclude = () => {
     if (!investor) return;
-    if (reason.trim().length < 3) return setError("Scrivi il motivo dell'esclusione.");
+    if (reason.trim().length < 3) return setError("Scrivi il motivo.");
     setError(null);
     startTransition(async () => {
       const res = await excludeRoundInvestor({ id: investor.id, reason });
@@ -329,426 +266,211 @@ export function InvestorSheet({
     });
   };
 
-  const handleAddEntry = () => {
-    if (!investor) return;
-    if (!entry.body.trim()) return setError("Scrivi cosa è successo.");
-    setError(null);
-    startTransition(async () => {
-      const res = await addRoundInteraction({ investorId: investor.id, ...entry });
-      if (!res.success) return setError(res.message ?? "Non sono riuscito ad aggiungerlo.");
-      setEntry((e) => ({ ...e, body: "" }));
-      void loadHistory(investor.id);
-      onSaved(null);
-    });
-  };
-
-  const handleDeleteEntry = (id: string) => {
-    if (!investor) return;
-    startTransition(async () => {
-      const res = await deleteRoundInteraction({ id });
-      if (!res.success) return setError(res.message ?? "Eliminazione non riuscita.");
-      void loadHistory(investor.id);
-    });
-  };
-
   const excluded = investor?.excluded ?? false;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 sm:max-w-[600px]" onOpenAutoFocus={(e) => e.preventDefault()}>
-        {/* Testata */}
-        <div className="border-b border-[#f2f2f3] px-5 pb-4 pt-6 sm:px-7">
-          <div className="pr-8 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#71717a]">
-            {CATEGORY_LABEL[draft.category]}
-            {draft.subcategory ? ` · ${draft.subcategory}` : ""}
-          </div>
-          <SheetTitle className="mt-1.5 pr-8 text-[22px] font-semibold leading-tight tracking-[-0.02em] text-[#111111]">
-            {investor ? investor.name : "Nuovo investitore"}
-          </SheetTitle>
-          <SheetDescription className="mt-1 text-[13.5px] text-[#71717a]">
-            {investor
-              ? [investor.organization, investor.updatedByName ? `ultima modifica di ${investor.updatedByName}` : null]
-                  .filter(Boolean)
-                  .join(" · ")
-              : "Nome e tipologia bastano: il resto si completa dopo."}
-          </SheetDescription>
-          {excluded ? (
-            <div className="mt-3 rounded-xl border border-[#e9e9eb] bg-[#fafafa] px-3.5 py-2.5 text-[13px] leading-relaxed text-[#3f3f46]">
-              <span className="font-semibold">Escluso{investor?.excludedOn ? ` il ${shortDate(investor.excludedOn)}` : ""}:</span>{" "}
-              {investor?.excludedReason}
+      <SheetContent className="w-full gap-0 border-l-0 sm:max-w-[520px]" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <div className="flex-1 overflow-y-auto px-6 pb-10 pt-12 sm:px-10">
+          {/* Chi è */}
+          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#a1a1aa]">
+            {investor ? CATEGORY_LABEL[draft.category] : "Nuovo investitore"}
+          </p>
+          <SheetTitle asChild>
+            <div className="-mx-3 mt-2">
+              <input
+                value={draft.name}
+                onChange={(e) => set("name", e.target.value)}
+                placeholder="Nome"
+                aria-label="Nome"
+                className={cn(bare, "h-12 text-[24px] font-semibold tracking-[-0.025em]")}
+              />
             </div>
-          ) : null}
-          {investor ? (
-            <div className="mt-4 flex gap-1 rounded-xl bg-[#f1f1f2] p-1">
-              {(["scheda", "storico"] as const).map((t) => (
+          </SheetTitle>
+          <SheetDescription asChild>
+            <div className="-mx-3">
+              <input
+                value={draft.organization}
+                onChange={(e) => set("organization", e.target.value)}
+                placeholder="Organizzazione o ruolo"
+                aria-label="Organizzazione o ruolo"
+                className={cn(bare, "h-10 text-[15px] text-[#71717a]")}
+              />
+            </div>
+          </SheetDescription>
+
+          {investor ? null : (
+            <div className="mt-5 flex flex-wrap gap-1">
+              {ROUND_CATEGORIES.map((c) => (
                 <button
-                  key={t}
+                  key={c}
                   type="button"
-                  onClick={() => setTab(t)}
+                  onClick={() => set("category", c)}
                   className={cn(
-                    "flex-1 cursor-pointer rounded-[9px] px-3 py-1.5 text-sm transition-colors",
-                    tab === t
-                      ? "bg-white font-semibold text-[#111111] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
-                      : "text-[#71717a] hover:text-[#111111]",
+                    "h-9 cursor-pointer rounded-full px-3 text-[13px] transition-colors",
+                    draft.category === c ? "bg-[#111111] text-white" : "text-[#52525b] hover:bg-[#f4f4f5]",
                   )}
                 >
-                  {t === "scheda" ? "Scheda" : `Storico${history ? ` · ${history.length}` : ""}`}
+                  {CATEGORY_SHORT[c]}
                 </button>
               ))}
             </div>
+          )}
+
+          {excluded ? (
+            <p className="mt-6 text-[13.5px] leading-relaxed text-[#52525b]">
+              Escluso{investor?.excludedOn ? ` il ${shortDate(investor.excludedOn)}` : ""}: {investor?.excludedReason}{" "}
+              <button
+                type="button"
+                onClick={handleReadmit}
+                disabled={isPending}
+                className="cursor-pointer text-[#111111] underline decoration-[#d4d4d8] underline-offset-4 hover:decoration-[#111111]"
+              >
+                Riammetti
+              </button>
+            </p>
           ) : null}
-        </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-7">
-          {tab === "scheda" ? (
-            <div className="space-y-7">
-              {/* Esito */}
-              <section className="space-y-4">
-                <FinLabel>Esito del contatto</FinLabel>
-                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                  {ROUND_STATUSES.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => set("status", s)}
-                      className={cn(
-                        "flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border px-3 text-left text-[13.5px] transition-colors",
-                        draft.status === s
-                          ? "border-[#111111] bg-[#111111] font-medium text-white"
-                          : "border-[#e9e9eb] bg-white text-[#3f3f46] hover:border-[#a1a1aa]",
-                      )}
-                    >
-                      <StatusDot status={s} className={draft.status === s ? "ring-2 ring-white/70" : ""} />
-                      {STATUS_LABEL[s]}
-                    </button>
-                  ))}
+          <div className="mt-12 space-y-11">
+            <Section title="Stato">
+              <div className="flex items-center justify-between gap-3">
+                <div className="pl-2.5">
+                  <StatusMenu value={draft.status} onChange={(s) => set("status", s)} />
                 </div>
-                <p className="text-[12.5px] text-[#71717a]">{STATUS_HINT[draft.status]}</p>
-                {draft.status === "bloccato" ? (
-                  <Field label="Cosa lo blocca" htmlFor="rd-blocked">
-                    <input
-                      id="rd-blocked"
-                      value={draft.blockedReason}
-                      onChange={(e) => set("blockedReason", e.target.value)}
-                      placeholder="Es. Mamacrowd non trova ancora Reglo S.r.l."
-                      className={inputClass}
-                    />
-                  </Field>
-                ) : null}
-                {draft.status === "impegno" || draft.status === "interessato" || draft.commitment ? (
-                  <Field
-                    label={draft.status === "impegno" ? "Importo dell'impegno" : "Importo di cui si parla"}
-                    htmlFor="rd-commit"
-                    hint={draft.status === "impegno" ? "Conta nell'avanzamento verso l'obiettivo." : "Conta solo quando diventa «Impegno»."}
-                  >
-                    <EuroInput id="rd-commit" value={draft.commitment} onChange={(v) => set("commitment", v)} />
-                  </Field>
-                ) : null}
-                <div className="space-y-4">
-                  <Field label="Lead o follower">
-                    <Choice
-                      value={draft.leadRole}
-                      onChange={(v) => set("leadRole", v)}
-                      options={LEAD_ROLES.map((r) => ({ value: r, label: LEAD_ROLE_LABEL[r] }))}
-                      noneLabel="—"
-                    />
-                  </Field>
-                  <Field label="Priorità">
-                    <Choice
-                      value={draft.priority}
-                      onChange={(v) => set("priority", v)}
-                      options={PRIORITIES.map((p) => ({ value: p, label: p }))}
-                      noneLabel="—"
-                    />
-                  </Field>
-                </div>
-              </section>
-
-              {/* Date */}
-              <section className="space-y-4">
-                <FinLabel>Date</FinLabel>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Ultimo contatto">
-                    <DatePickerInput value={draft.lastContactOn} onChange={(v) => set("lastContactOn", v)} placeholder="Nessuno" />
-                  </Field>
-                  <Field label="Prossimo passo">
-                    <DatePickerInput value={draft.nextStepOn} onChange={(v) => set("nextStepOn", v)} placeholder="Da decidere" />
-                  </Field>
-                </div>
-                <Field label="Cosa fare al prossimo passo" htmlFor="rd-next">
+                <OwnerMenu value={draft.owner} onChange={(o) => set("owner", o)} showName />
+              </div>
+              {draft.status === "bloccato" ? (
+                <div className="-mx-3 mt-2">
                   <input
-                    id="rd-next"
+                    value={draft.blockedReason}
+                    onChange={(e) => set("blockedReason", e.target.value)}
+                    placeholder="Cosa lo blocca"
+                    className={bare}
+                  />
+                </div>
+              ) : null}
+              {draft.status === "impegno" ? (
+                <div className="mt-3 max-w-[200px]">
+                  <EuroInput value={draft.commitment} onChange={(v) => set("commitment", v)} placeholder="Importo" />
+                </div>
+              ) : null}
+            </Section>
+
+            <Section title="Prossimo passo">
+              <div className="grid gap-2 sm:grid-cols-[150px_minmax(0,1fr)]">
+                <DatePickerInput value={draft.nextStepOn} onChange={(v) => set("nextStepOn", v)} placeholder="Quando" />
+                <div className="-mx-3 sm:mx-0">
+                  <input
                     value={draft.nextStepNote}
                     onChange={(e) => set("nextStepNote", e.target.value)}
-                    placeholder="Es. Ricontattarlo dopo la presentazione"
-                    className={inputClass}
+                    placeholder="Cosa fare"
+                    className={bare}
                   />
-                </Field>
-                {(draft.nextStepOn || draft.lastContactOn) && (
-                  <div className="flex gap-2">
-                    {draft.nextStepOn ? (
-                      <button type="button" onClick={() => { set("nextStepOn", ""); set("nextStepNote", ""); }} className="cursor-pointer text-[12.5px] text-[#71717a] underline underline-offset-4 hover:text-[#111111]">
-                        Togli il prossimo passo
-                      </button>
-                    ) : null}
-                  </div>
-                )}
-              </section>
-
-              {/* Chi e come */}
-              <section className="space-y-4">
-                <FinLabel>Chi se ne occupa e come</FinLabel>
-                <Choice
-                  value={draft.owner}
-                  onChange={(v) => set("owner", v)}
-                  options={ROUND_OWNERS.map((o) => ({
-                    value: o,
-                    label: (
-                      <>
-                        <OwnerAvatar owner={o} size={22} />
-                        {OWNER_LABEL[o]}
-                      </>
-                    ),
-                  }))}
-                  noneLabel="Nessuno"
-                />
-                <div className="grid gap-4 sm:grid-cols-[200px_1fr]">
-                  <Field label="Canale" htmlFor="rd-channel">
-                    <SelectBox id="rd-channel" value={draft.channel} onChange={(e) => set("channel", e.target.value as RoundChannel | "")}>
-                      <option value="">Da decidere</option>
-                      {ROUND_CHANNELS.map((c) => (
-                        <option key={c} value={c}>
-                          {CHANNEL_LABEL[c]}
-                        </option>
-                      ))}
-                    </SelectBox>
-                  </Field>
-                  <Field label="Dettaglio del canale" htmlFor="rd-chdetail">
-                    <input
-                      id="rd-chdetail"
-                      value={draft.channelDetail}
-                      onChange={(e) => set("channelDetail", e.target.value)}
-                      placeholder="Link del modulo, chi ci presenta…"
-                      className={inputClass}
-                    />
-                  </Field>
                 </div>
-              </section>
+              </div>
+            </Section>
 
-              {/* Anagrafica */}
-              <section className="space-y-4">
-                <FinLabel>Anagrafica e contatti</FinLabel>
-                <Field label="Nome" htmlFor="rd-name">
-                  <input id="rd-name" value={draft.name} onChange={(e) => set("name", e.target.value)} className={inputClass} />
-                </Field>
-                <Field label="Organizzazione o ruolo" htmlFor="rd-org">
-                  <input id="rd-org" value={draft.organization} onChange={(e) => set("organization", e.target.value)} className={inputClass} />
-                </Field>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Tipologia" htmlFor="rd-cat">
-                    <SelectBox id="rd-cat" value={draft.category} onChange={(e) => set("category", e.target.value as RoundCategory)}>
-                      {ROUND_CATEGORIES.map((c) => (
-                        <option key={c} value={c}>
-                          {CATEGORY_LABEL[c]}
-                        </option>
-                      ))}
-                    </SelectBox>
-                  </Field>
-                  <Field label="Sottocategoria" htmlFor="rd-sub">
-                    <input
-                      id="rd-sub"
-                      list="rd-sub-list"
-                      value={draft.subcategory}
-                      onChange={(e) => set("subcategory", e.target.value)}
-                      placeholder="Es. Fondo VC pre-seed/seed"
-                      className={inputClass}
-                    />
-                    <datalist id="rd-sub-list">
-                      {subcategories.map((s) => (
-                        <option key={s} value={s} />
-                      ))}
-                    </datalist>
-                  </Field>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <LinkField id="rd-email" label="Email" value={draft.email} onChange={(v) => set("email", v)} href={draft.email ? `mailto:${draft.email}` : undefined} />
-                  <Field label="Telefono" htmlFor="rd-phone">
-                    <input id="rd-phone" inputMode="tel" value={draft.phone} onChange={(e) => set("phone", e.target.value)} className={inputClass} />
-                  </Field>
-                  <LinkField id="rd-li" label="LinkedIn" value={draft.linkedinUrl} onChange={(v) => set("linkedinUrl", v)} href={draft.linkedinUrl ? asHref(draft.linkedinUrl) : undefined} />
-                  <LinkField id="rd-web" label="Sito" value={draft.websiteUrl} onChange={(v) => set("websiteUrl", v)} href={draft.websiteUrl ? asHref(draft.websiteUrl) : undefined} />
-                </div>
-                <Field label="Città" htmlFor="rd-city">
-                  <input id="rd-city" value={draft.city} onChange={(e) => set("city", e.target.value)} className={inputClass} />
-                </Field>
-              </section>
+            <Section title="Contatto">
+              <div className="space-y-0.5">
+                <Row label="Email">
+                  <LinkInput
+                    value={draft.email}
+                    onChange={(v) => set("email", v)}
+                    href={draft.email ? `mailto:${draft.email}` : undefined}
+                    placeholder="—"
+                    inputMode="email"
+                  />
+                </Row>
+                <Row label="Telefono">
+                  <LinkInput value={draft.phone} onChange={(v) => set("phone", v)} placeholder="—" inputMode="tel" />
+                </Row>
+                <Row label="LinkedIn">
+                  <LinkInput
+                    value={draft.linkedinUrl}
+                    onChange={(v) => set("linkedinUrl", v)}
+                    href={draft.linkedinUrl ? asHref(draft.linkedinUrl) : undefined}
+                    placeholder="—"
+                    inputMode="url"
+                  />
+                </Row>
+              </div>
+            </Section>
 
-              {/* Profilo */}
-              <section className="space-y-4">
-                <FinLabel>Profilo</FinLabel>
-                <Field label="Ticket tipico" htmlFor="rd-ticket">
-                  <input id="rd-ticket" value={draft.ticket} onChange={(e) => set("ticket", e.target.value)} className={inputClass} />
-                </Field>
-                <Field label="Perché è adatto a Reglo" htmlFor="rd-fit">
-                  <textarea id="rd-fit" rows={3} value={draft.fit} onChange={(e) => set("fit", e.target.value)} className={textarea} />
-                </Field>
-                <Field label="Note" htmlFor="rd-notes">
-                  <textarea id="rd-notes" rows={5} value={draft.notes} onChange={(e) => set("notes", e.target.value)} className={textarea} />
-                </Field>
-                <Field label="Fonte" htmlFor="rd-source">
-                  <input id="rd-source" value={draft.source} onChange={(e) => set("source", e.target.value)} className={inputClass} />
-                </Field>
-              </section>
-
-              {/* Esclusione */}
-              {investor && !excluded ? (
-                <section className="space-y-3 rounded-2xl border border-[#f2f2f3] p-4">
-                  {excluding ? (
-                    <>
-                      <Field label="Perché lo escludiamo" htmlFor="rd-reason" hint="Obbligatorio: resta nella scheda e nello storico.">
-                        <textarea
-                          id="rd-reason"
-                          autoFocus
-                          rows={2}
-                          value={reason}
-                          onChange={(e) => setReason(e.target.value)}
-                          placeholder="Es. Conflitto: ha investito in un concorrente"
-                          className={textarea}
-                        />
-                      </Field>
-                      <div className="flex justify-end gap-2">
-                        <FinButton variant="ghost" onClick={() => setExcluding(false)} disabled={isPending}>
-                          Annulla
-                        </FinButton>
-                        <FinButton onClick={handleExclude} disabled={isPending || reason.trim().length < 3} className="bg-[#c2410c] hover:bg-[#9a3412]">
-                          Escludi dal round
-                        </FinButton>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-[13px] text-[#71717a]">Non va contattato? Escludilo dicendo perché.</div>
-                      <FinButton variant="danger" onClick={() => setExcluding(true)} className="shrink-0 px-3">
-                        Escludi
-                      </FinButton>
-                    </div>
-                  )}
-                </section>
-              ) : null}
-              {investor && excluded ? (
-                <FinButton variant="ghost" onClick={handleReadmit} disabled={isPending} className="w-full">
-                  Riammetti nel round
-                </FinButton>
-              ) : null}
-            </div>
-          ) : (
-            <History
-              history={history}
-              entry={entry}
-              setEntry={setEntry}
-              onAdd={handleAddEntry}
-              onDelete={handleDeleteEntry}
-              pending={isPending}
-            />
-          )}
-          {error ? <p className="mt-4 text-sm text-[#c2410c]">{error}</p> : null}
-        </div>
-
-        {tab === "scheda" ? (
-          <div className="flex items-center gap-2 border-t border-[#f2f2f3] px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-7">
-            <div className="ml-auto flex gap-2">
-              <FinButton variant="ghost" onClick={() => onOpenChange(false)} disabled={isPending}>
-                Chiudi
-              </FinButton>
-              <FinButton onClick={handleSave} disabled={isPending || !draft.name.trim()}>
-                {isPending ? "Salvo…" : investor ? "Salva" : "Aggiungi"}
-              </FinButton>
-            </div>
-          </div>
-        ) : null}
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-function History({
-  history,
-  entry,
-  setEntry,
-  onAdd,
-  onDelete,
-  pending,
-}: {
-  history: RoundInteractionRow[] | null;
-  entry: { kind: InteractionKind; occurredOn: string; body: string };
-  setEntry: (fn: (e: { kind: InteractionKind; occurredOn: string; body: string }) => typeof e) => void;
-  onAdd: () => void;
-  onDelete: (id: string) => void;
-  pending: boolean;
-}) {
-  return (
-    <div className="space-y-6">
-      <div className="space-y-3 rounded-2xl border border-[#e9e9eb] p-4">
-        <div className="grid grid-cols-[1fr_1fr] gap-3">
-          <SelectBox value={entry.kind} onChange={(e) => setEntry((x) => ({ ...x, kind: e.target.value as InteractionKind }))}>
-            {MANUAL_INTERACTION_KINDS.map((k) => (
-              <option key={k} value={k}>
-                {INTERACTION_LABEL[k]}
-              </option>
-            ))}
-          </SelectBox>
-          <DatePickerInput value={entry.occurredOn} onChange={(v) => setEntry((x) => ({ ...x, occurredOn: v }))} />
-        </div>
-        <textarea
-          rows={3}
-          value={entry.body}
-          onChange={(e) => setEntry((x) => ({ ...x, body: e.target.value }))}
-          placeholder="Cosa è successo: chi ha scritto, cosa ha risposto, cosa ci siamo detti…"
-          className={textarea}
-        />
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[12px] leading-snug text-[#a1a1aa]">Una risposta o una call segnano anche la tappa dell&apos;imbuto.</span>
-          <FinButton onClick={onAdd} disabled={pending || !entry.body.trim()} className="shrink-0">
-            Aggiungi
-          </FinButton>
-        </div>
-      </div>
-
-      {history === null ? (
-        <p className="text-[13.5px] text-[#a1a1aa]">Carico lo storico…</p>
-      ) : history.length ? (
-        <ol className="relative space-y-5 before:absolute before:bottom-2 before:left-[5px] before:top-2 before:w-px before:bg-[#ececee]">
-          {history.map((h) => (
-            <li key={h.id} className="group relative pl-6">
-              <span
-                className={cn(
-                  "absolute left-0 top-[6px] h-[11px] w-[11px] rounded-full border-2 border-white",
-                  h.kind === "stato" ? "bg-[#e4e4e7]" : h.kind === "risposta" || h.kind === "call" ? "bg-[#111111]" : "bg-[#a1a1aa]",
-                )}
+            <Section title="Note">
+              <textarea
+                rows={5}
+                value={draft.notes}
+                onChange={(e) => set("notes", e.target.value)}
+                placeholder="Cosa sappiamo, cosa ci siamo detti"
+                className="w-full resize-y rounded-xl bg-[#f7f7f8] px-4 py-3 text-[14.5px] leading-relaxed text-[#111111] outline-none transition-colors placeholder:text-[#b4b4b9] focus:bg-white focus:shadow-[inset_0_0_0_1px_#111111]"
               />
-              <div className="flex items-baseline gap-2">
-                <span className="text-[13px] font-semibold text-[#111111]">{INTERACTION_LABEL[h.kind]}</span>
-                <span className="text-[12px] tabular-nums text-[#a1a1aa]">{shortDate(h.occurredOn)}</span>
-                {h.authorName ? <span className="truncate text-[12px] text-[#a1a1aa]">· {h.authorName}</span> : null}
+            </Section>
+
+            {history && history.length ? (
+              <details className="group">
+                <summary className="flex h-11 cursor-pointer list-none items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-[#a1a1aa] hover:text-[#111111] [&::-webkit-details-marker]:hidden">
+                  Storico <span className="tabular-nums">{history.length}</span>
+                  <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+                </summary>
+                <ol className="mt-3 space-y-4">
+                  {history.map((h) => (
+                    <li key={h.id} className="grid grid-cols-[56px_minmax(0,1fr)] gap-3 text-[13.5px]">
+                      <span className="tabular-nums text-[#a1a1aa]">{shortDate(h.occurredOn)}</span>
+                      <span className="leading-relaxed text-[#52525b]">
+                        {h.kind !== "stato" ? <span className="text-[#111111]">{INTERACTION_LABEL[h.kind]} · </span> : null}
+                        <span className="whitespace-pre-line">{h.body}</span>
+                        {h.authorName ? <span className="text-[#a1a1aa]"> · {h.authorName}</span> : null}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            ) : null}
+
+            {investor && !excluded ? (
+              excluding ? (
+                <div className="space-y-3">
+                  <div className="-mx-3">
+                    <input
+                      autoFocus
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      placeholder="Perché lo escludiamo"
+                      className={bare}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <FinButton onClick={handleExclude} disabled={isPending || reason.trim().length < 3}>
+                      Escludi dal round
+                    </FinButton>
+                    <FinButton variant="ghost" onClick={() => setExcluding(false)} disabled={isPending} className="border-0">
+                      Annulla
+                    </FinButton>
+                  </div>
+                </div>
+              ) : (
                 <button
                   type="button"
-                  aria-label="Elimina dallo storico"
-                  onClick={() => onDelete(h.id)}
-                  disabled={pending}
-                  className="ml-auto flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-[#c9c9cf] opacity-100 hover:bg-[#fff7ed] hover:text-[#c2410c] md:opacity-0 md:group-hover:opacity-100"
+                  onClick={() => setExcluding(true)}
+                  className="-ml-1 h-11 cursor-pointer px-1 text-[13px] text-[#a1a1aa] hover:text-[#c2410c]"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  Escludi dal round
                 </button>
-              </div>
-              <p className={cn("mt-0.5 whitespace-pre-line text-[13.5px] leading-relaxed", h.kind === "stato" ? "text-[#71717a]" : "text-[#3f3f46]")}>
-                {h.body}
-              </p>
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <p className="text-[13.5px] text-[#71717a]">Nessuna voce nello storico.</p>
-      )}
-    </div>
+              )
+            ) : null}
+          </div>
+          {error ? <p className="mt-6 text-[13.5px] text-[#c2410c]">{error}</p> : null}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-1px_0_#f0f0f1] sm:px-10">
+          <FinButton variant="ghost" onClick={() => onOpenChange(false)} disabled={isPending} className="border-0">
+            Chiudi
+          </FinButton>
+          <FinButton onClick={handleSave} disabled={isPending || !draft.name.trim()} className="min-w-[96px]">
+            {isPending ? "Salvo…" : investor ? "Salva" : "Aggiungi"}
+          </FinButton>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }

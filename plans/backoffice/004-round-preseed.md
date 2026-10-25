@@ -32,3 +32,12 @@ Stima: 3 punti (metro: REG-413 Finanza).
 - Le anteprime sono state fatte sull'implementazione vera (dev locale contro
   il DB di staging), non su un prototipo a parte, perché Tiziano ha chiesto di
   procedere fino a staging.
+
+## Emendamento 2026-10-25 — versione grafica
+
+Feedback di Tiziano dopo il rilascio: «troppo complesso». La UI diventa
+totalmente grafica: una ciambella interattiva (per stato o per tipologia) con
+al centro l'obiettivo; la lista compare solo al clic su una fetta. Niente
+migrazioni, stessi dati. Su indicazione di Tiziano il rilascio è andato dritto,
+senza anteprime da approvare. Dettagli in `docs/features/round-preseed.md`
+§ Interfaccia.

@@ -1,11 +1,13 @@
-import { RoundInvestorsPage } from "@/components/pages/Backoffice/round/RoundInvestorsPage";
-import { RoundMissing } from "@/components/pages/Backoffice/round/RoundMissing";
-import { todayYmdRome } from "@/lib/finance/finance-math";
-import { getActiveRound, listRoundInvestors } from "@/lib/round/round-data";
+import { redirect } from "next/navigation";
 
-export default async function RoundInvestorsRoute() {
-  const round = await getActiveRound();
-  if (!round) return <RoundMissing />;
-  const investors = await listRoundInvestors(round.id);
-  return <RoundInvestorsPage investors={investors} today={todayYmdRome()} />;
+/** La vecchia lista è confluita nella pagina unica del round. */
+export default async function RoundInvestorsRedirect({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ scheda?: string }>;
+}) {
+  const [{ locale }, { scheda }] = await Promise.all([params, searchParams]);
+  redirect(`/${locale}/backoffice/round${scheda ? `?scheda=${encodeURIComponent(scheda)}` : ""}`);
 }

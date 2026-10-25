@@ -203,7 +203,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 
 ### Backoffice — Round pre-seed
 - ← **Backoffice access**: protezione e autore dello storico da `requireGlobalAdmin` / `getBackofficeIdentity`. Se cambia l'identità del backoffice, cambia `authorName()` in `lib/actions/round.actions.ts`
-- ← **Finanza**: riusa `finance-ui.tsx` (card, campi, filtri) e le date di `finance-math.ts` (`todayYmdRome`, `ymdToDbDate`). Se cambiano quei primitivi, controlla anche le pagine del round
+- ← **Finanza**: riusa `finance-ui.tsx` (pulsanti, campo euro) e le date di `finance-math.ts` (`todayYmdRome`, `ymdToDbDate`). Se cambiano quei primitivi, controlla anche le pagine del round
 - Nessun legame con autoscuole, allievi o app mobile: tabelle isolate
 
 ### Backoffice — Finanza (REG-413)
