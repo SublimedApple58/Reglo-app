@@ -67,8 +67,15 @@ somma di `commitmentCents` dei soli «Impegno».
 Il 25/10 Tiziano ha giudicato la prima versione, con dashboard e liste per
 tipologia, «troppo complessa». Ha chiesto una pagina totalmente grafica:
 «non voglio vedere liste infinite a meno che tramite interazione l'utente non
-capisca di volerla vedere». Modello dati invariato, `RoundPage.tsx`:
-- **Ciambella** al centro con un selettore «Per stato / Per tipologia».
+capisca di volerla vedere». Modello dati invariato, `RoundPage.tsx`. Il 25/10 sera la ciambella è diventata tridimensionale e animata, su richiesta di Tiziano («tridimensionale e animato un sacco, ma clean, niente bounce»).
+- **Ciambella tridimensionale** (`RoundDonut.tsx`, SVG puro, senza librerie 3D), con un selettore «Per stato / Per tipologia».
+  - È un anello in prospettiva (ellisse) con il lato visibile davanti e la parete interna dietro. Le fette si disegnano in ordine dietro → davanti.
+  - Luce dall'alto a sinistra e ombra di contatto.
+  - All'ingresso l'anello prende spessore e le fette si disegnano in senso orario (tween rAF, ease-out); i numeri contano fino al valore (`CountUp`).
+  - Al passaggio la fetta si solleva e si stacca (transform CSS). Le zone di tocco restano ferme, così la fetta non scappa sotto il cursore.
+  - Parallasse leggera legata al cursore (rotateX/Y di pochi gradi).
+  - Lista, scheda e centro entrano con profondità: keyframe `round-depth-in` in `globals.css` (scala, opacità, sfocatura).
+  - Curve solo ease-out, niente bounce. Con `prefers-reduced-motion` tutto è fermo.
   - Al centro: l'obiettivo, poi quanto è impegnato (se c'è) e quanti
     investitori ci sono.
   - Sotto quattro numeri: contattati, risposte, call, interessati (tappe

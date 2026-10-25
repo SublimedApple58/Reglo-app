@@ -580,3 +580,22 @@
     font-size: max(16px, 1em);
   }
 }
+
+/* Round pre-seed: lista e scheda entrano con profondità (niente rimbalzi). */
+@keyframes round-depth-in {
+  from {
+    opacity: 0;
+    transform: perspective(900px) translate3d(0, 10px, -70px) scale(0.965);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [class*="round-depth-in"] {
+    animation: none !important;
+  }
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Plus, Search, X } from "lucide-react";
 
@@ -18,6 +18,7 @@ import type { RoundInfo, RoundInvestorRow } from "@/lib/round/round-data";
 import { cn } from "@/lib/utils";
 
 import { InvestorSheet } from "./InvestorSheet";
+import { CountUp, RoundDonut } from "./RoundDonut";
 import { OwnerAvatar, StatusDot } from "./round-ui";
 
 /**
@@ -239,7 +240,7 @@ export function RoundPage({
             ))}
           </div>
 
-          <Donut
+          <RoundDonut
             key={mode}
             slices={slices}
             total={summary.total}
@@ -259,11 +260,11 @@ export function RoundPage({
           />
 
           <dl className="mt-2 grid w-full max-w-[460px] grid-cols-4 gap-2">
-            {stats.map((s) => (
+            {stats.map((s, i) => (
               <div key={s.label} className="text-center">
                 <dt className="sr-only">{s.label}</dt>
-                <dd className="text-[28px] font-medium leading-none tracking-[-0.035em] tabular-nums text-[#111111] md:text-[32px]">
-                  {s.value}
+                <dd className="text-[28px] font-medium leading-none tracking-[-0.035em] tabular-nums text-[#111111] md:text-[34px]">
+                  <CountUp value={s.value} delay={300 + i * 90} />
                 </dd>
                 <dd className="mt-2 text-[12.5px] text-[#71717a]">{s.label}</dd>
               </div>
@@ -324,100 +325,7 @@ export function RoundPage({
   );
 }
 
-// ── Ciambella ─────────────────────────────────────────────────────────────────
-
-const SIZE = 320;
-const R = 128;
-const STROKE = 30;
-const C = 2 * Math.PI * R;
-const GAP = 3;
-const MIN_FRAC = 0.014;
-
-function Donut({
-  slices,
-  total,
-  active,
-  selected,
-  onActive,
-  onOpen,
-  center,
-}: {
-  slices: Slice[];
-  total: number;
-  active: string | null;
-  selected: string | null;
-  onActive: (key: string | null) => void;
-  onOpen: (key: string) => void;
-  center: React.ReactNode;
-}) {
-  const [drawn, setDrawn] = useState(false);
-  const [intro, setIntro] = useState(true);
-  const pointer = useRef<string>("mouse");
-
-  // Al montaggio (e a ogni cambio di vista) le fette si disegnano una dopo l'altra.
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setDrawn(true));
-    const t = window.setTimeout(() => setIntro(false), 1600);
-    return () => {
-      cancelAnimationFrame(id);
-      window.clearTimeout(t);
-    };
-  }, []);
-
-  // Le fette piccole (un contatto su 150) restano toccabili: una larghezza minima.
-  const geometry = useMemo(() => {
-    const fracs = slices.map((s) => Math.max(s.count / (total || 1), MIN_FRAC));
-    const sum = fracs.reduce((a, b) => a + b, 0) || 1;
-    let start = 0;
-    return slices.map((s, i) => {
-      const len = (fracs[i] / sum) * C;
-      const g = { ...s, start, len };
-      start += len;
-      return g;
-    });
-  }, [slices, total]);
-
-  const focus = active ?? selected;
-
-  return (
-    <div className="relative mt-6 aspect-square w-full max-w-[300px] md:max-w-[400px]">
-      <svg
-        viewBox={`0 0 ${SIZE} ${SIZE}`}
-        className="h-full w-full -rotate-90 overflow-visible"
-        role="img"
-        aria-label={slices.map((s) => `${s.label} ${s.count}`).join(", ")}
-        onPointerLeave={(e) => e.pointerType === "mouse" && onActive(null)}
-      >
-        {geometry.map((g, i) => {
-          const on = focus === g.key;
-          const dim = focus !== null && !on;
-          return (
-            <circle
-              key={g.key}
-              cx={SIZE / 2}
-              cy={SIZE / 2}
-              r={R}
-              fill="none"
-              stroke={g.color}
-              strokeWidth={on ? STROKE + 12 : STROKE}
-              strokeDasharray={`${drawn ? Math.max(g.len - GAP, 0.5) : 0} ${C}`}
-              strokeDashoffset={-g.start}
-              className="cursor-pointer outline-none [transition:stroke-dasharray_900ms_cubic-bezier(.22,1,.36,1),stroke-width_350ms_cubic-bezier(.22,1,.36,1),opacity_300ms_ease] motion-reduce:transition-none"
-              style={{ opacity: dim ? 0.28 : 1, transitionDelay: intro ? `${i * 70}ms` : "0ms", pointerEvents: "visibleStroke" }}
-              onPointerDown={(e) => (pointer.current = e.pointerType)}
-              onPointerEnter={(e) => e.pointerType === "mouse" && onActive(g.key)}
-              onClick={() => {
-                if (pointer.current !== "mouse" && active !== g.key) return onActive(g.key);
-                onOpen(g.key);
-              }}
-            />
-          );
-        })}
-      </svg>
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">{center}</div>
-    </div>
-  );
-}
+// ── Centro della ciambella ───────────────────────────────────────────────────
 
 function DonutCenter({
   slice,
@@ -434,29 +342,31 @@ function DonutCenter({
 }) {
   if (!slice) {
     return (
-      <div key="target" className="flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-500">
-        <span className="text-[44px] font-semibold leading-none tracking-[-0.045em] text-[#111111] md:text-[56px]">{target}</span>
-        <span className="mt-3 text-[13px] text-[#71717a]">{committed ? `${committed} impegnati` : "obiettivo"}</span>
-        <span className="mt-1 text-[12.5px] tabular-nums text-[#a1a1aa]">{total} investitori</span>
+      <div key="target" className="flex flex-col items-center text-center animate-[round-depth-in_0.9s_cubic-bezier(0.22,1,0.36,1)_both] [animation-delay:500ms]">
+        <span className="text-[34px] font-semibold leading-none tracking-[-0.045em] text-[#111111] md:text-[50px]">{target}</span>
+        <span className="mt-2 text-[12.5px] text-[#71717a] md:text-[13px]">{committed ? `${committed} impegnati` : "obiettivo"}</span>
+        <span className="mt-0.5 text-[12px] tabular-nums text-[#a1a1aa] md:text-[12.5px]">
+          <CountUp value={total} delay={500} /> investitori
+        </span>
       </div>
     );
   }
   return (
-    <div key={slice.key} className="flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-300">
+    <div key={slice.key} className="flex flex-col items-center text-center animate-[round-depth-in_0.45s_cubic-bezier(0.22,1,0.36,1)_both]">
       <span className="flex items-center gap-2 text-[12px] font-medium uppercase tracking-[0.14em] text-[#71717a]">
         <span className="h-2 w-2 rounded-full" style={{ backgroundColor: slice.color, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.06)" }} />
         {slice.label}
       </span>
-      <span className="mt-2.5 text-[52px] font-semibold leading-none tracking-[-0.045em] tabular-nums text-[#111111] md:text-[64px]">
-        {slice.count}
+      <span className="mt-1.5 text-[38px] font-semibold leading-none tracking-[-0.045em] tabular-nums text-[#111111] md:text-[54px]">
+        <CountUp value={slice.count} duration={600} />
       </span>
-      <span className="mt-2.5 text-[13px] tabular-nums text-[#71717a]">
+      <span className="mt-1.5 text-[12px] tabular-nums text-[#71717a] md:text-[13px]">
         {pct(slice.count, total)} del round{slice.hint ? ` · ${slice.hint}` : ""}
       </span>
       <button
         type="button"
         onClick={() => onOpen(slice.key)}
-        className="pointer-events-auto mt-3 inline-flex h-9 cursor-pointer items-center gap-1 rounded-full px-3 text-[12.5px] font-medium text-[#111111] transition-colors hover:bg-[#f4f4f5] md:hidden"
+        className="pointer-events-auto mt-1 inline-flex h-9 cursor-pointer items-center gap-1 rounded-full px-3 text-[12.5px] font-medium text-[#111111] transition-colors hover:bg-[#f4f4f5] md:hidden"
       >
         Vedi chi sono <ArrowRight className="h-3.5 w-3.5" />
       </button>
@@ -549,7 +459,7 @@ function ContactList({
   }, [rows, query]);
 
   return (
-    <div className="flex max-h-[calc(82dvh-2rem)] flex-col animate-in fade-in slide-in-from-bottom-2 duration-500 md:max-h-[calc(100dvh-8rem)] md:slide-in-from-bottom-0 md:slide-in-from-right-4">
+    <div className="flex max-h-[calc(82dvh-2rem)] flex-col animate-[round-depth-in_0.7s_cubic-bezier(0.22,1,0.36,1)_both] md:max-h-[calc(100dvh-8rem)]">
       <div className="flex items-center gap-3">
         {color ? <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.06)" }} /> : null}
         <h2 className="min-w-0 flex-1 truncate text-[17px] font-semibold tracking-[-0.02em] text-[#111111]">
@@ -580,7 +490,7 @@ function ContactList({
 
       <ul className="-mx-3 mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2">
         {shown.map((r, i) => (
-          <li key={r.id} className="animate-in fade-in fill-mode-both duration-500" style={{ animationDelay: `${Math.min(i, 14) * 22}ms` }}>
+          <li key={r.id} className="animate-[round-depth-in_0.6s_cubic-bezier(0.22,1,0.36,1)_both]" style={{ animationDelay: `${120 + Math.min(i, 14) * 28}ms` }}>
             <button
               type="button"
               onClick={() => onOpen(r.id)}

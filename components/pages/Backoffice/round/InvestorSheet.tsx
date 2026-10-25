@@ -271,7 +271,7 @@ export function InvestorSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full gap-0 border-l-0 sm:max-w-[520px]" onOpenAutoFocus={(e) => e.preventDefault()}>
-        <div className="flex-1 overflow-y-auto px-6 pb-10 pt-12 sm:px-10">
+        <div className="flex-1 overflow-y-auto px-6 pb-10 pt-12 animate-[round-depth-in_0.7s_cubic-bezier(0.22,1,0.36,1)_both] [animation-delay:90ms] sm:px-10">
           {/* Chi è */}
           <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#a1a1aa]">
             {investor ? CATEGORY_LABEL[draft.category] : "Nuovo investitore"}
