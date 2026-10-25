@@ -238,8 +238,12 @@ export function RoundDonut({
             return (
               <g
                 key={s.key}
-                className="pointer-events-none transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-                style={{ transform: lifted ? `translate(${dx}px, ${dy}px)` : "translate(0px, 0px)", opacity: dim ? 0.38 : 1 }}
+                className="pointer-events-none transition-[transform,filter] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+                style={{
+                  transform: lifted ? `translate(${dx}px, ${dy}px)` : "translate(0px, 0px)",
+                  // attenuate senza trasparenza: niente pareti che si vedono attraverso
+                  filter: dim ? "contrast(0.42) brightness(1.32)" : "contrast(1) brightness(1)",
+                }}
               >
                 {s.inner.map((d, i) => (
                   <g key={i}>
@@ -279,7 +283,7 @@ export function RoundDonut({
 
         <div
           className="pointer-events-none absolute flex -translate-x-1/2 -translate-y-1/2 items-center justify-center"
-          style={{ left: "50%", top: `${((CY - 6) / H) * 100}%` }}
+          style={{ left: "50%", top: `${((CY + DEPTH / 2 + 4) / H) * 100}%` }}
         >
           {center}
         </div>

@@ -343,7 +343,7 @@ function DonutCenter({
   if (!slice) {
     return (
       <div key="target" className="flex flex-col items-center text-center animate-[round-depth-in_0.9s_cubic-bezier(0.22,1,0.36,1)_both] [animation-delay:500ms]">
-        <span className="text-[34px] font-semibold leading-none tracking-[-0.045em] text-[#111111] md:text-[50px]">{target}</span>
+        <span className="text-[30px] font-semibold leading-none tracking-[-0.045em] text-[#111111] md:text-[46px]">{target}</span>
         <span className="mt-2 text-[12.5px] text-[#71717a] md:text-[13px]">{committed ? `${committed} impegnati` : "obiettivo"}</span>
         <span className="mt-0.5 text-[12px] tabular-nums text-[#a1a1aa] md:text-[12.5px]">
           <CountUp value={total} delay={500} /> investitori
@@ -357,7 +357,7 @@ function DonutCenter({
         <span className="h-2 w-2 rounded-full" style={{ backgroundColor: slice.color, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.06)" }} />
         {slice.label}
       </span>
-      <span className="mt-1.5 text-[38px] font-semibold leading-none tracking-[-0.045em] tabular-nums text-[#111111] md:text-[54px]">
+      <span className="mt-1 text-[32px] font-semibold leading-none tracking-[-0.045em] tabular-nums text-[#111111] md:text-[48px]">
         <CountUp value={slice.count} duration={600} />
       </span>
       <span className="mt-1.5 text-[12px] tabular-nums text-[#71717a] md:text-[13px]">
