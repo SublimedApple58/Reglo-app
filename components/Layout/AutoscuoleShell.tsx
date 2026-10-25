@@ -173,8 +173,8 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-white">
       {/* Top nav 84px — logo sx, tri-tab centrale, avatar + hamburger dx */}
-      <header className="sticky top-0 z-30 h-[84px] w-full border-b border-border bg-[#f7f7f7]">
-        <div className="mx-auto grid h-full max-w-[1440px] grid-cols-[1fr_auto_1fr] items-stretch px-4 lg:px-10">
+      <header className="sticky top-0 z-30 h-16 w-full border-b border-border bg-[#f7f7f7] md:h-[84px]">
+        <div className="mx-auto grid h-full max-w-[1440px] grid-cols-[1fr_auto] items-stretch px-4 md:grid-cols-[1fr_auto_1fr] lg:px-10">
           {/* Logo */}
           <div className="flex items-center">
             <Link href="/user/autoscuole" className="flex items-center">
@@ -189,7 +189,7 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* Tab centrali */}
-          <div className="flex items-stretch justify-center overflow-x-auto [scrollbar-width:none]">
+          <div className="hidden items-stretch justify-center overflow-x-auto [scrollbar-width:none] md:flex">
             {shellActive && <AutoscuoleNav />}
           </div>
 
@@ -513,9 +513,12 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main content */}
-      <main className={`mx-auto flex w-full flex-1 flex-col gap-6 px-4 pt-6 pb-10 lg:gap-8 lg:px-10 lg:pt-8 lg:pb-12 ${isWideLayout ? "max-w-[1920px]" : "max-w-[1440px]"}`}>
+      <main className={`mx-auto flex w-full min-w-0 flex-1 flex-col gap-6 px-4 pt-5 pb-[calc(88px+env(safe-area-inset-bottom))] md:pt-6 md:pb-10 lg:gap-8 lg:px-10 lg:pt-8 lg:pb-12 ${isWideLayout ? "max-w-[1920px]" : "max-w-[1440px]"}`}>
         <StudentNameOrderProvider>{children}</StudentNameOrderProvider>
       </main>
+
+      {/* Tab bar in basso sotto md (design-system §8b) */}
+      {shellActive && <AutoscuoleNav variant="bottom" />}
 
       {/* Dialog dal menu hamburger */}
       <NovitaDialog entry={novitaEntry} onClose={() => setNovitaEntry(null)} />

@@ -397,8 +397,8 @@ function AgendaOccupancyBand({
   const hasAvailability = occupancy.availableMinutes > 0;
 
   return (
-    <div className="mb-3.5 flex items-start gap-10 rounded-[14px] border border-[#dddddd] bg-white px-[22px] py-[18px]">
-      <div className="w-[250px] flex-none">
+    <div className="mb-3.5 flex flex-col items-stretch gap-4 rounded-[14px] border border-[#dddddd] bg-white px-4 py-4 md:flex-row md:items-start md:gap-10 md:px-[22px] md:py-[18px]">
+      <div className="md:w-[250px] md:flex-none">
         <div className="text-[13px] font-semibold uppercase tracking-[0.1px] text-[#929292]">
           Agenda occupata
         </div>
@@ -416,18 +416,18 @@ function AgendaOccupancyBand({
       {notStarted ? (
         // Barra, legenda e spiegazioni su un periodo che deve ancora arrivare
         // sarebbero solo rumore: non c'è niente da misurare, e basta dirlo.
-        <p className="min-w-0 flex-1 pt-2 text-[12.5px] font-medium leading-[1.5] text-[#b0b0b0]">
+        <p className="min-w-0 flex-1 text-[12.5px] md:pt-2 font-medium leading-[1.5] text-[#b0b0b0]">
           {"L'occupazione si misura sulle ore già trascorse. Scegli un periodo che è già cominciato per vedere quante delle ore dichiarate in agenda sono state occupate."}
         </p>
       ) : (
-      <div className="min-w-0 flex-1 pt-1">
+      <div className="min-w-0 flex-1 md:pt-1">
         <div className="flex h-2.5 overflow-hidden rounded-full bg-[#f0f0f0]">
           <span
             className="block h-full bg-[#111111]"
             style={{ width: `${Math.min(100, percent)}%` }}
           />
         </div>
-        <div className="mt-[11px] flex flex-wrap gap-5 text-[12.5px] font-medium text-[#929292]">
+        <div className="mt-[11px] flex flex-wrap gap-x-5 gap-y-1.5 text-[12.5px] font-medium text-[#929292]">
           <span>
             <span className="mr-1.5 inline-block size-2 translate-y-px rounded-[2px] bg-[#111111]" />
             Occupate{" "}

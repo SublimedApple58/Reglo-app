@@ -30,7 +30,12 @@ const consortiumNavItems = [
   { label: "Fatturazione", tab: "fatturazione", icon: "/images/nav/fatturazione-3d.png" },
 ] as const;
 
-export function AutoscuoleNav() {
+/**
+ * `variant="top"`: tab centrali dell'header (da `md` in su).
+ * `variant="bottom"`: barra fissa in basso sotto `md`, come una tab bar di
+ * app (design-system §8b).
+ */
+export function AutoscuoleNav({ variant = "top" }: { variant?: "top" | "bottom" }) {
   const pathname = usePathname() ?? "";
   const searchParams = useSearchParams();
   const locale = useLocale();
@@ -50,21 +55,73 @@ export function AutoscuoleNav() {
       ? consortiumNavItems
       : navItems;
 
+  const resolve = (item: (typeof items)[number]) => {
+    let isActive: boolean;
+    if (item.tab === "voice") {
+      isActive = pathname.startsWith(`${basePath}/voice`);
+    } else if (isOnAutoscuolePage) {
+      // L'agenda è la landing: attiva anche senza ?tab.
+      isActive = currentTab === item.tab || (item.tab === "agenda" && currentTab === null);
+    } else {
+      isActive = false;
+    }
+    const href = item.tab === "voice" ? `${basePath}/voice` : `${basePath}?tab=${item.tab}`;
+    return { isActive, href };
+  };
+
+  if (variant === "bottom") {
+    if (items.length < 2) return null;
+    return (
+      <nav
+        aria-label="Navigazione principale"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
+      >
+        <div className="mx-auto flex h-16 max-w-md items-stretch">
+          {items.map((item) => {
+            const { isActive, href } = resolve(item);
+            return (
+              <Link
+                key={item.label}
+                href={href}
+                aria-current={isActive ? "page" : undefined}
+                className="relative flex min-w-0 flex-1 select-none flex-col items-center justify-center gap-0.5 active:bg-[#f5f5f5]"
+              >
+                <span
+                  className={cn(
+                    "absolute inset-x-6 top-0 h-[2px] rounded-full transition-colors",
+                    isActive ? "bg-foreground" : "bg-transparent",
+                  )}
+                />
+                <Image
+                  src={item.icon}
+                  alt=""
+                  width={30}
+                  height={30}
+                  className={cn(
+                    "block h-[30px] w-[30px] object-contain transition-opacity",
+                    !isActive && "opacity-70",
+                  )}
+                />
+                <span
+                  className={cn(
+                    "max-w-full truncate px-1 text-[11px] leading-tight",
+                    isActive ? "font-semibold text-foreground" : "font-medium text-[#6a6a6a]",
+                  )}
+                >
+                  {item.label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+    );
+  }
+
   return (
     <nav className="flex h-full items-stretch justify-center overflow-x-auto [scrollbar-width:none]">
       {items.map((item) => {
-        let isActive: boolean;
-        if (item.tab === "voice") {
-          isActive = pathname.startsWith(`${basePath}/voice`);
-        } else if (isOnAutoscuolePage) {
-          // L'agenda è la landing: attiva anche senza ?tab.
-          isActive = currentTab === item.tab || (item.tab === "agenda" && currentTab === null);
-        } else {
-          isActive = false;
-        }
-
-        const href =
-          item.tab === "voice" ? `${basePath}/voice` : `${basePath}?tab=${item.tab}`;
+        const { isActive, href } = resolve(item);
 
         return (
           <Link

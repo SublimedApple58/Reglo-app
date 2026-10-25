@@ -56,6 +56,7 @@ Dettagli: [docs/architecture/git-flow.md](docs/architecture/git-flow.md) · stag
 - Icons: `@tabler/icons-react` and `lucide-react`
 - Env: `.env.dev`, `.env.staging`, `.env.prod` via `DOTENV_CONFIG_PATH`. Never commit `.env.*`. Staging = isolated DB + `APP_ENV=staging` (external sends no-op). See `docs/architecture/environments.md`.
 - Run `pnpm lint` before PRs
+- **RESPONSIVE OBBLIGATORIO (regola permanente, 2026-10-25)**: ogni modifica o pagina nuova della **web app** (backoffice titolari/segreteria, cioè le pagine autoscuole, e backoffice interno `/backoffice`) deve essere responsive e curata anche da telefono (riferimento 390px), non solo da desktop: niente scroll orizzontale della pagina, target touch ≥ 44px, tabelle → card sotto `md`, dialog → sheet dal basso sotto `sm` (già automatico per `components/ui/dialog.tsx`), tab header → barra in basso sotto `md`. Breakpoint, pattern e checklist di chiusura in `docs/design-system.md` §8b.
 
 ## Documentation
 

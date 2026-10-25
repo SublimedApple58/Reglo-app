@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { useAtomValue } from "jotai";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Plus, Layers, SlidersHorizontal, Users, Link2, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2, BookOpen, Lock, Printer, TrafficCone, Route, Truck, NotebookPen } from "lucide-react";
 
 import { companyAtom } from "@/atoms/company.store";
@@ -1166,6 +1167,12 @@ export function AutoscuoleAgendaPage({
     }
   }, [loading, instructors, vehicles]);
   const [viewMode, setViewMode] = React.useState<"week" | "day">("week");
+  // Su telefono l'agenda apre in vista Giorno (design-system §8b): la
+  // settimana con N istruttori non sta in 390px.
+  const isNarrowViewport = useIsMobile();
+  React.useEffect(() => {
+    if (window.matchMedia("(max-width: 767.98px)").matches) setViewMode("day");
+  }, []);
   // Anteprima di stampa dell'agenda (foglio PDF della vista corrente).
   const [printOpen, setPrintOpen] = React.useState(false);
   // Schermo intero: overlay `fixed inset-0` (NON la Fullscreen API del browser,
@@ -1242,9 +1249,14 @@ export function AutoscuoleAgendaPage({
   // lo scroll orizzontale, altrimenti 1fr riempie. Così l'agenda "si apre" in
   // larghezza già di default (soprattutto nel modo istruttori, prima a 80px).
   // Fuori fullscreen fsCols() → undefined → template originale invariato.
-  const fsColMin = isAgendaFullscreen ? Math.round(90 * agendaZoom) : 0;
+  // Su telefono (sotto md) vale lo stesso principio: colonne di almeno 128px
+  // e scroll orizzontale DENTRO la griglia, invece di 10 colonne da 30px con i
+  // nomi troncati (design-system §8b).
+  const fsColMin = isAgendaFullscreen ? Math.round(90 * agendaZoom) : isNarrowViewport ? 128 : 0;
   const fsCols = (n: number) =>
-    isAgendaFullscreen ? `56px repeat(${n}, minmax(${fsColMin}px, 1fr))` : undefined;
+    isAgendaFullscreen || isNarrowViewport
+      ? `56px repeat(${n}, minmax(${fsColMin}px, 1fr))`
+      : undefined;
   const [createOpen, setCreateOpen] = React.useState(false);
   // Luogo precompilato (REG-392 + REG-409): default dell'allievo → luogo del
   // tipo di patente della guida (categoria del veicolo se scelto, altrimenti
@@ -4039,21 +4051,21 @@ export function AutoscuoleAgendaPage({
             />
           )}
           {tabs}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-3 md:flex-nowrap md:gap-3">
           {/* Date nav */}
-          <div className="flex items-center gap-1">
+          <div className="flex w-full min-w-0 items-center gap-1 md:w-auto">
             <button type="button"
-              className="flex size-[30px] cursor-pointer items-center justify-center rounded-full text-[#555] transition-colors hover:bg-[#f2f2f2]"
+              className="flex size-10 shrink-0 cursor-pointer md:size-[30px] items-center justify-center rounded-full text-[#555] transition-colors hover:bg-[#f2f2f2]"
               onClick={() => viewMode === "week" ? setWeekStart((prev) => addDays(prev, -7)) : setDayFocus((prev) => addDays(prev, -1))}>
               <ChevronLeft className="size-4" />
             </button>
-            <span className="min-w-[130px] select-none text-center text-[15px] font-semibold text-foreground">
+            <span className="min-w-0 flex-1 select-none truncate text-center text-[15px] font-semibold text-foreground md:min-w-[130px] md:flex-none">
               {viewMode === "week"
                 ? formatRangeLabel(weekStart)
                 : dayFocus.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" })}
             </span>
             <button type="button"
-              className="flex size-[30px] cursor-pointer items-center justify-center rounded-full text-[#555] transition-colors hover:bg-[#f2f2f2]"
+              className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#555] transition-colors hover:bg-[#f2f2f2] md:size-[30px]"
               onClick={() => viewMode === "week" ? setWeekStart((prev) => addDays(prev, 7)) : setDayFocus((prev) => addDays(prev, 1))}>
               <ChevronRight className="size-4" />
             </button>
@@ -4091,6 +4103,9 @@ export function AutoscuoleAgendaPage({
 
           <div className="min-w-2 flex-1" />
 
+          {/* Strumenti secondari (legenda, visualizzazione, zoom, schermo
+              intero, stampa): solo da tablet in su (design-system §8b). */}
+          <div className="hidden md:contents">
           {/* Legenda (icona info, proto) */}
           {source?.toolbarLocked ? (
             <LockedToolbarTip tip="legenda">
@@ -4332,6 +4347,8 @@ export function AutoscuoleAgendaPage({
               <Printer className="size-4" strokeWidth={1.6} />
             </button>
           )}
+
+          </div>
 
           {/* Filtri (menu unico, proto) */}
           {source?.toolbarLocked ? (
@@ -5543,7 +5560,7 @@ export function AutoscuoleAgendaPage({
           })()}
           <div
             ref={calendarScrollRef}
-            className={cn("bg-white", isAgendaFullscreen ? "overflow-auto" : "overflow-y-auto", agendaFrameClass)}
+            className={cn("bg-white", isAgendaFullscreen || isNarrowViewport ? "overflow-auto" : "overflow-y-auto", agendaFrameClass)}
             style={{ height: "100%", ...agendaFrameStyle }}
           >
           {/* Sticky instructor headers */}

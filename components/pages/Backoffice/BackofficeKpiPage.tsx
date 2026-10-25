@@ -215,13 +215,16 @@ export function BackofficeKpiPage({
       </motion.header>
 
       {/* ── Filtro periodo (resta in vista mentre si scorre) ── */}
-      <div className="sticky top-16 z-20 -mx-4 mt-5 border-b border-[#eeeef2] bg-[#fbfbfc] px-4 py-3 shadow-[0_6px_16px_-14px_rgba(17, 17, 17,0.5)] lg:-mx-6 lg:px-6">
+      <div className="sticky top-[105px] z-20 -mx-4 mt-5 md:top-16 border-b border-[#eeeef2] bg-[#fbfbfc] px-4 py-3 shadow-[0_6px_16px_-14px_rgba(17, 17, 17,0.5)] lg:-mx-6 lg:px-6">
         <div className="flex flex-wrap items-center gap-3">
-          <SegmentedControl
-            value={showCustom ? "custom" : preset}
-            onChange={onPreset}
-            options={PRESETS}
-          />
+          {/* Sul telefono i periodi scorrono invece di sbordare. */}
+          <div className="-mx-4 max-w-[calc(100%+2rem)] overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:max-w-none md:px-0">
+            <SegmentedControl
+              value={showCustom ? "custom" : preset}
+              onChange={onPreset}
+              options={PRESETS}
+            />
+          </div>
           {showCustom && (
             <motion.div
               initial={reduce ? false : { opacity: 0, x: -6 }}

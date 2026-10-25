@@ -537,3 +537,46 @@
   from { background: var(--exam-wash); }
   to { background: transparent; }
 }
+
+/* ── Responsive (design-system §8b) ─────────────────────────────────────
+   Sotto 640px il Dialog di components/ui/dialog.tsx diventa uno sheet dal
+   basso a tutta larghezza: angoli solo in alto, altezza massima 92dvh con
+   contenuto scrollabile, bordo bianco sotto per la safe-area di iOS. */
+@keyframes reglo-sheet-in {
+  from { transform: translate3d(0, 100%, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+@keyframes reglo-sheet-out {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(0, 100%, 0); }
+}
+@media (max-width: 639.98px) {
+  .reglo-dialog {
+    top: auto !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    translate: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    max-height: 92dvh !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    border-radius: 24px 24px 0 0 !important;
+    border-left-width: 0 !important;
+    border-right-width: 0 !important;
+    border-bottom: env(safe-area-inset-bottom) solid #fff !important;
+  }
+  .reglo-dialog[data-state="open"] {
+    animation: reglo-sheet-in 0.32s cubic-bezier(0.32, 0.72, 0, 1) !important;
+  }
+  .reglo-dialog[data-state="closed"] {
+    animation: reglo-sheet-out 0.2s ease-in !important;
+  }
+  /* iOS zooma sugli input sotto 16px */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}

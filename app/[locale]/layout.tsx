@@ -1,6 +1,6 @@
 import '@/assets/styles/globals.css';
 import { APP_DESCRIPTION, APP_NAME, SERVER_URL } from '@/lib/constants';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Figtree } from 'next/font/google';
 import { SessionProvider } from 'next-auth/react';
 import { NextIntlClientProvider } from 'next-intl';
@@ -11,6 +11,14 @@ const figtree = Figtree({
   variable: '--font-geist-sans',
   fallback: ['Circular', '-apple-system', 'system-ui', 'Helvetica Neue', 'sans-serif'],
 });
+
+// viewport-fit=cover: le barre fisse in basso (tab bar mobile) usano
+// env(safe-area-inset-bottom) per stare sopra l'indicatore home di iOS.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+};
 
 export const metadata: Metadata = {
   title: {

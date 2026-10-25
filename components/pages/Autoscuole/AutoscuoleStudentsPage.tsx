@@ -664,7 +664,7 @@ function StudentListSkeleton() {
         {Array.from({ length: 6 }).map((_, i) => (
           <div
             key={i}
-            className="grid grid-cols-[2fr_1.5fr_1fr_1fr_110px] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
+            className="flex items-center gap-3 border-t border-[#ebebeb] px-4 py-3.5 md:grid md:grid-cols-[2fr_1.5fr_1fr_1fr_110px] md:px-6 md:py-5"
           >
             <div className="flex min-w-0 items-center gap-3">
               <Skeleton className="size-10 shrink-0 rounded-full" />
@@ -2288,6 +2288,27 @@ export function AutoscuoleStudentsPage({
     );
   };
 
+  /** «Dettaglio» da tablet in su; su telefono una freccia con area touch da 44px. */
+  const renderDetailButton = (student: Student) => (
+    <>
+      <button
+        type="button"
+        className={cn(listButtonClass, "hidden md:inline-block")}
+        onClick={() => openStudentDetail(student.id)}
+      >
+        Dettaglio
+      </button>
+      <button
+        type="button"
+        aria-label={`Apri ${formatStudentName(student, studentNameOrder)}`}
+        className="-mr-2 flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#929292] active:bg-[#f2f2f2] md:hidden"
+        onClick={() => openStudentDetail(student.id)}
+      >
+        <ChevronRight className="size-5" strokeWidth={1.8} />
+      </button>
+    </>
+  );
+
   const renderNameCell = (
     student: Student,
     options?: { secondLine?: string | null; showDot?: boolean },
@@ -2303,7 +2324,7 @@ export function AutoscuoleStudentsPage({
         .filter(Boolean)
         .join(" · ") || null;
     return (
-    <div className="flex min-w-0 items-center gap-3">
+    <div className="flex min-w-0 flex-1 items-center gap-3">
       <div className="relative shrink-0">
         <StudentAvatar student={student} nameOrder={studentNameOrder} />
         {options?.showDot && (
@@ -2320,12 +2341,12 @@ export function AutoscuoleStudentsPage({
             {formatStudentName(student, studentNameOrder)}
           </span>
           {student.neverAccessed ? (
-            <NeverAccessedListMark hasPhone={Boolean(student.phone)} />
+            <span className="shrink-0"><NeverAccessedListMark hasPhone={Boolean(student.phone)} /></span>
           ) : null}
           {student.bookingBlocked && (
-            <Pill tone="red">Bloccato</Pill>
+            <span className="shrink-0"><Pill tone="red">Bloccato</Pill></span>
           )}
-          {student.examReady && <Pill tone="green">Pronto</Pill>}
+          {student.examReady && <span className="shrink-0"><Pill tone="green">Pronto</Pill></span>}
         </div>
         {secondLine ? (
           <p className="mt-0.5 truncate text-[12px] font-medium text-[#929292]">{secondLine}</p>
@@ -2349,12 +2370,12 @@ export function AutoscuoleStudentsPage({
           return (
             <div
               key={student.id}
-              className="grid grid-cols-[2fr_1.5fr_1fr_auto] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
+              className="flex items-center gap-3 border-t border-[#ebebeb] px-4 py-3.5 md:grid md:grid-cols-[2fr_1.5fr_1fr_auto] md:px-6 md:py-5"
             >
               {renderNameCell(student)}
-              <div className="truncate pr-3 text-[13px] font-medium text-[#6a6a6a]">{student.email || "—"}</div>
-              <div className="text-[13px] font-medium text-[#929292]">Iscritto il {formatDate(student.createdAt)}</div>
-              <div className="flex items-center justify-end gap-2">
+              <div className="hidden truncate pr-3 text-[13px] font-medium text-[#6a6a6a] md:block">{student.email || "—"}</div>
+              <div className="hidden text-[13px] font-medium text-[#929292] md:block">Iscritto il {formatDate(student.createdAt)}</div>
+              <div className="flex shrink-0 items-center justify-end gap-2">
                 <button
                   type="button"
                   className={listButtonClass}
@@ -2364,9 +2385,7 @@ export function AutoscuoleStudentsPage({
                 >
                   {isSaving ? "Assegno…" : "Assegna quiz"}
                 </button>
-                <button type="button" className={listButtonClass} onClick={() => openStudentDetail(student.id)}>
-                  Dettaglio
-                </button>
+                {renderDetailButton(student)}
               </div>
             </div>
           );
@@ -2388,12 +2407,12 @@ export function AutoscuoleStudentsPage({
           return (
             <div
               key={student.id}
-              className="grid grid-cols-[22px_2fr_1.5fr_1fr_1fr_110px] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
+              className="flex items-center gap-3 border-t border-[#ebebeb] px-4 py-3.5 md:grid md:grid-cols-[22px_2fr_1.5fr_1fr_1fr_110px] md:px-6 md:py-5"
             >
               {renderSelectCell(student)}
               {renderNameCell(student, { showDot: true })}
-              <div className="truncate pr-3 text-[13px] font-medium text-[#6a6a6a]">{student.email || "—"}</div>
-              <div className="text-[13px] font-medium text-foreground">{student.phone || "—"}</div>
+              <div className="hidden truncate pr-3 text-[13px] font-medium text-[#6a6a6a] md:block">{student.email || "—"}</div>
+              <div className="hidden text-[13px] font-medium text-foreground md:block">{student.phone || "—"}</div>
               <div>
                 {countdown ? (
                   <>
@@ -2414,10 +2433,8 @@ export function AutoscuoleStudentsPage({
                   </>
                 )}
               </div>
-              <div className="flex justify-end">
-                <button type="button" className={listButtonClass} onClick={() => openStudentDetail(student.id)}>
-                  Dettaglio
-                </button>
+              <div className="flex shrink-0 justify-end">
+                {renderDetailButton(student)}
               </div>
             </div>
           );
@@ -2469,15 +2486,15 @@ export function AutoscuoleStudentsPage({
           return (
             <div
               key={student.id}
-              className="grid grid-cols-[22px_2fr_1.5fr_1fr_1.1fr_1fr_110px] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
+              className="flex items-center gap-3 border-t border-[#ebebeb] px-4 py-3.5 md:grid md:grid-cols-[22px_2fr_1.5fr_1fr_1.1fr_1fr_110px] md:px-6 md:py-5"
             >
               {renderSelectCell(student)}
               {renderNameCell(student, { showDot: true, secondLine })}
-              <div className="truncate pr-3 text-[13px] font-medium text-[#6a6a6a]">{student.email || "—"}</div>
-              <div className="text-[13px] font-medium text-foreground">{student.phone || "—"}</div>
+              <div className="hidden truncate pr-3 text-[13px] font-medium text-[#6a6a6a] md:block">{student.email || "—"}</div>
+              <div className="hidden text-[13px] font-medium text-foreground md:block">{student.phone || "—"}</div>
               {/* Luogo di default (REG-392): colonna dedicata → righe di altezza
                   uniforme che ci sia o meno un luogo ("—" quando assente = sede). */}
-              <div className="min-w-0">
+              <div className="hidden min-w-0 md:block">
                 {student.defaultLocationName ? (
                   <div className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
                     <MapPin className="size-3.5 shrink-0 text-[#9a9a9a]" strokeWidth={2} />
@@ -2501,10 +2518,8 @@ export function AutoscuoleStudentsPage({
                       : "Guide"}
                 </p>
               </div>
-              <div className="flex justify-end">
-                <button type="button" className={listButtonClass} onClick={() => openStudentDetail(student.id)}>
-                  Dettaglio
-                </button>
+              <div className="flex shrink-0 justify-end">
+                {renderDetailButton(student)}
               </div>
             </div>
           );
@@ -2524,19 +2539,17 @@ export function AutoscuoleStudentsPage({
         {visible.map((student) => (
           <div
             key={student.id}
-            className="grid grid-cols-[22px_2fr_1.5fr_1fr_1fr_110px] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
+            className="flex items-center gap-3 border-t border-[#ebebeb] px-4 py-3.5 md:grid md:grid-cols-[22px_2fr_1.5fr_1fr_1fr_110px] md:px-6 md:py-5"
           >
             {renderSelectCell(student)}
             {renderNameCell(student)}
-            <div className="truncate pr-3 text-[13px] font-medium text-[#6a6a6a]">{student.email || "—"}</div>
-            <div className="text-[13px] font-medium text-foreground">{student.phone || "—"}</div>
+            <div className="hidden truncate pr-3 text-[13px] font-medium text-[#6a6a6a] md:block">{student.email || "—"}</div>
+            <div className="hidden text-[13px] font-medium text-foreground md:block">{student.phone || "—"}</div>
             <div>
               <Pill tone="green">Patentato</Pill>
             </div>
-            <div className="flex justify-end">
-              <button type="button" className={listButtonClass} onClick={() => openStudentDetail(student.id)}>
-                Dettaglio
-              </button>
+            <div className="flex shrink-0 justify-end">
+              {renderDetailButton(student)}
             </div>
           </div>
         ))}

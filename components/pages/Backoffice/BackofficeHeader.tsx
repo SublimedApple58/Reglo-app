@@ -63,9 +63,11 @@ export function BackofficeHeader() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/60 bg-white/90 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4 lg:px-6">
+      {/* Sotto md: riga 1 marchio + esci, riga 2 menu a tutta larghezza che
+          scorre (design-system §8b). */}
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-2 px-4 md:h-16 md:flex-nowrap lg:px-6">
         {/* Brand */}
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="flex h-14 shrink-0 items-center gap-3 md:h-auto">
           <RegloMark size={32} />
           {/* Sul telefono resta solo il simbolo: lo spazio serve al menu. */}
           <div className="hidden items-center gap-2.5 lg:flex">
@@ -79,13 +81,13 @@ export function BackofficeHeader() {
         </div>
 
         {/* Nav */}
-        <nav className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
+        <nav className="order-last -mx-4 flex w-[calc(100%+2rem)] min-w-0 items-center gap-1 overflow-x-auto px-3 pb-2 [scrollbar-width:none] md:order-none md:mx-0 md:w-auto md:px-0 md:pb-0">
           {NAV_ITEMS.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                "flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors md:min-h-0",
                 isActive(item.href)
                   ? "bg-gray-100 text-foreground"
                   : "text-muted-foreground hover:bg-gray-50 hover:text-foreground",
@@ -125,7 +127,7 @@ export function BackofficeHeader() {
             type="button"
             onClick={handleLogout}
             disabled={isPending}
-            className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-gray-100 hover:text-foreground"
+            className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground md:min-h-0 transition-colors hover:bg-gray-100 hover:text-foreground"
           >
             <LogOut className="h-4 w-4" />
             <span className="hidden sm:inline">Esci</span>

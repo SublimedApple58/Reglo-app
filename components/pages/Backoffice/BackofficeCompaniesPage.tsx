@@ -993,32 +993,32 @@ export default function BackofficeCompaniesPage({
       </div>
 
       {/* ── Stats ── */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="rounded-2xl border border-border bg-white p-3 shadow-[var(--shadow-card)] sm:p-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f2f2f2]">
+            <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:flex bg-[#f2f2f2]">
               <GraduationCap className="h-5 w-5 text-[#222222]" />
             </div>
             <div>
               <p className="text-2xl font-semibold text-foreground">{visible.length}</p>
-              <p className="text-xs text-muted-foreground">Autoscuole</p>
+              <p className="text-[11px] leading-tight text-muted-foreground sm:text-xs">Autoscuole</p>
             </div>
           </div>
         </div>
-        <div className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
+        <div className="rounded-2xl border border-border bg-white p-3 shadow-[var(--shadow-card)] sm:p-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f2f2f2]">
+            <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:flex bg-[#f2f2f2]">
               <Smartphone className="h-5 w-5 text-[#222222]" />
             </div>
             <div>
               <p className="text-2xl font-semibold text-foreground">{totalStudents}</p>
-              <p className="text-xs text-muted-foreground">Allievi su app</p>
+              <p className="text-[11px] leading-tight text-muted-foreground sm:text-xs">Allievi su app</p>
             </div>
           </div>
         </div>
-        <div className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
+        <div className="rounded-2xl border border-border bg-white p-3 shadow-[var(--shadow-card)] sm:p-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
+            <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:flex bg-emerald-50">
               <Phone className="h-5 w-5 text-emerald-600" />
             </div>
             <div>
@@ -1027,15 +1027,15 @@ export default function BackofficeCompaniesPage({
                   c.services.some((s) => s.limits?.voiceProvisioningStatus === "ready")
                 ).length}
               </p>
-              <p className="text-xs text-muted-foreground">Linee vocali attive</p>
+              <p className="text-[11px] leading-tight text-muted-foreground sm:text-xs">Linee vocali attive</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* ── Search ── */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-full sm:max-w-sm sm:flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
@@ -1066,11 +1066,11 @@ export default function BackofficeCompaniesPage({
           <TableHeader>
             <TableRow>
               <TableHead>Autoscuola</TableHead>
-              <TableHead>Registrata il</TableHead>
+              <TableHead className="hidden md:table-cell">Registrata il</TableHead>
               <TableHead>Stato</TableHead>
-              <TableHead>Allievi</TableHead>
-              <TableHead>Voce AI</TableHead>
-              <TableHead className="text-right">Azioni</TableHead>
+              <TableHead className="hidden md:table-cell">Allievi</TableHead>
+              <TableHead className="hidden md:table-cell">Voce AI</TableHead>
+              <TableHead className="hidden text-right md:table-cell">Azioni</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1107,14 +1107,14 @@ export default function BackofficeCompaniesPage({
                       setDrawerOpen(true);
                     }}
                   >
-                    <TableCell>
+                    <TableCell className="whitespace-normal md:whitespace-nowrap">
                       <div className="flex items-center gap-2.5">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#f2f2f2] text-xs font-bold text-[#222222]">
                           {company.name.charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-foreground">{company.name}</span>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="font-medium text-foreground [overflow-wrap:anywhere]">{company.name}</span>
                             {consorzio && (
                               <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#ecebff] px-2 py-0.5 text-[10px] font-semibold text-[#3b35a8]">
                                 <Layers className="h-3 w-3" />
@@ -1131,7 +1131,7 @@ export default function BackofficeCompaniesPage({
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="hidden text-muted-foreground md:table-cell">
                       {new Date(company.createdAt).toLocaleDateString("it-IT", {
                         day: "2-digit",
                         month: "short",
@@ -1151,7 +1151,7 @@ export default function BackofficeCompaniesPage({
                         </span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">
                       {studentCount > 0 ? (
                         <div className="flex items-center gap-1.5">
                           {company.androidStudents > 0 && (
@@ -1169,7 +1169,7 @@ export default function BackofficeCompaniesPage({
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">
                       {hasVoice ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-[#f0f0f0] px-2 py-0.5 text-[10px] font-semibold text-[#111111]">
                           <Phone className="h-3 w-3" />
@@ -1179,7 +1179,7 @@ export default function BackofficeCompaniesPage({
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="hidden text-right md:table-cell">
                       <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                         {consorzio && (
                           <Button size="sm" variant="outline" onClick={openConsorzio}>

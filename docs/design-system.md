@@ -244,6 +244,50 @@ CSS variables per animazioni in `globals.css`:
 
 ---
 
+## 8b. Responsive e mobile (REGOLA PERMANENTE, dal 2026-10-25)
+
+**Ogni modifica o pagina nuova della web app deve essere responsive e curata anche da telefono, non solo da desktop.** Vale per le pagine delle autoscuole (titolari e segreteria) e per il backoffice interno `/backoffice`. Su mobile deve sembrare un'app vera, non un sito rimpicciolito.
+
+### Breakpoint (Tailwind di default)
+
+| Nome | Da | Uso |
+|------|----|-----|
+| base | 0 | telefono (riferimento: **390px**, iPhone; minimo supportato 360px) |
+| `sm` | 640px | telefono grande / orizzontale |
+| `md` | 768px | tablet: da qui torna la navigazione desktop |
+| `lg` | 1024px | laptop |
+| `xl` | 1280px | desktop (riferimento) |
+
+Si scrive **mobile-first**: classi base per il telefono, `md:`/`lg:` per allargare.
+
+### Pattern
+
+- **Navigazione**: sotto `md` le tab dell'header (`AutoscuoleNav`) spariscono e diventano una **barra in basso** fissa (`AutoscuoleNav variant="bottom"`, icone + etichetta, safe-area iOS). Il menu ☰ resta in alto a destra. Nel backoffice interno le voci di navigazione non devono sbordare (menu o barra che scorre).
+- **Tabelle / liste**: sotto `md` ogni riga diventa una **card impilata** (nome in evidenza su una riga intera, metadati sotto, azione principale a destra o come tap sulla card). Lo scroll orizzontale è ammesso solo dentro un contenitore dichiarato (`overflow-x-auto`) per dati davvero tabellari (es. agenda, griglie numeriche), mai sulla pagina.
+- **Dialog**: sotto `sm` il `Dialog` di `components/ui/dialog.tsx` diventa da solo uno **sheet dal basso** (classe `reglo-dialog` + regole in `globals.css`): tutta larghezza, angoli in alto, `max-h` 92dvh scrollabile, `DialogFooter` con bottoni impilati a tutta larghezza. Gli `AlertDialog` restano centrati con 16px di margine. I modali custom (non `DialogContent`) vanno controllati a mano.
+- **Toolbar**: sotto `md` le azioni secondarie (stampa, zoom, info, schermo intero…) vanno in un menu «⋯»; restano visibili solo navigazione data, filtro e azione primaria.
+- **Tab di pagina / segmented**: se non ci stanno, scorrono in orizzontale (`overflow-x-auto`, niente scrollbar visibile) senza troncare le etichette.
+- **Form**: campi a tutta larghezza, label sopra il campo; i select non si troncano («4…» è un bug).
+- **Agenda**: su telefono apre in vista **Giorno**, colonne ≥128px che scorrono in orizzontale dentro la griglia; gli strumenti secondari della toolbar sono solo da `md`.
+- **Grafici**: scorrono in orizzontale dentro il loro contenitore (come il grafico Finanza, centrato sul mese in corso).
+
+### Minimi
+
+- Target touch **≥ 44×44px** sotto `md` (icone comprese: area cliccabile, non il disegno).
+- Testo ≥ 12px (meta), 14–16px corpo; gli `input` a **16px** su mobile (iOS altrimenti zooma).
+- Gutter laterale 16px; nessun elemento oltre la larghezza dello schermo.
+- `100dvh` invece di `100vh`; `env(safe-area-inset-bottom)` per le barre fisse (viewport `viewportFit: cover` nel layout root).
+
+### Prima di chiudere un lavoro di UI
+
+1. Playwright a **390px**, **768px** e **1280px** sulle pagine toccate (anche dialog aperti).
+2. `document.documentElement.scrollWidth === innerWidth` a 390px: **zero scroll orizzontale**.
+3. Nessuna etichetta troncata in modo da perdere significato (nomi allievi, tab, select).
+4. Target touch ≥ 44px, testo leggibile, dialog dentro lo schermo con il bottone principale raggiungibile.
+5. Screenshot a 390px in `/tmp/hiro-anteprime/<task>/` (HIRO_SHOT).
+
+---
+
 ## 9. Regole e Divieti
 
 ### Da fare
@@ -254,6 +298,7 @@ CSS variables per animazioni in `globals.css`:
 - Usare CVA per varianti componente
 - Focus visible ring su tutti gli elementi interattivi (`.reglo-focus-ring`)
 - Transizioni via `transform` e `opacity` only
+- **Responsive**: ogni pagina/modifica della web app curata anche a 390px (vedi §8b)
 
 ### Da NON fare
 - **Non** hardcodare hex — usare CSS variables (`var(--primary)`) o Tailwind classes (`bg-primary`)
