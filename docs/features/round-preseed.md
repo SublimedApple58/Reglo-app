@@ -68,21 +68,15 @@ Il 25/10 Tiziano ha giudicato la prima versione, con dashboard e liste per
 tipologia, «troppo complessa». Ha chiesto una pagina totalmente grafica:
 «non voglio vedere liste infinite a meno che tramite interazione l'utente non
 capisca di volerla vedere». Modello dati invariato, `RoundPage.tsx`. Il 25/10 sera la ciambella è diventata tridimensionale e animata, su richiesta di Tiziano («tridimensionale e animato un sacco, ma clean, niente bounce»).
-- **Ciambella tridimensionale** (`RoundDonut.tsx`, SVG puro, senza librerie 3D), con un selettore «Per stato / Per tipologia».
-  - È un anello in prospettiva (ellisse) con il lato visibile davanti e la parete interna dietro. Le fette si disegnano in ordine dietro → davanti.
-  - Luce dall'alto a sinistra e ombra di contatto.
-  - All'ingresso l'anello prende spessore e le fette si disegnano in senso orario (tween rAF, ease-out); i numeri contano fino al valore (`CountUp`).
-  - Al passaggio la fetta si solleva e si stacca (transform CSS). Le zone di tocco restano ferme, così la fetta non scappa sotto il cursore.
-  - Parallasse leggera legata al cursore (rotateX/Y di pochi gradi).
-  - Lista, scheda e centro entrano con profondità: keyframe `round-depth-in` in `globals.css` (scala, opacità, sfocatura).
-  - Curve solo ease-out, niente bounce. Con `prefers-reduced-motion` tutto è fermo.
-  - Al centro: l'obiettivo, poi quanto è impegnato (se c'è) e quanti
-    investitori ci sono.
-  - Sotto quattro numeri: contattati, risposte, call, interessati (tappe
-    dell'imbuto).
-  - Le fette hanno una larghezza minima, così anche quella di un solo
-    contatto resta cliccabile. Si disegnano in sequenza al montaggio e a ogni
-    cambio di vista.
+- **Ciambella tridimensionale e viva** (`RoundDonut.tsx`, SVG puro + `motion/react`, senza librerie 3D), con un selettore «Per stato / Per tipologia» (pill che scivola con `layoutId`).
+  - È un anello in prospettiva con il lato davanti, la parete interna dietro, ombra di contatto e un alone colorato sfocato (conic-gradient, solo transform).
+  - Palette viva ma sobria: smeraldo, turchese, viola, orchidea, cielo, ambra, corallo; ogni fetta ha un gradiente chiaro → scuro. I pallini di stato in `STATUS_COLOR` usano gli stessi toni.
+  - Un solo loop `useAnimationFrame` porta ogni valore al bersaglio con un avvicinamento esponenziale: morbido, senza overshoot, indipendente dal frame rate. React ridisegna solo mentre qualcosa si muove.
+  - **Sigla d'ingresso**: l'anello ruota in posizione e si inclina, le fette crescono una dopo l'altra, i numeri contano (`CountUp` con `animate` di motion), i testi salgono a cascata.
+  - **Da ferma**: respiro lento dell'inclinazione, un riflesso che scorre sull'anello, parallasse interpolata col cursore. Sono transform e attributi via ref, senza render di React.
+  - **Cambio vista = morph**: ogni posto (slot, 9) rimodella il suo arco e sfuma il colore. Per questo la ciambella non va mai rimontata (niente `key={mode}`).
+  - **Al clic** la fetta esce in avanti; la lista entra (e esce) con `AnimatePresence`, righe a cascata con sfocatura. La scheda e il foglio dal basso entrano ed escono in profondità: keyframe `round-sheet-*` in `globals.css`.
+  - Con `prefers-reduced-motion` tutto è fermo.
 - **Mouse**: al passaggio la fetta si ingrossa e il centro mostra conteggio e
   percentuale (per tipologia anche quanti sono già avviati). Al clic, e solo
   allora, nella colonna destra la lista di quei contatti prende il posto della

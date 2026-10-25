@@ -39,14 +39,14 @@ const MENU_GROUPS: RoundStatus[][] = [
 ];
 
 export function StatusDot({ status, className }: { status: RoundStatus; className?: string }) {
-  const hollow = status === "da_contattare" || status === "no" || status === "in_pausa";
+  const hollow = status === "da_contattare";
   return (
     <span
       aria-hidden
       className={cn("inline-block h-[7px] w-[7px] shrink-0 rounded-full", className)}
       style={
         hollow
-          ? { boxShadow: `inset 0 0 0 1.25px ${status === "da_contattare" ? "#a1a1aa" : "#d4d4d8"}` }
+          ? { boxShadow: "inset 0 0 0 1.25px #a1a1aa" }
           : { backgroundColor: STATUS_COLOR[status] }
       }
     />
@@ -73,7 +73,7 @@ export function StatusMenu({
           onClick={(e) => e.stopPropagation()}
           className={cn(
             "-mx-2.5 inline-flex h-11 cursor-pointer items-center gap-2 whitespace-nowrap rounded-full px-2.5 text-[13.5px] transition-colors hover:bg-[#f4f4f5] disabled:cursor-wait disabled:opacity-50 md:h-9",
-            value === "bloccato" ? "text-[#9a3412]" : value === "no" || value === "in_pausa" ? "text-[#a1a1aa]" : "text-[#111111]",
+            value === "bloccato" ? "text-[#be123c]" : value === "no" ? "text-[#a1a1aa]" : "text-[#111111]",
           )}
         >
           <StatusDot status={value} />

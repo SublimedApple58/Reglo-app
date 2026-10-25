@@ -69,20 +69,17 @@ export const STATUS_HINT: Record<RoundStatus, string> = {
   in_pausa: "Fermo per scelta nostra o loro, da riprendere.",
 };
 
-/**
- * Colore del pallino di stato: grigi che si scuriscono lungo l'imbuto, verde
- * per interesse e impegno, arancio (l'allarme della Finanza) per i bloccati.
- */
+/** Colore del pallino di stato: lo stesso tono delle fette della ciambella. */
 export const STATUS_COLOR: Record<RoundStatus, string> = {
   da_contattare: "#d4d4d8",
-  contattato: "#a1a1aa",
-  bloccato: "#c2410c",
-  risposto: "#52525b",
-  call: "#111111",
-  interessato: "#15803d",
-  impegno: "#14532d",
-  no: "#e4e4e7",
-  in_pausa: "#e4e4e7",
+  contattato: "#0ea5e9",
+  bloccato: "#f43f5e",
+  risposto: "#d946ef",
+  call: "#8b5cf6",
+  interessato: "#14b8a6",
+  impegno: "#10b981",
+  no: "#a1a1aa",
+  in_pausa: "#f59e0b",
 };
 
 export const ROUND_OWNERS = ["tiziano", "gabriele", "hiro"] as const;

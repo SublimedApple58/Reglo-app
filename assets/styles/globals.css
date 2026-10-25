@@ -599,3 +599,25 @@
     animation: none !important;
   }
 }
+/* Scheda del Round: entra e esce con profondità. */
+@keyframes round-sheet-in {
+  from { opacity: 0; transform: perspective(1200px) translate3d(48px, 0, -90px) scale(0.97); filter: blur(8px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
+@keyframes round-sheet-out {
+  from { opacity: 1; transform: none; filter: blur(0); }
+  to { opacity: 0; transform: perspective(1200px) translate3d(40px, 0, -70px) scale(0.98); filter: blur(6px); }
+}
+@keyframes round-sheet-up-in {
+  from { opacity: 0; transform: perspective(1200px) translate3d(0, 60px, -60px) scale(0.98); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
+@keyframes round-sheet-up-out {
+  from { opacity: 1; transform: none; filter: blur(0); }
+  to { opacity: 0; transform: perspective(1200px) translate3d(0, 50px, -50px) scale(0.98); filter: blur(4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [class*="round-sheet-"] {
+    animation-duration: 1ms !important;
+  }
+}
