@@ -128,7 +128,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 
 ### Auto-block prenotazioni per debito allievo (web-only)
 - **Scrive sullo STESSO campo** `CompanyMember.bookingBlocked` del blocco manuale (unificazione). Distinzione origine via `bookingBlockReason` ("manual" | "unpaid_threshold" | null) + watermark `unpaidBlockClearedAtCount` per l'anti-conflitto sullo sblocco manuale. State machine pura in `lib/autoscuole/unpaid-auto-block.ts`.
-- → **Payments**: il conteggio "guide da pagare" (`isLessonUnpaid`, = `manualUnpaid`) dipende da `manualMode` (`getAutoscuolaPaymentConfig`) e dallo stato pagamento delle guide. `isLessonUnpaid` ora è **definizione unica** nell'helper, importata da `autoscuole.actions.ts`.
+- → **Payments**: il conteggio "guide da pagare" (`isLessonUnpaid`, = `manualUnpaid`) dipende da `manualMode` (`getAutoscuolaPaymentConfig`) e dallo stato pagamento delle guide. `isLessonUnpaid` è **definizione unica** in `lib/autoscuole/lesson-unpaid.ts` (modulo puro, usato anche dal drawer web) ed **esclude le guide rimosse dallo storico** (`record_cleanup`, REG-634). → **Appointments**: chi cambia la semantica di «Rimuovi dallo storico» o di `cancellationKind` cambia anche il debito e il blocco automatico.
 - → **Availability / Booking Engine**: il guard prenotazione da app (`ensureStudentCanBookFromApp`-like) riconcilia il blocco **prima** del check `bookingBlocked` (solo se la feature è attiva) → enforcement al momento della prenotazione.
 - → **Swaps**: le guard swap (`respondToSwapOffer`, offerte) leggono `bookingBlocked` → rispettano il blocco automatico senza codice extra (campo unificato).
 - → **Group Lessons (self-booking, REG-420 + REG-421, 2026-08-29)**: il self-enrol ai gruppi rispetta `bookingBlocked` (raw) — `respondGroupLessonInvite` rifiuta, `broadcastGroupLessonInvite` esclude i bloccati. Prima era un buco (solo le singole guardavano il blocco). **REG-421 (UI)**: `getGroupLessonInvites` non nasconde più le guide al bloccato — le ritorna con `bookable:false` (card mobile disabilitata "Prenotazioni sospese"); `countOnly` (badge) resta `[]`. Staff (create/add) invariati. Ogni NUOVO path che fa acquisire un posto di gruppo va guardato allo stesso modo.
@@ -167,7 +167,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 
 ### Ex allievi (REG-629)
 - → **Users Directory / Mobile self-deletion**: unica fonte delle righe (`archiveFormerStudentMemberships`)
-- → **Payments & Credits**: saldo = `isLessonUnpaid` + `isCompanyManualMode` (`unpaid-auto-block.ts`), importo da `priceAmount`/`penaltyAmount`; il pagamento si registra con `setManualPaymentStatus`
+- → **Payments & Credits**: saldo = `isLessonUnpaid` + `isCompanyManualMode` (`lesson-unpaid.ts`), importo da `priceAmount`/`penaltyAmount`; il pagamento si registra con `setManualPaymentStatus`
 - → **Lista Allievi**: tab «Ex allievi» in `AutoscuoleStudentsPage` (`PhaseTab = "ex"`), fuori da filtri e selezione multipla
 - → **Percorsi patente (REG-458)**: snapshot di categoria/cambio dalla `CompanyMember`; lo script di recupero li legge da `AutoscuolaLicensePath`
 - ✗ **Nessun impatto** su liste/prenotazioni/notifiche/conteggi/job: l'ex allievo non ha `CompanyMember`

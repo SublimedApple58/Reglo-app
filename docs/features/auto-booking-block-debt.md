@@ -44,7 +44,8 @@ La logica è una macchina a stati **pura** e testata: `resolveUnpaidAutoBlock`.
 |------|-------|
 | `prisma/schema.prisma` (`CompanyMember`) | Nuovi campi `bookingBlockReason` (String?), `unpaidBlockClearedAtCount` (Int?) |
 | `prisma/migrations/20260723120000_add_auto_booking_block/` | Migration (2 colonne nullable) |
-| `lib/autoscuole/unpaid-auto-block.ts` | **Cuore**: state machine pura `resolveUnpaidAutoBlock`, `reconcileUnpaidAutoBlock` (scrive), `getStudentUnpaidLessonCount`, `isLessonUnpaid` (definizione unica condivisa), `readAutoBlockSettings`, default |
+| `lib/autoscuole/lesson-unpaid.ts` | **Regola unica "da pagare" (REG-634)**, modulo puro importabile anche dal client: `isLessonUnpaid` (esclude `cancellationKind="record_cleanup"`), `isCompanyManualMode`, `UNPAID_LESSON_SELECT`, `NOT_CLEANED_UP_WHERE`, pre-filtro Prisma `unpaidLessonCandidatesWhere` |
+| `lib/autoscuole/unpaid-auto-block.ts` | **Cuore**: state machine pura `resolveUnpaidAutoBlock`, `reconcileUnpaidAutoBlock` (scrive), `getStudentUnpaidLessonCount` / `getStudentsUnpaidLessonCounts` (unico conteggio server, senza `take`), `readAutoBlockSettings`, default; ri-esporta `isLessonUnpaid` |
 | `lib/services.ts` | `ServiceLimits.autoBookingBlockEnabled` / `autoBookingBlockThreshold` |
 | `lib/actions/autoscuole-settings.actions.ts` | Read/validate/save dei due setting nel JSON `limits` |
 | `lib/actions/autoscuole.actions.ts` | `getAutoscuolaStudentsWithProgress` + `getAutoscuolaStudentRegister` riconciliano on-read; `toggleStudentBookingBlock` marca `reason` + watermark (dal 2026-09-19 via `applyStudentsBookingBlock`, condiviso col bulk REG-442); importa `isLessonUnpaid` dall'helper |
@@ -53,13 +54,15 @@ La logica è una macchina a stati **pura** e testata: `resolveUnpaidAutoBlock`.
 | `components/pages/Autoscuole/AutoscuoleResourcesPage.tsx` | State + load + auto-save (`persistField`) + wiring props |
 | `components/pages/Autoscuole/AutoscuoleStudentsPage.tsx` | Mostra "Blocco automatico per guide da pagare" nel dettaglio; toggle manuale aggiorna `reason` in ottimistico |
 | `tests/unit/autoscuole/unpaid-auto-block.test.ts` | 20 test sulla state machine + helper |
+| `tests/unit/autoscuole/lesson-unpaid.test.ts` | REG-634: caso reale (5 guide di cui una penale rimossa dallo storico → 4, nessun blocco) + pre-filtro Prisma ≡ `isLessonUnpaid` su tutte le combinazioni |
 
 ## Dove scatta il calcolo (calcolo on-read + reconcile)
 
 Nessun job dedicato: il conteggio "guide da pagare" (`isLessonUnpaid`, stessa
 definizione di `manualUnpaid` mostrato in UI) viene ricalcolato e riconciliato:
-1. **Lista allievi titolare** (`getAutoscuolaStudentsWithProgress`) — riusa il
-   `manualUnpaid` già calcolato, nessuna query extra; self-heal della pill "Bloccato".
+1. **Lista allievi titolare** (`getAutoscuolaStudentsWithProgress`) — `manualUnpaid`
+   viene da `getStudentsUnpaidLessonCounts` (una query sulle sole guide candidate);
+   self-heal della pill "Bloccato".
 2. **Dettaglio allievo** (`getAutoscuolaStudentRegister`).
 3. **Guard prenotazione da app** (`ensureStudentCanBookFromApp`-like in
    availability): **solo se la feature è attiva**, calcola il debito e riconcilia
@@ -70,6 +73,18 @@ definizione di `manualUnpaid` mostrato in UI) viene ricalcolato e riconciliato:
    ricerche destinate al 400 silenzioso (bug segnalato da Robatto il 28/07).
 
 Scritture rare: `reconcileUnpaidAutoBlock` persiste solo quando lo stato cambia.
+
+**Tutti i punti devono contare uguale (REG-634, 26/10/2026).** Prima la scheda
+allievo escludeva le guide rimosse dallo storico (`record_cleanup`) e gli altri
+punti no: un allievo con una penale rimossa stava sopra soglia per la
+prenotazione e sotto per la scheda. Aprire la scheda toglieva il blocco (e il
+watermark dello sblocco manuale), il primo tentativo di prenotazione lo
+rimetteva. Ora la regola è `isLessonUnpaid` di `lesson-unpaid.ts` ovunque,
+`cancellationKind` è un campo **obbligatorio** del suo input (chi conta deve
+selezionarlo, o non compila) e il conteggio server è uno solo. La lista allievi
+contava inoltre su guide troncate a 5000 per tutta l'autoscuola senza ordine:
+ora il debito ha la sua query, senza tetto. «Rimuovi dallo storico» resta
+com'è: non azzera la penale sul record, semplicemente non conta più.
 
 ## Guardrail
 
