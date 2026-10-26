@@ -144,6 +144,7 @@ import {
 } from "@/lib/autoscuole/payments";
 import { generateAndUploadReceipt } from "@/lib/autoscuole/receipt";
 import {
+  isCompanyManualMode,
   isLessonUnpaid,
   readAutoBlockSettings,
   reconcileUnpaidAutoBlock,
@@ -2062,21 +2063,6 @@ type DrivingRegisterLessonRow = {
   lateCancellationAction?: string | null;
 };
 
-// "Da pagare" = guida che la scuola deve ancora incassare. Stessa definizione del
-// tab guide del drawer allievo (AutoscuoleStudentsPage): effettuata (o penale
-// addebitata), NON coperta da credito, non ancora saldata. Il ramo "effettuata"
-// vale solo in pagamento manuale. Tenere allineato con il predicato client.
-function isCompanyManualMode(config: {
-  enabled: boolean;
-  lessonCreditFlowEnabled: boolean;
-  lessonCreditsRequired: boolean;
-}): boolean {
-  return (
-    (!config.enabled && !config.lessonCreditFlowEnabled) ||
-    (config.lessonCreditFlowEnabled && !config.lessonCreditsRequired)
-  );
-}
-
 const buildDrivingRegisterData = ({
   cases,
   lessons,
@@ -2308,9 +2294,10 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
       }),
     ]);
 
-    const manualMode = isCompanyManualMode(
-      await getAutoscuolaPaymentConfig({ companyId }),
-    );
+    // Debito per allievo (REG-634): stesso conteggio della prenotazione da app
+    // e dello sblocco, letto a parte e senza tetto. Prima si contava sulle
+    // guide qui sopra, troncate a 5000 per tutta l'autoscuola senza ordine.
+    const unpaidCounts = await getStudentsUnpaidLessonCounts(companyId, studentIds);
 
     const casesByStudent = new Map<string, DrivingRegisterCaseRow[]>();
     for (const item of cases) {
@@ -2346,8 +2333,7 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
           lessons: lessonsByStudent.get(student.id) ?? [],
           paths: pathsByStudent.get(student.id) ?? [],
         });
-        const studentLessons = lessonsByStudent.get(student.id) ?? [];
-        const manualUnpaid = studentLessons.filter((l) => isLessonUnpaid(l, manualMode)).length;
+        const manualUnpaid = unpaidCounts.get(student.id) ?? 0;
         // Riconcilia il blocco automatico per debito: usa il conteggio appena
         // calcolato (nessuna query extra) e persiste solo se lo stato cambia.
         const blockState = memberBlockStateMap.get(student.id) ?? {

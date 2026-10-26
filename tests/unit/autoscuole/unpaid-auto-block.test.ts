@@ -161,22 +161,27 @@ describe("readAutoBlockSettings", () => {
 
 describe("isLessonUnpaid", () => {
   it("counts a completed lesson in manual mode", () => {
-    expect(isLessonUnpaid({ status: "completed" }, true)).toBe(true);
+    expect(isLessonUnpaid({ status: "completed", cancellationKind: null }, true)).toBe(true);
   });
 
   it("does not count a completed lesson outside manual mode", () => {
-    expect(isLessonUnpaid({ status: "completed" }, false)).toBe(false);
+    expect(isLessonUnpaid({ status: "completed", cancellationKind: null }, false)).toBe(false);
   });
 
   it("excludes paid or credit-covered lessons", () => {
-    expect(isLessonUnpaid({ status: "completed", manualPaymentStatus: "paid" }, true)).toBe(false);
-    expect(isLessonUnpaid({ status: "completed", creditApplied: true }, true)).toBe(false);
+    expect(isLessonUnpaid({ status: "completed", manualPaymentStatus: "paid", cancellationKind: null }, true)).toBe(false);
+    expect(isLessonUnpaid({ status: "completed", creditApplied: true, cancellationKind: null }, true)).toBe(false);
   });
 
   it("counts a charged late cancellation still unpaid", () => {
     expect(
       isLessonUnpaid(
-        { status: "cancelled", lateCancellationAction: "charged", manualPaymentStatus: "unpaid" },
+        {
+          status: "cancelled",
+          lateCancellationAction: "charged",
+          manualPaymentStatus: "unpaid",
+          cancellationKind: null,
+        },
         false,
       ),
     ).toBe(true);

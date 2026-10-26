@@ -150,6 +150,7 @@ import { FadeIn } from "@/components/ui/fade-in";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { AutoscuoleLateCancellationsPanel } from "./AutoscuoleLateCancellationsPanel";
 import { NeverAccessedListMark } from "./NeverAccessedNudge";
+import { isLessonUnpaid } from "@/lib/autoscuole/lesson-unpaid";
 import {
   blockUntilDateToInstant,
   blockUntilInstantToDateLabel,
@@ -3304,15 +3305,8 @@ export function AutoscuoleStudentsPage({
     // pagata). NON le future programmate (anche se marcate da pagare) e NON quelle
     // coperte da credito (già saldate col pacchetto crediti → mostrano "Coperta da
     // credito", non devono rientrare qui). Stessa definizione usata dal tag/bottone.
-    const lessonUnpaid = (l: LessonEntry) =>
-      !l.creditApplied &&
-      l.manualPaymentStatus !== "paid" &&
-      (
-        (["completed", "checked_in"].includes(l.status) && manualMode) ||
-        (["cancelled", "no_show"].includes(l.status) &&
-          l.lateCancellationAction === "charged" &&
-          l.manualPaymentStatus === "unpaid")
-      );
+    // Predicato condiviso con il blocco per debito (REG-634).
+    const lessonUnpaid = (l: LessonEntry) => isLessonUnpaid(l, manualMode);
     const predicates: Record<LessonFilter, (l: LessonEntry) => boolean> = {
       all: () => true,
       upcoming: (l) => ["scheduled", "confirmed"].includes(l.status) && lessonStartMs(l) > nowMs,
