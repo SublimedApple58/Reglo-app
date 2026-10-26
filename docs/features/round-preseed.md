@@ -51,6 +51,18 @@ Analisi e piano approvati da Tiziano il 2026-10-25. Decisioni:
 per tipologia, imbuto, tasso di risposta = risposte / contattati, impegnato =
 somma di `commitmentCents` dei soli «Impegno».
 
+Due conteggi diversi, entrambi a schermo (26/10, Tiziano li leggeva come dati
+incoerenti):
+
+- **«Dall'inizio»** (le quattro statistiche sotto la ciambella) = imbuto
+  cumulativo dalle date delle tappe (`contactedOn`, `respondedOn`, `callOn`,
+  `interestedOn`): chi ha raggiunto almeno quella tappa, qualunque sia lo stato
+  di oggi. Chi ha fatto una call conta anche tra i contattati e tra chi ha
+  risposto; un «In pausa» già sentito conta lo stesso.
+- **«Oggi, per stato»** (legenda e fette) = stato attuale, uno per persona; la
+  somma fa il totale attivo («Vedi tutti»). Gli esclusi stanno fuori da tutti e
+  due i conteggi.
+
 ## File
 
 | Cosa | Dove |

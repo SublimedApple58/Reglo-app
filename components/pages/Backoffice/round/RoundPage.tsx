@@ -78,6 +78,8 @@ const swatch = (s: { color: string }) => ({
 });
 /** Numeri grandi come nel deck: Figtree sottile, tracking stretto, cifre tabellari. */
 const BIG_NUMBER = "font-normal leading-none tabular-nums tracking-[-0.05em] text-[#111111]";
+/** Etichetta di sezione come nel deck: piccola, maiuscola, spaziata. */
+const EYEBROW = "text-[11px] font-medium uppercase tracking-[0.16em] text-[#8d8778]";
 
 /** Curva di tutta la pagina: ease-out lungo, niente rimbalzi. */
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -208,11 +210,14 @@ export function RoundPage({
     setActive(null);
   };
 
+  // Le tappe raggiunte dall'inizio (cumulative): chi ha avuto una call ha anche risposto ed è stato contattato.
+  // La legenda invece conta lo stato di oggi, uno per persona. Le due etichette di sezione lo dicono.
+  const one = (n: number, singular: string, plural: string) => (n === 1 ? singular : plural);
   const stats = [
-    { value: summary.funnel.contacted, label: "contattati" },
-    { value: summary.funnel.responded, label: summary.funnel.responded === 1 ? "risposta" : "risposte" },
-    { value: summary.funnel.call, label: "call" },
-    { value: summary.funnel.interested, label: summary.funnel.interested === 1 ? "interessato" : "interessati" },
+    { value: summary.funnel.contacted, label: one(summary.funnel.contacted, "contattato", "contattati") },
+    { value: summary.funnel.responded, label: one(summary.funnel.responded, "ha risposto", "hanno risposto") },
+    { value: summary.funnel.call, label: one(summary.funnel.call, "call fatta", "call fatte") },
+    { value: summary.funnel.interested, label: one(summary.funnel.interested, "interessato", "interessati") },
   ];
 
   const list = panel ? (
@@ -295,14 +300,17 @@ export function RoundPage({
             }
           />
 
-          <dl className="mt-6 grid w-full max-w-[480px] grid-cols-4 gap-4 md:gap-6">
+          <motion.p {...rise(0.5)} className={cn(EYEBROW, "mt-6 w-full max-w-[480px]")}>
+            Dall&apos;inizio
+          </motion.p>
+          <dl className="mt-3 grid w-full max-w-[480px] grid-cols-4 gap-4 md:gap-6">
             {stats.map((s, i) => (
               <motion.div key={s.label} className="border-t border-[#e6e0d4] pt-3" {...rise(0.55 + i * 0.08)}>
                 <dt className="sr-only">{s.label}</dt>
                 <dd className={cn(BIG_NUMBER, "text-[30px] md:text-[38px]")}>
                   <CountUp value={s.value} delay={0.6 + i * 0.08} duration={1.6} />
                 </dd>
-                <dd className="mt-2 text-[12.5px] text-[#6a6a6a]">{s.label}</dd>
+                <dd className="mt-2 text-[12.5px] leading-snug text-[#6a6a6a]">{s.label}</dd>
               </motion.div>
             ))}
           </dl>
@@ -331,6 +339,7 @@ export function RoundPage({
               transition={{ duration: 0.6, ease: EASE }}
             >
             <Legend
+              title={mode === "stato" ? "Oggi, per stato" : "Oggi, per tipologia"}
               slices={slices}
               total={summary.total}
               active={active}
@@ -450,6 +459,7 @@ function DonutCenter({
 // ── Legenda ───────────────────────────────────────────────────────────────────
 
 function Legend({
+  title,
   slices,
   total,
   active,
@@ -459,6 +469,7 @@ function Legend({
   onAll,
   onExcluded,
 }: {
+  title: string;
   slices: Slice[];
   total: number;
   active: string | null;
@@ -469,7 +480,10 @@ function Legend({
   onExcluded: () => void;
 }) {
   return (
-    <div className="md:pt-16" onPointerLeave={(e) => e.pointerType === "mouse" && onActive(null)}>
+    <div className="md:pt-11" onPointerLeave={(e) => e.pointerType === "mouse" && onActive(null)}>
+      <motion.p {...rise(0.3)} className={cn(EYEBROW, "mb-1")}>
+        {title}
+      </motion.p>
       <ul className="grid grid-cols-2 gap-x-6 md:grid-cols-1">
         {slices.map((s, i) => (
           <motion.li key={s.key} className="border-b border-[#efebe3]" {...rise(0.35 + i * 0.05)}>
