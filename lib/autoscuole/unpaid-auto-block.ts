@@ -1,5 +1,11 @@
 import { prisma } from "@/db/prisma";
 import { getAutoscuolaPaymentConfig } from "@/lib/autoscuole/payments";
+import {
+  isCompanyManualMode,
+  isLessonUnpaid,
+  unpaidLessonCandidatesWhere,
+  UNPAID_LESSON_SELECT,
+} from "@/lib/autoscuole/lesson-unpaid";
 
 /**
  * Auto-block prenotazioni per debito allievo.
@@ -146,64 +152,17 @@ export function resolveUnpaidAutoBlock(
   };
 }
 
-const normalizeStatus = (value: string) => value.trim().toLowerCase();
-
-export function isCompanyManualMode(config: {
-  enabled: boolean;
-  lessonCreditFlowEnabled: boolean;
-  lessonCreditsRequired: boolean;
-}): boolean {
-  return (
-    (!config.enabled && !config.lessonCreditFlowEnabled) ||
-    (config.lessonCreditFlowEnabled && !config.lessonCreditsRequired)
-  );
-}
-
-/**
- * Predicato "guida da pagare non saldata". Definizione unica condivisa dalla
- * lista allievi, dal dettaglio allievo e dal conteggio dell'auto-block, così la
- * regola non può divergere tra i vari punti.
- */
-export function isLessonUnpaid(
-  l: {
-    status: string;
-    manualPaymentStatus?: string | null;
-    creditApplied?: boolean | null;
-    lateCancellationAction?: string | null;
-  },
-  manualMode: boolean,
-): boolean {
-  if (l.creditApplied) return false;
-  if (l.manualPaymentStatus === "paid") return false;
-  const s = normalizeStatus(l.status);
-  return (
-    (["completed", "checked_in"].includes(s) && manualMode) ||
-    (["cancelled", "no_show"].includes(s) &&
-      l.lateCancellationAction === "charged" &&
-      l.manualPaymentStatus === "unpaid")
-  );
-}
+// Predicato e pre-filtro vivono in un modulo puro (REG-634), importabile anche
+// dai client component: qui li ri-esportiamo per i chiamanti storici.
+export { isCompanyManualMode, isLessonUnpaid };
 
 /** Conta le guide non pagate non saldate di un singolo allievo. */
 export async function getStudentUnpaidLessonCount(
   companyId: string,
   studentId: string,
 ): Promise<number> {
-  const [config, lessons] = await Promise.all([
-    getAutoscuolaPaymentConfig({ companyId }),
-    prisma.autoscuolaAppointment.findMany({
-      where: { companyId, studentId },
-      select: {
-        status: true,
-        manualPaymentStatus: true,
-        creditApplied: true,
-        lateCancellationAction: true,
-      },
-      take: 5000,
-    }),
-  ]);
-  const manualMode = isCompanyManualMode(config);
-  return lessons.filter((l) => isLessonUnpaid(l, manualMode)).length;
+  const counts = await getStudentsUnpaidLessonCounts(companyId, [studentId]);
+  return counts.get(studentId) ?? 0;
 }
 
 /**
@@ -241,9 +200,14 @@ export async function reconcileUnpaidAutoBlock(params: {
 }
 
 /**
- * Versione batch di `getStudentUnpaidLessonCount`: una sola lettura per N
- * allievi. Serve allo sblocco in bulk (REG-442), che deve scrivere il watermark
- * di ogni allievo senza sparare 2 query a testa.
+ * Conta le guide da pagare di N allievi con una sola lettura. È l'unico
+ * conteggio del debito lato server: lo usano la prenotazione da app, la lista
+ * Allievi e lo sblocco (anche in bulk, REG-442, per il watermark).
+ *
+ * Legge solo le guide candidate (`unpaidLessonCandidatesWhere`), non tutto lo
+ * storico, e senza `take`: un tetto senza ordinamento faceva sparire guide a
+ * caso e scendere il debito sotto soglia (REG-634). La regola finale resta
+ * `isLessonUnpaid`, applicata riga per riga.
  */
 export async function getStudentsUnpaidLessonCounts(
   companyId: string,
@@ -251,21 +215,16 @@ export async function getStudentsUnpaidLessonCounts(
 ): Promise<Map<string, number>> {
   const counts = new Map<string, number>(studentIds.map((id) => [id, 0]));
   if (!studentIds.length) return counts;
-  const [config, lessons] = await Promise.all([
-    getAutoscuolaPaymentConfig({ companyId }),
-    prisma.autoscuolaAppointment.findMany({
-      where: { companyId, studentId: { in: studentIds } },
-      select: {
-        studentId: true,
-        status: true,
-        manualPaymentStatus: true,
-        creditApplied: true,
-        lateCancellationAction: true,
-      },
-      take: 20000,
-    }),
-  ]);
+  const config = await getAutoscuolaPaymentConfig({ companyId });
   const manualMode = isCompanyManualMode(config);
+  const lessons = await prisma.autoscuolaAppointment.findMany({
+    where: {
+      companyId,
+      studentId: { in: studentIds },
+      ...unpaidLessonCandidatesWhere(manualMode),
+    },
+    select: { studentId: true, ...UNPAID_LESSON_SELECT },
+  });
   for (const lesson of lessons) {
     if (!lesson.studentId) continue;
     if (!counts.has(lesson.studentId)) continue;

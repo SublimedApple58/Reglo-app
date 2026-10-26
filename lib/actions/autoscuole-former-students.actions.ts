@@ -6,7 +6,11 @@ import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { isOwner } from "@/lib/autoscuole/roles";
 import { getAutoscuolaPaymentConfig } from "@/lib/autoscuole/payments";
-import { isCompanyManualMode, isLessonUnpaid } from "@/lib/autoscuole/unpaid-auto-block";
+import {
+  isCompanyManualMode,
+  isLessonUnpaid,
+  NOT_CLEANED_UP_WHERE,
+} from "@/lib/autoscuole/lesson-unpaid";
 import {
   asFormerStudentReason,
   FORMER_STUDENT_NAME_MAX_LENGTH,
@@ -79,6 +83,7 @@ const LESSON_SELECT = {
   paymentRequired: true,
   creditApplied: true,
   lateCancellationAction: true,
+  cancellationKind: true,
   priceAmount: true,
   penaltyAmount: true,
   groupLessonId: true,
@@ -89,6 +94,7 @@ type LessonRecord = {
   manualPaymentStatus: string | null;
   creditApplied: boolean;
   lateCancellationAction: string | null;
+  cancellationKind: string | null;
   priceAmount: unknown;
   penaltyAmount: unknown;
 };
@@ -100,9 +106,7 @@ const lessonAmount = (l: LessonRecord) => {
 };
 
 // Le guide tolte dallo storico dal titolare non contano, come nella scheda allievo.
-const notCleanedUp = {
-  OR: [{ cancellationKind: null }, { cancellationKind: { not: "record_cleanup" } }],
-};
+const notCleanedUp = NOT_CLEANED_UP_WHERE;
 
 function summarize(lessons: Array<LessonRecord & { startsAt: Date }>, manualMode: boolean) {
   let unpaidCount = 0;
