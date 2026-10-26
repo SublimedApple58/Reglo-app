@@ -195,12 +195,21 @@ La regola sta in **`lib/autoscuole/mandatory-lessons.ts`** (`REQUIRED_LESSONS_CO
 `isMandatoryLessonDuration`) ed è usata da entrambi i punti che la mostrano:
 
 - `summary` di `getAutoscuolaStudentDrivingRegister` → contatore del dettaglio allievo web
+- `summary` di `getAutoscuolaStudentsWithProgress` → contatore della lista Allievi web
 - `buildAppointmentGridFlags` → flag `mandatoryLesson` dei colori agenda
 
 **Contano SOLO le guide da esattamente 60 minuti.** Fino al 2026-09-18 il contatore del
 dettaglio allievo contava tutte le guide completate (anche quelle da 30 minuti) mentre
 l'agenda applicava già il criterio dei 60: le due viste si contraddicevano. Ora la regola è
 una sola. `endsAt` nullo non conta (altrove vale 30 minuti, `computeAppointmentEnd`).
+
+**Lista Allievi (REG-635, 2026-10-26).** La lista legge solo le guide che possono
+contare (`status = "completed"` e `endsAt` non nullo) di tutti gli allievi mostrati, senza
+tetto. Prima caricava tutte le guide degli allievi, annullate comprese, con `take: 5000` per
+l'intera autoscuola e senza ordinamento: Robatto era a ~4500 righe, e oltre il tetto ad allievi
+a caso sarebbero mancate guide nel contatore. Ora per Robatto sono ~2700 righe. Il debito ha
+una query sua (`getStudentsUnpaidLessonCounts`, REG-634). Resta il tetto di 500 allievi della
+lista (`take: 500` sui membri, i più recenti).
 
 `byLessonType` ("Tipi guida completati") continua invece a contare **tutte** le guide
 completate: è un riepilogo dei tipi svolti, non dell'obbligo.
