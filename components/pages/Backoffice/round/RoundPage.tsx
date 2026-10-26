@@ -210,16 +210,6 @@ export function RoundPage({
     setActive(null);
   };
 
-  // Le tappe raggiunte dall'inizio (cumulative): chi ha avuto una call ha anche risposto ed è stato contattato.
-  // La legenda invece conta lo stato di oggi, uno per persona. Le due etichette di sezione lo dicono.
-  const one = (n: number, singular: string, plural: string) => (n === 1 ? singular : plural);
-  const stats = [
-    { value: summary.funnel.contacted, label: one(summary.funnel.contacted, "contattato", "contattati") },
-    { value: summary.funnel.responded, label: one(summary.funnel.responded, "ha risposto", "hanno risposto") },
-    { value: summary.funnel.call, label: one(summary.funnel.call, "call fatta", "call fatte") },
-    { value: summary.funnel.interested, label: one(summary.funnel.interested, "interessato", "interessati") },
-  ];
-
   const list = panel ? (
     <ContactList
       key={`${mode}:${panel.kind}:${panel.kind === "slice" ? panel.key : ""}`}
@@ -299,21 +289,6 @@ export function RoundPage({
               />
             }
           />
-
-          <motion.p {...rise(0.5)} className={cn(EYEBROW, "mt-6 w-full max-w-[480px]")}>
-            Dall&apos;inizio
-          </motion.p>
-          <dl className="mt-3 grid w-full max-w-[480px] grid-cols-4 gap-4 md:gap-6">
-            {stats.map((s, i) => (
-              <motion.div key={s.label} className="border-t border-[#e6e0d4] pt-3" {...rise(0.55 + i * 0.08)}>
-                <dt className="sr-only">{s.label}</dt>
-                <dd className={cn(BIG_NUMBER, "text-[30px] md:text-[38px]")}>
-                  <CountUp value={s.value} delay={0.6 + i * 0.08} duration={1.6} />
-                </dd>
-                <dd className="mt-2 text-[12.5px] leading-snug text-[#6a6a6a]">{s.label}</dd>
-              </motion.div>
-            ))}
-          </dl>
         </div>
 
         {/* A destra la legenda; al clic su una fetta la lista ne prende il posto */}

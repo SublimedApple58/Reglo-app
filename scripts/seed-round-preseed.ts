@@ -447,7 +447,6 @@ async function main() {
       .map(([k, v]) => `${CATEGORY_LABEL[k as RoundCategory]} ${v.total}`)
       .join(" · "),
   );
-  console.log("Imbuto:", JSON.stringify(s.funnel), "· risposta", s.responseRate?.toFixed(2));
   const owners = drafts.reduce<Record<string, number>>((acc, d) => ((acc[d.owner ?? "nessuno"] = (acc[d.owner ?? "nessuno"] ?? 0) + 1), acc), {});
   console.log("Chi se ne occupa:", JSON.stringify(owners));
   console.log(

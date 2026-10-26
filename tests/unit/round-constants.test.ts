@@ -78,9 +78,6 @@ describe("round pre-seed: conteggi", () => {
     expect(s.excluded).toBe(1);
     expect(s.byStatus.bloccato).toBe(1);
     expect(s.byCategory.club_angel.total).toBe(1);
-    expect(s.funnel.contacted).toBe(2);
-    expect(s.funnel.call).toBe(1);
-    expect(s.responseRate).toBe(0.5);
   });
 
   it("somma l'impegno solo di chi è in «Impegno»", () => {
@@ -89,9 +86,5 @@ describe("round pre-seed: conteggi", () => {
       inv({ status: "interessato", commitmentCents: 9_000_000 }),
     ]);
     expect(s.committedCents).toBe(5_000_000);
-  });
-
-  it("tasso di risposta nullo senza contattati", () => {
-    expect(summarize([inv({})]).responseRate).toBeNull();
   });
 });

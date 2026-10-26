@@ -213,9 +213,6 @@ export type RoundSummary = {
   excluded: number;
   byStatus: Record<RoundStatus, number>;
   byCategory: Record<RoundCategory, { total: number; byStatus: Record<RoundStatus, number> }>;
-  funnel: Record<FunnelStage, number>;
-  /** Risposte / contattati, null se nessun contattato. */
-  responseRate: number | null;
   committedCents: number;
 };
 
@@ -228,7 +225,6 @@ export function summarize(investors: FunnelInvestor[]): RoundSummary {
   const byCategory = Object.fromEntries(
     ROUND_CATEGORIES.map((c) => [c, { total: 0, byStatus: zeroStatuses() }]),
   ) as RoundSummary["byCategory"];
-  const funnel = Object.fromEntries(FUNNEL_STAGES.map((s) => [s, 0])) as Record<FunnelStage, number>;
   let excluded = 0;
   let committedCents = 0;
   let total = 0;
@@ -242,7 +238,6 @@ export function summarize(investors: FunnelInvestor[]): RoundSummary {
     byStatus[inv.status] += 1;
     byCategory[inv.category].total += 1;
     byCategory[inv.category].byStatus[inv.status] += 1;
-    for (const stage of FUNNEL_STAGES) if (inv[MILESTONE_FIELD[stage]]) funnel[stage] += 1;
     if (inv.status === "impegno" && inv.commitmentCents) committedCents += inv.commitmentCents;
   }
 
@@ -251,8 +246,6 @@ export function summarize(investors: FunnelInvestor[]): RoundSummary {
     excluded,
     byStatus,
     byCategory,
-    funnel,
-    responseRate: funnel.contacted ? funnel.responded / funnel.contacted : null,
     committedCents,
   };
 }

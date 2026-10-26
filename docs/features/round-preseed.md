@@ -48,20 +48,17 @@ Analisi e piano approvati da Tiziano il 2026-10-25. Decisioni:
 ## Conteggi
 
 `summarize()` (puro, testato in `tests/unit/round-constants.test.ts`): per stato,
-per tipologia, imbuto, tasso di risposta = risposte / contattati, impegnato =
-somma di `commitmentCents` dei soli «Impegno».
+per tipologia, impegnato = somma di `commitmentCents` dei soli «Impegno».
 
-Due conteggi diversi, entrambi a schermo (26/10, Tiziano li leggeva come dati
-incoerenti):
+A schermo c'è un solo conteggio: **«Oggi, per stato»** (legenda e fette) =
+stato attuale, uno per persona; la somma fa il totale attivo («Vedi tutti»).
+Gli esclusi ne stanno fuori.
 
-- **«Dall'inizio»** (le quattro statistiche sotto la ciambella) = imbuto
-  cumulativo dalle date delle tappe (`contactedOn`, `respondedOn`, `callOn`,
-  `interestedOn`): chi ha raggiunto almeno quella tappa, qualunque sia lo stato
-  di oggi. Chi ha fatto una call conta anche tra i contattati e tra chi ha
-  risposto; un «In pausa» già sentito conta lo stesso.
-- **«Oggi, per stato»** (legenda e fette) = stato attuale, uno per persona; la
-  somma fa il totale attivo («Vedi tutti»). Gli esclusi stanno fuori da tutti e
-  due i conteggi.
+Il 26/10 Tiziano ha fatto togliere il blocco «Dall'inizio» sotto la ciambella
+(contattati · hanno risposto · call fatte · interessati, imbuto cumulativo dalle
+date delle tappe): accanto alla legenda si leggeva come un dato incoerente. Con
+lui sono usciti da `summarize()` l'imbuto e il tasso di risposta, che servivano
+solo lì. Le date delle tappe restano sul contatto (`milestonesAfterStatus`).
 
 ## File
 
