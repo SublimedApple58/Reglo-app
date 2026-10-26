@@ -2256,10 +2256,17 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
         },
         take: 2000,
       }),
+      // REG-635 — la lista usa le guide solo per il contatore x/6, che conta
+      // le guide completate con una fine registrata: si leggono solo quelle, e
+      // tutte. Prima si caricavano tutte le guide degli allievi (annullate
+      // comprese) con un tetto di 5000 per l'intera autoscuola, senza ordine:
+      // oltre il tetto, ad allievi a caso mancavano guide nel conteggio.
       prisma.autoscuolaAppointment.findMany({
         where: {
           companyId,
           studentId: { in: studentIds },
+          status: "completed",
+          endsAt: { not: null },
         },
         select: {
           id: true,
@@ -2269,11 +2276,7 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
           status: true,
           startsAt: true,
           endsAt: true,
-          manualPaymentStatus: true,
-          creditApplied: true,
-          lateCancellationAction: true,
         },
-        take: 5000,
       }),
       // REG-458 — servono a contare l'obbligo sul percorso in corso invece che
       // su tutta la vita dell'allievo.
