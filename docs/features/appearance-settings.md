@@ -75,6 +75,32 @@ nel JSON `limits`, **default spento**) con anteprima del blocco rigato. Comporta
 regola del sostituto e «Assegna sostituto» in
 [cancelled-lesson-blocks.md](cancelled-lesson-blocks.md).
 
+## Veicolo nei blocchi (REG-633)
+
+Riga «Mostra il veicolo nei blocchi delle guide» (on/off, `agendaShowVehicle`
+nel JSON `limits`, **default spento**), con anteprima di un blocco. Compare
+**solo col modulo veicoli attivo** (`vehiclesEnabled`). Acceso, i blocchi guida
+mostrano il **nome** del mezzo (mai la targa), troncato con ellissi se lungo;
+una guida moto con altri mezzi diventa «Moto + moto extra + Auto al seguito»
+(`agendaVehicleLabel` in `lib/autoscuole/agenda-vehicle-label.ts`, stessa
+etichetta della home istruttore mobile).
+
+- **Web** (`AutoscuoleAgendaPage`): colonne istruttore della Settimana e vista
+  Giorno, per chiunque apra l'agenda web (titolare e segreteria). Settimana,
+  blocco alto: riga propria sotto «Patente X»; vista Giorno: sulla riga della
+  patente («Patente B · Fiat Panda»), perché nel blocco da un'ora una riga in
+  più non entra; blocco basso (compatto), in entrambe: accodato alla riga
+  dell'orario come la patente. Tooltip (`title`) del blocco con il veicolo in
+  coda. Nella vista «colonne per Veicolo» del consorzio non si ripete (il mezzo
+  è già l'intestazione).
+- **Mobile**: `DayItinerary` (durata · veicolo) e griglia `WeeklyAgendaView`
+  (terza riga, solo nei blocchi da un'ora in su). Allievo escluso. Interruttore
+  in `Altro → Aspetto agenda`, sezione «Veicolo».
+- Scritto da `updateAutoscuolaSettings` (web) e dall'endpoint scoped
+  `PATCH /api/autoscuole/agenda-colors` (`updateAgendaColorSettings`, mobile,
+  titolari e istruttori).
+- Test: `tests/unit/autoscuole/agenda-vehicle-label.test.ts`.
+
 ## Data model
 
 - Nessuna migrazione: `agendaColorCriterion` (valori `"durata"` default |
@@ -91,6 +117,8 @@ regola del sostituto e «Assegna sostituto» in
 - Ordine del nome allievo: `studentNameOrder` (`"nome_cognome"` default |
   `"cognome_nome"`) nello stesso JSON `limits`, normalizzato da
   `asStudentNameOrder`. Nessuna migrazione.
+- Veicolo nei blocchi: `agendaShowVehicle` (boolean, default `false`) nello
+  stesso JSON `limits` (REG-633). Nessuna migrazione.
 
 ## Files
 

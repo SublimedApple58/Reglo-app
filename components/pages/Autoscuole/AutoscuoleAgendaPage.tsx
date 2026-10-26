@@ -115,6 +115,7 @@ import {
   studentMatchesQuery,
   type StudentNameOrder,
 } from "@/lib/autoscuole/student-name-order";
+import { agendaVehicleLabel } from "@/lib/autoscuole/agenda-vehicle-label";
 import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
 import { blueLinkClass } from "@/components/pages/Autoscuole/student-detail-ui";
 import {
@@ -1460,6 +1461,10 @@ export function AutoscuoleAgendaPage({
   // REG-623: blocchi delle guide annullate non ancora sostituite (spento finché
   // i settings non arrivano, come il bordo delle automatiche).
   const [cancelledBlocksEnabled, setCancelledBlocksEnabled] = React.useState(false);
+  // REG-633: nome del veicolo nei blocchi guida (spento finché i settings non
+  // arrivano, come gli altri setting di resa).
+  const [agendaShowVehicle, setAgendaShowVehicle] = React.useState(false);
+  const showVehicleOnBlocks = agendaShowVehicle && vehiclesEnabled;
   // REG-624: la nota sul blocco annullato è dell'ufficio (titolare e segreteria).
   const [officeNotes, setOfficeNotes] = React.useState(false);
   const [dayNotes, setDayNotes] = React.useState<AgendaDayNote[]>([]);
@@ -1468,6 +1473,7 @@ export function AutoscuoleAgendaPage({
     getAutoscuolaSettings().then((res) => {
       if (active && res.success && res.data) {
         setCancelledBlocksEnabled(res.data.cancelledLessonBlocks);
+        setAgendaShowVehicle(res.data.agendaShowVehicle);
         setAgendaColorCriterion(res.data.agendaColorCriterion);
         setAgendaColorOverrides(res.data.agendaColorOverrides);
         setAgendaColorExceptions(res.data.agendaColorExceptions);
@@ -5156,6 +5162,7 @@ export function AutoscuoleAgendaPage({
                           const sharedWithInstr = sharedWithNames(item, instr.instructorId);
                           const isCompact = height <= 40;
                           const licenseTag = licenseTagFor(item);
+                          const vehicleLabelInstr = showVehicleOnBlocks ? agendaVehicleLabel(item) : null;
                           // Moto lesson type: individual lessons carry it on the
                           // appointment; group-moto lessons carry it on the container
                           // (groupLessonMotoType). Same badge for both.
@@ -5166,7 +5173,7 @@ export function AutoscuoleAgendaPage({
                           const hasNotesInstr = noteTextInstr.length > 0;
                           // Righe di nota che entrano nello spazio residuo del blocco
                           // (multi-riga fino a riempire; "…" solo su ciò che non ci sta).
-                          const headerPxInstr = 14 + 11 + (!isCompact && licenseTag ? 12 : 0) + (motoTypeLabelInstr ? 20 : 0) + 6;
+                          const headerPxInstr = 14 + 11 + (!isCompact && licenseTag ? 12 : 0) + (!isCompact && vehicleLabelInstr ? 11 : 0) + (motoTypeLabelInstr ? 20 : 0) + 6;
                           const noteFillLinesInstr = hasNotesInstr ? Math.max(1, Math.floor((height - headerPxInstr) / 10)) : 0;
                           const isPendingAction = pendingEventActionId === item.id;
                           const glTintInstr = groupLessonTint(item);
@@ -5196,7 +5203,7 @@ export function AutoscuoleAgendaPage({
                                   type="button"
                                   className={cn("agenda-card group absolute left-0.5 right-0.5 z-10 flex flex-col justify-start rounded-[8px] text-[9px] leading-tight text-left hover:z-30", isPendingAction ? "pointer-events-none opacity-75" : "", instrCardClass)}
                                   style={{ top, height, ...(instrColorStyle ?? {}) }}
-                                  title={`${isExamInstr ? "🎓 ESAME · " : ""}${formatStudentName(item.student, studentNameOrder)} · ${formatEventType(item.type)} · ${formatTimeRange(start, end)}${sharedWithInstr.length ? ` · condivisa con ${sharedWithInstr.join(", ")}` : ""}`}
+                                  title={`${isExamInstr ? "🎓 ESAME · " : ""}${formatStudentName(item.student, studentNameOrder)} · ${formatEventType(item.type)} · ${formatTimeRange(start, end)}${vehicleLabelInstr ? ` · ${vehicleLabelInstr}` : ""}${sharedWithInstr.length ? ` · condivisa con ${sharedWithInstr.join(", ")}` : ""}`}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     source?.onCardClick?.(item.id);
@@ -5220,9 +5227,12 @@ export function AutoscuoleAgendaPage({
                                       {sharedWithInstr.length ? <Link2 className="size-2.5 shrink-0" strokeWidth={2.6} aria-hidden /> : null}
                                       <span className="truncate">{isExamInstr ? "🎓 " : ""}{isGroupLessonInstr ? item.student.firstName : formatStudentNameShort(item.student, studentNameOrder)}</span>
                                     </div>
-                                    <div className={cn("text-[8px] truncate", isExamInstr ? "text-violet-600" : isGroupLessonInstr ? glTintInstr.time : "text-muted-foreground")}>{isExamInstr ? "Esame · " : isGroupLessonInstr ? `${glTintInstr.label} · ` : ""}{formatTimeRange(start, end)}{isCompact && licenseTag ? ` · ${licenseTag}` : ""}</div>
+                                    <div className={cn("text-[8px] truncate", isExamInstr ? "text-violet-600" : isGroupLessonInstr ? glTintInstr.time : "text-muted-foreground")}>{isExamInstr ? "Esame · " : isGroupLessonInstr ? `${glTintInstr.label} · ` : ""}{formatTimeRange(start, end)}{isCompact && licenseTag ? ` · ${licenseTag}` : ""}{isCompact && vehicleLabelInstr ? ` · ${vehicleLabelInstr}` : ""}</div>
                                     {!isCompact && licenseTag ? (
                                       <div className={cn("text-[9px] font-semibold truncate", isExamInstr ? "text-violet-700" : "text-foreground/70")}>Patente {licenseTag}</div>
+                                    ) : null}
+                                    {!isCompact && vehicleLabelInstr ? (
+                                      <div className={cn("truncate text-[8.5px] font-medium", isExamInstr ? "text-violet-700/80" : "text-foreground/60")} data-agenda-vehicle>{vehicleLabelInstr}</div>
                                     ) : null}
                                     {motoTypeLabelInstr ? (
                                       <span className="mt-0.5 inline-flex max-w-full items-center gap-0.5 rounded-full bg-white/70 px-1.5 py-[1px] text-[8px] font-bold uppercase tracking-wide text-[#333333]">
@@ -5739,6 +5749,8 @@ export function AutoscuoleAgendaPage({
                       const isGroupLessonDay = item.type === "group_lesson";
                       const isCompact = height <= 56;
                       const licenseTag = licenseTagFor(item);
+                      // In vista "colonne per Veicolo" il mezzo è già l'intestazione.
+                      const vehicleLabelDay = showVehicleOnBlocks && !columnsByVehicle ? agendaVehicleLabel(item) : null;
                       const effMotoTypeDay = isGroupLessonDay ? (item.groupLessonMotoType ?? null) : (item.motoLessonType ?? null);
                       const motoTypeLabelDay = motoLessonTypeLabel(effMotoTypeDay);
                       const MotoTypeIconDay = effMotoTypeDay === "birilli" ? TrafficCone : Route;
@@ -5750,7 +5762,7 @@ export function AutoscuoleAgendaPage({
                       // da questa colonna (vuoto se non è condivisa). Va calcolato
                       // prima di headerPxDay: la riga "con ..." mangia spazio alle note.
                       const sharedWithDay = sharedWithNames(item, columnsByVehicle ? null : instr.id);
-                      const headerPxDay = 18 + 15 + (!isCompact && licenseTag ? 14 : 0) + (motoTypeLabelDay ? 18 : 0) + (sharedWithDay.length ? 14 : 0) + 22;
+                      const headerPxDay = 18 + 15 + (!isCompact && (licenseTag || vehicleLabelDay) ? 14 : 0) + (motoTypeLabelDay ? 18 : 0) + (sharedWithDay.length ? 14 : 0) + 22;
                       const noteFillLinesDay = hasNotesDay ? Math.max(1, Math.floor((height - headerPxDay) / 14)) : 0;
                       const isPendingAction = pendingEventActionId === item.id;
                       const glTintDay = groupLessonTint(item);
@@ -5780,12 +5792,13 @@ export function AutoscuoleAgendaPage({
                             <button
                               type="button"
                               className={cn(
-                                "agenda-card group absolute left-1 right-1 z-10 box-border flex flex-col rounded-[10px] text-left text-[11px] transition-[box-shadow,transform] duration-200 ease-out motion-safe:hover:-translate-y-0.5 hover:z-30",
+                                "agenda-card group absolute left-1 right-1 z-10 box-border flex flex-col rounded-[10px] text-left text-[11px] transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:z-30",
                                 isCompact ? "p-1.5" : "p-2",
                                 isPendingAction ? "pointer-events-none opacity-75" : "",
                                 dayCardClass,
                               )}
                               style={{ top, height, ...(dayColorStyle ?? {}) }}
+                              title={vehicleLabelDay ? `${formatStudentName(item.student, studentNameOrder)} · ${formatTimeRange(start, end)} · ${vehicleLabelDay}` : undefined}
                               onClick={(event) => {
                                 event.stopPropagation();
                                 source?.onCardClick?.(item.id);
@@ -5826,10 +5839,19 @@ export function AutoscuoleAgendaPage({
                                     {!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}
                                     {!isExamDay && !isGroupLessonDay ? ` · ${item.type}` : ""}
                                     {isCompact && licenseTag ? ` · ${licenseTag}` : ""}
+                                    {isCompact && vehicleLabelDay ? ` · ${vehicleLabelDay}` : ""}
                                   </div>
-                                  {!isCompact && licenseTag ? (
-                                    <div className={cn("truncate whitespace-nowrap text-[10px] font-semibold", isExamDay ? "text-violet-700" : "text-foreground/70")}>
-                                      Patente {licenseTag}
+                                  {/* Il blocco da un'ora non ha posto per una riga in più:
+                                      il veicolo sta sulla riga della patente. */}
+                                  {!isCompact && (licenseTag || vehicleLabelDay) ? (
+                                    <div className={cn("truncate whitespace-nowrap text-[10px]", isExamDay ? "text-violet-700" : "text-foreground/70")}>
+                                      {licenseTag ? <span className="font-semibold">Patente {licenseTag}</span> : null}
+                                      {licenseTag && vehicleLabelDay ? <span className="opacity-60"> · </span> : null}
+                                      {vehicleLabelDay ? (
+                                        <span className={cn("font-medium", isExamDay ? "text-violet-700/80" : "text-foreground/60")} data-agenda-vehicle>
+                                          {vehicleLabelDay}
+                                        </span>
+                                      ) : null}
                                     </div>
                                   ) : null}
                                   {/* REG-585: lo stesso blocco sta anche nella colonna dei colleghi. */}

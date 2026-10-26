@@ -464,6 +464,8 @@ const autoscuolaSettingsPatchSchema = z
     automaticLessonMarkerColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
     // Blocchi delle guide annullate non ancora sostituite (REG-623).
     cancelledLessonBlocks: z.boolean().optional(),
+    // Nome del veicolo nei blocchi guida dell'agenda (REG-633).
+    agendaShowVehicle: z.boolean().optional(),
     // Ordine custom delle colonne istruttore in agenda (REG-449): elenco di id,
     // anche parziale. Array vuoto = si torna all'ordine alfabetico.
     agendaInstructorOrder: z.array(z.string()).optional(),
@@ -680,6 +682,7 @@ export type AutoscuolaSettingsData = {
   automaticLessonMarker: boolean;
   automaticLessonMarkerColor: string | null;
   cancelledLessonBlocks: boolean;
+  agendaShowVehicle: boolean;
   agendaInstructorOrder: string[];
   studentNameOrder: StudentNameOrder;
 };
@@ -1086,6 +1089,8 @@ const resolveAutoscuolaSettingsData = async (
     automaticLessonMarkerColor: resolveAutomaticLessonMarker(limits).color,
     // REG-623: nasce SPENTO, lo accende chi lo vuole.
     cancelledLessonBlocks: limits.cancelledLessonBlocks === true,
+    // REG-633: nasce SPENTO.
+    agendaShowVehicle: limits.agendaShowVehicle === true,
     agendaInstructorOrder: asAgendaInstructorOrder(limits.agendaInstructorOrder),
     studentNameOrder: asStudentNameOrder(limits.studentNameOrder),
   };
@@ -1809,6 +1814,7 @@ export async function updateAutoscuolaSettings(
       ...automaticMarkerLimits(payload, limits),
       cancelledLessonBlocks:
         payload.cancelledLessonBlocks ?? limits.cancelledLessonBlocks === true,
+      agendaShowVehicle: payload.agendaShowVehicle ?? limits.agendaShowVehicle === true,
       studentNameOrder: asStudentNameOrder(
         payload.studentNameOrder ?? limits.studentNameOrder,
       ),
@@ -1994,6 +2000,7 @@ export async function updateAutoscuolaSettings(
         automaticLessonMarker: nextLimits.automaticLessonMarker,
         automaticLessonMarkerColor: nextLimits.automaticLessonMarkerColor,
         cancelledLessonBlocks: nextLimits.cancelledLessonBlocks,
+        agendaShowVehicle: nextLimits.agendaShowVehicle,
         agendaInstructorOrder: nextLimits.agendaInstructorOrder,
         studentNameOrder: nextLimits.studentNameOrder,
       },
@@ -2005,8 +2012,9 @@ export async function updateAutoscuolaSettings(
 
 // ---------------------------------------------------------------------------
 // Colori agenda (pannello "Aspetto") — action SCOPED e gestibile anche dagli
-// ISTRUTTORI (non solo titolari). Scrive ESCLUSIVAMENTE i 3 campi agendaColor*
-// nel JSON limits: nessun altro setting sensibile (pagamenti/voce/booking) è
+// ISTRUTTORI (non solo titolari). Scrive ESCLUSIVAMENTE i setting di resa
+// dell'agenda (campi agendaColor*, contrassegno automatiche, guide annullate,
+// veicolo nei blocchi) nel JSON limits: nessun setting sensibile (pagamenti/voce/booking) è
 // raggiungibile da qui, così allargare il permesso resta sicuro.
 // ---------------------------------------------------------------------------
 const AGENDA_COLOR_HEX = /^#[0-9a-fA-F]{6}$/;
@@ -2025,6 +2033,7 @@ const agendaColorPatchSchema = z
     automaticLessonMarker: z.boolean().optional(),
     automaticLessonMarkerColor: z.string().regex(AGENDA_COLOR_HEX).nullable().optional(),
     cancelledLessonBlocks: z.boolean().optional(),
+    agendaShowVehicle: z.boolean().optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), {
     message: "Nessun campo da aggiornare.",
@@ -2064,6 +2073,7 @@ export async function updateAgendaColorSettings(
       ...automaticMarkerLimits(payload, limits),
       cancelledLessonBlocks:
         payload.cancelledLessonBlocks ?? limits.cancelledLessonBlocks === true,
+      agendaShowVehicle: payload.agendaShowVehicle ?? limits.agendaShowVehicle === true,
     };
 
     if (service) {

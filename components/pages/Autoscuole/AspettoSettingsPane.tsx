@@ -211,6 +211,11 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
   const handleRefs = React.useRef<Record<string, HTMLButtonElement | null>>({});
   const [cancelledBlocks, setCancelledBlocks] = React.useState(false);
   const [savingCancelledBlocks, setSavingCancelledBlocks] = React.useState(false);
+  // REG-633: nome del veicolo nei blocchi guida. La riga esiste solo col
+  // modulo veicoli attivo.
+  const [showVehicle, setShowVehicle] = React.useState(false);
+  const [savingShowVehicle, setSavingShowVehicle] = React.useState(false);
+  const [vehiclesEnabled, setVehiclesEnabled] = React.useState(false);
 
   React.useEffect(() => {
     let active = true;
@@ -225,6 +230,8 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
         setMarkerEnabled(res.data.automaticLessonMarker);
         setMarkerColor(res.data.automaticLessonMarkerColor);
         setCancelledBlocks(res.data.cancelledLessonBlocks);
+        setShowVehicle(res.data.agendaShowVehicle);
+        setVehiclesEnabled(res.data.vehiclesEnabled);
         setOrder(res.data.agendaInstructorOrder);
       }
       setLoading(false);
@@ -326,6 +333,18 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
       return;
     }
     setCancelledBlocks(res.data.cancelledLessonBlocks);
+  };
+
+  const toggleShowVehicle = async () => {
+    if (savingShowVehicle) return;
+    setSavingShowVehicle(true);
+    const res = await updateAutoscuolaSettings({ agendaShowVehicle: !showVehicle });
+    setSavingShowVehicle(false);
+    if (!res.success || !res.data) {
+      toast.error({ description: res.message ?? "Impossibile salvare l'impostazione." });
+      return;
+    }
+    setShowVehicle(res.data.agendaShowVehicle);
   };
 
   const toggleMarker = async () => {
@@ -775,6 +794,60 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
           </div>
         </div>
       </section>
+
+      {/* ── Veicolo nei blocchi (REG-633) ── */}
+      {vehiclesEnabled && (
+        <section className="mt-4" data-testid="agenda-vehicle-setting">
+          <div className="flex items-center justify-between gap-4 rounded-2xl border-[1.5px] border-[#ededed] p-4">
+            <div className="flex min-w-0 items-center gap-4">
+              {/* Anteprima: un blocco guida con la riga del veicolo. */}
+              <div
+                aria-hidden
+                className="agenda-card flex h-12 w-[84px] shrink-0 flex-col justify-center overflow-hidden rounded-[10px] px-2"
+                style={agendaBlockStyle(
+                  DURATION_COLOR_ENTRIES[2],
+                  overrides.durata?.[DURATION_COLOR_ENTRIES[2].key],
+                )}
+              >
+                <span className="truncate text-[10px] font-semibold leading-tight text-[#222222]">
+                  Rossi M.
+                </span>
+                <span className="text-[9px] font-medium leading-tight tabular-nums text-[#3a3a3a]">
+                  09:00–10:00
+                </span>
+                <span
+                  className={cn(
+                    "truncate text-[9px] font-medium leading-tight text-[#3a3a3a] transition-opacity duration-200",
+                    !showVehicle && "opacity-0",
+                  )}
+                >
+                  Fiat Panda
+                </span>
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-[#222222]">
+                  Mostra il veicolo nei blocchi delle guide
+                </div>
+                <div className="mt-0.5 max-w-[460px] text-[13px] font-medium leading-normal text-[#929292]">
+                  Sotto il nome dell&apos;allievo compare il mezzo della guida, in agenda sul web e
+                  sull&apos;app. Per le guide moto anche l&apos;auto al seguito.
+                </div>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center">
+              {savingShowVehicle ? (
+                <LoadingDots className="text-[#929292]" />
+              ) : (
+                <InlineToggle
+                  checked={showVehicle}
+                  size="lg"
+                  onChange={() => void toggleShowVehicle()}
+                />
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ── Nome degli allievi (REG-507) ── */}
       <section className="mt-10">

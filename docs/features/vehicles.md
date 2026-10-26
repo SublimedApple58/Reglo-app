@@ -131,3 +131,12 @@ Il flusso che usa tutto questo è in [appointments.md](appointments.md) § «Aut
 
 ## Group MOTO lessons reuse the follow car at the GROUP level (2026-06-25)
 Besides per-appointment follow cars, a **group moto lesson** (`AutoscuolaGroupLesson.kind="moto"`) reserves a **fleet of motos** (`AutoscuolaGroupLessonVehicle`) + **one shared follow car** (`AutoscuolaGroupLesson.followVehicleId`) at the **container level** — the follow car is NOT replicated on each participant's `appointmentVehicles` (that would self-conflict between siblings). `lib/autoscuole/group-lesson-busy.ts` marks the fleet + follow car busy; `findGroupLessonOverlap` checks them. Per-participant moto auto-assignment lives in `lib/autoscuole/group-moto.ts`. See `features/group-lessons.md`.
+
+## Veicolo nei blocchi dell'agenda (REG-633)
+
+Impostazione dell'autoscuola in **Impostazioni → Aspetto** (`agendaShowVehicle`,
+spenta di default, visibile solo con `vehiclesEnabled`): i blocchi guida
+dell'agenda web e del calendario mobile mostrano il nome del mezzo (mai la
+targa) e, per le guide moto, «Moto + Auto al seguito». Etichetta in
+`lib/autoscuole/agenda-vehicle-label.ts`. Dettagli in
+[appearance-settings.md](appearance-settings.md#veicolo-nei-blocchi-reg-633).
