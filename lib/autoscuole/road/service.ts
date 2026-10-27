@@ -12,7 +12,7 @@ import {
   resolveMarkerLabel,
   type RoadCustomMarker,
 } from "@/lib/autoscuole/road/catalog";
-import { sanitizePoints, trackDistanceMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
+import { drivingSeconds, sanitizePoints, trackDistanceMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
 import { finalizeRoadSession, loadRoadTrack } from "@/lib/autoscuole/road/maintenance";
 
 /**
@@ -138,7 +138,8 @@ const sessionSelect = {
 } satisfies Prisma.RoadSessionSelect;
 type SessionRow = Prisma.RoadSessionGetPayload<{ select: typeof sessionSelect }>;
 
-function sessionDTO(s: SessionRow) {
+/** `lessonStartsAt`: i minuti di guida contano dall'inizio della guida (vedi `drivingSeconds`). */
+function sessionDTO(s: SessionRow, lessonStartsAt: Date) {
   return {
     id: s.id,
     appointmentId: s.appointmentId,
@@ -146,7 +147,7 @@ function sessionDTO(s: SessionRow) {
     startedAt: s.startedAt.toISOString(),
     endedAt: s.endedAt?.toISOString() ?? null,
     distanceMeters: s.distanceMeters,
-    durationSec: s.status === "active" ? Math.round((Date.now() - s.startedAt.getTime()) / 1000) : s.durationSec,
+    durationSec: drivingSeconds(s.startedAt, s.endedAt ?? new Date(), lessonStartsAt),
     lastSeq: s.lastSeq,
     last:
       s.lastLat != null && s.lastLng != null
@@ -251,7 +252,7 @@ export async function getRoadState() {
     return ok({
       ...base,
       activeSession: active
-        ? { ...sessionDTO(active), lesson: lessonDTO(active.appointment) }
+        ? { ...sessionDTO(active, active.appointment.startsAt), lesson: lessonDTO(active.appointment) }
         : null,
       eligibleLesson: eligible ? lessonDTO(eligible) : null,
     });
@@ -285,7 +286,7 @@ export async function startRoadSession(input: { appointmentId: string }) {
     // Ripresa (app chiusa e riaperta): stessa sessione, anche se già chiusa
     // la restituiamo così la mobile mostra il riepilogo invece di un errore.
     if (appointment.roadSession) {
-      return ok({ ...sessionDTO(appointment.roadSession), lesson: lessonDTO(appointment), resumed: true });
+      return ok({ ...sessionDTO(appointment.roadSession, appointment.startsAt), lesson: lessonDTO(appointment), resumed: true });
     }
 
     if (!ROAD_ELIGIBLE_STATUSES.includes(appointment.status)) {
@@ -320,7 +321,7 @@ export async function startRoadSession(input: { appointmentId: string }) {
       }
       return s;
     });
-    return ok({ ...sessionDTO(created), lesson: lessonDTO(appointment), resumed: false });
+    return ok({ ...sessionDTO(created, appointment.startsAt), lesson: lessonDTO(appointment), resumed: false });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return startRoadSession(input); // doppio tap: la seconda chiamata riprende
@@ -530,7 +531,7 @@ async function buildDetail(sessionId: string, companyId: string) {
   if (!s) return null;
   const track = await loadTrack(sessionId);
   return {
-    ...sessionDTO(s),
+    ...sessionDTO(s, s.appointment.startsAt),
     lesson: lessonDTO(s.appointment),
     markers: s.markers.map(markerDTO),
     // Per la mappa bastano [lat, lng]; il tempo serve a disegnare il "fatto fin qui".
@@ -720,7 +721,7 @@ export async function getRoadLive() {
         ? { name: base.name, lat: Number(base.latitude), lng: Number(base.longitude) }
         : null,
       sessions: active.map((s) => ({
-        ...sessionDTO(s),
+        ...sessionDTO(s, s.appointment.startsAt),
         lesson: lessonDTO(s.appointment),
         markerCount: counts.get(s.id)?.count ?? 0,
         markerKinds: counts.get(s.id)?.kinds ?? [],
@@ -755,7 +756,7 @@ export async function getRoadToday() {
       lessons.map((r) => ({
         ...lessonDTO(r),
         road: r.roadSession
-          ? { ...sessionDTO(r.roadSession), markerCount: counts.get(r.roadSession.id)?.count ?? 0, markerKinds: counts.get(r.roadSession.id)?.kinds ?? [] }
+          ? { ...sessionDTO(r.roadSession, r.startsAt), markerCount: counts.get(r.roadSession.id)?.count ?? 0, markerKinds: counts.get(r.roadSession.id)?.kinds ?? [] }
           : null,
       })),
     );
@@ -798,7 +799,7 @@ export async function getRoadHistory(input: {
     const counts = await markerCounts(page.map((r) => r.id));
     return ok({
       items: page.map((s) => ({
-        ...sessionDTO(s),
+        ...sessionDTO(s, s.appointment.startsAt),
         lesson: lessonDTO(s.appointment),
         markerCount: counts.get(s.id)?.count ?? 0,
         markerKinds: counts.get(s.id)?.kinds ?? [],

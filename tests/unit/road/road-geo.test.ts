@@ -1,4 +1,4 @@
-import { haversineMeters, sanitizePoints, trackDistanceMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
+import { drivingSeconds, haversineMeters, sanitizePoints, trackDistanceMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
 import { parseRoadCustomMarkers, resolveMarkerLabel } from "@/lib/autoscuole/road/catalog";
 
 describe("Reglo Road geo", () => {
@@ -60,5 +60,16 @@ describe("Reglo Road catalogo", () => {
   it("una voce custom tolta nel frattempo usa l'etichetta del client", () => {
     expect(resolveMarkerLabel("custom:zz", custom, "Freno a mano")).toBe("Freno a mano");
     expect(resolveMarkerLabel("custom:zz", custom)).toBeNull();
+  });
+});
+
+describe("Reglo Road minuti di guida", () => {
+  it("in Road a guida già partita: conta dall'inizio della guida", () => {
+    // caso QA 27/10: guida 16:15, Road 16:48:51 → 16:49:39
+    const s = drivingSeconds(new Date("2026-10-27T15:48:51Z"), new Date("2026-10-27T15:49:39Z"), new Date("2026-10-27T15:15:00Z"));
+    expect(Math.floor(s / 60)).toBe(34);
+  });
+  it("in Road prima dell'inizio: conta dall'ingresso", () => {
+    expect(drivingSeconds(new Date("2026-10-27T15:05:00Z"), new Date("2026-10-27T15:15:00Z"), new Date("2026-10-27T15:10:00Z"))).toBe(600);
   });
 });

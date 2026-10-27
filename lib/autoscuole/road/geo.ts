@@ -68,3 +68,13 @@ export function trackDistanceMeters(points: RoadPoint[], prev?: RoadPoint | null
   }
   return total;
 }
+
+/**
+ * Secondi «di guida» di una sessione Road: dall'inizio della guida se in Road si
+ * è entrati dopo (es. invito accettato a guida già partita), altrimenti
+ * dall'ingresso in Road. Fino a `end` (chiusura, o adesso se ancora attiva).
+ */
+export function drivingSeconds(startedAt: Date, end: Date, lessonStartsAt?: Date | null): number {
+  const from = lessonStartsAt && lessonStartsAt < startedAt ? lessonStartsAt : startedAt;
+  return Math.max(0, Math.round((end.getTime() - from.getTime()) / 1000));
+}

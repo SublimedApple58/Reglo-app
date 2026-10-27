@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { trackDistanceMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
+import { drivingSeconds, trackDistanceMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
 
 /**
  * REG-638 Reglo Road — manutenzione, usata dal job Trigger
@@ -34,7 +34,10 @@ export async function finalizeRoadSession(
   endedAt: Date,
 ) {
   const track = await loadRoadTrack(db, sessionId);
-  const s = await db.roadSession.findUniqueOrThrow({ where: { id: sessionId }, select: { startedAt: true } });
+  const s = await db.roadSession.findUniqueOrThrow({
+    where: { id: sessionId },
+    select: { startedAt: true, appointment: { select: { startsAt: true } } },
+  });
   await db.roadSession.update({
     where: { id: sessionId },
     data: {
@@ -42,7 +45,7 @@ export async function finalizeRoadSession(
       endedAt,
       distanceMeters: Math.round(trackDistanceMeters(track)),
       pointCount: track.length,
-      durationSec: Math.max(0, Math.round((endedAt.getTime() - s.startedAt.getTime()) / 1000)),
+      durationSec: drivingSeconds(s.startedAt, endedAt, s.appointment?.startsAt),
     },
   });
 }
