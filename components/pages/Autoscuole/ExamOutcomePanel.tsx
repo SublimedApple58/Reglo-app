@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import { Search, X } from "lucide-react";
 
 import { setExamOutcome } from "@/lib/actions/autoscuole.actions";
