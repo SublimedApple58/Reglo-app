@@ -93,6 +93,13 @@ export type ServiceLimits = {
    */
   aulaEnabled?: boolean;
   /**
+   * Reglo Road (REG-638) — guida in diretta: modalità Road sul telefono
+   * dell'istruttore (GPS, percorso, segnalazioni) e mappa dal vivo in web.
+   * Si accende SOLO dal backoffice. Nasce spento: vale solo `=== true`.
+   * Vedi docs/features/reglo-road.md.
+   */
+  roadEnabled?: boolean;
+  /**
    * Modalità "solo Segretaria": la company ha attivato SOLO il modulo
    * segreteria vocale AI, non l'intera suite autoscuole. Quando true la web
    * app mostra unicamente l'area Segretaria + le sue impostazioni (niente

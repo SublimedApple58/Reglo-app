@@ -18,6 +18,7 @@ import {
   Layers,
   Building2,
   ChevronRight,
+  Navigation,
 } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
@@ -173,6 +174,7 @@ function AutoscuolaDrawerContent({
       : 0;
   const autoAssignQuizOnSignup = Boolean(limits.autoAssignQuizOnSignup);
   const aulaEnabled = Boolean(limits.aulaEnabled);
+  const roadEnabled = limits.roadEnabled === true;
   const secretaryOnly = Boolean(limits.secretaryOnly);
   const isConsortiumMode = limits.accountKind === "consorzio";
 
@@ -788,6 +790,37 @@ function AutoscuolaDrawerContent({
             checked={aulaEnabled}
             onCheckedChange={(checked) =>
               setLimits((prev) => ({ ...prev, aulaEnabled: Boolean(checked) }))
+            }
+          />
+        </label>
+      </section>
+
+      {/* ── Reglo Road (REG-638): guida in diretta, nasce spento ── */}
+      <section className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-100">
+            <Navigation className="h-4 w-4 text-gray-900" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">Reglo Road</p>
+            <p className="text-xs text-muted-foreground">
+              Guida in diretta: GPS e segnalazioni dal telefono dell&apos;istruttore, mappa dal vivo in web app.
+            </p>
+          </div>
+        </div>
+        <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-xl border border-border bg-white px-3 py-2.5 hover:bg-gray-50/60">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">Modulo attivo</p>
+            <p className="text-xs text-muted-foreground">
+              {roadEnabled
+                ? "Istruttori e titolare vedono Road. Si applica con «Salva modifiche»."
+                : "Spento: nessuno vede Road in app né in web."}
+            </p>
+          </div>
+          <Checkbox
+            checked={roadEnabled}
+            onCheckedChange={(checked) =>
+              setLimits((prev) => ({ ...prev, roadEnabled: Boolean(checked) }))
             }
           />
         </label>

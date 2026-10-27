@@ -362,6 +362,11 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Endpoint self-set** `PATCH /api/autoscuole/me/license-path`: self-scoped (solo STUDENT + `selfRegistered`), idempotente (no-op se già valorizzata). Non confondere con l'owner-side `updateStudentLicensePath`.
 - → **Mobile**: gate bloccante `LicensePathGateScreen` (montato in `app/(tabs)/_layout.tsx` accanto al phone gate). Vedi `reglo-mobile/docs/features/license-path-gate.md`.
 
+### Reglo Road
+- → **Settings / Backoffice**: flag `roadEnabled` in `CompanyService.limits`, acceso solo dal backoffice (drawer «Gestisci»), esposto read-only in `AutoscuolaSettingsData` / `GET /api/autoscuole/settings`. Nasce spento (`=== true`).
+- → **Cache**: segmento `SETTINGS`, invalidato da `updateCompanyService`.
+- → **Agenda guide** *(fasi successive)*: sessione Road legata a `AutoscuolaAppointment`; ingresso in Road → `checked_in`.
+
 ### Reglo Aula
 - → **Quiz Teoria**: riusa **read-only** `QuizQuestion` + `QuizChapter` (DB) + immagini quiz su R2 per le domande del live (filtro per capitolo). Aula non scrive sulla banca — asset aziendale già centralizzato, non duplicato.
 - → **R2 storage**: pacchetti slide `.rppt` (`aula/templates/`, `aula/{companyId}/`) + immagini slide; stesso bucket del quiz. **Le slide non stanno nel DB.**

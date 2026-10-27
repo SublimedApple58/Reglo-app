@@ -683,6 +683,8 @@ export type AutoscuolaSettingsData = {
   automaticLessonMarkerColor: string | null;
   cancelledLessonBlocks: boolean;
   agendaShowVehicle: boolean;
+  /** REG-638 Reglo Road: sola lettura, si accende dal backoffice. */
+  roadEnabled: boolean;
   agendaInstructorOrder: string[];
   studentNameOrder: StudentNameOrder;
 };
@@ -1091,6 +1093,8 @@ const resolveAutoscuolaSettingsData = async (
     cancelledLessonBlocks: limits.cancelledLessonBlocks === true,
     // REG-633: nasce SPENTO.
     agendaShowVehicle: limits.agendaShowVehicle === true,
+    // REG-638: modulo Road, nasce SPENTO e si accende solo dal backoffice.
+    roadEnabled: limits.roadEnabled === true,
     agendaInstructorOrder: asAgendaInstructorOrder(limits.agendaInstructorOrder),
     studentNameOrder: asStudentNameOrder(limits.studentNameOrder),
   };
