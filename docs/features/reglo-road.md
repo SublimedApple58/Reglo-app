@@ -79,3 +79,9 @@ Visibile solo con `isRoadEnabled(services)` (`lib/services.ts`: `roadEnabled ===
 - **Risoluzione** (`resolveCarColor`): colore del veicolo → variante più vicina alla tinta dell'istruttore (solo varianti colorate) → bianco. Lato server in `lessonDTO` e in `atBase`.
 - **Immagini**: varianti pre-generate (niente filtri CSS) in `public/images/road/cars/auto-{su,34}-<chiave>.png`; helper web `roadCarImages(key)` in `symbols.ts`. Mobile: `assets/road/cars/`, stesse chiavi. Generate ricolorando solo la carrozzeria dell'auto bianca (ombre e riflessi conservati; vetri, gomme, cerchioni e insegna intatti).
 - **Icona nav «Road»**: `public/images/nav/road-3d.png` = segnaposto rosso su tratto di strada (Gemini, stile icone 3D della barra), 128px.
+
+## QA 27/10 sera — segno, minuti di guida, Road nel dettaglio allievo
+
+- **Segno delle segnalazioni**: `RoadMarker.sentiment` (`"good"` | `"bad"` | null, migrazione `20261031130000_reglo_road_marker_sentiment`). `POST /markers` accetta `sentiment`; `normalizeSentiment` in `catalog.ts`. Le liste (live/today/history) hanno `markerGood` / `markerBad` oltre a `markerCount`. Web: segnaposto con bordo verde/rosso (`.road-sg.good/.bad`), `SymbolTile sentiment`, `SentimentCounts`, `MarkerPill good/bad`.
+- **Minuti di guida**: `drivingSeconds(startedAt, end, lessonStartsAt)` in `geo.ts` — dall'inizio della guida se in Road si entra dopo. Calcolato alla lettura in `sessionDTO` (vale anche per sessioni già chiuse) e salvato in `finalizeRoadSession`.
+- **Road nel dettaglio allievo (web)**: `GET /road/students/[id]` → `getRoadForStudent` (titolare: tutte; istruttore: le sue; con miniatura `thumb` ≤ 60 punti). `components/pages/Autoscuole/road/StudentRoad.tsx`: `useStudentRoad`, `StudentRoadStrip` (miniatura montata solo a schermo), `StudentRoadPanel` (percorso dentro il pannello «Guide» di `AutoscuoleStudentsPage`).
