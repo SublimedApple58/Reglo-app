@@ -49,6 +49,36 @@ dell'allievo, e chi incassa in autoscuola spesso non è l'istruttore che quella
 guida l'ha tenuta. `tests/unit/autoscuole/lesson-payments.test.ts` esiste perché
 la restrizione non rientri per distrazione.
 
+### Storico pagamento — chi e quando (REG-637)
+
+Ogni gesto manuale lascia una riga in `AutoscuolaAppointmentPaymentEvent`
+(`fromStatus`, `toStatus`, `actorUserId`, `createdAt`), scritta da
+`setManualPaymentStatus` **nella stessa transazione** dell'update e solo se lo
+stato cambia davvero (un doppio tocco non sporca lo storico). La risposta porta
+`paymentEvent` (l'evento appena scritto), così web e app aggiornano la riga
+senza rileggere.
+
+`loadPaymentHistories(companyId, appointmentIds)` (`lib/autoscuole/payment-history.ts`)
+fonde due fonti, dal più recente: gli eventi manuali e il **ledger crediti**
+(`delta < 0` = «Coperta da credito», `> 0` = «Credito restituito») — le guide
+coperte da credito hanno storico anche da prima di REG-637. I cambi automatici
+(nascita "da pagare", penale tardiva, annullo) **non** sono registrati: non
+sono gesti di nessuno. Guide segnate a mano prima di REG-637 → storico vuoto,
+la UI mostra solo l'etichetta (niente "data non disponibile").
+
+Dove arriva (`paymentHistory: PaymentHistoryEvent[]` su ogni guida), **solo allo staff**:
+- `getAutoscuolaStudentDrivingRegister` → tab Guide del dettaglio allievo web;
+- `getFormerStudentDetail` → scheda Ex allievi (REG-629);
+- `getAutoscuolaAppointmentsFiltered` ramo FULL **con `studentId`** → schermata
+  Pagamenti dell'app. Mai all'allievo, mai sull'agenda.
+
+UI web: `LessonPaymentTrail` — riga «Segnata pagata · 12 ott, 18:40 · Mario
+Rossi» sotto le etichette, mostrata solo se l'ultimo evento racconta ancora lo
+stato attuale (`lastEventMatchesState`); con ≥ 2 eventi, «Storico N» apre un
+popover con la timeline (`z-[210]`, sopra il DetailPanel). Copia gemella in
+`reglo-mobile/src/utils/paymentHistory.ts`. E2e: `tests/e2e/reg637-storico-pagamento.auth.spec.ts`
+(seed `scripts/seed-reg637.ts`).
+
 **Regola gemella**: `isLessonUnpaid` / `isCompanyManualMode`
 (`lib/autoscuole/unpaid-auto-block.ts`) sono duplicate client-side in
 `reglo-mobile/src/utils/lessonPayments.ts`. Vanno cambiate **insieme**: la stessa

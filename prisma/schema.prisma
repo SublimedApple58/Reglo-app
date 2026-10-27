@@ -98,6 +98,7 @@ model User {
   autoscuolaLessonCreditBalances       AutoscuolaStudentLessonCreditBalance[]
   autoscuolaLessonCreditLedgerStudent  AutoscuolaStudentLessonCreditLedger[]  @relation("AutoscuolaCreditLedgerStudent")
   autoscuolaLessonCreditLedgerActor    AutoscuolaStudentLessonCreditLedger[]  @relation("AutoscuolaCreditLedgerActor")
+  autoscuolaPaymentEventsActor         AutoscuolaAppointmentPaymentEvent[]    @relation("AutoscuolaPaymentEventActor")
   autoscuolaAppointmentPayments        AutoscuolaAppointmentPayment[]
   autoscuolaMessageLogs                AutoscuolaMessageLog[]
   autoscuolaWeeklyAbsences             AutoscuolaStudentWeeklyAbsence[]
@@ -237,6 +238,7 @@ model Company {
   autoscuolaPaymentProfiles            AutoscuolaStudentPaymentProfile[]
   autoscuolaLessonCreditBalances       AutoscuolaStudentLessonCreditBalance[]
   autoscuolaLessonCreditLedger         AutoscuolaStudentLessonCreditLedger[]
+  autoscuolaPaymentEvents              AutoscuolaAppointmentPaymentEvent[]
   autoscuolaAppointmentPayments        AutoscuolaAppointmentPayment[]
   autoscuolaMessageTemplates           AutoscuolaMessageTemplate[]
   autoscuolaMessageRules               AutoscuolaMessageRule[]
@@ -660,6 +662,8 @@ model AutoscuolaAppointment {
   replacedAppointments     AutoscuolaAppointment[]               @relation("AutoscuolaAppointmentReplacement")
   payments                 AutoscuolaAppointmentPayment[]
   creditLedger             AutoscuolaStudentLessonCreditLedger[]
+  /// REG-637: storico dei gesti manuali sullo stato pagamento.
+  paymentEvents            AutoscuolaAppointmentPaymentEvent[]
   messageLogs              AutoscuolaMessageLog[]
   voiceCalls               AutoscuolaVoiceCall[]
   swapOffers               AutoscuolaSwapOffer[]
@@ -1467,6 +1471,30 @@ model AutoscuolaStudentLessonCreditLedger {
 
   @@index([companyId, studentId, createdAt])
   @@index([appointmentId])
+}
+
+/// REG-637 — storico dei cambi MANUALI dello stato pagamento di una guida
+/// ("Segna pagata" / "Segna da pagare", web e app). Righe solo in aggiunta,
+/// come il ledger crediti: chi e quando, mai sovrascritte. I cambi automatici
+/// (nascita "da pagare", penale tardiva, annullo) NON passano di qui; la
+/// copertura con credito si legge dal ledger crediti. Vedi
+/// lib/autoscuole/payment-history.ts.
+model AutoscuolaAppointmentPaymentEvent {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId     String   @db.Uuid
+  appointmentId String   @db.Uuid
+  /// manualPaymentStatus prima e dopo: "paid" | "unpaid" | null.
+  fromStatus    String?
+  toStatus      String?
+  actorUserId   String?  @db.Uuid
+  createdAt     DateTime @default(now()) @db.Timestamp(6)
+
+  company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  appointment AutoscuolaAppointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  actor       User?                 @relation("AutoscuolaPaymentEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([appointmentId, createdAt])
+  @@index([companyId])
 }
 
 model AutoscuolaAppointmentPayment {

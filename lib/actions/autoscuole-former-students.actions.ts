@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { loadPaymentHistories, type PaymentHistoryEvent } from "@/lib/autoscuole/payment-history";
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
@@ -54,6 +55,8 @@ export type FormerStudentLesson = {
   isGroup: boolean;
   amount: number;
   unpaid: boolean;
+  /** REG-637: chi/quando sullo stato pagamento, dal più recente. */
+  paymentHistory: PaymentHistoryEvent[];
 };
 
 export type FormerStudentDetail = FormerStudentRow & {
@@ -213,6 +216,7 @@ export async function getAutoscuolaFormerStudentDetail(userId: string) {
     ]);
     const manualMode = isCompanyManualMode(config);
     const { unpaidCount, unpaidAmount, lastLessonAt } = summarize(lessons, manualMode);
+    const paymentHistories = await loadPaymentHistories(companyId, lessons.map((l) => l.id));
 
     let completedCount = 0;
     let drivenMinutes = 0;
@@ -254,6 +258,7 @@ export async function getAutoscuolaFormerStudentDetail(userId: string) {
         isGroup: l.groupLessonId != null,
         amount: lessonAmount(l),
         unpaid: isLessonUnpaid(l, manualMode),
+        paymentHistory: paymentHistories.get(l.id) ?? [],
       })),
     };
     return { success: true as const, data: detail };

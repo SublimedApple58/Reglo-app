@@ -9,6 +9,7 @@ import { LoadingDots } from "@/components/ui/loading-dots";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { sectionLabelClass } from "@/components/pages/Autoscuole/student-detail-ui";
 import { setManualPaymentStatus } from "@/lib/actions/autoscuole.actions";
+import { LessonPaymentTrail } from "./LessonPaymentTrail";
 import {
   assignFormerStudentName,
   getAutoscuolaFormerStudentDetail,
@@ -271,6 +272,12 @@ function LessonRow({
           {STATUS_LABELS[lesson.status] ?? lesson.status} · {lesson.instructorName || "Istruttore n/d"}
           {lesson.vehicleName ? ` · ${lesson.vehicleName}` : ""}
         </p>
+        <LessonPaymentTrail
+          history={lesson.paymentHistory}
+          manualPaymentStatus={lesson.manualPaymentStatus}
+          creditApplied={lesson.creditApplied}
+          lessonLabel={`${start.toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short", year: "numeric" })} · ${time(start)}`}
+        />
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1 text-right">
         {lesson.amount > 0 && (lesson.unpaid || paid) && (
