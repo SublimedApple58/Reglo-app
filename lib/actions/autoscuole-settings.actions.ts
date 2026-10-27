@@ -1,5 +1,11 @@
 "use server";
 
+import {
+  ROAD_CUSTOM_MARKERS_MAX,
+  ROAD_CUSTOM_MARKER_LABEL_MAX,
+  parseRoadCustomMarkers,
+  type RoadCustomMarker,
+} from "@/lib/autoscuole/road/catalog";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
@@ -466,6 +472,16 @@ const autoscuolaSettingsPatchSchema = z
     cancelledLessonBlocks: z.boolean().optional(),
     // Nome del veicolo nei blocchi guida dell'agenda (REG-633).
     agendaShowVehicle: z.boolean().optional(),
+    // REG-638 Reglo Road: segnalazioni personalizzate (oltre alla lista base).
+    roadCustomMarkers: z
+      .array(
+        z.object({
+          id: z.string().trim().min(1).max(40),
+          label: z.string().trim().min(1).max(ROAD_CUSTOM_MARKER_LABEL_MAX),
+        }),
+      )
+      .max(ROAD_CUSTOM_MARKERS_MAX)
+      .optional(),
     // Ordine custom delle colonne istruttore in agenda (REG-449): elenco di id,
     // anche parziale. Array vuoto = si torna all'ordine alfabetico.
     agendaInstructorOrder: z.array(z.string()).optional(),
@@ -685,6 +701,8 @@ export type AutoscuolaSettingsData = {
   agendaShowVehicle: boolean;
   /** REG-638 Reglo Road: sola lettura, si accende dal backoffice. */
   roadEnabled: boolean;
+  /** REG-638: segnalazioni personalizzate dell'autoscuola. */
+  roadCustomMarkers: RoadCustomMarker[];
   agendaInstructorOrder: string[];
   studentNameOrder: StudentNameOrder;
 };
@@ -1095,6 +1113,7 @@ const resolveAutoscuolaSettingsData = async (
     agendaShowVehicle: limits.agendaShowVehicle === true,
     // REG-638: modulo Road, nasce SPENTO e si accende solo dal backoffice.
     roadEnabled: limits.roadEnabled === true,
+    roadCustomMarkers: parseRoadCustomMarkers(limits.roadCustomMarkers),
     agendaInstructorOrder: asAgendaInstructorOrder(limits.agendaInstructorOrder),
     studentNameOrder: asStudentNameOrder(limits.studentNameOrder),
   };
@@ -1819,6 +1838,7 @@ export async function updateAutoscuolaSettings(
       cancelledLessonBlocks:
         payload.cancelledLessonBlocks ?? limits.cancelledLessonBlocks === true,
       agendaShowVehicle: payload.agendaShowVehicle ?? limits.agendaShowVehicle === true,
+      roadCustomMarkers: payload.roadCustomMarkers ?? parseRoadCustomMarkers(limits.roadCustomMarkers),
       studentNameOrder: asStudentNameOrder(
         payload.studentNameOrder ?? limits.studentNameOrder,
       ),

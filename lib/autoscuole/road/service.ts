@@ -1,0 +1,801 @@
+import { Prisma } from "@prisma/client";
+
+import { prisma } from "@/db/prisma";
+import { requireServiceAccess } from "@/lib/service-access";
+import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
+import { isInstructor, isOwner, isStudent } from "@/lib/autoscuole/roles";
+import { formatError } from "@/lib/utils";
+import {
+  ROAD_BASE_MARKERS,
+  parseRoadCustomMarkers,
+  resolveMarkerLabel,
+  type RoadCustomMarker,
+} from "@/lib/autoscuole/road/catalog";
+import { sanitizePoints, trackDistanceMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
+import { finalizeRoadSession, loadRoadTrack } from "@/lib/autoscuole/road/maintenance";
+
+/**
+ * REG-638 Reglo Road — logica server. Le route in `app/api/autoscuole/road/**`
+ * sono sottili e chiamano queste funzioni; funzionano sia col cookie web sia
+ * col Bearer della mobile (`requireServiceAccess`).
+ *
+ * Regole:
+ * - tutto spento se `limits.roadEnabled !== true` (si accende dal backoffice);
+ * - v1 solo guide singole in auto: niente gruppi, esami, moto;
+ * - «Termina guida» chiude la sessione e segna SUBITO la guida `completed`;
+ * - l'allievo vede percorso e segnalazioni solo con `studentNotesEnabled`.
+ */
+
+type Result<T> = { success: true; data: T } | { success: false; message: string; code?: string };
+const ok = <T>(data: T): Result<T> => ({ success: true, data });
+const fail = (message: string, code?: string): Result<never> => ({ success: false, message, code });
+
+const MOTO_CATEGORIES = new Set(["AM", "A1", "A2", "A"]);
+/** L'invito a entrare in Road si apre 15 minuti prima dell'inizio. */
+export const ROAD_ENTRY_OPENS_MIN = 15;
+const ROAD_ELIGIBLE_STATUSES = ["scheduled", "confirmed", "checked_in"];
+const MAX_POINTS_PER_BATCH = 600;
+
+// ─── contesto ────────────────────────────────────────────────────────────────
+
+async function roadContext() {
+  const ctx = await requireServiceAccess("AUTOSCUOLE");
+  const limits = await getCachedCompanyServiceLimits(ctx.membership.companyId);
+  return {
+    ...ctx,
+    companyId: ctx.membership.companyId,
+    limits,
+    roadEnabled: limits.roadEnabled === true,
+    // Stesso default di «Mostra note e percorsi nell'app allievi» (spento).
+    studentRoadVisible: limits.studentNotesEnabled === true,
+    customMarkers: parseRoadCustomMarkers(limits.roadCustomMarkers),
+  };
+}
+type RoadCtx = Awaited<ReturnType<typeof roadContext>>;
+
+const canSeeAll = (ctx: RoadCtx) => ctx.membership.role === "admin" || isOwner(ctx.membership.autoscuolaRole);
+
+async function ownInstructorId(ctx: RoadCtx) {
+  if (!isInstructor(ctx.membership.autoscuolaRole)) return null;
+  const row = await prisma.autoscuolaInstructor.findFirst({
+    where: { companyId: ctx.companyId, userId: ctx.membership.userId, status: { not: "inactive" } },
+    select: { id: true },
+  });
+  return row?.id ?? null;
+}
+
+type EligibilityInput = {
+  type: string;
+  groupLessonId: string | null;
+  motoLessonType: string | null;
+  vehicle: { licenseCategory: string } | null;
+  studentId: string | null;
+};
+/** v1: solo guide singole in auto (niente gruppi, esami, moto). */
+export function isRoadEligibleLesson(a: EligibilityInput) {
+  if (!a.studentId) return false;
+  if (a.groupLessonId) return false;
+  if (a.type === "esame" || a.type === "group_lesson") return false;
+  if (a.motoLessonType) return false;
+  if (a.vehicle && MOTO_CATEGORIES.has(a.vehicle.licenseCategory)) return false;
+  return true;
+}
+
+const appointmentSelect = {
+  id: true,
+  companyId: true,
+  type: true,
+  status: true,
+  startsAt: true,
+  endsAt: true,
+  studentId: true,
+  instructorId: true,
+  vehicleId: true,
+  groupLessonId: true,
+  motoLessonType: true,
+  student: { select: { id: true, name: true } },
+  instructor: { select: { id: true, name: true, color: true, userId: true } },
+  vehicle: { select: { id: true, name: true, plate: true, licenseCategory: true } },
+} satisfies Prisma.AutoscuolaAppointmentSelect;
+type AppointmentRow = Prisma.AutoscuolaAppointmentGetPayload<{ select: typeof appointmentSelect }>;
+
+const lessonEnd = (a: { startsAt: Date; endsAt: Date | null }) =>
+  a.endsAt ?? new Date(a.startsAt.getTime() + 60 * 60 * 1000);
+
+function lessonDTO(a: AppointmentRow) {
+  return {
+    appointmentId: a.id,
+    startsAt: a.startsAt.toISOString(),
+    endsAt: lessonEnd(a).toISOString(),
+    status: a.status,
+    student: a.student ? { id: a.student.id, name: a.student.name } : null,
+    instructor: a.instructor ? { id: a.instructor.id, name: a.instructor.name, color: a.instructor.color } : null,
+    vehicle: a.vehicle ? { id: a.vehicle.id, name: a.vehicle.name, plate: a.vehicle.plate } : null,
+  };
+}
+
+const sessionSelect = {
+  id: true,
+  appointmentId: true,
+  status: true,
+  startedAt: true,
+  endedAt: true,
+  distanceMeters: true,
+  durationSec: true,
+  pointCount: true,
+  lastSeq: true,
+  lastLat: true,
+  lastLng: true,
+  lastSpeed: true,
+  lastHeading: true,
+  lastStreet: true,
+  lastPointAt: true,
+} satisfies Prisma.RoadSessionSelect;
+type SessionRow = Prisma.RoadSessionGetPayload<{ select: typeof sessionSelect }>;
+
+function sessionDTO(s: SessionRow) {
+  return {
+    id: s.id,
+    appointmentId: s.appointmentId,
+    status: s.status as "active" | "completed" | "abandoned",
+    startedAt: s.startedAt.toISOString(),
+    endedAt: s.endedAt?.toISOString() ?? null,
+    distanceMeters: s.distanceMeters,
+    durationSec: s.status === "active" ? Math.round((Date.now() - s.startedAt.getTime()) / 1000) : s.durationSec,
+    lastSeq: s.lastSeq,
+    last:
+      s.lastLat != null && s.lastLng != null
+        ? {
+            lat: s.lastLat,
+            lng: s.lastLng,
+            speed: s.lastSpeed,
+            heading: s.lastHeading,
+            street: s.lastStreet,
+            at: s.lastPointAt?.toISOString() ?? null,
+          }
+        : null,
+  };
+}
+
+function markerDTO(m: {
+  id: string;
+  clientId: string;
+  kind: string;
+  label: string;
+  note: string | null;
+  lat: number;
+  lng: number;
+  street: string | null;
+  recordedAt: Date;
+}) {
+  return {
+    id: m.id,
+    clientId: m.clientId,
+    kind: m.kind,
+    label: m.label,
+    note: m.note,
+    lat: m.lat,
+    lng: m.lng,
+    street: m.street,
+    recordedAt: m.recordedAt.toISOString(),
+  };
+}
+const markerSelect = {
+  id: true,
+  clientId: true,
+  kind: true,
+  label: true,
+  note: true,
+  lat: true,
+  lng: true,
+  street: true,
+  recordedAt: true,
+} as const;
+
+/**
+ * Sessione dell'istruttore: deve essere sua (istruttore della guida) e attiva
+ * per le scritture. Gli admin passano sempre (debug/assistenza).
+ */
+async function loadOwnSession(ctx: RoadCtx, sessionId: string) {
+  const session = await prisma.roadSession.findFirst({
+    where: { id: sessionId, companyId: ctx.companyId },
+    select: { ...sessionSelect, instructorId: true, companyId: true },
+  });
+  if (!session) return { error: fail("Sessione Road non trovata.", "NOT_FOUND") };
+  if (!canSeeAll(ctx)) {
+    const mine = await ownInstructorId(ctx);
+    if (!mine || mine !== session.instructorId) return { error: fail("Questa guida non è tua.", "FORBIDDEN") };
+  }
+  return { session };
+}
+
+// ─── catalogo + stato per la mobile ─────────────────────────────────────────
+
+export async function getRoadState() {
+  try {
+    const ctx = await roadContext();
+    const base = {
+      roadEnabled: ctx.roadEnabled,
+      catalog: { base: ROAD_BASE_MARKERS, custom: ctx.customMarkers },
+    };
+    if (!ctx.roadEnabled) return ok({ ...base, activeSession: null, eligibleLesson: null });
+
+    const instructorId = await ownInstructorId(ctx);
+    if (!instructorId) return ok({ ...base, activeSession: null, eligibleLesson: null });
+
+    const now = new Date();
+    const active = await prisma.roadSession.findFirst({
+      where: { companyId: ctx.companyId, instructorId, status: "active" },
+      orderBy: { startedAt: "desc" },
+      select: { ...sessionSelect, appointment: { select: appointmentSelect } },
+    });
+    const opensFrom = new Date(now.getTime() + ROAD_ENTRY_OPENS_MIN * 60 * 1000);
+    const candidates = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId: ctx.companyId,
+        instructorId,
+        status: { in: ROAD_ELIGIBLE_STATUSES },
+        startsAt: { lte: opensFrom, gte: new Date(now.getTime() - 4 * 60 * 60 * 1000) },
+        roadSession: null,
+      },
+      orderBy: { startsAt: "asc" },
+      select: appointmentSelect,
+    });
+    const eligible = candidates.find((a) => isRoadEligibleLesson(a) && lessonEnd(a) > now) ?? null;
+
+    return ok({
+      ...base,
+      activeSession: active
+        ? { ...sessionDTO(active), lesson: lessonDTO(active.appointment) }
+        : null,
+      eligibleLesson: eligible ? lessonDTO(eligible) : null,
+    });
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
+// ─── sessione: avvio / ripresa ──────────────────────────────────────────────
+
+export async function startRoadSession(input: { appointmentId: string }) {
+  try {
+    const ctx = await roadContext();
+    if (!ctx.roadEnabled) return fail("Reglo Road non è attivo per questa autoscuola.", "ROAD_DISABLED");
+    if (typeof input?.appointmentId !== "string") return fail("Guida mancante.");
+
+    const appointment = await prisma.autoscuolaAppointment.findFirst({
+      where: { id: input.appointmentId, companyId: ctx.companyId },
+      select: { ...appointmentSelect, roadSession: { select: { ...sessionSelect, instructorId: true } } },
+    });
+    if (!appointment) return fail("Guida non trovata.", "NOT_FOUND");
+
+    const instructorId = await ownInstructorId(ctx);
+    if (!instructorId || appointment.instructorId !== instructorId) {
+      return fail("Puoi usare Road solo sulle tue guide.", "FORBIDDEN");
+    }
+    if (!isRoadEligibleLesson(appointment)) {
+      return fail("Road per ora funziona solo con le guide singole in auto.", "NOT_ELIGIBLE");
+    }
+
+    // Ripresa (app chiusa e riaperta): stessa sessione, anche se già chiusa
+    // la restituiamo così la mobile mostra il riepilogo invece di un errore.
+    if (appointment.roadSession) {
+      return ok({ ...sessionDTO(appointment.roadSession), lesson: lessonDTO(appointment), resumed: true });
+    }
+
+    if (!ROAD_ELIGIBLE_STATUSES.includes(appointment.status)) {
+      return fail("Questa guida non è più in programma.", "NOT_ELIGIBLE");
+    }
+    const now = new Date();
+    if (now.getTime() < appointment.startsAt.getTime() - ROAD_ENTRY_OPENS_MIN * 60 * 1000) {
+      return fail(`Road si apre ${ROAD_ENTRY_OPENS_MIN} minuti prima della guida.`, "TOO_EARLY");
+    }
+
+    // Un istruttore ha una sola sessione attiva: quella vecchia (guida
+    // precedente dimenticata aperta) si chiude come abbandonata.
+    await prisma.roadSession.updateMany({
+      where: { companyId: ctx.companyId, instructorId, status: "active" },
+      data: { status: "abandoned", endedAt: now },
+    });
+
+    const created = await prisma.$transaction(async (tx) => {
+      const s = await tx.roadSession.create({
+        data: {
+          companyId: ctx.companyId,
+          appointmentId: appointment.id,
+          instructorId,
+          studentId: appointment.studentId,
+          vehicleId: appointment.vehicleId,
+          startedAt: now,
+        },
+        select: sessionSelect,
+      });
+      if (appointment.status === "scheduled" || appointment.status === "confirmed") {
+        await tx.autoscuolaAppointment.update({ where: { id: appointment.id }, data: { status: "checked_in" } });
+      }
+      return s;
+    });
+    return ok({ ...sessionDTO(created), lesson: lessonDTO(appointment), resumed: false });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return startRoadSession(input); // doppio tap: la seconda chiamata riprende
+    }
+    return fail(formatError(error));
+  }
+}
+
+// ─── punti GPS a lotti ──────────────────────────────────────────────────────
+
+export async function appendRoadPoints(
+  sessionId: string,
+  input: { seq: number; points: unknown; street?: string | null },
+) {
+  try {
+    const ctx = await roadContext();
+    const loaded = await loadOwnSession(ctx, sessionId);
+    if ("error" in loaded) return loaded.error!;
+    const { session } = loaded;
+    if (session.status !== "active") return ok({ accepted: false, reason: "SESSION_CLOSED" as const });
+
+    const seq = Number(input?.seq);
+    if (!Number.isInteger(seq) || seq < 0) return fail("Lotto non valido.");
+    const points = sanitizePoints(input?.points).slice(0, MAX_POINTS_PER_BATCH);
+    if (!points.length) return ok({ accepted: true, duplicate: false });
+
+    try {
+      await prisma.roadPointBatch.create({
+        data: { sessionId, seq, points: points as unknown as Prisma.InputJsonValue },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        return ok({ accepted: true, duplicate: true }); // rimandato dopo un timeout
+      }
+      throw error;
+    }
+
+    const last = points[points.length - 1];
+    const prev: RoadPoint | null =
+      session.lastLat != null && session.lastLng != null && session.lastPointAt
+        ? [session.lastPointAt.getTime(), session.lastLat, session.lastLng, null, null, null]
+        : null;
+    // Lotti arrivati in ritardo (seq vecchio): contano nei km ma non spostano
+    // l'auto all'indietro. A fine guida i km si ricalcolano da zero in ordine.
+    const inOrder = seq > session.lastSeq;
+    const added = Math.round(trackDistanceMeters(points, inOrder ? prev : null));
+    const street = typeof input?.street === "string" ? input.street.trim().slice(0, 120) : null;
+
+    await prisma.roadSession.update({
+      where: { id: sessionId },
+      data: {
+        distanceMeters: { increment: added },
+        pointCount: { increment: points.length },
+        ...(inOrder
+          ? {
+              lastSeq: seq,
+              lastLat: last[1],
+              lastLng: last[2],
+              lastSpeed: last[3],
+              lastHeading: last[4],
+              lastPointAt: new Date(last[0]),
+              ...(street ? { lastStreet: street } : {}),
+            }
+          : {}),
+      },
+    });
+    return ok({ accepted: true, duplicate: false });
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
+// ─── segnalazioni ───────────────────────────────────────────────────────────
+
+export async function addRoadMarker(
+  sessionId: string,
+  input: {
+    clientId: string;
+    kind: string;
+    label?: string | null;
+    note?: string | null;
+    lat: number;
+    lng: number;
+    street?: string | null;
+    recordedAt?: string;
+  },
+) {
+  try {
+    const ctx = await roadContext();
+    const loaded = await loadOwnSession(ctx, sessionId);
+    if ("error" in loaded) return loaded.error!;
+    const { session } = loaded;
+    // Una segnalazione in coda offline può arrivare dopo «Termina guida»:
+    // la accettiamo fino a 2 ore dopo la chiusura.
+    if (session.status !== "active") {
+      const closedAt = session.endedAt?.getTime() ?? 0;
+      if (Date.now() - closedAt > 2 * 60 * 60 * 1000) return fail("La guida è chiusa.", "SESSION_CLOSED");
+    }
+    const clientId = typeof input?.clientId === "string" ? input.clientId.trim().slice(0, 64) : "";
+    if (!clientId) return fail("Segnalazione non valida.");
+    const lat = Number(input?.lat);
+    const lng = Number(input?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return fail("Posizione non valida.");
+    const kind = typeof input?.kind === "string" ? input.kind.trim() : "";
+    const label = resolveMarkerLabel(kind, ctx.customMarkers, input?.label);
+    if (!label) return fail("Tipo di segnalazione sconosciuto.");
+    const recordedAt = input?.recordedAt ? new Date(input.recordedAt) : new Date();
+
+    const existing = await prisma.roadMarker.findUnique({ where: { clientId }, select: markerSelect });
+    if (existing) return ok(markerDTO(existing));
+
+    const marker = await prisma.roadMarker.create({
+      data: {
+        sessionId,
+        companyId: ctx.companyId,
+        clientId,
+        kind,
+        label,
+        note: typeof input?.note === "string" && input.note.trim() ? input.note.trim().slice(0, 500) : null,
+        lat,
+        lng,
+        street: typeof input?.street === "string" ? input.street.trim().slice(0, 120) || null : null,
+        recordedAt: Number.isNaN(recordedAt.getTime()) ? new Date() : recordedAt,
+      },
+      select: markerSelect,
+    });
+    return ok(markerDTO(marker));
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const again = await prisma.roadMarker.findUnique({ where: { clientId: input.clientId }, select: markerSelect });
+      if (again) return ok(markerDTO(again));
+    }
+    return fail(formatError(error));
+  }
+}
+
+/** «Annulla» dopo una segnalazione: si cancella per id o per clientId. */
+export async function removeRoadMarker(sessionId: string, markerIdOrClientId: string) {
+  try {
+    const ctx = await roadContext();
+    const loaded = await loadOwnSession(ctx, sessionId);
+    if ("error" in loaded) return loaded.error!;
+    const isUuid = /^[0-9a-f-]{36}$/i.test(markerIdOrClientId);
+    await prisma.roadMarker.deleteMany({
+      where: {
+        sessionId,
+        OR: [{ clientId: markerIdOrClientId }, ...(isUuid ? [{ id: markerIdOrClientId }] : [])],
+      },
+    });
+    return ok({ removed: true });
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
+// ─── fine guida ─────────────────────────────────────────────────────────────
+
+const loadTrack = (sessionId: string) => loadRoadTrack(prisma, sessionId);
+
+export async function endRoadSession(sessionId: string) {
+  try {
+    const ctx = await roadContext();
+    const loaded = await loadOwnSession(ctx, sessionId);
+    if ("error" in loaded) return loaded.error!;
+    const { session } = loaded;
+
+    if (session.status === "active") {
+      const endedAt = new Date();
+      await finalizeRoadSession(prisma, sessionId, "completed", endedAt);
+      // Decisione di prodotto: «Termina guida» = guida completata subito.
+      await prisma.autoscuolaAppointment.updateMany({
+        where: { id: session.appointmentId, status: { in: ROAD_ELIGIBLE_STATUSES } },
+        data: { status: "completed" },
+      });
+    }
+    return getRoadSessionDetail(sessionId);
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
+// ─── lettura: dettaglio, traccia, allievo ───────────────────────────────────
+
+/** Pagellino della guida (sola lettura, per riepilogo e dettaglio web). */
+async function evaluationSummary(appointmentId: string) {
+  const rows = await prisma.autoscuolaAppointmentEvaluation.findMany({
+    where: { appointmentId },
+    orderBy: { item: { position: "asc" } },
+    select: { score: true, notApplicable: true, updatedAt: true, item: { select: { label: true, scaleMax: true } } },
+  });
+  if (!rows.length) return null;
+  return {
+    items: rows.map((r) => ({ label: r.item.label, scaleMax: r.item.scaleMax, score: r.score, notApplicable: r.notApplicable })),
+    updatedAt: rows.reduce((m, r) => (r.updatedAt > m ? r.updatedAt : m), rows[0].updatedAt).toISOString(),
+  };
+}
+
+async function buildDetail(sessionId: string, companyId: string) {
+  const s = await prisma.roadSession.findFirst({
+    where: { id: sessionId, companyId },
+    select: {
+      ...sessionSelect,
+      appointment: { select: appointmentSelect },
+      markers: { orderBy: { recordedAt: "asc" }, select: markerSelect },
+    },
+  });
+  if (!s) return null;
+  const track = await loadTrack(sessionId);
+  return {
+    ...sessionDTO(s),
+    lesson: lessonDTO(s.appointment),
+    markers: s.markers.map(markerDTO),
+    // Per la mappa bastano [lat, lng]; il tempo serve a disegnare il "fatto fin qui".
+    track: track.map((p) => [p[1], p[2], p[0]] as [number, number, number]),
+  };
+}
+
+export async function getRoadSessionDetail(sessionId: string) {
+  try {
+    const ctx = await roadContext();
+    if (!canSeeAll(ctx)) {
+      const loaded = await loadOwnSession(ctx, sessionId);
+      if ("error" in loaded) return loaded.error!;
+    }
+    const detail = await buildDetail(sessionId, ctx.companyId);
+    if (!detail) return fail("Sessione Road non trovata.", "NOT_FOUND");
+    return ok({ ...detail, evaluation: await evaluationSummary(detail.appointmentId) });
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
+/** Solo i lotti nuovi dopo `afterSeq` (la mappa web li aggiunge al percorso). */
+export async function getRoadTrackDelta(sessionId: string, afterSeq: number) {
+  try {
+    const ctx = await roadContext();
+    if (!canSeeAll(ctx)) return fail("Non autorizzato.", "FORBIDDEN");
+    const s = await prisma.roadSession.findFirst({ where: { id: sessionId, companyId: ctx.companyId }, select: { id: true } });
+    if (!s) return fail("Sessione Road non trovata.", "NOT_FOUND");
+    const batches = await prisma.roadPointBatch.findMany({
+      where: { sessionId, seq: { gt: Number.isFinite(afterSeq) ? afterSeq : -1 } },
+      orderBy: { seq: "asc" },
+      select: { seq: true, points: true },
+    });
+    const points = batches
+      .flatMap((b) => (b.points as unknown as RoadPoint[]))
+      .sort((a, b) => a[0] - b[0])
+      .map((p) => [p[1], p[2], p[0]] as [number, number, number]);
+    return ok({ lastSeq: batches.at(-1)?.seq ?? afterSeq, points });
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
+/**
+ * Sessione Road di una guida. Allievo: solo la sua guida, e solo se
+ * l'autoscuola ha attivo «Mostra note e percorsi nell'app allievi».
+ */
+export async function getRoadForAppointment(appointmentId: string) {
+  try {
+    const ctx = await roadContext();
+    if (!ctx.roadEnabled) return ok(null);
+    const session = await prisma.roadSession.findFirst({
+      where: { appointmentId, companyId: ctx.companyId },
+      select: { id: true, studentId: true, instructorId: true, status: true },
+    });
+    if (!session) return ok(null);
+
+    if (isStudent(ctx.membership.autoscuolaRole) && ctx.membership.role !== "admin") {
+      if (session.studentId !== ctx.membership.userId) return fail("Non autorizzato.", "FORBIDDEN");
+      if (!ctx.studentRoadVisible) return ok(null);
+      if (session.status === "active") return ok(null); // l'allievo la vede a guida finita
+      const detail = await buildDetail(session.id, ctx.companyId);
+      return ok(detail);
+    }
+    if (!canSeeAll(ctx)) {
+      const mine = await ownInstructorId(ctx);
+      if (!mine || mine !== session.instructorId) return fail("Non autorizzato.", "FORBIDDEN");
+    }
+    const detail = await buildDetail(session.id, ctx.companyId);
+    return ok(detail ? { ...detail, evaluation: await evaluationSummary(appointmentId) } : null);
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
+// ─── web: dal vivo, oggi, storico ───────────────────────────────────────────
+
+/** Inizio/fine del giorno italiano che contiene `date`, in UTC. */
+export function romeDayBounds(date = new Date()) {
+  const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  const offsetFor = (d: Date) => {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Rome", timeZoneName: "shortOffset" })
+      .formatToParts(d)
+      .find((p) => p.type === "timeZoneName")?.value ?? "GMT+1";
+    const m = parts.match(/GMT([+-]\d+)(?::(\d+))?/);
+    const h = m ? Number(m[1]) : 1;
+    return `${h >= 0 ? "+" : "-"}${String(Math.abs(h)).padStart(2, "0")}:${m?.[2] ?? "00"}`;
+  };
+  const start = new Date(`${ymd}T00:00:00${offsetFor(date)}`);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return { start, end };
+}
+
+async function requireWebRoad() {
+  const ctx = await roadContext();
+  if (!ctx.roadEnabled) return { error: fail("Reglo Road non è attivo.", "ROAD_DISABLED") };
+  if (!canSeeAll(ctx)) return { error: fail("Non autorizzato.", "FORBIDDEN") };
+  return { ctx };
+}
+
+async function markerCounts(sessionIds: string[]) {
+  if (!sessionIds.length) return new Map<string, { count: number; kinds: string[] }>();
+  const rows = await prisma.roadMarker.findMany({
+    where: { sessionId: { in: sessionIds } },
+    orderBy: { recordedAt: "asc" },
+    select: { sessionId: true, kind: true },
+  });
+  const map = new Map<string, { count: number; kinds: string[] }>();
+  for (const r of rows) {
+    const cur = map.get(r.sessionId) ?? { count: 0, kinds: [] };
+    cur.count += 1;
+    cur.kinds.push(r.kind);
+    map.set(r.sessionId, cur);
+  }
+  return map;
+}
+
+export async function getRoadLive() {
+  try {
+    const loaded = await requireWebRoad();
+    if ("error" in loaded) return loaded.error!;
+    const { ctx } = loaded;
+    const now = new Date();
+
+    const active = await prisma.roadSession.findMany({
+      where: { companyId: ctx.companyId, status: "active" },
+      orderBy: { startedAt: "asc" },
+      select: { ...sessionSelect, appointment: { select: appointmentSelect } },
+    });
+    const counts = await markerCounts(active.map((s) => s.id));
+    const recent = active.length
+      ? await prisma.roadMarker.findMany({
+          where: { sessionId: { in: active.map((s) => s.id) } },
+          orderBy: { recordedAt: "desc" },
+          select: { ...markerSelect, sessionId: true },
+        })
+      : [];
+
+    // Auto in sede: veicoli attivi non impegnati adesso, con la prossima guida.
+    const busyVehicleIds = new Set(active.map((s) => s.appointment.vehicleId).filter(Boolean) as string[]);
+    const vehicles = await prisma.autoscuolaVehicle
+      .findMany({ where: { companyId: ctx.companyId, status: { not: "inactive" } }, select: { id: true, name: true, plate: true } })
+      .catch(() => [] as { id: string; name: string; plate: string | null }[]);
+    const { end: dayEnd } = romeDayBounds(now);
+    const upcoming = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId: ctx.companyId,
+        vehicleId: { in: vehicles.map((v) => v.id) },
+        status: { in: ["scheduled", "confirmed", "checked_in"] },
+        endsAt: { gt: now },
+        startsAt: { lt: dayEnd },
+      },
+      orderBy: { startsAt: "asc" },
+      select: { vehicleId: true, startsAt: true, endsAt: true },
+    });
+    const inUseNow = new Set(
+      upcoming.filter((a) => a.startsAt <= now && (a.endsAt ?? a.startsAt) > now).map((a) => a.vehicleId!),
+    );
+    const atBase = vehicles
+      .filter((v) => !busyVehicleIds.has(v.id) && !inUseNow.has(v.id))
+      .map((v) => ({
+        id: v.id,
+        name: v.name,
+        plate: v.plate,
+        freeUntil: upcoming.find((a) => a.vehicleId === v.id && a.startsAt > now)?.startsAt.toISOString() ?? null,
+      }));
+
+    const base = await prisma.autoscuolaLocation
+      .findFirst({
+        where: { companyId: ctx.companyId, latitude: { not: null }, longitude: { not: null } },
+        orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+        select: { name: true, latitude: true, longitude: true },
+      })
+      .catch(() => null);
+
+    return ok({
+      now: now.toISOString(),
+      base: base?.latitude != null && base.longitude != null
+        ? { name: base.name, lat: Number(base.latitude), lng: Number(base.longitude) }
+        : null,
+      sessions: active.map((s) => ({
+        ...sessionDTO(s),
+        lesson: lessonDTO(s.appointment),
+        markerCount: counts.get(s.id)?.count ?? 0,
+        markerKinds: counts.get(s.id)?.kinds ?? [],
+        recentMarkers: recent.filter((m) => m.sessionId === s.id).slice(0, 3).map(markerDTO),
+      })),
+      atBase,
+    });
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
+/** Guide di oggi (singole in auto) con lo stato Road di ciascuna. */
+export async function getRoadToday() {
+  try {
+    const loaded = await requireWebRoad();
+    if ("error" in loaded) return loaded.error!;
+    const { ctx } = loaded;
+    const { start, end } = romeDayBounds();
+    const rows = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId: ctx.companyId,
+        startsAt: { gte: start, lt: end },
+        status: { notIn: ["cancelled", "proposal"] },
+      },
+      orderBy: { startsAt: "asc" },
+      select: { ...appointmentSelect, roadSession: { select: sessionSelect } },
+    });
+    const lessons = rows.filter(isRoadEligibleLesson);
+    const counts = await markerCounts(lessons.map((r) => r.roadSession?.id).filter(Boolean) as string[]);
+    return ok(
+      lessons.map((r) => ({
+        ...lessonDTO(r),
+        road: r.roadSession
+          ? { ...sessionDTO(r.roadSession), markerCount: counts.get(r.roadSession.id)?.count ?? 0, markerKinds: counts.get(r.roadSession.id)?.kinds ?? [] }
+          : null,
+      })),
+    );
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
+export async function getRoadHistory(input: {
+  from?: string | null;
+  to?: string | null;
+  instructorId?: string | null;
+  studentId?: string | null;
+  cursor?: string | null;
+  limit?: number;
+}) {
+  try {
+    const loaded = await requireWebRoad();
+    if ("error" in loaded) return loaded.error!;
+    const { ctx } = loaded;
+    const take = Math.min(Math.max(Number(input.limit) || 30, 1), 100);
+    const where: Prisma.RoadSessionWhereInput = {
+      companyId: ctx.companyId,
+      status: { not: "active" },
+      ...(input.instructorId ? { instructorId: input.instructorId } : {}),
+      ...(input.studentId ? { studentId: input.studentId } : {}),
+      startedAt: {
+        ...(input.from ? { gte: new Date(input.from) } : {}),
+        ...(input.to ? { lt: new Date(input.to) } : {}),
+      },
+    };
+    const rows = await prisma.roadSession.findMany({
+      where,
+      orderBy: [{ startedAt: "desc" }, { id: "desc" }],
+      take: take + 1,
+      ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+      select: { ...sessionSelect, appointment: { select: appointmentSelect } },
+    });
+    const page = rows.slice(0, take);
+    const counts = await markerCounts(page.map((r) => r.id));
+    return ok({
+      items: page.map((s) => ({
+        ...sessionDTO(s),
+        lesson: lessonDTO(s.appointment),
+        markerCount: counts.get(s.id)?.count ?? 0,
+        markerKinds: counts.get(s.id)?.kinds ?? [],
+      })),
+      nextCursor: rows.length > take ? page[page.length - 1].id : null,
+    });
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
+export type { RoadCustomMarker };

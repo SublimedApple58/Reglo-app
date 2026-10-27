@@ -239,6 +239,7 @@ model Company {
   autoscuolaLessonCreditBalances       AutoscuolaStudentLessonCreditBalance[]
   autoscuolaLessonCreditLedger         AutoscuolaStudentLessonCreditLedger[]
   autoscuolaPaymentEvents              AutoscuolaAppointmentPaymentEvent[]
+  roadSessions                         RoadSession[]
   autoscuolaAppointmentPayments        AutoscuolaAppointmentPayment[]
   autoscuolaMessageTemplates           AutoscuolaMessageTemplate[]
   autoscuolaMessageRules               AutoscuolaMessageRule[]
@@ -664,6 +665,8 @@ model AutoscuolaAppointment {
   creditLedger             AutoscuolaStudentLessonCreditLedger[]
   /// REG-637: storico dei gesti manuali sullo stato pagamento.
   paymentEvents            AutoscuolaAppointmentPaymentEvent[]
+  /// REG-638 Reglo Road: sessione GPS della guida (una sola per guida).
+  roadSession              RoadSession?
   messageLogs              AutoscuolaMessageLog[]
   voiceCalls               AutoscuolaVoiceCall[]
   swapOffers               AutoscuolaSwapOffer[]
@@ -2483,4 +2486,81 @@ model RoundInteraction {
   investor RoundInvestor @relation(fields: [investorId], references: [id], onDelete: Cascade)
 
   @@index([investorId, occurredOn])
+}
+
+/// REG-638 Reglo Road — sessione di guida in diretta: GPS del telefono
+/// dell'istruttore, percorso e segnalazioni. Una per guida (`appointmentId`
+/// unico). `last*` = ultima posizione nota, letta dalla vista «Dal vivo».
+/// Conservata 12 mesi, poi la cancella il job `autoscuole-road-maintenance`.
+model RoadSession {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String    @db.Uuid
+  appointmentId  String    @unique @db.Uuid
+  instructorId   String?   @db.Uuid
+  studentId      String?   @db.Uuid
+  vehicleId      String?   @db.Uuid
+  /// "active" | "completed" | "abandoned"
+  status         String    @default("active")
+  startedAt      DateTime  @default(now()) @db.Timestamp(6)
+  endedAt        DateTime? @db.Timestamp(6)
+  distanceMeters Int       @default(0)
+  durationSec    Int       @default(0)
+  pointCount     Int       @default(0)
+  lastSeq        Int       @default(-1)
+  lastLat        Float?
+  lastLng        Float?
+  lastSpeed      Float?
+  lastHeading    Float?
+  lastStreet     String?
+  lastPointAt    DateTime? @db.Timestamp(6)
+  createdAt      DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @db.Timestamp(6)
+
+  company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  appointment AutoscuolaAppointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  batches     RoadPointBatch[]
+  markers     RoadMarker[]
+
+  @@index([companyId, status])
+  @@index([companyId, startedAt])
+  @@index([studentId, startedAt])
+  @@index([status, startedAt])
+}
+
+/// Lotto di punti GPS inviato dal telefono. `seq` progressivo per sessione:
+/// un lotto rimandato (rete assente) non viene salvato due volte.
+/// `points` = [[tMs, lat, lng, speedMs|null, heading|null, accuracyM|null], ...]
+model RoadPointBatch {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId String   @db.Uuid
+  seq       Int
+  points    Json
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  session RoadSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, seq])
+}
+
+/// Segnalazione dell'istruttore sul punto esatto. `kind` = chiave base
+/// (es. "stop") oppure "custom:<id>"; `label` è la copia del nome al momento
+/// della segnalazione, così rinominare/togliere una voce custom non cambia lo storico.
+model RoadMarker {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId  String   @db.Uuid
+  companyId  String   @db.Uuid
+  clientId   String   @unique
+  kind       String
+  label      String
+  note       String?
+  lat        Float
+  lng        Float
+  street     String?
+  recordedAt DateTime @db.Timestamp(6)
+  createdAt  DateTime @default(now()) @db.Timestamp(6)
+
+  session RoadSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, recordedAt])
+  @@index([companyId, kind])
 }
