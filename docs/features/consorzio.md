@@ -498,7 +498,7 @@ cioè la sezione del sito col video di presentazione — stesso titolo della car
 "Come funziona la modalità autonoma per gli istruttori?".
 
 > ⚠️ **L'ancora vive in un altro repo.** `#video-autonoma` **non è un id**
-> della pagina: la landing (`~/Developer/reglo-landing`) è una SPA senza id
+> della pagina: la landing (`~/Developer/reglo/reglo-landing`) è una SPA senza id
 > sulle sezioni, che sono marcate con `data-screen-label`. L'hash lo risolve
 > `src/site/deepLink.ts`, agganciato in `RoutedSite.tsx` — il livello scritto
 > a mano, perché `src/site/generated/` viene rigenerato da
