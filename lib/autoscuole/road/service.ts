@@ -94,7 +94,7 @@ const appointmentSelect = {
   groupLessonId: true,
   motoLessonType: true,
   student: { select: { id: true, name: true } },
-  instructor: { select: { id: true, name: true, color: true, userId: true } },
+  instructor: { select: { id: true, name: true, color: true, phone: true, userId: true } },
   vehicle: { select: { id: true, name: true, plate: true, licenseCategory: true } },
 } satisfies Prisma.AutoscuolaAppointmentSelect;
 type AppointmentRow = Prisma.AutoscuolaAppointmentGetPayload<{ select: typeof appointmentSelect }>;
@@ -109,7 +109,9 @@ function lessonDTO(a: AppointmentRow) {
     endsAt: lessonEnd(a).toISOString(),
     status: a.status,
     student: a.student ? { id: a.student.id, name: a.student.name } : null,
-    instructor: a.instructor ? { id: a.instructor.id, name: a.instructor.name, color: a.instructor.color } : null,
+    instructor: a.instructor
+      ? { id: a.instructor.id, name: a.instructor.name, color: a.instructor.color, phone: a.instructor.phone }
+      : null,
     vehicle: a.vehicle ? { id: a.vehicle.id, name: a.vehicle.name, plate: a.vehicle.plate } : null,
   };
 }
@@ -589,6 +591,8 @@ export async function getRoadForAppointment(appointmentId: string) {
       if (!ctx.studentRoadVisible) return ok(null);
       if (session.status === "active") return ok(null); // l'allievo la vede a guida finita
       const detail = await buildDetail(session.id, ctx.companyId);
+      // Il telefono dell'istruttore serve solo al «Chiama» del titolare in web.
+      if (detail?.lesson.instructor) detail.lesson.instructor.phone = null;
       return ok(detail);
     }
     if (!canSeeAll(ctx)) {

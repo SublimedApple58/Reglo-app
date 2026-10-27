@@ -217,6 +217,19 @@ export const isConsortium = (
 ): boolean => getServiceLimits(services, "AUTOSCUOLE").accountKind === "consorzio";
 
 /**
+ * true se la company ha acceso Reglo Road (REG-638) dal backoffice. Vale solo
+ * `=== true` e mai per consorzio / «solo Segretaria» / consorziata senza Reglo:
+ * lì l'agenda delle guide in auto non c'è.
+ */
+export const isRoadEnabled = (
+  services: CompanyServiceInfo[] | null | undefined,
+): boolean =>
+  getServiceLimits(services, "AUTOSCUOLE").roadEnabled === true &&
+  !isSecretaryOnly(services) &&
+  !isConsortium(services) &&
+  !isAffiliateWithoutReglo(services);
+
+/**
  * Id della company CONSORZIO a cui questa autoscuola è collegata, oppure null.
  * Null-safe su stringhe vuote: un `affiliateOf: ""` scritto per sbaglio non
  * deve far credere che la company sia una consorziata.

@@ -5,12 +5,12 @@ import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { useAtomValue } from "jotai";
-import { Plus, ChevronLeft, ChevronRight, X, type LucideIcon } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, Route, X, type LucideIcon } from "lucide-react";
 
 import { companyAtom } from "@/atoms/company.store";
 import { LicenseCategorySelectItems } from "./LicenseCategorySelectItems";
 import {
-  isAffiliateWithoutReglo, isConsortium, isSecretaryOnly } from "@/lib/services";
+  isAffiliateWithoutReglo, isConsortium, isRoadEnabled, isSecretaryOnly } from "@/lib/services";
 import { LockedSettingsPane } from "@/components/pages/Autoscuole/locked/LockedSettingsPane";
 
 import {
@@ -63,6 +63,7 @@ import VehiclesTab from "./tabs/VehiclesTab";
 import { VoiceSettingsPane } from "./VoiceSettingsPane";
 import { AspettoSettingsPane } from "./AspettoSettingsPane";
 import { EvaluationSheetPane } from "./EvaluationSheetPane";
+import { RoadSettingsPane } from "./RoadSettingsPane";
 import { BusinessInfoPane } from "./tabs/BusinessInfoPane";
 import {
   getAutoscuolaInstructors,
@@ -304,6 +305,7 @@ type ConfigPane =
   | "policy"
   | "reminders"
   | "evaluation"
+  | "road"
   | "instructors"
   | "vehicles"
   | "aspetto"
@@ -317,7 +319,7 @@ const PANES_NEEDING_RESOURCES: ConfigPane[] = ["instructors", "vehicles", "aspet
 // Icone 1:1 dal proto (components/ui/proto-icons.tsx): lucide ha varianti
 // diverse dagli SVG del proto per quasi tutte le voci della sidebar.
 const CONFIG_PANE_GROUPS: Array<
-  Array<{ key: ConfigPane; label: string; icon: LucideIcon | ProtoIcon }>
+  Array<{ key: ConfigPane; label: string; icon: LucideIcon | ProtoIcon; badge?: string }>
 > = [
   [
     { key: "business", label: "Informazioni aziendali", icon: UserRoundProtoIcon },
@@ -327,6 +329,8 @@ const CONFIG_PANE_GROUPS: Array<
     { key: "bookings", label: "Prenotazioni e allievi", icon: CalendarProtoIcon },
     { key: "policy", label: "Policy tipi guida", icon: NotepadProtoIcon },
     { key: "evaluation", label: "Pagellino", icon: StarProtoIcon },
+    // REG-638: solo con il modulo Road acceso (filtrata in `paneGroups`).
+    { key: "road", label: "Reglo Road", icon: Route, badge: "Nuovo" },
     { key: "reminders", label: "Promemoria e notifiche", icon: BellProtoIcon },
   ],
   [
@@ -390,6 +394,7 @@ const CONFIG_PANE_TITLES: Record<ConfigPane, string> = {
   bookings: "Prenotazioni e allievi",
   policy: "Policy tipi guida",
   evaluation: "Pagellino",
+  road: "Reglo Road",
   reminders: "Promemoria e notifiche",
   instructors: "Istruttori",
   vehicles: "Veicoli",
@@ -414,13 +419,17 @@ export function AutoscuoleResourcesPage({
   // pagamenti" (placeholder Reglo × Fatture in Cloud), come nel prototipo.
   const consortium = isConsortium(company?.services ?? null);
   const affiliateReduced = isAffiliateWithoutReglo(company?.services ?? null);
+  const roadEnabled = isRoadEnabled(company?.services ?? null);
   const paneGroups = React.useMemo(() => {
     if (secretaryOnly) return [CONFIG_PANE_GROUPS[CONFIG_PANE_GROUPS.length - 1]];
-    if (!consortium) return CONFIG_PANE_GROUPS;
-    return CONFIG_PANE_GROUPS.map((group, index) =>
+    const groups = roadEnabled
+      ? CONFIG_PANE_GROUPS
+      : CONFIG_PANE_GROUPS.map((group) => group.filter((p) => p.key !== "road"));
+    if (!consortium) return groups;
+    return groups.map((group, index) =>
       index === 0 ? [...group, CONSORZIO_BILLING_PANE] : group,
     );
-  }, [secretaryOnly, consortium]);
+  }, [secretaryOnly, consortium, roadEnabled]);
   const [configTab, setConfigTab] = React.useState<ConfigPane>(() => {
     if (secretaryOnly) return "voice";
     // Consorziata senza Reglo: si entra su una pane aperta, mai su una bloccata.
@@ -2291,6 +2300,11 @@ export function AutoscuoleResourcesPage({
                       >
                         <pane.icon className="size-5 shrink-0 lg:size-6" strokeWidth={1.9} />
                         {pane.label}
+                        {"badge" in pane && pane.badge ? (
+                          <span className="-ml-1 grid h-5 place-items-center rounded-[10px] bg-[#111111] px-2 text-[11px] font-semibold text-white lg:-ml-2">
+                            {pane.badge}
+                          </span>
+                        ) : null}
                       </button>
                     );
                   })}
@@ -2439,6 +2453,11 @@ export function AutoscuoleResourcesPage({
         <KeepAlivePane active={configTab === "evaluation"} eager={mountAllPanes}>
           <EvaluationSheetPane />
         </KeepAlivePane>
+        {roadEnabled && (
+          <KeepAlivePane active={configTab === "road"}>
+            <RoadSettingsPane />
+          </KeepAlivePane>
+        )}
         <KeepAlivePane active={configTab === "voice"} eager={mountAllPanes}>
           <VoiceSettingsPane />
         </KeepAlivePane>

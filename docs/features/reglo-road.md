@@ -40,7 +40,7 @@ Tutte rispondono `{ success: true, data } | { success: false, message, code? }` 
 | GET | `/road/history?from&to&instructorId&studentId&cursor&limit` | titolare | `{ items: [Session+{lesson, markerCount, markerKinds}], nextCursor }` |
 
 Tipi:
-- `Lesson` = `{ appointmentId, startsAt, endsAt, status, student: {id,name}|null, instructor: {id,name,color}|null, vehicle: {id,name,plate}|null }`
+- `Lesson` = `{ appointmentId, startsAt, endsAt, status, student: {id,name}|null, instructor: {id,name,color,phone}|null, vehicle: {id,name,plate}|null }` — `phone` serve al «Chiama» del titolare; all'allievo arriva sempre `null`.
 - `Session` = `{ id, appointmentId, status, startedAt, endedAt, distanceMeters, durationSec, lastSeq, last: {lat,lng,speed,heading,street,at}|null }`
 - `Marker` = `{ id, clientId, kind, label, note, lat, lng, street, recordedAt }`
 - `Detail` = `Session + { lesson, markers: Marker[], track: [[lat,lng,tMs]], evaluation?: { items: [{label, scaleMax, score, notApplicable}], updatedAt } | null }`
@@ -55,4 +55,19 @@ Tipi:
 - `trigger/autoscuole-road-maintenance.ts` — job ogni 15 min (va in prod con `pnpm trigger:deploy:prod`, **dopo** `migrate:prod`).
 - `app/api/autoscuole/road/**` — route sottili.
 - Backoffice: card «Reglo Road» in `components/pages/Backoffice/BackofficeCompaniesPage.tsx`.
-- Test: `tests/unit/road/road-geo.test.ts`.
+- Test: `tests/unit/road/road-geo.test.ts`, e2e web `tests/e2e/reg638-road.auth.spec.ts`.
+
+## Web (titolare)
+Visibile solo con `isRoadEnabled(services)` (`lib/services.ts`: `roadEnabled === true` e mai per consorzio / solo Segretaria / consorziata senza Reglo). Senza modulo le pagine rimandano all'agenda.
+
+- **Barra**: voce «Road» tra Allievi e Segretaria (`AutoscuoleNav.tsx`, icona `public/images/nav/road-3d.png`), pagina vera `/[locale]/user/autoscuole/road` come la Segretaria.
+- **Pagina** `components/pages/Autoscuole/road/AutoscuoleRoadPage.tsx`: header + segmented «Dal vivo / Guide di oggi / Storico», vista in `?view=` (`live` di default). Rotta `app/[locale]/user/(autoscuole)/autoscuole/road/page.tsx`.
+  - **Dal vivo** `RoadLiveView.tsx` (caricata con `dynamic(..., { ssr:false })`): pannello «In giro adesso» (KPI, righe istruttore con auto 3D e badge nella tinta, via, minuti, pillola segnalazioni, barra di avanzamento sulla durata; «In sede» con «Libera fino alle HH:MM») + mappa (percorsi nella tinta dell'istruttore al 55%, selezionato nero 6.5 px; auto `auto-su.png` ruotata con `last.heading`; etichetta «Nome · Allievo»; sede; ultime segnalazioni; legenda; zoom). Click su riga o auto = selezione + card «Guida in corso» (km, km/h, segnalazioni, ultime 2, «Apri la guida», «Chiama» solo se l'istruttore ha un telefono).
+  - **Polling**: `GET /road/live` ogni 5 s **solo a scheda visibile** (si ferma su `visibilitychange` e riparte subito al ritorno). Per ogni sessione attiva: primo giro `track?afterSeq=-1`, poi solo i delta (`afterSeq=lastSeq`) quando `session.lastSeq` cresce. Lo spostamento dell'auto è interpolato in ~1 s (`animateCar`, requestAnimationFrame). L'inquadratura si fa una volta sola (lascia 400 px a destra per la card).
+  - **Guide di oggi** `RoadTodayView.tsx` (`/road/today`, refresh 30 s): stato Road Da iniziare / In corso / Completata / Non registrata (passata senza sessione) / Chiusa in automatico; click → dettaglio se c'è sessione.
+  - **Storico** `RoadHistoryView.tsx` (`/road/history`, 20 per pagina, «Carica altre» a cursore): filtri istruttore, allievo, periodo (7/30/90 giorni o da sempre).
+- **Dettaglio** `RoadSessionDetail.tsx` (rotta `road/[sessionId]?from=live|today|history`, guardia in `RoadSessionDetailPage.tsx`): breadcrumb, titolo, chip stato, «Apri in agenda» (`?tab=agenda&date=YYYY-MM-DD`), mappa con percorso nero, partenza e segnalazioni numerate, 3 numeri, segnalazioni in ordine di tempo (con nota «…»), pagellino (stelle `#FACC15`) o «Pagellino non compilato», nota su cosa vede l'allievo (`studentNotesEnabled`). Se la sessione è attiva si ricarica ogni 5 s a scheda visibile.
+- **Mappa** `road/road-map.ts`: `maplibre-gl` 4.7 con import dinamico (solo browser) + tile **solo** `https://tiles.openfreemap.org/styles/liberty`, ricolorate come `roadStyle()` del prototipo (niente POI/città, etichette `name:it`). **Attribuzione** OpenFreeMap / © OpenMapTiles / OpenStreetMap sempre visibile (controllo compatto in basso a destra; zoom spostato sopra). Gotcha: il contenitore della mappa riceve `position:relative` da MapLibre (va dentro un wrapper `absolute`), e la radice di un Marker non deve avere `position`/`transform` propri (stili e rotazione stanno sui figli, vedi `.road-*` in `road-ui.tsx`).
+- **Simboli** `lib/autoscuole/road/symbols.ts`: chiave base → `public/images/road/*.png` (stop→s-stop, precedenza→s-prec, distanza→s-dist, velocita→f-vel, semaforo→f-sem, rotonda→f-rot, svolta→f-svo, corsia→f-cor, pedoni→f-ped, specchietti→f-spe, parcheggio→f-par, altro→f-alt, `custom:*`→f-cus). Client tipizzato delle API: `lib/autoscuole/road/client.ts`.
+- **Impostazioni** › «Reglo Road» (`RoadSettingsPane.tsx`, voce con badge «Nuovo» in `AutoscuoleResourcesPage.tsx`, solo con modulo acceso): griglia delle 12 segnalazioni base (sola lettura) e «Le tue segnalazioni» (aggiungi / rinomina / togli, max 12, label max 40, id `crypto.randomUUID().slice(0,8)`), salvataggio immediato con toast. › Prenotazioni e allievi › App allievi: il toggle si chiama «Mostra note e percorsi nell'app allievi».
+- **Dati di prova (solo dev)**: `scripts/seed-reg638-road.ts` (3 guide in corso con percorsi veri di Torino da `scripts/fixtures/reg638-routes.json`, guide di oggi, storico, pagellino; `--drive` muove le auto per ~60 s, `--cleanup` toglie tutto).

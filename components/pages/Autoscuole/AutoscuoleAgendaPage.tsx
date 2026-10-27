@@ -1667,6 +1667,21 @@ export function AutoscuoleAgendaPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guideRequestParam]);
 
+  // Deep link `?date=YYYY-MM-DD` (es. «Apri in agenda» dal dettaglio Road,
+  // REG-638): l'agenda si apre su quel giorno, in vista settimana o giorno.
+  const dateParam = searchParams?.get("date") ?? null;
+  const dateParamLoadedRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!dateParam || dateParamLoadedRef.current === dateParam) return;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateParam);
+    if (!m) return;
+    dateParamLoadedRef.current = dateParam;
+    const day = normalizeDay(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+    setWeekStart(weekAnchor(day, viewPrefs.weekMode));
+    setDayFocus(day);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateParam]);
+
   // Gli istruttori arrivano col bootstrap: appena disponibili, il draft senza
   // istruttore prende il primo (il ghost vive nella sua colonna).
   React.useEffect(() => {

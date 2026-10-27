@@ -72,6 +72,7 @@
     "lucide-react": "^0.456.0",
     "make-cancellable-promise": "^2.0.0",
     "make-event-props": "^2.0.0",
+    "maplibre-gl": "^4.7.1",
     "merge-refs": "^2.0.0",
     "motion": "^12.15.0",
     "next": "^15.2.2",

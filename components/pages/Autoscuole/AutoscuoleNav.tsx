@@ -7,7 +7,7 @@ import { useLocale } from "next-intl";
 import { useAtomValue } from "jotai";
 
 import { companyAtom } from "@/atoms/company.store";
-import { isConsortium, isSecretaryOnly } from "@/lib/services";
+import { isConsortium, isRoadEnabled, isSecretaryOnly } from "@/lib/services";
 import { cn } from "@/lib/utils";
 
 /**
@@ -19,6 +19,8 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { label: "Agenda", tab: "agenda", icon: "/images/nav/agenda-3d.png" },
   { label: "Allievi", tab: "students", icon: "/images/nav/allievi-3d.png" },
+  // Reglo Road (REG-638): solo se il modulo è acceso dal backoffice.
+  { label: "Road", tab: "road", icon: "/images/nav/road-3d.png" },
   { label: "Segretaria", tab: "voice", icon: "/images/nav/segretaria-3d.png" },
   { label: "Rinnovi", tab: "rinnovi", icon: "/images/nav/rinnovi-3d.png" },
 ] as const;
@@ -49,23 +51,26 @@ export function AutoscuoleNav({ variant = "top" }: { variant?: "top" | "bottom" 
   // Modalità consorzio: Agenda | Autoscuole | Fatturazione.
   const secretaryOnly = isSecretaryOnly(company?.services ?? null);
   const consortium = isConsortium(company?.services ?? null);
+  const roadEnabled = isRoadEnabled(company?.services ?? null);
   const items = secretaryOnly
     ? navItems.filter((item) => item.tab === "voice")
     : consortium
       ? consortiumNavItems
-      : navItems;
+      : navItems.filter((item) => item.tab !== "road" || roadEnabled);
 
   const resolve = (item: (typeof items)[number]) => {
     let isActive: boolean;
-    if (item.tab === "voice") {
-      isActive = pathname.startsWith(`${basePath}/voice`);
+    // Segretaria e Road sono pagine vere (non tab di ?tab=).
+    const ownPage = item.tab === "voice" || item.tab === "road";
+    if (ownPage) {
+      isActive = pathname.startsWith(`${basePath}/${item.tab}`);
     } else if (isOnAutoscuolePage) {
       // L'agenda è la landing: attiva anche senza ?tab.
       isActive = currentTab === item.tab || (item.tab === "agenda" && currentTab === null);
     } else {
       isActive = false;
     }
-    const href = item.tab === "voice" ? `${basePath}/voice` : `${basePath}?tab=${item.tab}`;
+    const href = ownPage ? `${basePath}/${item.tab}` : `${basePath}?tab=${item.tab}`;
     return { isActive, href };
   };
 

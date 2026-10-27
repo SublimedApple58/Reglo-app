@@ -365,7 +365,11 @@ Each entry: **Feature** → list of features it connects to, with reason.
 ### Reglo Road
 - → **Settings / Backoffice**: flag `roadEnabled` in `CompanyService.limits`, acceso solo dal backoffice (drawer «Gestisci»), esposto read-only in `AutoscuolaSettingsData` / `GET /api/autoscuole/settings`. Nasce spento (`=== true`).
 - → **Cache**: segmento `SETTINGS`, invalidato da `updateCompanyService`.
-- → **Agenda guide** *(fasi successive)*: sessione Road legata a `AutoscuolaAppointment`; ingresso in Road → `checked_in`.
+- → **Agenda guide**: sessione Road legata a `AutoscuolaAppointment` (una per guida); ingresso in Road → `checked_in`, «Termina guida» → `completed`. Il dettaglio web ha «Apri in agenda» → `?tab=agenda&date=YYYY-MM-DD` (deep link aggiunto in `AutoscuoleAgendaPage.tsx` per Road; chi tocca la navigazione data dell'agenda deve tenerlo).
+- → **Impostazioni (web)**: voce sidebar «Reglo Road» (`RoadSettingsPane.tsx`, solo con `isRoadEnabled`) salva `roadCustomMarkers` via `updateAutoscuolaSettings`; il toggle «Mostra note e percorsi nell'app allievi» (`BookingsTab.tsx`, `studentNotesEnabled`) decide anche se l'allievo vede percorso e segnalazioni.
+- → **Allievi / Istruttori / Veicoli**: la web Road legge nome e colore istruttore (`AutoscuolaInstructor.color`, fallback palette in `road-ui.tsx`), telefono istruttore (solo titolare, per «Chiama»; nascosto all'allievo), veicoli attivi per «In sede». Filtri Storico: `getAutoscuolaInstructors` + `getAutoscuolaStudentsList`.
+- → **Pagellino (REG-443)**: il dettaglio Road mostra in sola lettura le valutazioni della guida (`evaluationSummary`).
+- → **Sede e luoghi**: la «sede» sulla mappa dal vivo è la prima `AutoscuolaLocation` con coordinate (default prima).
 
 ### Reglo Aula
 - → **Quiz Teoria**: riusa **read-only** `QuizQuestion` + `QuizChapter` (DB) + immagini quiz su R2 per le domande del live (filtro per capitolo). Aula non scrive sulla banca — asset aziendale già centralizzato, non duplicato.

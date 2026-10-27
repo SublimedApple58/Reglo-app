@@ -1038,8 +1038,8 @@ export default function BookingsTab({
       <div className={cn("divide-y divide-[#ebebeb]", subTab !== "app" && "hidden")}>
         <div className="py-6">
           <SettingRow
-            title="Mostra note nell'app allievi"
-            description="Gli allievi potranno consultare le note rilasciate dagli istruttori dopo ogni guida, direttamente dalla loro app."
+            title="Mostra note e percorsi nell'app allievi"
+            description="Dopo ogni guida gli allievi vedono nella loro app le note dell'istruttore e, con Reglo Road, il percorso fatto e le segnalazioni sul punto."
             checked={studentNotesEnabled}
             onToggle={() => setStudentNotesEnabled((prev) => !prev)}
           />
