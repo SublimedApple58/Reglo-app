@@ -16,6 +16,7 @@ import {
 import { drivingSeconds, freeLessonEnd, sanitizePoints, trackDistanceMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
 import { finalizeRoadSession, loadRoadTrack } from "@/lib/autoscuole/road/maintenance";
 import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
+import { LESSON_BUFFER_BLOCK_REASON } from "@/lib/autoscuole/lesson-buffer";
 import { AUTOSCUOLE_CACHE_SEGMENTS, invalidateAutoscuoleCache } from "@/lib/autoscuole/cache";
 
 /**
@@ -525,12 +526,27 @@ export async function endRoadSession(sessionId: string) {
 async function trimFreeLessonEnd(appointmentId: string, endedAt: Date) {
   const a = await prisma.autoscuolaAppointment.findUnique({
     where: { id: appointmentId },
-    select: { companyId: true, bookingSource: true, startsAt: true, endsAt: true },
+    select: { companyId: true, instructorId: true, bookingSource: true, startsAt: true, endsAt: true },
   });
   if (!a || a.bookingSource !== BOOKING_SOURCE.road || !a.endsAt) return;
   const end = freeLessonEnd(a.startsAt, a.endsAt, endedAt).getTime();
   if (end !== a.endsAt.getTime()) {
     await prisma.autoscuolaAppointment.update({ where: { id: appointmentId }, data: { endsAt: new Date(end) } });
+    // La pausa dopo la guida (REG-484) era nata sulla fine prenotata: la segue,
+    // altrimenti resterebbe un blocco fantasma che ferma la guida successiva.
+    if (a.instructorId) {
+      const pause = await prisma.autoscuolaInstructorBlock.findFirst({
+        where: { companyId: a.companyId, instructorId: a.instructorId, reason: LESSON_BUFFER_BLOCK_REASON, startsAt: a.endsAt },
+        select: { id: true, startsAt: true, endsAt: true },
+      });
+      if (pause) {
+        const length = pause.endsAt.getTime() - pause.startsAt.getTime();
+        await prisma.autoscuolaInstructorBlock.update({
+          where: { id: pause.id },
+          data: { startsAt: new Date(end), endsAt: new Date(end + length) },
+        });
+      }
+    }
     await invalidateFreeLessonAgenda(a.companyId);
   }
 }
