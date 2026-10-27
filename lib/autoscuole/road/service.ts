@@ -672,7 +672,11 @@ export async function getRoadLive() {
     // Auto in sede: veicoli attivi non impegnati adesso, con la prossima guida.
     const busyVehicleIds = new Set(active.map((s) => s.appointment.vehicleId).filter(Boolean) as string[]);
     const vehicles = await prisma.autoscuolaVehicle
-      .findMany({ where: { companyId: ctx.companyId, status: { not: "inactive" } }, select: { id: true, name: true, plate: true } })
+      .findMany({
+        // v1 solo auto: le moto non compaiono tra le «auto in sede».
+        where: { companyId: ctx.companyId, status: { not: "inactive" }, licenseCategory: { notIn: [...MOTO_CATEGORIES] } },
+        select: { id: true, name: true, plate: true },
+      })
       .catch(() => [] as { id: string; name: string; plate: string | null }[]);
     const { end: dayEnd } = romeDayBounds(now);
     const upcoming = await prisma.autoscuolaAppointment.findMany({
