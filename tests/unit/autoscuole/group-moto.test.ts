@@ -7,7 +7,10 @@ import {
   instructorCanUseVehicle,
   validateMotoGroupSetup,
   MOTO_GROUP_SETUP_MESSAGES,
+  planMotoChange,
+  motoChoicesForSeat,
   type FleetVehicle,
+  type MotoSeat,
 } from "@/lib/autoscuole/group-moto";
 import type { FollowCarRules } from "@/lib/autoscuole/follow-car";
 
@@ -398,5 +401,80 @@ describe("validateMotoGroupSetup", () => {
       expect(typeof MOTO_GROUP_SETUP_MESSAGES[c]).toBe("string");
       expect(MOTO_GROUP_SETUP_MESSAGES[c].length).toBeGreaterThan(0);
     }
+  });
+});
+
+// REG-636 — per-participant moto change / swap.
+
+describe("planMotoChange", () => {
+  // Fleet: two A2 (m1 Honda, m2 Yamaha), one A1 (k1 KTM), one A (z1 Z900).
+  const fleet: FleetVehicle[] = [moto("m1", "A2"), moto("m2", "A2"), moto("k1", "A1"), moto("z1", "A")];
+  const seats: MotoSeat[] = [
+    { appointmentId: "mario", vehicleId: "m1", license: { licenseCategory: "A2", transmission: "manual" } },
+    { appointmentId: "luca", vehicleId: "m2", license: { licenseCategory: "A", transmission: "manual" } },
+    { appointmentId: "giulia", vehicleId: "k1", license: { licenseCategory: "A1", transmission: "manual" } },
+    { appointmentId: "anna", vehicleId: null, license: { licenseCategory: "A2", transmission: "manual" } },
+  ];
+  const plan = (appointmentId: string, vehicleId: string | null) =>
+    planMotoChange({ fleet, seats, appointmentId, vehicleId });
+
+  it("is a noop when the seat already has that moto (or is already on rotation)", () => {
+    expect(plan("mario", "m1")).toEqual({ ok: true, kind: "noop" });
+    expect(plan("anna", null)).toEqual({ ok: true, kind: "noop" });
+  });
+
+  it("assigns rotation and free motos without touching other seats", () => {
+    expect(plan("mario", null)).toEqual({ ok: true, kind: "assign" });
+    const free = planMotoChange({ fleet: [...fleet, moto("b1", "A2")], seats, appointmentId: "mario", vehicleId: "b1" });
+    expect(free).toEqual({ ok: true, kind: "assign" });
+  });
+
+  it("refuses motos outside the fleet or above the student's license", () => {
+    expect(plan("mario", "nope")).toEqual({ ok: false, reason: "not_in_fleet" });
+    expect(plan("mario", "z1")).toEqual({ ok: false, reason: "incompatible" });
+    expect(plan("ghost", "m1")).toEqual({ ok: false, reason: "seat_not_found" });
+  });
+
+  it("swaps cleanly when the holder can ride the mover's moto", () => {
+    expect(plan("mario", "m2")).toEqual({
+      ok: true, kind: "swap", otherAppointmentId: "luca", otherNextVehicleId: "m1", otherBlockedVehicleId: null,
+    });
+  });
+
+  it("sends the holder to rotation when they cannot ride the mover's moto", () => {
+    expect(plan("mario", "k1")).toEqual({
+      ok: true, kind: "swap", otherAppointmentId: "giulia", otherNextVehicleId: null, otherBlockedVehicleId: "m1",
+    });
+  });
+
+  it("sends the holder to rotation when the mover had no moto", () => {
+    expect(plan("anna", "m1")).toEqual({
+      ok: true, kind: "swap", otherAppointmentId: "mario", otherNextVehicleId: null, otherBlockedVehicleId: null,
+    });
+  });
+
+  it("refuses a transmission mismatch", () => {
+    const auto: MotoSeat[] = [{ appointmentId: "x", vehicleId: null, license: { licenseCategory: "A2", transmission: "automatic" } }];
+    expect(planMotoChange({ fleet, seats: auto, appointmentId: "x", vehicleId: "m1" })).toEqual({ ok: false, reason: "incompatible" });
+  });
+});
+
+describe("motoChoicesForSeat", () => {
+  const fleet: FleetVehicle[] = [moto("m2", "A2"), moto("z1", "A"), moto("b1", "A2"), moto("m1", "A2"), moto("k1", "A1")];
+  const seats: MotoSeat[] = [
+    { appointmentId: "mario", vehicleId: "m1", license: { licenseCategory: "A2", transmission: "manual" } },
+    { appointmentId: "luca", vehicleId: "m2", license: { licenseCategory: "A", transmission: "manual" } },
+    { appointmentId: "giulia", vehicleId: "k1", license: { licenseCategory: "A1", transmission: "manual" } },
+  ];
+
+  it("orders current, free, then taken, and lists incompatible motos", () => {
+    const res = motoChoicesForSeat({ fleet, seats, appointmentId: "mario" });
+    expect(res.choices).toEqual([
+      { vehicleId: "m1", state: "current", holderAppointmentId: "mario" },
+      { vehicleId: "b1", state: "free", holderAppointmentId: null },
+      { vehicleId: "m2", state: "taken", holderAppointmentId: "luca" },
+      { vehicleId: "k1", state: "taken", holderAppointmentId: "giulia" },
+    ]);
+    expect(res.incompatibleVehicleIds).toEqual(["z1"]);
   });
 });

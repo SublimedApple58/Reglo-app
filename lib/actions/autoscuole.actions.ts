@@ -94,6 +94,9 @@ import {
   instructorCanUseVehicle,
   validateMotoGroupSetup,
   MOTO_GROUP_SETUP_MESSAGES,
+  planMotoChange,
+  MOTO_CHANGE_MESSAGES,
+  type MotoSeat,
   type FleetVehicle,
 } from "@/lib/autoscuole/group-moto";
 import { findFreeGroupFollowCar, NO_FREE_FOLLOW_CAR_MESSAGE } from "@/lib/autoscuole/group-follow-assign";
@@ -11657,6 +11660,23 @@ export async function getGroupLesson(groupLessonId: string) {
       }
     }
 
+    // REG-636 — the license each participant pursues, so the staff's moto
+    // picker offers only compatible fleet motos. Staff-only (moto groups).
+    const studentLicenses = new Map<string, { licenseCategory: string | null; transmission: string | null }>();
+    if (isStaff && l.kind === "moto" && l.appointments.length) {
+      const members = await prisma.companyMember.findMany({
+        where: {
+          companyId: membership.companyId,
+          autoscuolaRole: "STUDENT",
+          userId: { in: l.appointments.map((a) => a.studentId).filter((id): id is string => Boolean(id)) },
+        },
+        select: { userId: true, licenseCategory: true, transmission: true },
+      });
+      for (const m of members) {
+        studentLicenses.set(m.userId, { licenseCategory: m.licenseCategory, transmission: m.transmission });
+      }
+    }
+
     return {
       success: true as const,
       data: {
@@ -11699,6 +11719,8 @@ export async function getGroupLesson(groupLessonId: string) {
               vehicleId: null,
               vehicleName: null,
               licenseCategory: null,
+              studentLicenseCategory: null,
+              studentTransmission: null,
             };
           }
           return {
@@ -11719,10 +11741,149 @@ export async function getGroupLesson(groupLessonId: string) {
             vehicleId: a.vehicle?.id ?? null,
             vehicleName: a.vehicle?.name ?? null,
             licenseCategory: a.vehicle?.licenseCategory ?? null,
+            // REG-636 — the student's own license (staff, moto groups only).
+            studentLicenseCategory: studentLicenses.get(a.studentId!)?.licenseCategory ?? null,
+            studentTransmission: studentLicenses.get(a.studentId!)?.transmission ?? null,
           };
         }),
       },
     };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// REG-636 — change the moto of ONE participant of a moto group lesson.
+//
+// The staff picks any fleet moto serving the student's license, or rotation
+// (`vehicleId: null`). A moto already held by a sibling is a SWAP: the sibling
+// takes the mover's moto if their license allows it, otherwise goes to
+// rotation. The client previews the swap with the same pure `planMotoChange`
+// and must echo `swapWithAppointmentId`; the server recomputes the plan under
+// the group row lock and refuses if it no longer matches (someone else changed
+// the roster in between). No notification: the student just sees the new moto.
+// ---------------------------------------------------------------------------
+
+const setGroupLessonParticipantMotoSchema = z.object({
+  groupLessonId: z.string().uuid(),
+  appointmentId: z.string().uuid(),
+  vehicleId: z.string().uuid().nullable(),
+  swapWithAppointmentId: z.string().uuid().nullable().optional(),
+});
+
+/** Rewrite a seat's moto: `vehicleId` + its single role="primary" join row. */
+async function setSeatMoto(
+  tx: Prisma.TransactionClient,
+  appointmentId: string,
+  vehicleId: string | null,
+) {
+  await tx.autoscuolaAppointment.update({ where: { id: appointmentId }, data: { vehicleId } });
+  await tx.autoscuolaAppointmentVehicle.deleteMany({ where: { appointmentId, role: "primary" } });
+  if (vehicleId) {
+    await tx.autoscuolaAppointmentVehicle.create({ data: { appointmentId, vehicleId, role: "primary" } });
+  }
+}
+
+export async function setGroupLessonParticipantMoto(
+  input: z.infer<typeof setGroupLessonParticipantMotoSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = setGroupLessonParticipantMotoSchema.parse(input);
+    const companyId = membership.companyId;
+
+    const isStaff =
+      membership.role === "admin" ||
+      isOwner(membership.autoscuolaRole) ||
+      isInstructor(membership.autoscuolaRole);
+    if (!isStaff) return { success: false as const, message: "Operazione non consentita." };
+
+    const gl = await prisma.autoscuolaGroupLesson.findFirst({
+      where: { id: payload.groupLessonId, companyId },
+      select: {
+        id: true, kind: true, status: true, instructorId: true,
+        coInstructors: { select: { instructorId: true } },
+        fleetVehicles: {
+          select: { vehicle: { select: { id: true, licenseCategory: true, transmission: true } } },
+        },
+      },
+    });
+    if (!gl) return { success: false as const, message: "Guida di gruppo non trovata." };
+    if (gl.kind !== "moto") {
+      return { success: false as const, message: "La moto si sceglie solo nelle guide di gruppo moto." };
+    }
+    if (gl.status !== "scheduled") {
+      return { success: false as const, message: "La guida di gruppo è stata annullata." };
+    }
+
+    // An instructor (non-admin) may only touch their own (or co-led) lessons.
+    if (isInstructor(membership.autoscuolaRole) && membership.role !== "admin") {
+      const ownInstructorId = await resolveOwnInstructorId(companyId, membership.userId);
+      const involved =
+        !!ownInstructorId &&
+        (gl.instructorId === ownInstructorId ||
+          gl.coInstructors.some((c) => c.instructorId === ownInstructorId));
+      if (!involved) {
+        return { success: false as const, message: "Puoi modificare solo le tue guide." };
+      }
+    }
+
+    const fleet: FleetVehicle[] = gl.fleetVehicles.map((f) => f.vehicle);
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        // Same lock as enrolment: the roster's moto map can't move under us.
+        await tx.$queryRaw`SELECT id FROM "AutoscuolaGroupLesson" WHERE id = ${gl.id}::uuid FOR UPDATE`;
+        const seatRows = await tx.autoscuolaAppointment.findMany({
+          where: { groupLessonId: gl.id, status: { in: GROUP_LESSON_ENROLLED_STATUSES } },
+          select: { id: true, studentId: true, vehicleId: true },
+        });
+        const members = await tx.companyMember.findMany({
+          where: {
+            companyId,
+            autoscuolaRole: "STUDENT",
+            userId: { in: seatRows.map((s) => s.studentId).filter((id): id is string => Boolean(id)) },
+          },
+          select: { userId: true, licenseCategory: true, transmission: true },
+        });
+        const licenseByStudent = new Map(members.map((m) => [m.userId, m]));
+        const seats: MotoSeat[] = seatRows.map((s) => {
+          const m = s.studentId ? licenseByStudent.get(s.studentId) : undefined;
+          return {
+            appointmentId: s.id,
+            vehicleId: s.vehicleId,
+            license: { licenseCategory: m?.licenseCategory ?? null, transmission: m?.transmission ?? null },
+          };
+        });
+
+        const plan = planMotoChange({
+          fleet,
+          seats,
+          appointmentId: payload.appointmentId,
+          vehicleId: payload.vehicleId,
+        });
+        if (!plan.ok) throw new Error(MOTO_CHANGE_MESSAGES[plan.reason]);
+        if (plan.kind === "noop") return;
+        if (plan.kind === "swap") {
+          if (!payload.swapWithAppointmentId) {
+            throw new Error("La moto è già assegnata a un altro allievo: conferma lo scambio.");
+          }
+          if (payload.swapWithAppointmentId !== plan.otherAppointmentId) {
+            throw new Error("Nel frattempo le moto sono cambiate: ricarica e riprova.");
+          }
+          await setSeatMoto(tx, plan.otherAppointmentId, plan.otherNextVehicleId);
+        }
+        // A moto the client saw as taken but that is free by now is simply
+        // assigned: nobody else is affected.
+        await setSeatMoto(tx, payload.appointmentId, payload.vehicleId);
+      });
+    } catch (txErr) {
+      return { success: false as const, message: formatError(txErr) };
+    }
+
+    await invalidateAgendaAndPaymentsCache(companyId);
+    return { success: true as const };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }

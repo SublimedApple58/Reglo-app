@@ -34,10 +34,11 @@ import {
   updateAutoscuolaAppointmentDetails,
   setGroupLessonSeatOutcome,
   markGroupLessonAllPresent,
+  setGroupLessonParticipantMoto,
 } from "@/lib/actions/autoscuole.actions";
 import { inviteToGroupLesson } from "@/lib/actions/autoscuole-availability.actions";
 import { matchesPersonSearch } from "@/lib/autoscuole/people-search";
-import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
+import { instructorCanUseVehicle, planMotoChange, MOTO_CHANGE_MESSAGES, type MotoChangePlan, type MotoSeat } from "@/lib/autoscuole/group-moto";
 import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, motoLessonTypeLabel, asMotoLessonType, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
 import { MOTO_LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,7 @@ type ResourceOption = { id: string; name: string };
 import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
 import { formatStoredName, storedNameInitials } from "@/lib/autoscuole/student-name-order";
 import { CoInstructorPicker } from "@/components/pages/Autoscuole/CoInstructorPicker";
+import { GroupMotoTrigger, GroupMotoSwapConfirm, describeMotoSwap, firstStudentName, type FleetMoto } from "./GroupMotoPicker";
 
 type VehicleWithLicense = {
   id: string;
@@ -86,6 +88,9 @@ type GroupLessonDetail = {
     vehicleId?: string | null;
     vehicleName?: string | null;
     licenseCategory?: string | null;
+    /** REG-636 — the license the student pursues (staff, moto groups). */
+    studentLicenseCategory?: string | null;
+    studentTransmission?: string | null;
   }[];
 };
 
@@ -290,6 +295,7 @@ export function GroupLessonManageDialog({
       setEligible([]);
       setConfirmCancel(false);
       setNoteEditing(null);
+      setMotoSwap(null);
       setEditingField(null);
       setSidePanel(null);
       setAddSearch("");
@@ -364,6 +370,35 @@ export function GroupLessonManageDialog({
     [lesson],
   );
 
+  // REG-636 — per-participant moto (moto groups): the seats as the pure
+  // planner sees them, the displayed names, and the pending swap confirm.
+  const motoFleet: FleetMoto[] = React.useMemo(() => lesson?.fleet ?? [], [lesson]);
+  const motoSeats: MotoSeat[] = React.useMemo(
+    () =>
+      (lesson?.participants ?? []).map((p) => ({
+        appointmentId: p.appointmentId,
+        vehicleId: p.vehicleId ?? null,
+        license: { licenseCategory: p.studentLicenseCategory ?? null, transmission: p.studentTransmission ?? null },
+      })),
+    [lesson],
+  );
+  const displayNames = React.useMemo(
+    () =>
+      new Map(
+        (lesson?.participants ?? []).map((p) => [
+          p.appointmentId,
+          p.studentName ? formatStoredName(p.studentName, nameOrder) : "Allievo",
+        ]),
+      ),
+    [lesson, nameOrder],
+  );
+  const [motoSwap, setMotoSwap] = React.useState<{
+    appointmentId: string;
+    vehicleId: string;
+    plan: Extract<MotoChangePlan, { kind: "swap" }>;
+  } | null>(null);
+  const [motoSavingId, setMotoSavingId] = React.useState<string | null>(null);
+
   const run = async (fn: () => Promise<{ success: boolean; message?: string }>, okMsg: string) => {
     setBusy(true);
     try {
@@ -378,6 +413,37 @@ export function GroupLessonManageDialog({
     } finally {
       setBusy(false);
     }
+  };
+
+  const saveMoto = async (appointmentId: string, vehicleId: string | null, swapWithAppointmentId: string | null) => {
+    if (!groupLessonId) return;
+    setMotoSavingId(appointmentId);
+    try {
+      const ok = await run(
+        () => setGroupLessonParticipantMoto({ groupLessonId, appointmentId, vehicleId, swapWithAppointmentId }),
+        swapWithAppointmentId ? "Moto scambiate." : "Moto aggiornata.",
+      );
+      if (ok) {
+        setMotoSwap(null);
+        reload(true);
+      }
+    } finally {
+      setMotoSavingId(null);
+    }
+  };
+  const handlePickMoto = (appointmentId: string, vehicleId: string | null) => {
+    const plan = planMotoChange({ fleet: motoFleet, seats: motoSeats, appointmentId, vehicleId });
+    if (!plan.ok) {
+      toast.error({ description: MOTO_CHANGE_MESSAGES[plan.reason] });
+      return;
+    }
+    if (plan.kind === "noop") return;
+    if (plan.kind === "swap" && vehicleId) {
+      setMotoSwap({ appointmentId, vehicleId, plan });
+      return;
+    }
+    setMotoSwap(null);
+    void saveMoto(appointmentId, vehicleId, null);
   };
 
   const handleRemove = async (studentId: string) => {
@@ -815,9 +881,9 @@ export function GroupLessonManageDialog({
                 Nessun iscritto. Aggiungi un allievo o invia gli inviti.
               </p>
             ) : (
-              <div className="rounded-md border-[1.5px] border-[#ededed]">
+              <div data-testid="group-roster" className="rounded-md border-[1.5px] border-[#ededed]">
                 {lesson.participants.map((p, idx) => (
-                  <div key={p.appointmentId} className={cn("px-4 py-3", idx > 0 && "border-t border-[#f0f0f0]")}>
+                  <div key={p.appointmentId} data-testid={`group-seat-${p.appointmentId}`} className={cn("px-4 py-3", idx > 0 && "border-t border-[#f0f0f0]")}>
                     <div className="flex items-center justify-between gap-2">
                       <span className="flex min-w-0 items-center gap-3">
                         <UserPhotoCircle userId={p.studentId} size={36}>
@@ -828,16 +894,15 @@ export function GroupLessonManageDialog({
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-semibold text-foreground">{p.studentName ? formatStoredName(p.studentName, nameOrder) : "Allievo"}</span>
                           {isMoto ? (
-                            <span className="block text-[12px] font-medium text-[#929292]">
-                              {p.vehicleName ? (
-                                <>
-                                  {p.vehicleName}
-                                  {p.licenseCategory ? ` · ${p.licenseCategory}` : ""}
-                                </>
-                              ) : (
-                                "Moto a rotazione"
-                              )}
-                            </span>
+                            <GroupMotoTrigger
+                              appointmentId={p.appointmentId}
+                              fleet={motoFleet}
+                              seats={motoSeats}
+                              displayNames={displayNames}
+                              saving={motoSavingId === p.appointmentId}
+                              disabled={busy}
+                              onPick={(vehicleId) => handlePickMoto(p.appointmentId, vehicleId)}
+                            />
                           ) : null}
                         </span>
                       </span>
@@ -862,6 +927,31 @@ export function GroupLessonManageDialog({
                         </button>
                       </div>
                     </div>
+                    {/* REG-636 — conferma scambio moto, dentro la riga. */}
+                    {isMoto && motoSwap?.appointmentId === p.appointmentId ? (() => {
+                      const picked = motoFleet.find((m) => m.id === motoSwap.vehicleId);
+                      const other = lesson.participants.find((o) => o.appointmentId === motoSwap.plan.otherAppointmentId);
+                      if (!picked || !other) return null;
+                      const moverName = displayNames.get(p.appointmentId) ?? "Allievo";
+                      const otherName = displayNames.get(other.appointmentId) ?? "Allievo";
+                      return (
+                        <GroupMotoSwapConfirm
+                          moverName={moverName}
+                          otherName={otherName}
+                          description={describeMotoSwap({
+                            plan: motoSwap.plan,
+                            moverName: firstStudentName(moverName),
+                            otherName: firstStudentName(otherName),
+                            pickedMoto: picked,
+                            fleet: motoFleet,
+                            otherLicenseCategory: other.studentLicenseCategory ?? null,
+                          })}
+                          busy={motoSavingId === p.appointmentId}
+                          onConfirm={() => saveMoto(p.appointmentId, motoSwap.vehicleId, motoSwap.plan.otherAppointmentId)}
+                          onCancel={() => setMotoSwap(null)}
+                        />
+                      );
+                    })() : null}
                     {/* Presenza: tint (teal auto / arancio moto) = presente,
                         grigio = assente, nessuno = da confermare. */}
                     <div className="mt-2.5 inline-flex items-center rounded-full bg-[#f4f4f5] p-0.5">
