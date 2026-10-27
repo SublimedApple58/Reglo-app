@@ -264,8 +264,10 @@ test.describe("REG-636 moto dei partecipanti nei gruppi moto", () => {
     await shot(page, "web-swap.png", [page.getByTestId(`group-seat-${ctx.seats.elena}`)]);
     await confirm.getByRole("button", { name: "Scambia" }).click();
     await expect(confirm).toBeHidden({ timeout: 15_000 });
-    await expect(page.getByTestId(`moto-trigger-${ctx.seats.elena}`)).toContainText("Yamaha MT-07");
-    await expect(page.getByTestId(`moto-trigger-${ctx.seats.gino}`)).toContainText("Honda CB");
+    // Quando la conferma sparisce il roster è GIÀ ricaricato: niente finestra
+    // in cui i selettori mostrano le moto vecchie (bug visto su staging).
+    await expect(page.getByTestId(`moto-trigger-${ctx.seats.elena}`)).toContainText("Yamaha MT-07", { timeout: 300 });
+    await expect(page.getByTestId(`moto-trigger-${ctx.seats.gino}`)).toContainText("Honda CB", { timeout: 300 });
     expect(await motoOf(page.request, ctx)).toEqual({ elena: ctx.motos.yamaha, gino: ctx.motos.honda, dario: ctx.motos.aprilia });
 
     // Elena prende l'Aprilia di Dario: Dario (A1) non può guidare la Yamaha (A2).
