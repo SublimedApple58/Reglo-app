@@ -984,7 +984,7 @@ export function AutoscuoleStudentsPage({
   const companyForRoad = useAtomValueRoad(companyAtomRoad);
   const roadEnabled = isRoadEnabled(companyForRoad?.services ?? null);
   const [roadPanelSessionId, setRoadPanelSessionId] = React.useState<string | null>(null);
-  const studentRoad = useStudentRoad(selectedStudentId, roadEnabled && drawerTab === "lessons");
+  const studentRoad = useStudentRoad(selectedStudentId, roadEnabled && drawerTab === "notes");
   React.useEffect(() => {
     setRoadPanelSessionId(null);
   }, [selectedStudentId, drawerTab]);
@@ -3312,15 +3312,6 @@ export function AutoscuoleStudentsPage({
 
   const renderPanelLessons = () => {
     if (!register) return null;
-    if (roadPanelSessionId) {
-      return (
-        <StudentRoadPanel
-          sessionId={roadPanelSessionId}
-          backLabel={`Guide di ${[register.student?.firstName, register.student?.lastName].filter(Boolean).join(" ") || "allievo"}`}
-          onBack={() => setRoadPanelSessionId(null)}
-        />
-      );
-    }
     // REG-584: ordine cronologico puro. Prima le guide da pagare venivano
     // portate in testa: con il filtro "Da pagare" qui accanto era un doppione e
     // spezzava la sequenza delle date, che è il modo in cui si legge lo storico.
@@ -3615,12 +3606,6 @@ export function AutoscuoleStudentsPage({
                   creditApplied={lesson.creditApplied}
                   lessonLabel={`${startDate.toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" })} · ${startDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`}
                 />
-                {studentRoad.get(lesson.id) ? (
-                  <StudentRoadStrip
-                    item={studentRoad.get(lesson.id)!}
-                    onOpen={() => setRoadPanelSessionId(studentRoad.get(lesson.id)!.id)}
-                  />
-                ) : null}
               </div>
             </div>
           );
@@ -3641,6 +3626,17 @@ export function AutoscuoleStudentsPage({
 
   const renderPanelNotes = () => {
     if (!register) return null;
+    // REG-638: il percorso Road sta nell'andamento della guida (tab «Note»),
+    // non nel tab «Guide», che resta contabile (stati, da pagare, pagata).
+    if (roadPanelSessionId) {
+      return (
+        <StudentRoadPanel
+          sessionId={roadPanelSessionId}
+          backLabel={`Note di ${[register.student?.firstName, register.student?.lastName].filter(Boolean).join(" ") || "allievo"}`}
+          onBack={() => setRoadPanelSessionId(null)}
+        />
+      );
+    }
     if (!register.lessons.length) {
       return (
         <div className="pt-8 text-center">
@@ -3856,6 +3852,12 @@ export function AutoscuoleStudentsPage({
                     </button>
                   </div>
                 )}
+                {studentRoad.get(lesson.id) ? (
+                  <StudentRoadStrip
+                    item={studentRoad.get(lesson.id)!}
+                    onOpen={() => setRoadPanelSessionId(studentRoad.get(lesson.id)!.id)}
+                  />
+                ) : null}
               </div>
             </div>
           );
