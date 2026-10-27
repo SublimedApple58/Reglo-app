@@ -961,7 +961,8 @@ export async function getRoadFreeStartOptions() {
     const { durations, defaultDuration } = await freeStartDurations(ctx.companyId, instructorId, ctx.limits);
     const windowEnd = new Date(now.getTime() + defaultDuration * 60 * 1000);
 
-    const [vehicles, busyRows, preferred, recent, current] = await Promise.all([
+    const day = romeDayBounds();
+    const [vehicles, busyRows, preferred, recent, current, todayRows] = await Promise.all([
       prisma.autoscuolaVehicle.findMany({
         where: {
           companyId: ctx.companyId,
@@ -997,6 +998,16 @@ export async function getRoadFreeStartOptions() {
         select: { vehicleId: true, student: { select: { id: true, name: true } } },
       }),
       currentOwnLesson(ctx, instructorId, windowEnd),
+      prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId: ctx.companyId,
+          instructorId,
+          startsAt: { gte: day.start, lt: day.end },
+          status: { notIn: ["cancelled", "proposal"] },
+        },
+        orderBy: { startsAt: "asc" },
+        select: { startsAt: true },
+      }),
     ]);
 
     const busy = new Set<string>();
@@ -1039,6 +1050,9 @@ export async function getRoadFreeStartOptions() {
       defaultVehicleId: pick?.id ?? null,
       recentStudents,
       currentLesson: current ? lessonDTO(current) : null,
+      // Per il pannello «Pronto a partire?» della tab Road.
+      todayCount: todayRows.length,
+      nextLessonAt: todayRows.find((r) => r.startsAt > now)?.startsAt.toISOString() ?? null,
     });
   } catch (error) {
     return fail(formatError(error));
