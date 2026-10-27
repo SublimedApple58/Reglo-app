@@ -207,3 +207,109 @@ export const validateMotoGroupSetup = (args: {
 
   return null;
 };
+
+/**
+ * REG-636 — a participant's seat as seen by the per-participant moto picker:
+ * its current moto (null = "a rotazione") and the license the student pursues.
+ */
+export type MotoSeat = {
+  appointmentId: string;
+  vehicleId: string | null;
+  license: StudentLicense;
+};
+
+/**
+ * Outcome of moving a participant onto a given moto (or onto rotation with
+ * `vehicleId: null`) inside a moto group, computed the same way by the web
+ * preview, the mobile preview and the server transaction:
+ * - `noop`   — the seat already has that moto;
+ * - `assign` — the moto is free (or rotation): only this seat changes;
+ * - `swap`   — the moto belongs to `otherAppointmentId`, who takes the mover's
+ *   current moto when their license allows it, otherwise goes to rotation
+ *   (`otherNextVehicleId: null`). `otherBlockedVehicleId` is the mover's moto
+ *   the other could NOT ride (null when the mover had none), so the confirm
+ *   can say why.
+ * Errors: the moto is not in the group fleet, or doesn't serve the license.
+ */
+export type MotoChangePlan =
+  | { ok: false; reason: "seat_not_found" | "not_in_fleet" | "incompatible" }
+  | { ok: true; kind: "noop" | "assign" }
+  | {
+      ok: true;
+      kind: "swap";
+      otherAppointmentId: string;
+      otherNextVehicleId: string | null;
+      otherBlockedVehicleId: string | null;
+    };
+
+export const MOTO_CHANGE_MESSAGES: Record<"seat_not_found" | "not_in_fleet" | "incompatible", string> = {
+  seat_not_found: "Allievo non trovato in questa guida.",
+  not_in_fleet: "La moto non fa parte di questa guida di gruppo.",
+  incompatible: "La patente dell'allievo non è compatibile con questa moto.",
+};
+
+export const planMotoChange = (args: {
+  fleet: FleetVehicle[];
+  seats: MotoSeat[];
+  appointmentId: string;
+  vehicleId: string | null;
+}): MotoChangePlan => {
+  const seat = args.seats.find((s) => s.appointmentId === args.appointmentId);
+  if (!seat) return { ok: false, reason: "seat_not_found" };
+  if (seat.vehicleId === args.vehicleId) return { ok: true, kind: "noop" };
+  if (args.vehicleId === null) return { ok: true, kind: "assign" };
+
+  const moto = args.fleet.find((m) => m.id === args.vehicleId);
+  if (!moto) return { ok: false, reason: "not_in_fleet" };
+  if (!vehicleServesLicense(moto, seat.license)) return { ok: false, reason: "incompatible" };
+
+  const holder = args.seats.find(
+    (s) => s.appointmentId !== seat.appointmentId && s.vehicleId === args.vehicleId,
+  );
+  if (!holder) return { ok: true, kind: "assign" };
+
+  const moverMoto = seat.vehicleId ? args.fleet.find((m) => m.id === seat.vehicleId) ?? null : null;
+  const holderCanRide = moverMoto ? vehicleServesLicense(moverMoto, holder.license) : false;
+  return {
+    ok: true,
+    kind: "swap",
+    otherAppointmentId: holder.appointmentId,
+    otherNextVehicleId: holderCanRide ? moverMoto!.id : null,
+    otherBlockedVehicleId: moverMoto && !holderCanRide ? moverMoto.id : null,
+  };
+};
+
+/**
+ * The motos a participant may pick: fleet motos serving their license, in the
+ * order the picker shows them — current moto, free motos, motos held by a
+ * sibling (swap) — plus how many fleet motos were left out as incompatible.
+ */
+export const motoChoicesForSeat = (args: {
+  fleet: FleetVehicle[];
+  seats: MotoSeat[];
+  appointmentId: string;
+}): {
+  choices: Array<{ vehicleId: string; state: "current" | "free" | "taken"; holderAppointmentId: string | null }>;
+  incompatibleVehicleIds: string[];
+} => {
+  const seat = args.seats.find((s) => s.appointmentId === args.appointmentId);
+  if (!seat) return { choices: [], incompatibleVehicleIds: [] };
+  const current: ReturnType<typeof motoChoicesForSeat>["choices"] = [];
+  const free: typeof current = [];
+  const taken: typeof current = [];
+  const incompatibleVehicleIds: string[] = [];
+  for (const moto of args.fleet) {
+    if (!vehicleServesLicense(moto, seat.license)) {
+      incompatibleVehicleIds.push(moto.id);
+      continue;
+    }
+    if (moto.id === seat.vehicleId) {
+      current.push({ vehicleId: moto.id, state: "current", holderAppointmentId: seat.appointmentId });
+      continue;
+    }
+    const holder = args.seats.find((s) => s.appointmentId !== seat.appointmentId && s.vehicleId === moto.id);
+    if (holder) taken.push({ vehicleId: moto.id, state: "taken", holderAppointmentId: holder.appointmentId });
+    else free.push({ vehicleId: moto.id, state: "free", holderAppointmentId: null });
+  }
+  return { choices: [...current, ...free, ...taken], incompatibleVehicleIds };
+};
