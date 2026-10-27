@@ -825,6 +825,10 @@ const filterStudentsBySchool = <T extends { consorzioSchoolId?: string | null }>
  * anche la richiesta al consorzio (REG-429) — un secondo selettore scritto a
  * parte sarebbe un secondo posto dove sbagliare.
  */
+
+/** REG-638 Road libero: guida avviata da Reglo Road senza guida in agenda. */
+const isRoadLesson = (item: unknown) => (item as { bookingSource?: string | null }).bookingSource === "road";
+
 export function StudentSearchSelect({
   students,
   instructors,
@@ -5242,7 +5246,7 @@ export function AutoscuoleAgendaPage({
                                       {sharedWithInstr.length ? <Link2 className="size-2.5 shrink-0" strokeWidth={2.6} aria-hidden /> : null}
                                       <span className="truncate">{isExamInstr ? "🎓 " : ""}{isGroupLessonInstr ? item.student.firstName : formatStudentNameShort(item.student, studentNameOrder)}</span>
                                     </div>
-                                    <div className={cn("text-[8px] truncate", isExamInstr ? "text-violet-600" : isGroupLessonInstr ? glTintInstr.time : "text-muted-foreground")}>{isExamInstr ? "Esame · " : isGroupLessonInstr ? `${glTintInstr.label} · ` : ""}{formatTimeRange(start, end)}{isCompact && licenseTag ? ` · ${licenseTag}` : ""}{isCompact && vehicleLabelInstr ? ` · ${vehicleLabelInstr}` : ""}</div>
+                                    <div className={cn("text-[8px] truncate", isExamInstr ? "text-violet-600" : isGroupLessonInstr ? glTintInstr.time : "text-muted-foreground")}>{isExamInstr ? "Esame · " : isGroupLessonInstr ? `${glTintInstr.label} · ` : ""}{isRoadLesson(item) ? "Road · " : ""}{formatTimeRange(start, end)}{isCompact && licenseTag ? ` · ${licenseTag}` : ""}{isCompact && vehicleLabelInstr ? ` · ${vehicleLabelInstr}` : ""}</div>
                                     {!isCompact && licenseTag ? (
                                       <div className={cn("text-[9px] font-semibold truncate", isExamInstr ? "text-violet-700" : "text-foreground/70")}>Patente {licenseTag}</div>
                                     ) : null}
@@ -5850,6 +5854,7 @@ export function AutoscuoleAgendaPage({
                                     </Badge>
                                   </div>
                                   <div className={cn("truncate whitespace-nowrap text-[11px]", isExamDay ? "text-violet-600" : isGroupLessonDay ? glTintDay.time : "text-muted-foreground")}>
+                                    {isRoadLesson(item) ? "Road · " : ""}
                                     {formatTimeRange(start, end)}
                                     {!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}
                                     {!isExamDay && !isGroupLessonDay ? ` · ${item.type}` : ""}

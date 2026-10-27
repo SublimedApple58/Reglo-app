@@ -78,3 +78,13 @@ export function drivingSeconds(startedAt: Date, end: Date, lessonStartsAt?: Date
   const from = lessonStartsAt && lessonStartsAt < startedAt ? lessonStartsAt : startedAt;
   return Math.max(0, Math.round((end.getTime() - from.getTime()) / 1000));
 }
+
+/**
+ * Road libero: fine reale di una guida nata da Road. Arrotondata per eccesso ai
+ * 5 minuti, almeno 5 minuti dopo l'inizio, mai oltre la fine prenotata.
+ */
+export function freeLessonEnd(startsAt: Date, bookedEnd: Date, endedAt: Date): Date {
+  const step = 5 * 60 * 1000;
+  const rounded = Math.ceil(endedAt.getTime() / step) * step;
+  return new Date(Math.min(bookedEnd.getTime(), Math.max(rounded, startsAt.getTime() + step)));
+}

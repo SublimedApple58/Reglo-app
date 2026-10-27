@@ -1326,6 +1326,8 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           locationId: true,
           groupLessonId: true,
           motoLessonType: true,
+          // REG-638 Road libero: il blocco della guida nata da Road porta il segno «Road».
+          bookingSource: true,
           // Economia dell'annullamento (REG-587): senza questi campi il dialogo
           // "Annulla guida" dell'agenda vedeva `penaltyCutoffAt` sempre null e
           // quindi NESSUN annullamento risultava tardivo — il ramo con la scelta
@@ -1668,6 +1670,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           locationId: gl.locationId,
           groupLessonId: gl.id,
           motoLessonType: null,
+          bookingSource: BOOKING_SOURCE.groupLesson,
           // Una guida di gruppo vuota non è un esame: nessun esito, mai.
           examOutcome: null,
           cancellationKind: null,

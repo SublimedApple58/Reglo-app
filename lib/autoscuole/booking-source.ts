@@ -17,6 +17,7 @@
  *  - group_lesson  → not counted as a normal guida cap.
  *  - exam          → exempt (exams are not driving lessons).
  *  - voice         → school-operated phone assistant (treated like staff).
+ *  - road          → instructor started it from Reglo Road (staff, may confirm past the warning).
  */
 export const BOOKING_SOURCE = {
   studentSelf: "student_self",
@@ -29,6 +30,8 @@ export const BOOKING_SOURCE = {
   exam: "exam",
   /** Guida creata dal consorzio accettando una Richiesta guida di un'autoscuola consorziata. */
   consortiumRequest: "consortium_request",
+  /** REG-638 Road libero: guida avviata da Reglo Road senza guida in agenda (staff). */
+  road: "road",
 } as const;
 
 export type BookingSource = (typeof BOOKING_SOURCE)[keyof typeof BOOKING_SOURCE];

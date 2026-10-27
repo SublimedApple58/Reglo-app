@@ -99,6 +99,8 @@ export type ServiceLimits = {
    * Vedi docs/features/reglo-road.md.
    */
   roadEnabled?: boolean;
+  /** REG-638 Road libero: l'istruttore avvia da Road una guida non in agenda. Nasce spento. */
+  roadFreeStartEnabled?: boolean;
   /**
    * Modalità "solo Segretaria": la company ha attivato SOLO il modulo
    * segreteria vocale AI, non l'intera suite autoscuole. Quando true la web

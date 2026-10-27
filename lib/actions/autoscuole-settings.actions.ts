@@ -472,6 +472,8 @@ const autoscuolaSettingsPatchSchema = z
     cancelledLessonBlocks: z.boolean().optional(),
     // Nome del veicolo nei blocchi guida dell'agenda (REG-633).
     agendaShowVehicle: z.boolean().optional(),
+    // REG-638 Road libero: avviare una guida da Road senza guida in agenda.
+    roadFreeStartEnabled: z.boolean().optional(),
     // REG-638 Reglo Road: segnalazioni personalizzate (oltre alla lista base).
     roadCustomMarkers: z
       .array(
@@ -703,6 +705,8 @@ export type AutoscuolaSettingsData = {
   roadEnabled: boolean;
   /** REG-638: segnalazioni personalizzate dell'autoscuola. */
   roadCustomMarkers: RoadCustomMarker[];
+  /** REG-638 Road libero: «Avvia guida» da Road senza guida in agenda. Nasce SPENTO. */
+  roadFreeStartEnabled: boolean;
   agendaInstructorOrder: string[];
   studentNameOrder: StudentNameOrder;
 };
@@ -1114,6 +1118,8 @@ const resolveAutoscuolaSettingsData = async (
     // REG-638: modulo Road, nasce SPENTO e si accende solo dal backoffice.
     roadEnabled: limits.roadEnabled === true,
     roadCustomMarkers: parseRoadCustomMarkers(limits.roadCustomMarkers),
+    // REG-638 Road libero: nasce SPENTO.
+    roadFreeStartEnabled: limits.roadFreeStartEnabled === true,
     agendaInstructorOrder: asAgendaInstructorOrder(limits.agendaInstructorOrder),
     studentNameOrder: asStudentNameOrder(limits.studentNameOrder),
   };
@@ -1839,6 +1845,7 @@ export async function updateAutoscuolaSettings(
         payload.cancelledLessonBlocks ?? limits.cancelledLessonBlocks === true,
       agendaShowVehicle: payload.agendaShowVehicle ?? limits.agendaShowVehicle === true,
       roadCustomMarkers: payload.roadCustomMarkers ?? parseRoadCustomMarkers(limits.roadCustomMarkers),
+      roadFreeStartEnabled: payload.roadFreeStartEnabled ?? limits.roadFreeStartEnabled === true,
       studentNameOrder: asStudentNameOrder(
         payload.studentNameOrder ?? limits.studentNameOrder,
       ),

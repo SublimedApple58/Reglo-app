@@ -89,7 +89,7 @@ export const SOURCE_BUCKETS: Array<{
   match: (source: string | null) => boolean;
 }> = [
   { key: "app", label: "App allievo", match: (s) => s === "student_self" },
-  { key: "staff", label: "Staff (agenda)", match: (s) => s === "staff_owner" || s === "staff_instructor" },
+  { key: "staff", label: "Staff (agenda)", match: (s) => s === "staff_owner" || s === "staff_instructor" || s === "road" },
   { key: "gruppo", label: "Guide di gruppo", match: (s) => s === "group_lesson" },
   { key: "esame", label: "Esami", match: (s) => s === "exam" },
   { key: "scambio", label: "Scambi e slot liberati", match: (s) => s === "swap" || s === "slot_fill" },
