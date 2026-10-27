@@ -921,6 +921,9 @@ model AutoscuolaVehicle {
   licenseCategory               String   @default("B")
   /// Transmission: manual | automatic.
   transmission                  String   @default("manual")
+  /// Colore carrozzeria per Reglo Road (REG-638): chiave della palette in
+  /// lib/autoscuole/road/car-colors.ts. Null = tinta dell'istruttore della guida.
+  color                         String?
   createdAt                     DateTime @default(now()) @db.Timestamp(6)
   updatedAt                     DateTime @updatedAt
 

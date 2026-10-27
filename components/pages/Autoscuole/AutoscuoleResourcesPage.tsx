@@ -115,6 +115,8 @@ import {
   triggerEmptySlotNotification,
 } from "@/lib/actions/autoscuole-settings.actions";
 import { cn } from "@/lib/utils";
+import { type CarColorKey, isCarColorKey } from "@/lib/autoscuole/road/car-colors";
+import { VehicleColorField } from "@/components/pages/Autoscuole/road/VehicleColorField";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FadeIn } from "@/components/ui/fade-in";
 
@@ -160,6 +162,7 @@ type VehicleDetail = {
   followsInstructorAvailability: boolean;
   licenseCategory: string;
   transmission: string;
+  color?: string | null;
 };
 
 type VehicleUsageMode = "open" | "pool" | "exclusive";
@@ -601,6 +604,8 @@ export function AutoscuoleResourcesPage({
     React.useState(true);
   const [editVehicleCategory, setEditVehicleCategory] = React.useState<string>("B");
   const [editVehicleTransmission, setEditVehicleTransmission] = React.useState<string>("manual");
+  // Colore carrozzeria per Reglo Road: null = tinta dell'istruttore.
+  const [editVehicleColor, setEditVehicleColor] = React.useState<CarColorKey | null>(null);
   const [savingEditVehicle, setSavingEditVehicle] = React.useState(false);
 
   // ── Dettaglio veicolo inline (proto veic-detail-view): quale veicolo e tab.
@@ -660,6 +665,7 @@ export function AutoscuoleResourcesPage({
           followsInstructorAvailability: item.followsInstructorAvailability ?? true,
           licenseCategory: item.licenseCategory ?? "B",
           transmission: item.transmission ?? "manual",
+          color: item.color ?? null,
         })),
       );
     }
@@ -1405,6 +1411,7 @@ export function AutoscuoleResourcesPage({
     setEditVehicleFollowsAvailability(vehicle.followsInstructorAvailability);
     setEditVehicleCategory(vehicle.licenseCategory ?? "B");
     setEditVehicleTransmission(vehicle.transmission ?? "manual");
+    setEditVehicleColor(isCarColorKey(vehicle.color) ? vehicle.color : null);
   };
 
   const handleSaveEditVehicle = async () => {
@@ -1438,6 +1445,7 @@ export function AutoscuoleResourcesPage({
         editVehicleMode === "exclusive" ? editVehicleFollowsAvailability : false,
       licenseCategory: editVehicleCategory as LicenseCategory,
       transmission: editVehicleTransmission as "manual" | "automatic",
+      ...(roadEnabled ? { color: editVehicleColor } : {}),
     });
     setSavingEditVehicle(false);
     if (!res.success || !res.data) {
@@ -1453,6 +1461,7 @@ export function AutoscuoleResourcesPage({
       followsInstructorAvailability: res.data!.followsInstructorAvailability ?? true,
       licenseCategory: res.data!.licenseCategory ?? "B",
       transmission: res.data!.transmission ?? "manual",
+      color: res.data!.color ?? null,
     };
     setVehicles((prev) =>
       prev.map((v) => (v.id === editVehicle.id ? { ...v, ...nextVehicle } : v)),
@@ -1795,6 +1804,10 @@ export function AutoscuoleResourcesPage({
             </Select>
           </div>
         </div>
+
+        {roadEnabled ? (
+          <VehicleColorField value={editVehicleColor} onChange={setEditVehicleColor} labelClassName={VEIC_LBL} />
+        ) : null}
 
         {/* Modalità di utilizzo: segmented proto + extra per modalità */}
         <div className={cn(VEIC_LBL, "mt-[22px]")}>Modalità di utilizzo</div>

@@ -1,5 +1,6 @@
 "use server";
 
+import { CAR_COLOR_KEYS } from "@/lib/autoscuole/road/car-colors";
 import { randomUUID } from "crypto";
 import { after } from "next/server";
 import { z } from "zod";
@@ -433,6 +434,8 @@ const updateVehicleSchema = z.object({
   // License category + transmission this vehicle serves (Vehicles module).
   licenseCategory: z.enum(LICENSE_CATEGORIES).optional(),
   transmission: z.enum(TRANSMISSIONS).optional(),
+  // Colore carrozzeria per Reglo Road (REG-638): null = tinta dell'istruttore.
+  color: z.enum(CAR_COLOR_KEYS).nullable().optional(),
 });
 
 const adjustStudentLessonCreditsSchema = z.object({
@@ -7594,6 +7597,7 @@ export async function updateAutoscuolaVehicle(
       ...(payload.transmission !== undefined
         ? { transmission: payload.transmission }
         : {}),
+      ...(payload.color !== undefined ? { color: payload.color } : {}),
     };
 
     // No more 1:1 reassign: an instructor may own several exclusive vehicles.

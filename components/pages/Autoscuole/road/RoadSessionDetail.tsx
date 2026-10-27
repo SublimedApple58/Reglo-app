@@ -10,7 +10,7 @@ import type { Marker as MlMarker } from "maplibre-gl";
 import { companyAtom } from "@/atoms/company.store";
 import { getServiceLimits } from "@/lib/services";
 import { roadApi, type RoadDetail } from "@/lib/autoscuole/road/client";
-import { roadMarkerSymbol, ROAD_IMAGES } from "@/lib/autoscuole/road/symbols";
+import { roadCarImages, roadMarkerSymbol, ROAD_IMAGES } from "@/lib/autoscuole/road/symbols";
 import { cn } from "@/lib/utils";
 import {
   addHtmlMarker,
@@ -124,7 +124,7 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
       const prev = coords[Math.max(0, coords.length - 4)];
       const deg = detail.last?.heading ?? (Math.atan2(last[0] - prev[0], last[1] - prev[1]) * 180) / Math.PI;
       const el = htmlElement(
-        `<div class="road-car sel"><div class="halo"></div><div class="body" style="transform:rotate(${deg}deg)"><img src="${ROAD_IMAGES.carTop}" alt=""></div></div>`,
+        `<div class="road-car sel"><div class="halo"></div><div class="body" style="transform:rotate(${deg}deg)"><img src="${roadCarImages(detail.lesson.carColor).top}" alt=""></div></div>`,
       );
       markersRef.current.push(addHtmlMarker(handle, last, el));
     }

@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 
+import { resolveCarColor } from "@/lib/autoscuole/road/car-colors";
 import { prisma } from "@/db/prisma";
 import { requireServiceAccess } from "@/lib/service-access";
 import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
@@ -95,7 +96,7 @@ const appointmentSelect = {
   motoLessonType: true,
   student: { select: { id: true, name: true } },
   instructor: { select: { id: true, name: true, color: true, phone: true, userId: true } },
-  vehicle: { select: { id: true, name: true, plate: true, licenseCategory: true } },
+  vehicle: { select: { id: true, name: true, plate: true, licenseCategory: true, color: true } },
 } satisfies Prisma.AutoscuolaAppointmentSelect;
 type AppointmentRow = Prisma.AutoscuolaAppointmentGetPayload<{ select: typeof appointmentSelect }>;
 
@@ -113,6 +114,8 @@ function lessonDTO(a: AppointmentRow) {
       ? { id: a.instructor.id, name: a.instructor.name, color: a.instructor.color, phone: a.instructor.phone }
       : null,
     vehicle: a.vehicle ? { id: a.vehicle.id, name: a.vehicle.name, plate: a.vehicle.plate } : null,
+    // Chiave della variante colore dell'auto 3D (veicolo → tinta istruttore → bianco).
+    carColor: resolveCarColor(a.vehicle?.color, a.instructor?.color),
   };
 }
 
@@ -675,9 +678,9 @@ export async function getRoadLive() {
       .findMany({
         // v1 solo auto: le moto non compaiono tra le «auto in sede».
         where: { companyId: ctx.companyId, status: { not: "inactive" }, licenseCategory: { notIn: [...MOTO_CATEGORIES] } },
-        select: { id: true, name: true, plate: true },
+        select: { id: true, name: true, plate: true, color: true },
       })
-      .catch(() => [] as { id: string; name: string; plate: string | null }[]);
+      .catch(() => [] as { id: string; name: string; plate: string | null; color: string | null }[]);
     const { end: dayEnd } = romeDayBounds(now);
     const upcoming = await prisma.autoscuolaAppointment.findMany({
       where: {
@@ -699,6 +702,7 @@ export async function getRoadLive() {
         id: v.id,
         name: v.name,
         plate: v.plate,
+        carColor: resolveCarColor(v.color),
         freeUntil: upcoming.find((a) => a.vehicleId === v.id && a.startsAt > now)?.startsAt.toISOString() ?? null,
       }));
 

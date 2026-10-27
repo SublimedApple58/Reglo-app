@@ -102,7 +102,7 @@ export function RoadTodayView({ onOpen }: { onOpen: (sessionId: string) => void 
                   {hhmm(it.startsAt)}
                   <span className="block text-[12.5px] font-normal text-[#6a6a6a]">{hhmm(it.endsAt)}</span>
                 </div>
-                <Car3D tint={tint} label={initials(it.instructor?.name)} />
+                <Car3D color={it.carColor} tint={tint} label={initials(it.instructor?.name)} />
                 <div className="min-w-0">
                   <div className="truncate text-[15px] font-semibold tracking-[-0.2px] text-[#111111]">
                     {it.student?.name ?? "Allievo"}

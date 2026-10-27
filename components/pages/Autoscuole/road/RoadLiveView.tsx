@@ -4,7 +4,7 @@ import * as React from "react";
 import type { Marker as MlMarker } from "maplibre-gl";
 
 import { roadApi, type RoadLive, type RoadLiveSession } from "@/lib/autoscuole/road/client";
-import { roadMarkerSymbol, ROAD_IMAGES } from "@/lib/autoscuole/road/symbols";
+import { roadCarImages, roadMarkerSymbol, ROAD_IMAGES } from "@/lib/autoscuole/road/symbols";
 import { cn } from "@/lib/utils";
 import {
   addHtmlMarker,
@@ -224,7 +224,7 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
       let car = carsRef.current.get(s.id);
       if (!car) {
         const el = htmlElement(
-          `<div class="road-car"><div class="halo"></div><div class="body"><img src="${ROAD_IMAGES.carTop}" alt=""></div><div class="lab"><i></i><span></span></div></div>`,
+          `<div class="road-car"><div class="halo"></div><div class="body"><img src="${roadCarImages(s.lesson.carColor).top}" alt=""></div><div class="lab"><i></i><span></span></div></div>`,
         );
         el.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -237,6 +237,10 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
       } else if (car.pos[0] !== at.pos[0] || car.pos[1] !== at.pos[1]) {
         animateCar(car, at.pos, at.heading);
       }
+      // il veicolo della guida può cambiare: tieni l'auto nel colore giusto
+      const carImg = car.el.querySelector(".body img") as HTMLImageElement;
+      const carSrc = roadCarImages(s.lesson.carColor).top;
+      if (carImg.getAttribute("src") !== carSrc) carImg.setAttribute("src", carSrc);
       const lab = car.el.querySelector(".lab") as HTMLElement;
       (lab.querySelector("i") as HTMLElement).style.background = tint;
       (lab.querySelector("i") as HTMLElement).textContent = initials(s.lesson.instructor?.name);
@@ -360,7 +364,7 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
                         : "border-transparent hover:bg-[#fafafa]",
                     )}
                   >
-                    <Car3D tint={tint} label={initials(s.lesson.instructor?.name)} />
+                    <Car3D color={s.lesson.carColor} tint={tint} label={initials(s.lesson.instructor?.name)} />
                     <div className="min-w-0">
                       <div className="truncate text-[15px] font-semibold tracking-[-0.2px] text-[#111111]">
                         {s.lesson.instructor?.name ?? "Istruttore"}
@@ -404,7 +408,7 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
                     key={v.id}
                     className="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-3 rounded-[20px] py-3 pl-2.5 pr-3.5 opacity-75"
                   >
-                    <Car3D />
+                    <Car3D color={v.carColor} />
                     <div className="min-w-0">
                       <div className="truncate text-[15px] font-semibold tracking-[-0.2px] text-[#111111]">{v.name}</div>
                       <div className="mt-0.5 text-[12.5px] text-[#6a6a6a]">

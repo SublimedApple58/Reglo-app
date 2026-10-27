@@ -6,6 +6,7 @@
  * puntina `f-cus`. Stesse immagini e stessa mappa della mobile.
  */
 import { CUSTOM_KIND_PREFIX, ROAD_BASE_MARKERS, type RoadBaseMarkerKey } from "@/lib/autoscuole/road/catalog";
+import { DEFAULT_CAR_COLOR, isCarColorKey } from "@/lib/autoscuole/road/car-colors";
 
 const ROAD_IMG = "/images/road";
 
@@ -47,7 +48,11 @@ export const ROAD_BASE_SYMBOLS = ROAD_BASE_MARKERS.map((m) => ({
 }));
 
 export const ROAD_IMAGES = {
-  carTop: `${ROAD_IMG}/auto-su.png`,
-  car34: `${ROAD_IMG}/auto-34.png`,
   base: `${ROAD_IMG}/sede.png`,
 } as const;
+
+/** Auto 3D nella variante colore del veicolo (vista dall'alto e 3/4). */
+export function roadCarImages(color: string | null | undefined) {
+  const key = isCarColorKey(color) ? color : DEFAULT_CAR_COLOR;
+  return { top: `${ROAD_IMG}/cars/auto-su-${key}.png`, threeQuarter: `${ROAD_IMG}/cars/auto-34-${key}.png` };
+}

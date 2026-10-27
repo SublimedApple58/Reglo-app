@@ -35,12 +35,12 @@ Tutte rispondono `{ success: true, data } | { success: false, message, code? }` 
 | POST | `/road/sessions/[id]/end` | istruttore | chiude + guida `completed` → `Detail` |
 | GET | `/road/sessions/[id]/track?afterSeq=n` | titolare | `{ lastSeq, points: [[lat,lng,tMs]] }` (solo lotti nuovi) |
 | GET | `/road/appointments/[appointmentId]` | allievo (con setting), istruttore, titolare | `Detail \| null` |
-| GET | `/road/live` | titolare | `{ now, base: {name,lat,lng}\|null, sessions: [Session+{lesson, markerCount, markerKinds, recentMarkers}], atBase: [{id,name,plate,freeUntil}] }` |
+| GET | `/road/live` | titolare | `{ now, base: {name,lat,lng}\|null, sessions: [Session+{lesson, markerCount, markerKinds, recentMarkers}], atBase: [{id,name,plate,carColor,freeUntil}] }` |
 | GET | `/road/today` | titolare | `[Lesson + { road: Session+{markerCount, markerKinds} \| null }]` guide singole in auto di oggi (Europa/Roma) |
 | GET | `/road/history?from&to&instructorId&studentId&cursor&limit` | titolare | `{ items: [Session+{lesson, markerCount, markerKinds}], nextCursor }` |
 
 Tipi:
-- `Lesson` = `{ appointmentId, startsAt, endsAt, status, student: {id,name}|null, instructor: {id,name,color,phone}|null, vehicle: {id,name,plate}|null }` — `phone` serve al «Chiama» del titolare; all'allievo arriva sempre `null`.
+- `Lesson` = `{ appointmentId, startsAt, endsAt, status, student: {id,name}|null, instructor: {id,name,color,phone}|null, vehicle: {id,name,plate}|null, carColor }` — `phone` serve al «Chiama» del titolare; all'allievo arriva sempre `null`. `carColor` = chiave della variante colore dell'auto 3D, già risolta dal server (vedi «Colore delle auto»).
 - `Session` = `{ id, appointmentId, status, startedAt, endedAt, distanceMeters, durationSec, lastSeq, last: {lat,lng,speed,heading,street,at}|null }`
 - `Marker` = `{ id, clientId, kind, label, note, lat, lng, street, recordedAt }`
 - `Detail` = `Session + { lesson, markers: Marker[], track: [[lat,lng,tMs]], evaluation?: { items: [{label, scaleMax, score, notApplicable}], updatedAt } | null }`
@@ -71,3 +71,11 @@ Visibile solo con `isRoadEnabled(services)` (`lib/services.ts`: `roadEnabled ===
 - **Simboli** `lib/autoscuole/road/symbols.ts`: chiave base → `public/images/road/*.png` (stop→s-stop, precedenza→s-prec, distanza→s-dist, velocita→f-vel, semaforo→f-sem, rotonda→f-rot, svolta→f-svo, corsia→f-cor, pedoni→f-ped, specchietti→f-spe, parcheggio→f-par, altro→f-alt, `custom:*`→f-cus). Client tipizzato delle API: `lib/autoscuole/road/client.ts`.
 - **Impostazioni** › «Reglo Road» (`RoadSettingsPane.tsx`, voce con badge «Nuovo» in `AutoscuoleResourcesPage.tsx`, solo con modulo acceso): griglia delle 12 segnalazioni base (sola lettura) e «Le tue segnalazioni» (aggiungi / rinomina / togli, max 12, label max 40, id `crypto.randomUUID().slice(0,8)`), salvataggio immediato con toast. › Prenotazioni e allievi › App allievi: il toggle si chiama «Mostra note e percorsi nell'app allievi».
 - **Dati di prova (solo dev)**: `scripts/seed-reg638-road.ts` (3 guide in corso con percorsi veri di Torino da `scripts/fixtures/reg638-routes.json`, guide di oggi, storico, pagellino; `--drive` muove le auto per ~60 s, `--cleanup` toglie tutto).
+
+## Colore delle auto (2026-10-27)
+
+- **Setting**: `AutoscuolaVehicle.color` (nullable, migrazione `20261031120000_reglo_road_vehicle_color`), campo «Colore» nella scheda veicolo (Impostazioni › Veicoli › Dettagli), visibile solo con Road acceso. Componente `components/pages/Autoscuole/road/VehicleColorField.tsx`, salvato da `updateAutoscuolaVehicle` (`color`: chiave o `null`).
+- **Palette**: `lib/autoscuole/road/car-colors.ts` — 10 chiavi (bianco, argento, grigio, nero, rosso, arancio, giallo, verde, azzurro, blu). Le chiavi sono contratto con la mobile.
+- **Risoluzione** (`resolveCarColor`): colore del veicolo → variante più vicina alla tinta dell'istruttore (solo varianti colorate) → bianco. Lato server in `lessonDTO` e in `atBase`.
+- **Immagini**: varianti pre-generate (niente filtri CSS) in `public/images/road/cars/auto-{su,34}-<chiave>.png`; helper web `roadCarImages(key)` in `symbols.ts`. Mobile: `assets/road/cars/`, stesse chiavi. Generate ricolorando solo la carrozzeria dell'auto bianca (ombre e riflessi conservati; vetri, gomme, cerchioni e insegna intatti).
+- **Icona nav «Road»**: `public/images/nav/road-3d.png` = segnaposto rosso su tratto di strada (Gemini, stile icone 3D della barra), 128px.

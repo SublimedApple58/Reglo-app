@@ -145,7 +145,7 @@ export function RoadHistoryView({ onOpen }: { onOpen: (sessionId: string) => voi
                   {s.endedAt ? ` – ${hhmm(s.endedAt)}` : ""}
                 </span>
               </div>
-              <Car3D tint={instructorTint(s.lesson.instructor)} label={initials(s.lesson.instructor?.name)} />
+              <Car3D color={s.lesson.carColor} tint={instructorTint(s.lesson.instructor)} label={initials(s.lesson.instructor?.name)} />
               <div className="min-w-0">
                 <div className="truncate text-[15px] font-semibold tracking-[-0.2px] text-[#111111]">
                   {s.lesson.student?.name ?? "Allievo"}

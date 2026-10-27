@@ -4,6 +4,8 @@
  * `docs/features/reglo-road.md` (sezione API).
  */
 
+import type { CarColorKey } from "@/lib/autoscuole/road/car-colors";
+
 export type RoadLesson = {
   appointmentId: string;
   startsAt: string;
@@ -12,6 +14,8 @@ export type RoadLesson = {
   student: { id: string; name: string | null } | null;
   instructor: { id: string; name: string; color: string | null; phone?: string | null } | null;
   vehicle: { id: string; name: string; plate: string | null } | null;
+  /** Chiave variante colore dell'auto 3D (vedi car-colors.ts). */
+  carColor: CarColorKey;
 };
 
 export type RoadSessionStatus = "active" | "completed" | "abandoned";
@@ -59,7 +63,7 @@ export type RoadLive = {
   now: string;
   base: { name: string; lat: number; lng: number } | null;
   sessions: RoadLiveSession[];
-  atBase: Array<{ id: string; name: string; plate: string | null; freeUntil: string | null }>;
+  atBase: Array<{ id: string; name: string; plate: string | null; carColor: CarColorKey; freeUntil: string | null }>;
 };
 
 export type RoadTodayItem = RoadLesson & { road: (RoadSession & RoadMarkerSummary) | null };

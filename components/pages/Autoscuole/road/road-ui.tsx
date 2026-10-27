@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { roadMarkerSymbol, ROAD_IMAGES } from "@/lib/autoscuole/road/symbols";
+import { roadCarImages, roadMarkerSymbol } from "@/lib/autoscuole/road/symbols";
 import { cn } from "@/lib/utils";
 
 /**
@@ -115,12 +115,12 @@ export function LiveDot({ className }: { className?: string }) {
   );
 }
 
-/** Auto 3D 3/4 con il badge iniziali nella tinta dell'istruttore. */
-export function Car3D({ tint, label }: { tint?: string; label?: string }) {
+/** Auto 3D 3/4 nel colore del veicolo, con il badge iniziali nella tinta dell'istruttore. */
+export function Car3D({ color, tint, label }: { color?: string | null; tint?: string; label?: string }) {
   return (
     <div className="relative w-16">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={ROAD_IMAGES.car34} alt="" className="block w-16" draggable={false} />
+      <img src={roadCarImages(color).threeQuarter} alt="" className="block w-16" draggable={false} />
       {tint && label ? (
         <div
           className="absolute -bottom-0.5 -right-1 grid size-6 place-items-center rounded-full border-2 border-white text-[10.5px] font-semibold text-white"
