@@ -16,6 +16,7 @@ import {
 import { drivingSeconds, freeLessonEnd, sanitizePoints, trackDistanceMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
 import { finalizeRoadSession, loadRoadTrack } from "@/lib/autoscuole/road/maintenance";
 import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
+import { isBookingBlockActive } from "@/lib/autoscuole/booking-block";
 import { LESSON_BUFFER_BLOCK_REASON } from "@/lib/autoscuole/lesson-buffer";
 import { AUTOSCUOLE_CACHE_SEGMENTS, invalidateAutoscuoleCache } from "@/lib/autoscuole/cache";
 
@@ -1057,6 +1058,12 @@ export async function getRoadFreeStartOptions() {
     }
 
     const instructor = await prisma.autoscuolaInstructor.findUnique({ where: { id: instructorId }, select: { color: true } });
+    // Allievi con le prenotazioni bloccate: la mobile lo scrive già nella lista.
+    const blockedRows = await prisma.companyMember.findMany({
+      where: { companyId: ctx.companyId, autoscuolaRole: "STUDENT", bookingBlocked: true },
+      select: { userId: true, bookingBlocked: true, bookingBlockUntil: true },
+    });
+    const blockedStudentIds = blockedRows.filter((m) => isBookingBlockActive(m)).map((m) => m.userId);
     return ok({
       durations,
       defaultDuration,
@@ -1076,6 +1083,7 @@ export async function getRoadFreeStartOptions() {
       recentStudents,
       currentLesson: current ? lessonDTO(current) : null,
       // Per il pannello «Pronto a partire?» della tab Road.
+      blockedStudentIds,
       todayCount: todayRows.length,
       nextLessonAt: todayRows.find((r) => r.startsAt > now)?.startsAt.toISOString() ?? null,
     });
@@ -1099,6 +1107,7 @@ export async function startFreeRoadSession(input: {
   durationMin: number;
   confirmWeeklyLimit?: boolean;
   confirmNoBuffer?: boolean;
+  confirmStudentBlocked?: boolean;
 }) {
   try {
     const ctx = await roadContext();
@@ -1146,9 +1155,14 @@ export async function startFreeRoadSession(input: {
       return fail("Questo veicolo è riservato a un altro istruttore.", "VEHICLE_RESERVED");
     }
 
+    // Come in agenda (REG-499): l'allievo bloccato non ferma l'istruttore, che
+    // viene avvisato e può procedere comunque.
     const { getStudentBookingBlockStatus } = await import("@/lib/actions/autoscuole-availability.actions");
-    if (await getStudentBookingBlockStatus(ctx.companyId, input.studentId)) {
-      return fail("Questo allievo ha le prenotazioni bloccate: non puoi avviare una guida con lui.", "STUDENT_BLOCKED");
+    if (input.confirmStudentBlocked !== true && (await getStudentBookingBlockStatus(ctx.companyId, input.studentId))) {
+      return fail(
+        "Questo allievo ha le prenotazioni bloccate. Vuoi avviare la guida comunque?",
+        "STUDENT_BLOCKED_CONFIRM",
+      );
     }
 
     const { createAutoscuolaAppointment } = await import("@/lib/actions/autoscuole.actions");
