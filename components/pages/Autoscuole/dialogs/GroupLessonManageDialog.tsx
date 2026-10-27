@@ -423,9 +423,12 @@ export function GroupLessonManageDialog({
         () => setGroupLessonParticipantMoto({ groupLessonId, appointmentId, vehicleId, swapWithAppointmentId }),
         swapWithAppointmentId ? "Moto scambiate." : "Moto aggiornata.",
       );
+      // Keep the confirm + spinner until the roster is refetched: closing first
+      // left the triggers on the OLD motos for a beat (seen on staging), and a
+      // pick in that window previewed a swap on stale seats.
       if (ok) {
+        await reload(true);
         setMotoSwap(null);
-        reload(true);
       }
     } finally {
       setMotoSavingId(null);
@@ -900,7 +903,7 @@ export function GroupLessonManageDialog({
                               seats={motoSeats}
                               displayNames={displayNames}
                               saving={motoSavingId === p.appointmentId}
-                              disabled={busy}
+                              disabled={busy || !!motoSavingId}
                               onPick={(vehicleId) => handlePickMoto(p.appointmentId, vehicleId)}
                             />
                           ) : null}
