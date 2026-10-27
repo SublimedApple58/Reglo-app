@@ -48,13 +48,15 @@ export type RoadMarker = {
   lat: number;
   lng: number;
   street: string | null;
+  /** «fatto bene» / «da migliorare»; null = neutra (segnalazioni prima del segno). */
+  sentiment: "good" | "bad" | null;
   recordedAt: string;
 };
 
 /** Punto del percorso: [lat, lng, tMs]. */
 export type RoadTrackPoint = [number, number, number];
 
-export type RoadMarkerSummary = { markerCount: number; markerKinds: string[] };
+export type RoadMarkerSummary = { markerCount: number; markerKinds: string[]; markerGood: number; markerBad: number };
 
 export type RoadLiveSession = RoadSession &
   RoadMarkerSummary & { lesson: RoadLesson; recentMarkers: RoadMarker[] };
@@ -65,6 +67,10 @@ export type RoadLive = {
   sessions: RoadLiveSession[];
   atBase: Array<{ id: string; name: string; plate: string | null; carColor: CarColorKey; freeUntil: string | null }>;
 };
+
+/** Percorso Road di una guida nel dettaglio allievo (`GET /road/students/[id]`). */
+export type RoadStudentItem = RoadSession &
+  RoadMarkerSummary & { thumb: Array<[number, number]> };
 
 export type RoadTodayItem = RoadLesson & { road: (RoadSession & RoadMarkerSummary) | null };
 
@@ -129,6 +135,8 @@ export const roadApi = {
     }
     return call<{ items: RoadHistoryItem[]; nextCursor: string | null }>(`/history?${q}`, signal);
   },
+  student: (studentId: string, signal?: AbortSignal) =>
+    call<{ items: RoadStudentItem[] }>(`/students/${encodeURIComponent(studentId)}`, signal),
   session: (id: string, signal?: AbortSignal) =>
     call<RoadDetail>(`/sessions/${encodeURIComponent(id)}`, signal),
   track: (id: string, afterSeq: number, signal?: AbortSignal) =>

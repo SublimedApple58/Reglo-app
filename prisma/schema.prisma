@@ -2559,6 +2559,9 @@ model RoadMarker {
   lat        Float
   lng        Float
   street     String?
+  /// Segno della segnalazione: "good" (fatto bene) | "bad" (da migliorare).
+  /// Null = segnalazioni nate prima del segno (neutre).
+  sentiment  String?
   recordedAt DateTime @db.Timestamp(6)
   createdAt  DateTime @default(now()) @db.Timestamp(6)
 

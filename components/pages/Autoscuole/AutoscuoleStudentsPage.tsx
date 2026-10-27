@@ -153,6 +153,10 @@ import { LoadingDots } from "@/components/ui/loading-dots";
 import { AutoscuoleLateCancellationsPanel } from "./AutoscuoleLateCancellationsPanel";
 import { NeverAccessedListMark } from "./NeverAccessedNudge";
 import { isLessonUnpaid } from "@/lib/autoscuole/lesson-unpaid";
+import { useAtomValue as useAtomValueRoad } from "jotai";
+import { companyAtom as companyAtomRoad } from "@/atoms/company.store";
+import { isRoadEnabled } from "@/lib/services";
+import { StudentRoadPanel, StudentRoadStrip, useStudentRoad } from "./road/StudentRoad";
 import {
   blockUntilDateToInstant,
   blockUntilInstantToDateLabel,
@@ -976,6 +980,14 @@ export function AutoscuoleStudentsPage({
 
   // Panel tabs
   const [drawerTab, setDrawerTab] = React.useState<DrawerTab>("summary");
+  // REG-638: percorso Road di una guida aperto dentro il pannello «Guide».
+  const companyForRoad = useAtomValueRoad(companyAtomRoad);
+  const roadEnabled = isRoadEnabled(companyForRoad?.services ?? null);
+  const [roadPanelSessionId, setRoadPanelSessionId] = React.useState<string | null>(null);
+  const studentRoad = useStudentRoad(selectedStudentId, roadEnabled && drawerTab === "lessons");
+  React.useEffect(() => {
+    setRoadPanelSessionId(null);
+  }, [selectedStudentId, drawerTab]);
   // Situazione quiz (REG-445): caricata pigramente all'apertura del tab "Quiz",
   // così il dettaglio di un allievo in PRATICA non paga una query che non guarda.
   const [quizDetail, setQuizDetail] = React.useState<StudentQuizDetail | null>(null);
@@ -3300,6 +3312,15 @@ export function AutoscuoleStudentsPage({
 
   const renderPanelLessons = () => {
     if (!register) return null;
+    if (roadPanelSessionId) {
+      return (
+        <StudentRoadPanel
+          sessionId={roadPanelSessionId}
+          backLabel={`Guide di ${[register.student?.firstName, register.student?.lastName].filter(Boolean).join(" ") || "allievo"}`}
+          onBack={() => setRoadPanelSessionId(null)}
+        />
+      );
+    }
     // REG-584: ordine cronologico puro. Prima le guide da pagare venivano
     // portate in testa: con il filtro "Da pagare" qui accanto era un doppione e
     // spezzava la sequenza delle date, che è il modo in cui si legge lo storico.
@@ -3594,6 +3615,12 @@ export function AutoscuoleStudentsPage({
                   creditApplied={lesson.creditApplied}
                   lessonLabel={`${startDate.toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" })} · ${startDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`}
                 />
+                {studentRoad.get(lesson.id) ? (
+                  <StudentRoadStrip
+                    item={studentRoad.get(lesson.id)!}
+                    onOpen={() => setRoadPanelSessionId(studentRoad.get(lesson.id)!.id)}
+                  />
+                ) : null}
               </div>
             </div>
           );

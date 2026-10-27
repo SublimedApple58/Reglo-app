@@ -123,7 +123,7 @@ export function RoadTodayView({ onOpen }: { onOpen: (sessionId: string) => void 
                       <span className="text-sm font-semibold tabular-nums text-[#111111]">
                         {km(it.road.distanceMeters)} km
                       </span>
-                      <MarkerPill count={it.road.markerCount} kinds={it.road.markerKinds} />
+                      <MarkerPill count={it.road.markerCount} kinds={it.road.markerKinds} good={it.road.markerGood} bad={it.road.markerBad} />
                     </>
                   ) : null}
                 </div>

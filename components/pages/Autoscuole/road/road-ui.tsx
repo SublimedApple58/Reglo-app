@@ -141,8 +141,67 @@ export function PinIcon() {
   );
 }
 
+export const SENTIMENT_GOOD = "#16a34a";
+export const SENTIMENT_BAD = "#dc2626";
+
+/** Pollice bianco nel pallino verde/rosso (segno della segnalazione). */
+export function SentimentBadge({ sentiment, className }: { sentiment: "good" | "bad"; className?: string }) {
+  return (
+    <span
+      aria-label={sentiment === "good" ? "Fatto bene" : "Da migliorare"}
+      className={cn("grid size-[18px] place-items-center rounded-full border-2 border-white", className)}
+      style={{ background: sentiment === "good" ? SENTIMENT_GOOD : SENTIMENT_BAD }}
+    >
+      <svg
+        width="9"
+        height="9"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="2.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={sentiment === "bad" ? { transform: "rotate(180deg)" } : undefined}
+      >
+        <path d="M7 11v9M7 11l4-8a2 2 0 0 1 3 2l-1 5h5.5a2 2 0 0 1 2 2.3l-1.2 6A2 2 0 0 1 17.3 20H7" />
+      </svg>
+    </span>
+  );
+}
+
+/** «1 positiva · 2 da migliorare» (niente se nessuna segnalazione ha il segno). */
+export function SentimentCounts({ good, bad, className }: { good: number; bad: number; className?: string }) {
+  if (!good && !bad) return null;
+  return (
+    <div className={cn("flex items-center gap-3.5 text-[13px] text-[#3a3a3c]", className)}>
+      {good ? (
+        <span className="flex items-center gap-1.5">
+          <i className="block size-[7px] rounded-full" style={{ background: SENTIMENT_GOOD }} />
+          {good} {good === 1 ? "positiva" : "positive"}
+        </span>
+      ) : null}
+      {bad ? (
+        <span className="flex items-center gap-1.5">
+          <i className="block size-[7px] rounded-full" style={{ background: SENTIMENT_BAD }} />
+          {bad} da migliorare
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 /** Pillola segnalazioni: ultimi simboli + conteggio, oppure «Nessuna» verde. */
-export function MarkerPill({ count, kinds }: { count: number; kinds: string[] }) {
+export function MarkerPill({
+  count,
+  kinds,
+  good = 0,
+  bad = 0,
+}: {
+  count: number;
+  kinds: string[];
+  good?: number;
+  bad?: number;
+}) {
   if (!count) {
     return (
       <span className="inline-flex h-[26px] items-center rounded-[13px] bg-[#e6f6ec] px-2.5 text-[12.5px] font-semibold text-[#067647]">
@@ -162,17 +221,42 @@ export function MarkerPill({ count, kinds }: { count: number; kinds: string[] })
         // eslint-disable-next-line @next/next/no-img-element
         <img key={src} src={src} alt="" className="size-[18px] object-contain" draggable={false} />
       ))}
-      {count}
+      {good || bad ? (
+        <span className="ml-0.5 flex items-center gap-1.5 tabular-nums">
+          {good ? (
+            <span className="flex items-center gap-1">
+              <i className="block size-[6px] rounded-full" style={{ background: SENTIMENT_GOOD }} />
+              {good}
+            </span>
+          ) : null}
+          {bad ? (
+            <span className="flex items-center gap-1">
+              <i className="block size-[6px] rounded-full" style={{ background: SENTIMENT_BAD }} />
+              {bad}
+            </span>
+          ) : null}
+        </span>
+      ) : (
+        count
+      )}
     </span>
   );
 }
 
 /** Simbolo 3D su fondo grigio caldo (liste segnalazioni). */
-export function SymbolTile({ kind, size = 34 }: { kind: string; size?: 34 | 40 }) {
+export function SymbolTile({
+  kind,
+  size = 34,
+  sentiment,
+}: {
+  kind: string;
+  size?: 34 | 40;
+  sentiment?: "good" | "bad" | null;
+}) {
   return (
     <div
       className={cn(
-        "grid shrink-0 place-items-center bg-[#f4f4f2]",
+        "relative grid shrink-0 place-items-center bg-[#f4f4f2]",
         size === 40 ? "size-10 rounded-[13px]" : "size-[34px] rounded-[11px]",
       )}
     >
@@ -183,6 +267,7 @@ export function SymbolTile({ kind, size = 34 }: { kind: string; size?: 34 | 40 }
         className={cn("object-contain", size === 40 ? "size-7" : "size-6")}
         draggable={false}
       />
+      {sentiment ? <SentimentBadge sentiment={sentiment} className="absolute -bottom-1 -right-1" /> : null}
     </div>
   );
 }
@@ -259,6 +344,8 @@ export function RoadMarkerStyles() {
 .road-car.sel .lab{background:#111;color:#fff;z-index:2}
 .road-sg{width:34px;height:34px;border-radius:50%;background:#fff;display:grid;place-items:center;box-shadow:0 2px 8px rgba(0,0,0,.16)}
 .road-sg img{width:24px;height:24px;object-fit:contain}
+.road-sg.good{box-shadow:0 0 0 2.5px #16a34a,0 2px 8px rgba(0,0,0,.16)}
+.road-sg.bad{box-shadow:0 0 0 2.5px #dc2626,0 2px 8px rgba(0,0,0,.16)}
 .road-num{display:flex;align-items:center;gap:4px;transform:translateY(-22px)}
 .road-num b{width:26px;height:26px;border-radius:50%;background:#111;color:#fff;font-size:12.5px;font-weight:600;display:grid;place-items:center;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.25);font-family:inherit}
 .road-sede{display:flex;flex-direction:column;align-items:center}

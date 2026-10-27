@@ -159,7 +159,7 @@ export function RoadHistoryView({ onOpen }: { onOpen: (sessionId: string) => voi
                   {durationMin(s.durationSec)} min
                 </span>
                 <span className="text-sm font-semibold tabular-nums text-[#111111]">{km(s.distanceMeters)} km</span>
-                <MarkerPill count={s.markerCount} kinds={s.markerKinds} />
+                <MarkerPill count={s.markerCount} kinds={s.markerKinds} good={s.markerGood} bad={s.markerBad} />
               </div>
               <div className="hidden md:block">
                 <ChevronRight className="size-4 text-[#b0b0b0]" strokeWidth={2} />

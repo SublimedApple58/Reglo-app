@@ -66,3 +66,9 @@ export function resolveMarkerLabel(
   }
   return null;
 }
+
+/** Segno di una segnalazione: fatto bene / da migliorare. Null = neutra (storico). */
+export type RoadMarkerSentiment = "good" | "bad";
+export function normalizeSentiment(v: unknown): RoadMarkerSentiment | null {
+  return v === "good" || v === "bad" ? v : null;
+}

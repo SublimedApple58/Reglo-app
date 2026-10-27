@@ -34,6 +34,7 @@ import {
   RoadMarkerStyles,
   RoadStatusChip,
   romeYmd,
+  SentimentCounts,
   SymbolTile,
   ZoomControls,
 } from "./road-ui";
@@ -115,7 +116,7 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
     }
     detail.markers.forEach((m, i) => {
       const el = htmlElement(
-        `<div><div class="road-num"><b>${i + 1}</b><div class="road-sg" title="${escapeHtml(m.label)}"><img src="${roadMarkerSymbol(m.kind)}" alt=""></div></div></div>`,
+        `<div><div class="road-num"><b>${i + 1}</b><div class="road-sg ${m.sentiment ?? ""}" title="${escapeHtml(m.label)}"><img src="${roadMarkerSymbol(m.kind)}" alt=""></div></div></div>`,
       );
       markersRef.current.push(addHtmlMarker(handle, toLngLat(m), el));
     });
@@ -230,6 +231,13 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
               <Big value={detail ? String(minutes) : "–"} unit="min" label="Di guida" divided />
               <Big value={detail ? String(detail.markers.length) : "–"} label="Segnalazioni" divided />
             </div>
+            {detail ? (
+              <SentimentCounts
+                className="mt-3"
+                good={detail.markers.filter((m) => m.sentiment === "good").length}
+                bad={detail.markers.filter((m) => m.sentiment === "bad").length}
+              />
+            ) : null}
           </div>
 
           <div className="rounded-[22px] border border-[#ebebeb] px-5 py-[18px]" data-testid="road-detail-markers">
@@ -251,7 +259,7 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
                   <div className="grid size-6 place-items-center rounded-full bg-[#111111] text-xs font-semibold text-white">
                     {i + 1}
                   </div>
-                  <SymbolTile kind={m.kind} size={40} />
+                  <SymbolTile kind={m.kind} size={40} sentiment={m.sentiment} />
                   <div className="min-w-0">
                     <b className="block text-[14.5px] font-medium text-[#111111]">{m.label}</b>
                     <span className="text-[13px] text-[#6a6a6a]">

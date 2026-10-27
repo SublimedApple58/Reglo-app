@@ -183,6 +183,8 @@ async function lesson(i: LessonInput) {
         companyId: i.companyId,
         clientId: `reg638seed-${session.id.slice(0, 8)}-${n}`,
         kind: m.kind,
+        // segno: le «precedenze» del seed sono fatte bene, il resto da migliorare
+        sentiment: m.kind === "precedenza" ? "good" : "bad",
         label: m.label,
         note: m.note ?? null,
         lat: coords[idx][0],

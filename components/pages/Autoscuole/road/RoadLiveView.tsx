@@ -202,7 +202,7 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
         wanted.add(m.id);
         if (symbolsRef.current.has(m.id)) continue;
         const el = htmlElement(
-          `<div class="road-sg" title="${escapeHtml(m.label)}"><img src="${roadMarkerSymbol(m.kind)}" alt=""></div>`,
+          `<div class="road-sg ${m.sentiment ?? ""}" title="${escapeHtml(m.label)}"><img src="${roadMarkerSymbol(m.kind)}" alt=""></div>`,
         );
         symbolsRef.current.set(m.id, addHtmlMarker(handle, toLngLat(m), el));
       }
@@ -383,7 +383,7 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
                       <div className="text-sm font-semibold tabular-nums text-[#111111]">
                         {minutesBetween(s.startedAt, now)} min
                       </div>
-                      <MarkerPill count={s.markerCount} kinds={s.markerKinds} />
+                      <MarkerPill count={s.markerCount} kinds={s.markerKinds} good={s.markerGood} bad={s.markerBad} />
                     </div>
                     <div className="absolute bottom-[7px] left-3.5 right-3.5 h-[3px] overflow-hidden rounded-sm bg-[#f0f0f0]">
                       <i
@@ -495,7 +495,7 @@ function SelectedCard({ s, now, onOpen }: { s: RoadLiveSession; now: number; onO
       </div>
       {s.recentMarkers.slice(0, 2).map((m) => (
         <div key={m.id} className="mt-3 flex items-center gap-2.5">
-          <SymbolTile kind={m.kind} />
+          <SymbolTile kind={m.kind} sentiment={m.sentiment} />
           <div className="min-w-0 flex-1">
             <b className="block truncate text-sm font-medium text-[#222222]">{m.label}</b>
             {m.street ? <span className="mt-px block truncate text-[12.5px] text-[#6a6a6a]">{m.street}</span> : null}

@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 
 import { resolveCarColor } from "@/lib/autoscuole/road/car-colors";
+import { normalizeSentiment } from "@/lib/autoscuole/road/catalog";
 import { prisma } from "@/db/prisma";
 import { requireServiceAccess } from "@/lib/service-access";
 import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
@@ -172,6 +173,7 @@ function markerDTO(m: {
   lat: number;
   lng: number;
   street: string | null;
+  sentiment: string | null;
   recordedAt: Date;
 }) {
   return {
@@ -183,6 +185,7 @@ function markerDTO(m: {
     lat: m.lat,
     lng: m.lng,
     street: m.street,
+    sentiment: normalizeSentiment(m.sentiment),
     recordedAt: m.recordedAt.toISOString(),
   };
 }
@@ -195,6 +198,7 @@ const markerSelect = {
   lat: true,
   lng: true,
   street: true,
+  sentiment: true,
   recordedAt: true,
 } as const;
 
@@ -406,6 +410,8 @@ export async function addRoadMarker(
     lat: number;
     lng: number;
     street?: string | null;
+    /** "good" | "bad"; assente = neutra (client vecchi). */
+    sentiment?: string | null;
     recordedAt?: string;
   },
 ) {
@@ -444,6 +450,7 @@ export async function addRoadMarker(
         lat,
         lng,
         street: typeof input?.street === "string" ? input.street.trim().slice(0, 120) || null : null,
+        sentiment: normalizeSentiment(input?.sentiment),
         recordedAt: Number.isNaN(recordedAt.getTime()) ? new Date() : recordedAt,
       },
       select: markerSelect,
@@ -610,6 +617,54 @@ export async function getRoadForAppointment(appointmentId: string) {
   }
 }
 
+/** Al massimo N punti, presi a passo regolare: basta per la miniatura del percorso. */
+function thumbTrack(points: RoadPoint[], max = 60): Array<[number, number]> {
+  if (points.length <= max) return points.map((p) => [p[1], p[2]]);
+  const step = (points.length - 1) / (max - 1);
+  return Array.from({ length: max }, (_, i) => {
+    const p = points[Math.round(i * step)];
+    return [p[1], p[2]] as [number, number];
+  });
+}
+
+/**
+ * Percorsi Road delle guide di un allievo (dettaglio allievo web, storico guide
+ * nell'app istruttore): per guida km, minuti, segnalazioni e una miniatura.
+ * Titolare: tutte. Istruttore: solo le sue, come `getRoadForAppointment`.
+ */
+export async function getRoadForStudent(studentId: string) {
+  try {
+    const ctx = await roadContext();
+    if (!ctx.roadEnabled) return ok({ items: [] });
+    if (isStudent(ctx.membership.autoscuolaRole) && ctx.membership.role !== "admin") {
+      return fail("Non autorizzato.", "FORBIDDEN");
+    }
+    let instructorId: string | undefined;
+    if (!canSeeAll(ctx)) {
+      const mine = await ownInstructorId(ctx);
+      if (!mine) return fail("Non autorizzato.", "FORBIDDEN");
+      instructorId = mine;
+    }
+    const sessions = await prisma.roadSession.findMany({
+      where: { companyId: ctx.companyId, studentId, status: { not: "active" }, ...(instructorId ? { instructorId } : {}) },
+      orderBy: { startedAt: "desc" },
+      take: 100,
+      select: { ...sessionSelect, appointment: { select: { startsAt: true } } },
+    });
+    const counts = await markerCounts(sessions.map((x) => x.id));
+    const items = await Promise.all(
+      sessions.map(async (x) => ({
+        ...sessionDTO(x, x.appointment.startsAt),
+        ...markerSummary(counts, x.id),
+        thumb: thumbTrack(sanitizePoints(await loadRoadTrack(prisma, x.id))),
+      })),
+    );
+    return ok({ items });
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
 // ─── web: dal vivo, oggi, storico ───────────────────────────────────────────
 
 /** Inizio/fine del giorno italiano che contiene `date`, in UTC. */
@@ -635,21 +690,32 @@ async function requireWebRoad() {
   return { ctx };
 }
 
+type MarkerCount = { count: number; kinds: string[]; good: number; bad: number };
+
 async function markerCounts(sessionIds: string[]) {
-  if (!sessionIds.length) return new Map<string, { count: number; kinds: string[] }>();
+  if (!sessionIds.length) return new Map<string, MarkerCount>();
   const rows = await prisma.roadMarker.findMany({
     where: { sessionId: { in: sessionIds } },
     orderBy: { recordedAt: "asc" },
-    select: { sessionId: true, kind: true },
+    select: { sessionId: true, kind: true, sentiment: true },
   });
-  const map = new Map<string, { count: number; kinds: string[] }>();
+  const map = new Map<string, MarkerCount>();
   for (const r of rows) {
-    const cur = map.get(r.sessionId) ?? { count: 0, kinds: [] };
+    const cur = map.get(r.sessionId) ?? { count: 0, kinds: [], good: 0, bad: 0 };
     cur.count += 1;
     cur.kinds.push(r.kind);
+    const sg = normalizeSentiment(r.sentiment);
+    if (sg === "good") cur.good += 1;
+    else if (sg === "bad") cur.bad += 1;
     map.set(r.sessionId, cur);
   }
   return map;
+}
+
+/** Riassunto segnalazioni di una sessione per le liste (dal vivo, oggi, storico). */
+function markerSummary(counts: Map<string, MarkerCount>, sessionId: string) {
+  const c = counts.get(sessionId);
+  return { markerCount: c?.count ?? 0, markerKinds: c?.kinds ?? [], markerGood: c?.good ?? 0, markerBad: c?.bad ?? 0 };
 }
 
 export async function getRoadLive() {
@@ -723,8 +789,7 @@ export async function getRoadLive() {
       sessions: active.map((s) => ({
         ...sessionDTO(s, s.appointment.startsAt),
         lesson: lessonDTO(s.appointment),
-        markerCount: counts.get(s.id)?.count ?? 0,
-        markerKinds: counts.get(s.id)?.kinds ?? [],
+        ...markerSummary(counts, s.id),
         recentMarkers: recent.filter((m) => m.sessionId === s.id).slice(0, 3).map(markerDTO),
       })),
       atBase,
@@ -756,7 +821,7 @@ export async function getRoadToday() {
       lessons.map((r) => ({
         ...lessonDTO(r),
         road: r.roadSession
-          ? { ...sessionDTO(r.roadSession, r.startsAt), markerCount: counts.get(r.roadSession.id)?.count ?? 0, markerKinds: counts.get(r.roadSession.id)?.kinds ?? [] }
+          ? { ...sessionDTO(r.roadSession, r.startsAt), ...markerSummary(counts, r.roadSession.id) }
           : null,
       })),
     );
@@ -801,8 +866,7 @@ export async function getRoadHistory(input: {
       items: page.map((s) => ({
         ...sessionDTO(s, s.appointment.startsAt),
         lesson: lessonDTO(s.appointment),
-        markerCount: counts.get(s.id)?.count ?? 0,
-        markerKinds: counts.get(s.id)?.kinds ?? [],
+        ...markerSummary(counts, s.id),
       })),
       nextCursor: rows.length > take ? page[page.length - 1].id : null,
     });
