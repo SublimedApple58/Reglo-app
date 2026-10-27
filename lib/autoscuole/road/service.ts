@@ -996,7 +996,11 @@ export async function getRoadFreeStartOptions() {
           endsAt: { gt: now },
           OR: [{ vehicleId: { not: null } }, { appointmentVehicles: { some: {} } }],
         },
-        select: { vehicleId: true, appointmentVehicles: { select: { vehicleId: true } } },
+        select: {
+          vehicleId: true,
+          appointmentVehicles: { select: { vehicleId: true } },
+          instructor: { select: { name: true } },
+        },
       }),
       prisma.autoscuolaInstructorPreferredVehicle.findMany({ where: { instructorId }, select: { vehicleId: true } }),
       prisma.autoscuolaAppointment.findMany({
@@ -1026,10 +1030,12 @@ export async function getRoadFreeStartOptions() {
       }),
     ]);
 
-    const busy = new Set<string>();
+    // Auto impegnate adesso → con chi (per «in guida con …»).
+    const busy = new Map<string, string | null>();
     for (const r of busyRows) {
-      if (r.vehicleId) busy.add(r.vehicleId);
-      r.appointmentVehicles.forEach((v) => busy.add(v.vehicleId));
+      const who = r.instructor?.name ?? null;
+      if (r.vehicleId) busy.set(r.vehicleId, who);
+      r.appointmentVehicles.forEach((v) => busy.set(v.vehicleId, who));
     }
     const cars = vehicles.filter((v) => !MOTO_CATEGORIES.has(v.licenseCategory));
     const lastUsed = recent.find((r) => r.vehicleId && cars.some((v) => v.id === r.vehicleId))?.vehicleId ?? null;
@@ -1062,6 +1068,9 @@ export async function getRoadFreeStartOptions() {
         transmission: v.transmission,
         carColor: resolveCarColor(v.color, instructor?.color ?? null),
         busy: busy.has(v.id),
+        busyWith: busy.get(v.id) ?? null,
+        // «la tua»: auto esclusiva dell'istruttore (o la sua preferita).
+        mine: v.assignedInstructorId === instructorId || preferredIds.has(v.id),
       })),
       defaultVehicleId: pick?.id ?? null,
       recentStudents,
