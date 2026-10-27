@@ -19,6 +19,7 @@ import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
 import { isBookingBlockActive } from "@/lib/autoscuole/booking-block";
 import { LESSON_BUFFER_BLOCK_REASON } from "@/lib/autoscuole/lesson-buffer";
 import { AUTOSCUOLE_CACHE_SEGMENTS, invalidateAutoscuoleCache } from "@/lib/autoscuole/cache";
+import { buildBriefing, rankSuggestions, type Briefing, type SuggestionCandidate } from "@/lib/autoscuole/road/suggestions";
 
 /**
  * REG-638 Reglo Road — logica server. Le route in `app/api/autoscuole/road/**`
@@ -704,7 +705,10 @@ export async function getRoadForStudent(studentId: string) {
         thumb: thumbTrack(sanitizePoints(await loadRoadTrack(prisma, x.id))),
       })),
     );
-    return ok({ items });
+    // Briefing per voce (tab Road «Parti con»): sulle guide di tutta
+    // l'autoscuola, perché serve anche a chi porta l'allievo la prima volta.
+    const briefing = (await loadBriefings(ctx.companyId, [studentId])).get(studentId) ?? null;
+    return ok({ items, briefing });
   } catch (error) {
     return fail(formatError(error));
   }
@@ -1027,7 +1031,7 @@ export async function getRoadFreeStartOptions() {
           status: { notIn: ["cancelled", "proposal"] },
         },
         orderBy: { startsAt: "asc" },
-        select: { startsAt: true },
+        select: { startsAt: true, student: { select: { name: true } } },
       }),
     ]);
 
@@ -1064,6 +1068,9 @@ export async function getRoadFreeStartOptions() {
       select: { userId: true, bookingBlocked: true, bookingBlockUntil: true },
     });
     const blockedStudentIds = blockedRows.filter((m) => isBookingBlockActive(m)).map((m) => m.userId);
+
+    const tab = await roadTabExtras(ctx, instructorId, now, current, cars.map((v) => v.id), day.end);
+    const nextRow = todayRows.find((r) => r.startsAt > now) ?? null;
     return ok({
       durations,
       defaultDuration,
@@ -1078,6 +1085,8 @@ export async function getRoadFreeStartOptions() {
         busyWith: busy.get(v.id) ?? null,
         // «la tua»: auto esclusiva dell'istruttore (o la sua preferita).
         mine: v.assignedInstructorId === instructorId || preferredIds.has(v.id),
+        // «libera fino alle 16:00»: la prossima guida di oggi con quest'auto.
+        freeUntil: tab.vehicleNextUse.get(v.id) ?? null,
       })),
       defaultVehicleId: pick?.id ?? null,
       recentStudents,
@@ -1085,7 +1094,14 @@ export async function getRoadFreeStartOptions() {
       // Per il pannello «Pronto a partire?» della tab Road.
       blockedStudentIds,
       todayCount: todayRows.length,
-      nextLessonAt: todayRows.find((r) => r.startsAt > now)?.startsAt.toISOString() ?? null,
+      nextLessonAt: nextRow?.startsAt.toISOString() ?? null,
+      // Tab Road «mappa corta» (27/10): «alle 15:30 hai Giulia Bassi».
+      nextLesson: nextRow ? { startsAt: nextRow.startsAt.toISOString(), studentName: nextRow.student?.name ?? null } : null,
+      suggestions: tab.suggestions,
+      briefings: tab.briefings,
+      toClose: tab.toClose,
+      recentSessions: tab.recentSessions,
+      headquarters: tab.headquarters,
     });
   } catch (error) {
     return fail(formatError(error));
@@ -1193,6 +1209,246 @@ export async function startFreeRoadSession(input: {
     const session = await startRoadSession({ appointmentId });
     if (!session.success) return session;
     return ok({ ...session.data, appointmentId });
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
+// ─── tab Road «mappa corta» ─────────────────────────────────────────────────
+
+const SUGGEST_LOOKBACK_DAYS = 60;
+const TO_CLOSE_HOURS = 12;
+const RECENT_SESSIONS = 5;
+
+/** Briefing per voce delle ultime guide Road di ogni allievo. */
+async function loadBriefings(companyId: string, studentIds: string[]) {
+  const out = new Map<string, Briefing>();
+  if (!studentIds.length) return out;
+  const sessions = await prisma.roadSession.findMany({
+    where: { companyId, studentId: { in: studentIds }, status: { not: "active" } },
+    orderBy: { startedAt: "desc" },
+    take: 400,
+    select: { id: true, studentId: true, startedAt: true },
+  });
+  const perStudent = new Map<string, Array<{ id: string; startedAt: Date }>>();
+  for (const s of sessions) {
+    if (!s.studentId) continue;
+    const list = perStudent.get(s.studentId) ?? [];
+    if (list.length < 5) list.push({ id: s.id, startedAt: s.startedAt });
+    perStudent.set(s.studentId, list);
+  }
+  const ids = [...perStudent.values()].flat().map((s) => s.id);
+  if (!ids.length) return out;
+  const markers = await prisma.roadMarker.findMany({
+    where: { sessionId: { in: ids } },
+    select: { sessionId: true, kind: true, label: true, street: true, note: true, sentiment: true, recordedAt: true },
+  });
+  for (const [studentId, list] of perStudent) {
+    const b = buildBriefing(list, markers);
+    if (b) out.set(studentId, b);
+  }
+  return out;
+}
+
+/**
+ * Il resto della tab Road: allievi suggeriti col motivo (ordine deciso da
+ * Tiziano: guida in agenda, esame vicino, fermo da più tempo, chi guidi più
+ * spesso), briefing, ultima guida da chiudere col pagellino, ultime guide,
+ * sede per il pin, prossimo uso di ogni auto oggi.
+ */
+async function roadTabExtras(
+  ctx: RoadCtx,
+  instructorId: string,
+  now: Date,
+  current: AppointmentRow | null,
+  vehicleIds: string[],
+  dayEnd: Date,
+) {
+  const since = new Date(now.getTime() - SUGGEST_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+  const [withMe, mySessions, hq, nextUses] = await Promise.all([
+    prisma.autoscuolaAppointment.groupBy({
+      by: ["studentId"],
+      where: {
+        companyId: ctx.companyId,
+        instructorId,
+        studentId: { not: null },
+        groupLessonId: null,
+        type: { notIn: ["esame", "group_lesson"] },
+        status: { notIn: ["cancelled", "proposal"] },
+        startsAt: { gte: since, lt: now },
+      },
+      _count: { _all: true },
+    }),
+    prisma.roadSession.findMany({
+      where: { companyId: ctx.companyId, instructorId, status: { not: "active" } },
+      orderBy: { startedAt: "desc" },
+      take: RECENT_SESSIONS,
+      select: { ...sessionSelect, appointment: { select: appointmentSelect } },
+    }),
+    prisma.autoscuolaLocation.findFirst({
+      where: { companyId: ctx.companyId, isDefault: true, latitude: { not: null }, longitude: { not: null } },
+      select: { name: true, latitude: true, longitude: true },
+    }),
+    vehicleIds.length
+      ? prisma.autoscuolaAppointment.findMany({
+          where: {
+            companyId: ctx.companyId,
+            vehicleId: { in: vehicleIds },
+            status: { notIn: FREE_BUSY_STATUSES_EXCLUDED },
+            startsAt: { gt: now, lt: dayEnd },
+          },
+          orderBy: { startsAt: "asc" },
+          select: { vehicleId: true, startsAt: true },
+        })
+      : Promise.resolve([] as Array<{ vehicleId: string | null; startsAt: Date }>),
+  ]);
+
+  const vehicleNextUse = new Map<string, string>();
+  for (const r of nextUses) {
+    if (r.vehicleId && !vehicleNextUse.has(r.vehicleId)) vehicleNextUse.set(r.vehicleId, r.startsAt.toISOString());
+  }
+
+  // Candidati: chi ho guidato negli ultimi 60 giorni + l'allievo della guida in agenda.
+  const counts = new Map<string, number>();
+  for (const r of withMe) if (r.studentId) counts.set(r.studentId, r._count._all);
+  const agendaStudentId = current?.studentId ?? null;
+  const ids = [...new Set([...(agendaStudentId ? [agendaStudentId] : []), ...counts.keys()])].slice(0, 60);
+
+  let suggestions: ReturnType<typeof rankSuggestions> = [];
+  if (ids.length) {
+    const [members, users, done, exams] = await Promise.all([
+      prisma.companyMember.findMany({
+        where: { companyId: ctx.companyId, userId: { in: ids }, autoscuolaRole: "STUDENT" },
+        select: { userId: true, licenseCategory: true, studentPhase: true },
+      }),
+      prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }),
+      prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId: ctx.companyId,
+          studentId: { in: ids },
+          type: { notIn: ["esame"] },
+          status: { in: ["completed", "checked_in"] },
+          startsAt: { lt: now },
+        },
+        select: { studentId: true, startsAt: true, endsAt: true },
+      }),
+      prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId: ctx.companyId,
+          studentId: { in: ids },
+          type: "esame",
+          status: { notIn: ["cancelled", "proposal"] },
+          startsAt: { gte: now },
+        },
+        orderBy: { startsAt: "asc" },
+        select: { studentId: true, startsAt: true },
+      }),
+    ]);
+    const nameOf = new Map(users.map((u) => [u.id, u.name]));
+    const candidates: SuggestionCandidate[] = [];
+    for (const m of members) {
+      // Solo chi è in pratica (non teoria, non già patentato).
+      if (m.studentPhase !== "PRATICA") continue;
+      const mine = done.filter((d) => d.studentId === m.userId);
+      candidates.push({
+        id: m.userId,
+        name: nameOf.get(m.userId) ?? "Allievo",
+        licenseCategory: m.licenseCategory,
+        withMe: counts.get(m.userId) ?? 0,
+        doneCount: mine.length,
+        doneMinutes: mine.reduce((sum, d) => sum + (lessonEnd(d).getTime() - d.startsAt.getTime()) / 60000, 0),
+        lastDoneAt: mine.reduce<Date | null>((max, d) => (!max || d.startsAt > max ? d.startsAt : max), null),
+        nextExamAt: exams.find((e) => e.studentId === m.userId)?.startsAt ?? null,
+        agendaAt: m.userId === agendaStudentId && current ? current.startsAt : null,
+      });
+    }
+    // Uno in più: se il primo è quello della guida in agenda, la tab lo mostra
+    // in cima e propone gli altri come «Parti con un altro allievo».
+    suggestions = rankSuggestions(candidates, now, 4);
+  }
+
+  const briefings = Object.fromEntries(await loadBriefings(ctx.companyId, suggestions.map((s) => s.id)));
+
+  // Ultima guida da chiudere: mia, finita da poco, pagellino acceso e incompleto.
+  let toClose = null;
+  const last = mySessions[0];
+  if (
+    last?.endedAt &&
+    ctx.limits.evaluationSheetEnabled === true &&
+    now.getTime() - last.endedAt.getTime() <= TO_CLOSE_HOURS * 60 * 60 * 1000 &&
+    last.appointment.status !== "cancelled"
+  ) {
+    const [total, scored] = await Promise.all([
+      prisma.autoscuolaEvaluationItem.count({ where: { companyId: ctx.companyId, archivedAt: null } }),
+      prisma.autoscuolaAppointmentEvaluation.count({
+        where: { appointmentId: last.appointmentId, OR: [{ score: { not: null } }, { notApplicable: true }] },
+      }),
+    ]);
+    if (total > 0 && scored < total) {
+      toClose = { sessionId: last.id, appointmentId: last.appointmentId, evalTotal: total, evalDone: scored };
+    }
+  }
+
+  const sessionCounts = await markerCounts(mySessions.map((s) => s.id));
+  const recentSessions = await Promise.all(
+    mySessions.map(async (s) => ({
+      ...sessionDTO(s, s.appointment.startsAt),
+      ...markerSummary(sessionCounts, s.id),
+      lesson: lessonDTO(s.appointment),
+      thumb: thumbTrack(sanitizePoints(await loadRoadTrack(prisma, s.id))),
+    })),
+  );
+
+  return {
+    suggestions,
+    briefings,
+    toClose,
+    recentSessions,
+    headquarters: hq
+      ? { name: hq.name, lat: Number(hq.latitude), lng: Number(hq.longitude) }
+      : null,
+    vehicleNextUse,
+  };
+}
+
+/** Finestra del server per «Annulla» (la mobile la mostra per 10 secondi). */
+export const ROAD_UNDO_WINDOW_SEC = 15;
+
+/**
+ * «Annulla» nei primi secondi di una guida avviata da Road (avvio sbagliato):
+ * la sessione sparisce e la guida esce da agenda e storico come «Rimuovi dallo
+ * storico» (credito reso; la pausa dopo la guida la libera il trigger del DB).
+ * Solo la propria guida nata da Road, solo entro la finestra.
+ */
+export async function undoFreeRoadSession(input: { sessionId?: unknown }) {
+  try {
+    const ctx = await roadContext();
+    if (!ctx.roadEnabled) return fail("Reglo Road non è attivo per questa autoscuola.", "ROAD_DISABLED");
+    if (typeof input?.sessionId !== "string") return fail("Sessione mancante.");
+    const instructorId = await ownInstructorId(ctx);
+    if (!instructorId) return fail("Non autorizzato.", "FORBIDDEN");
+    const session = await prisma.roadSession.findFirst({
+      where: { id: input.sessionId, companyId: ctx.companyId },
+      select: { id: true, instructorId: true, startedAt: true, appointmentId: true, appointment: { select: { bookingSource: true } } },
+    });
+    if (!session) return fail("Sessione Road non trovata.", "NOT_FOUND");
+    if (session.instructorId !== instructorId) return fail("Questa guida non è tua.", "FORBIDDEN");
+    if (session.appointment.bookingSource !== BOOKING_SOURCE.road) {
+      return fail("Si annulla così solo una guida avviata da Road.", "NOT_FREE");
+    }
+    if (Date.now() - session.startedAt.getTime() > ROAD_UNDO_WINDOW_SEC * 1000) {
+      return fail("Ormai la guida è partita: chiudila con «Termina».", "UNDO_EXPIRED");
+    }
+    await prisma.roadSession.delete({ where: { id: session.id } });
+    const { removeAppointmentFromRecord } = await import("@/lib/autoscuole/operational-cancellation");
+    const removed = await removeAppointmentFromRecord({
+      companyId: ctx.companyId,
+      appointmentId: session.appointmentId,
+      actorUserId: ctx.membership.userId,
+      refundCredit: true,
+    });
+    if (!removed.success) return fail(removed.message ?? "Impossibile annullare la guida.");
+    return ok({ appointmentId: session.appointmentId });
   } catch (error) {
     return fail(formatError(error));
   }
