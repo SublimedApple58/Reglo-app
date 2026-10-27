@@ -25,6 +25,8 @@ import {
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { PageHeader } from "@/components/ui/page-header";
 import { SegmentedPill } from "@/components/ui/segmented-pill";
+import type { PaymentHistoryEvent } from "@/lib/autoscuole/payment-history";
+import { LessonPaymentTrail } from "./LessonPaymentTrail";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   CancelAppointmentDialog,
@@ -430,6 +432,8 @@ type LessonEntry = {
   paymentRequired: boolean;
   manualPaymentStatus: string | null;
   creditApplied: boolean;
+  /** REG-637: chi/quando sullo stato pagamento, dal più recente. */
+  paymentHistory?: PaymentHistoryEvent[];
   lateCancellationAction: string | null;
   /** Esito esame: "idoneo" | "respinto" | null = non ancora registrato. */
   examOutcome?: string | null;
@@ -1975,7 +1979,16 @@ export function AutoscuoleStudentsPage({
               }
             : prev.extendedSummary,
           lessons: prev.lessons.map((l) =>
-            l.id === appointmentId ? { ...l, manualPaymentStatus: status } : l,
+            l.id === appointmentId
+              ? {
+                  ...l,
+                  manualPaymentStatus: status,
+                  // REG-637: l'evento scritto dal server, in testa allo storico.
+                  paymentHistory: res.data?.paymentEvent
+                    ? [res.data.paymentEvent, ...(l.paymentHistory ?? [])]
+                    : l.paymentHistory,
+                }
+              : l,
           ),
         };
       });
@@ -3457,7 +3470,7 @@ export function AutoscuoleStudentsPage({
             cancelledDate.getTime() > cutoffDate.getTime();
 
           return (
-            <div key={lesson.id} className="flex gap-4 border-b border-[#f2f2f2] py-4">
+            <div key={lesson.id} data-testid="student-lesson-row" className="flex gap-4 border-b border-[#f2f2f2] py-4">
               <div className="min-w-[56px] pt-0.5 text-[12px] font-medium text-[#929292]">
                 {startDate.toLocaleDateString("it-IT", { day: "2-digit", month: "short" })}
               </div>
@@ -3575,6 +3588,12 @@ export function AutoscuoleStudentsPage({
                     </button>
                   )}
                 </div>
+                <LessonPaymentTrail
+                  history={lesson.paymentHistory}
+                  manualPaymentStatus={lesson.manualPaymentStatus}
+                  creditApplied={lesson.creditApplied}
+                  lessonLabel={`${startDate.toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" })} · ${startDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`}
+                />
               </div>
             </div>
           );

@@ -66,6 +66,11 @@ import {
 } from "@/lib/autoscuole/cache";
 import { isInstructor, isOwner, isStudent } from "@/lib/autoscuole/roles";
 import { canManageLessonPayments } from "@/lib/autoscuole/lesson-payments";
+import {
+  loadPaymentHistories,
+  toPaymentHistoryEvent,
+  type PaymentHistoryEvent,
+} from "@/lib/autoscuole/payment-history";
 import { LICENSE_CATEGORIES, TRANSMISSIONS, isMotoLicenseCategory, vehicleServesLicense } from "@/lib/autoscuole/license";
 import {
   EXAM_OUTCOMES,
@@ -2562,6 +2567,11 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
     // Group-lesson fill (N/M) + kind, so the student history can flag which
     // lessons were group lessons and how many students were on them.
     const registerGlInfo = await fetchGroupLessonFill(lessons.map((l) => l.groupLessonId));
+    // REG-637: storico pagamento (chi/quando) — solo per lo staff, l'allievo
+    // non vede lo stato pagamento manuale.
+    const paymentHistories = isStudent(membership.autoscuolaRole)
+      ? new Map<string, PaymentHistoryEvent[]>()
+      : await loadPaymentHistories(companyId, lessons.map((l) => l.id));
 
     // Query is scoped to a single studentId, so every row has that student; the
     // typed filter is a no-op at runtime that drops the nullable from the type.
@@ -2678,6 +2688,7 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
             notes: raw?.notes ?? null,
             createdAt: raw?.createdAt ?? null,
             group: raw?.groupLessonId ? registerGlInfo.get(raw.groupLessonId) ?? null : null,
+            paymentHistory: paymentHistories.get(lesson.id) ?? [],
             evaluations: (raw?.evaluations ?? []).map((e) => ({
               itemId: e.item.id,
               label: e.item.label,
@@ -3254,6 +3265,13 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
 
     const gridFlags = await buildAppointmentGridFlags(companyId, appointments);
     const glInfo = await fetchGroupLessonFill(appointments.map((a) => a.groupLessonId));
+    // REG-637: storico pagamento solo sulla lista guide di UN allievo vista
+    // dallo staff (schermata Pagamenti dell'app). Mai all'allievo, e mai
+    // sull'agenda: lì non serve e costerebbe una lettura in più.
+    const paymentHistories =
+      input?.studentId && !callerIsStudent
+        ? await loadPaymentHistories(companyId, appointments.map((a) => a.id))
+        : null;
     return {
       success: true,
       data: appointments.map((item) => {
@@ -3261,6 +3279,7 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
         const { coInstructors, ...rest } = item;
         return {
           ...rest,
+          ...(paymentHistories ? { paymentHistory: paymentHistories.get(item.id) ?? [] } : {}),
           // Appiattito a [{id, name}] come negli altri rami.
           coInstructors: (coInstructors ?? []).map((row) => row.instructor),
           student: mapCaseStudent(item.student),
@@ -12491,14 +12510,39 @@ export async function setManualPaymentStatus(
       };
     }
 
-    await prisma.autoscuolaAppointment.update({
-      where: { id: payload.appointmentId },
-      data: { manualPaymentStatus: payload.status },
+    // REG-637: ogni gesto lascia una riga di storico (chi e quando), nella
+    // stessa transazione della scrittura. Un tocco che non cambia nulla (doppio
+    // clic, due dispositivi) non sporca lo storico.
+    const changed = appointment.manualPaymentStatus !== payload.status;
+    const paymentEvent = await prisma.$transaction(async (tx) => {
+      await tx.autoscuolaAppointment.update({
+        where: { id: payload.appointmentId },
+        data: { manualPaymentStatus: payload.status },
+      });
+      if (!changed) return null;
+      return tx.autoscuolaAppointmentPaymentEvent.create({
+        data: {
+          companyId: membership.companyId,
+          appointmentId: payload.appointmentId,
+          fromStatus: appointment.manualPaymentStatus,
+          toStatus: payload.status,
+          actorUserId: membership.userId,
+        },
+        select: {
+          id: true,
+          toStatus: true,
+          createdAt: true,
+          actor: { select: { name: true } },
+        },
+      });
     });
 
     return {
       success: true,
-      data: { manualPaymentStatus: payload.status },
+      data: {
+        manualPaymentStatus: payload.status,
+        paymentEvent: paymentEvent ? toPaymentHistoryEvent(paymentEvent) : null,
+      },
       message:
         payload.status === "paid"
           ? "Guida segnata come pagata."
