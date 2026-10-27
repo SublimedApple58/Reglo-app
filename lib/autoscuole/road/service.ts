@@ -50,8 +50,6 @@ async function roadContext() {
     companyId: ctx.membership.companyId,
     limits,
     roadEnabled: limits.roadEnabled === true,
-    // Road libero (piano A): vale solo con Road acceso. Nasce spento.
-    freeStartEnabled: limits.roadEnabled === true && limits.roadFreeStartEnabled === true,
     // Stesso default di «Mostra note e percorsi nell'app allievi» (spento).
     studentRoadVisible: limits.studentNotesEnabled === true,
     customMarkers: parseRoadCustomMarkers(limits.roadCustomMarkers),
@@ -230,7 +228,9 @@ export async function getRoadState() {
     const ctx = await roadContext();
     const base = {
       roadEnabled: ctx.roadEnabled,
-      freeStartEnabled: ctx.freeStartEnabled,
+      // Road libero: c'è sempre quando Road è acceso (niente impostazione a parte).
+      // Il campo resta per le app 2.4.0 che lo leggono ancora.
+      freeStartEnabled: ctx.roadEnabled,
       catalog: { base: ROAD_BASE_MARKERS, custom: ctx.customMarkers },
     };
     if (!ctx.roadEnabled) return ok({ ...base, activeSession: null, eligibleLesson: null });
@@ -953,7 +953,7 @@ async function currentOwnLesson(ctx: RoadCtx, instructorId: string, until: Date)
 export async function getRoadFreeStartOptions() {
   try {
     const ctx = await roadContext();
-    if (!ctx.freeStartEnabled) return fail("Avvia guida da Road non è attivo per questa autoscuola.", "FREE_START_DISABLED");
+    if (!ctx.roadEnabled) return fail("Reglo Road non è attivo per questa autoscuola.", "ROAD_DISABLED");
     const instructorId = await ownInstructorId(ctx);
     if (!instructorId) return fail("Solo gli istruttori possono avviare una guida da Road.", "FORBIDDEN");
 
@@ -1077,7 +1077,7 @@ export async function startFreeRoadSession(input: {
 }) {
   try {
     const ctx = await roadContext();
-    if (!ctx.freeStartEnabled) return fail("Avvia guida da Road non è attivo per questa autoscuola.", "FREE_START_DISABLED");
+    if (!ctx.roadEnabled) return fail("Reglo Road non è attivo per questa autoscuola.", "ROAD_DISABLED");
     if (typeof input?.studentId !== "string" || typeof input?.vehicleId !== "string") {
       return fail("Scegli allievo e veicolo.");
     }

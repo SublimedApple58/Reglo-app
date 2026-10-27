@@ -14,7 +14,6 @@ import {
 } from "@/lib/autoscuole/road/catalog";
 import { CUSTOM_MARKER_SYMBOL, ROAD_BASE_SYMBOLS } from "@/lib/autoscuole/road/symbols";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { InlineToggle } from "@/components/ui/inline-toggle";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -37,17 +36,13 @@ export function RoadSettingsPane() {
   const [draft, setDraft] = React.useState("");
   const [saving, setSaving] = React.useState<"add" | string | null>(null);
   const [editing, setEditing] = React.useState<{ id: string; label: string } | null>(null);
-  const [freeStart, setFreeStart] = React.useState<boolean | null>(null);
-  const [savingFree, setSavingFree] = React.useState(false);
 
   React.useEffect(() => {
     let alive = true;
     void getAutoscuolaSettings().then((res) => {
       if (!alive) return;
-      if (res.success && res.data) {
-        setItems(res.data.roadCustomMarkers ?? []);
-        setFreeStart(res.data.roadFreeStartEnabled === true);
-      } else {
+      if (res.success && res.data) setItems(res.data.roadCustomMarkers ?? []);
+      else {
         setItems([]);
         toast.error({ description: res.message ?? "Impossibile caricare le segnalazioni." });
       }
@@ -108,45 +103,12 @@ export function RoadSettingsPane() {
 
   const full = (items?.length ?? 0) >= ROAD_CUSTOM_MARKERS_MAX;
 
-  // Road libero (piano A): nasce spento, lo accende il titolare.
-  const toggleFreeStart = async () => {
-    if (savingFree || freeStart === null) return;
-    setSavingFree(true);
-    const res = await updateAutoscuolaSettings({ roadFreeStartEnabled: !freeStart });
-    setSavingFree(false);
-    if (!res.success || !res.data) {
-      toast.error({ description: res.message ?? "Impossibile salvare l'impostazione." });
-      return;
-    }
-    setFreeStart(!freeStart);
-  };
-
   return (
     <div className="-mt-7" data-testid="road-settings-pane">
       <p className="max-w-[680px] text-[15px] leading-[1.5] text-[#6a6a6a]">
         Durante la guida l&apos;istruttore segna gli errori sul punto esatto del percorso. Qui scegli quali
         segnalazioni avere sotto mano oltre a quelle di base.
       </p>
-
-      <div
-        className="mt-[26px] flex items-center justify-between gap-6 rounded-[18px] border border-[#ebebeb] px-5 py-[18px]"
-        data-testid="road-free-start-setting"
-      >
-        <div className="min-w-0">
-          <div className="text-[15px] font-semibold text-[#222222]">Avvia guida da Road</div>
-          <div className="mt-0.5 max-w-[520px] text-[13px] font-medium leading-normal text-[#6a6a6a]">
-            L&apos;istruttore può partire anche senza una guida in agenda: sceglie allievo e veicolo dalla tab
-            Road e la guida entra in agenda da adesso, già presente, con crediti e pagamento come le altre.
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center">
-          {savingFree || freeStart === null ? (
-            <LoadingDots className="text-[#929292]" />
-          ) : (
-            <InlineToggle checked={freeStart} size="lg" onChange={() => void toggleFreeStart()} />
-          )}
-        </div>
-      </div>
 
       <div className="mt-[30px] flex items-baseline justify-between text-base font-semibold text-[#222222]">
         Segnalazioni di base
