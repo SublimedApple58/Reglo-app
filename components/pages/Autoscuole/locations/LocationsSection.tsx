@@ -11,6 +11,7 @@ import { locationsByLicenseEnabled } from "@/lib/autoscuole/location-for-license
 import { FadeIn } from "@/components/ui/fade-in";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LocationFormDialog, type LocationFormValues } from "./LocationFormDialog";
+import { SedeCoverCard } from "./SedeCoverCard";
 
 type Location = {
   id: string;
@@ -24,6 +25,8 @@ type Location = {
   isDefault: boolean;
   isPrecise: boolean;
   licenseCategories: string[];
+  /** REG-639: copertina della sede (solo `isDefault`), URL pubblico R2. */
+  coverPhotoUrl?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -313,6 +316,15 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
         Sede dell&apos;autoscuola e luoghi extra per le guide. Mostrati agli allievi nel
         dettaglio della guida.
       </p>
+      {/* ── Foto della sede (REG-639): copertina di Disponibilità nell'app istruttore ── */}
+      <SedeCoverCard
+        name={sede.name}
+        address={addressLabel(sede)}
+        coverPhotoUrl={sede.coverPhotoUrl ?? null}
+        onChange={(url) =>
+          setLocations((prev) => prev.map((l) => (l.id === sede.id ? { ...l, coverPhotoUrl: url } : l)))
+        }
+      />
       {/* ── Sede dell'autoscuola ── */}
       <div className="flex items-start justify-between gap-4 rounded-[12px] border border-[#e8e8e8] p-5">
         <div className="min-w-0">

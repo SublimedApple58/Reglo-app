@@ -4,6 +4,7 @@ import { prisma } from "@/db/prisma";
 import { getSignedAssetUrl } from "@/lib/storage/r2";
 import { getOrCreateInstructorForUser } from "@/lib/autoscuole/instructors";
 import { isInstructor } from "@/lib/autoscuole/roles";
+import { resolveCoverPhotoUrls } from "@/lib/autoscuole/location-cover";
 
 export async function GET(request: Request) {
   const token = parseBearerToken(request.headers.get("authorization"));
@@ -37,6 +38,11 @@ export async function GET(request: Request) {
     );
   }
 
+  // REG-639: copertina di Disponibilità (sede del membro, se no sede principale).
+  const coverUrls = await resolveCoverPhotoUrls(
+    memberships.map((m) => ({ companyId: m.companyId, defaultLocationId: m.defaultLocationId })),
+  );
+
   const companies = await Promise.all(
     memberships.map(async (entry) => {
       let logoUrl: string | null = null;
@@ -53,6 +59,7 @@ export async function GET(request: Request) {
         name: entry.company.name,
         logoKey: entry.company.logoKey,
         logoUrl,
+        coverPhotoUrl: coverUrls.get(entry.companyId) ?? null,
         role: entry.role,
         autoscuolaRole: entry.autoscuolaRole,
         services: entry.company.services,

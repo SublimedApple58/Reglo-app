@@ -127,6 +127,35 @@ in un luogo solo) era una gabbia: chi fa la B in due posti non poteva dirlo.
   la regola giusta — quindi il buco si vede solo nel campo precompilato a
   schermo, non nel dato salvato.
 
+## Foto della sede (REG-639, ottobre 2026)
+
+La copertina che gli istruttori vedono nell'app mobile, in testa a
+**Disponibilità**. La carica il **titolare** dal pane Impostazioni → «Sede e
+luoghi», card «Foto della sede» in cima (`locations/SedeCoverCard.tsx`).
+
+- **Solo la sede** (`isDefault`): gli altri luoghi sono parcheggi e punti di
+  ritrovo, non sedi, e non hanno il riquadro. Nessun campo «tipo» sui luoghi:
+  la distinzione è `isDefault`.
+- **Dato**: `AutoscuolaLocation.coverPhotoKey` (migrazione additiva
+  `20261101120000_location_cover_photo`), chiave R2
+  `companies/{companyId}/locations/{locationId}/cover-{uuid}.jpg`.
+- **Route**: `POST /api/uploads/location-cover` (form `file`) carica o
+  sostituisce, `DELETE` rimuove. Solo titolare (`isOwner`), sempre sulla sede
+  dell'autoscuola attiva. Logica in `lib/autoscuole/location-cover.ts`.
+- **Peso**: il browser rimpicciolisce a 2000 px JPEG prima di inviare (limite
+  4,5 MB del body Vercel; la route accetta max 4 MB); il server normalizza con
+  `sharp` (rotazione EXIF, metadati e GPS tolti, JPEG 1600 px q82).
+- **URL che non scade**: `getSignedAssetUrl` restituisce l'URL pubblico R2
+  (`R2_PUBLIC_BASE_URL` è impostato in tutti gli ambienti). Ogni caricamento ha
+  una chiave nuova (cache immutabile senza rischio di foto vecchia); la chiave
+  precedente viene cancellata da R2 (best-effort).
+- **Lettori**: `getAutoscuolaLocations` aggiunge `coverPhotoUrl` a ogni luogo
+  (pane web); `/api/mobile/me` aggiunge `coverPhotoUrl` a ogni company
+  (`resolveCoverPhotoUrls`): foto del luogo di default del membro
+  (`CompanyMember.defaultLocationId`) se ne ha una, altrimenti della sede,
+  altrimenti `null` → l'app usa il segnaposto `SEDE_COVER_FALLBACK`. Nessuna
+  assegnazione istruttore→sede (decisione di Tiziano 28/10).
+
 ## Backend — API routes
 
 - `GET/POST /api/autoscuole/locations` — lista / crea luogo custom

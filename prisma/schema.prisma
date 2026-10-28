@@ -715,6 +715,10 @@ model AutoscuolaLocation {
   /// guida. Una categoria appartiene a UN solo luogo per company (esclusività
   /// applicata in transazione da `setLocationLicenseCategories`).
   licenseCategories String[]  @default([])
+  /// Foto di copertina della SEDE (REG-639): chiave R2 caricata dal titolare
+  /// da Impostazioni → Sede e luoghi. Solo la sede (`isDefault`) ne ha una:
+  /// l'app istruttore la mostra in testa a Disponibilità (null = segnaposto).
+  coverPhotoKey     String?
   archivedAt        DateTime? @db.Timestamp(6)
   createdAt         DateTime  @default(now()) @db.Timestamp(6)
   updatedAt         DateTime  @updatedAt

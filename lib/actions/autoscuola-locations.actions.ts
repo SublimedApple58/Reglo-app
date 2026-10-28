@@ -18,6 +18,7 @@ import {
   LocationAuthzError,
 } from "@/lib/autoscuole/locations";
 import { LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
+import { coverPhotoUrl } from "@/lib/autoscuole/location-cover";
 
 /**
  * Tipi di patente serviti dal luogo (REG-409). Lista chiusa: il picker mostra
@@ -69,7 +70,11 @@ export async function getAutoscuolaLocations() {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const locations = await listLocationsForCompany(membership.companyId);
-    return { success: true, data: locations };
+    // REG-639: la copertina della sede esce già come URL (pubblico R2, non scade).
+    const data = await Promise.all(
+      locations.map(async (l) => ({ ...l, coverPhotoUrl: await coverPhotoUrl(l.coverPhotoKey) })),
+    );
+    return { success: true, data };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
