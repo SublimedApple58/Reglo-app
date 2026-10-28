@@ -20,10 +20,6 @@ export const runtime = "nodejs";
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-/**
- * Foto di copertina della SEDE (REG-639). POST `file` = carica o sostituisce,
- * DELETE = rimuove. Solo il titolare, solo la sede dell'autoscuola attiva.
- */
 /** Errori di accesso di `requireServiceAccess` → 401/403, mai 500. */
 const ACCESS_ERRORS: Record<string, { status: number; message: string }> = {
   USER_NOT_AUTHENTICATED: { status: 401, message: "Accedi per continuare." },
@@ -32,6 +28,10 @@ const ACCESS_ERRORS: Record<string, { status: number; message: string }> = {
   SERVICE_NOT_ACTIVE: { status: 403, message: "Servizio non attivo." },
 };
 
+/**
+ * Foto di copertina della SEDE (REG-639). POST `file` = carica o sostituisce,
+ * DELETE = rimuove. Solo il titolare, solo la sede dell'autoscuola attiva.
+ */
 async function resolveSede() {
   let membership;
   try {
