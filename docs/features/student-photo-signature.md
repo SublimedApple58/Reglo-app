@@ -48,6 +48,17 @@ Ogni avatar a iniziali mostra la foto profilo se presente, via **risoluzione bat
 - Upload web staff: pill "Modifica" sull'avatar del drawer → `POST /api/students/[id]/media/photo`.
 - **Esclusi (fallback iniziali, eventuale follow-up)**: `OwnerNotificationsBell` (payload senza userId), `components/shared/header/user-button.tsx` (header legacy), picker mobile label-only.
 
+## Copia avatar 512 px (REG-639 giro Road, 28/10/2026)
+
+Gli originali restano intatti (richiesta esplicita, servono per i documenti), ma pesavano anche 2–3 MB e l'app li scaricava interi per ogni avatar. Ora accanto a ogni foto profilo c'è una copia quadrata 512 px JPEG, `<image>.avatar-512.jpg`, con `Cache-Control: public, max-age=31536000, immutable`.
+
+- `lib/images/avatar-variant.ts`: chiave della copia, `currentAvatarKey(image, imageAvatar)` (la copia vale solo se deriva dall'`image` attuale), `buildAvatarJpeg` (sharp: rotazione EXIF, crop centrato, JPEG q82). Senza `server-only`: la usa anche lo script.
+- `lib/storage/avatar.ts`: `saveAvatarVariant()`, chiamata dopo ogni scrittura di `User.image`: upload mobile (`/api/mobile/profile/photo`), foto allievo (`/api/students/[id]/media/photo`), upload web (`/api/uploads/avatar`, `saveUserAvatar`). Best-effort: se fallisce (es. HEIC) l'avatar resta l'originale.
+- `User.imageAvatar` (migrazione `20261102120000_user_image_avatar`, additiva). `account-deletion` la azzera con `image`.
+- `getUserPhotoUrls` serve la copia quando è valida, altrimenti l'originale.
+- Foto già caricate: `scripts/avatar-variants.ts` (prova / `--apply` / `--revert`, su prod anche `--prod`). Idempotente; il revert azzera `imageAvatar` e cancella solo le copie.
+- Nuovo percorso che scrive `User.image` → chiamare `saveAvatarVariant` (se no l'avatar resta l'originale, mai una foto vecchia).
+
 ## Connessioni
 
 - **Avatar web esistente** (`app/api/uploads/avatar`, `lib/actions/storage.actions.ts`): stesso campo `User.image` — un upload dall'app sostituisce l'avatar mostrato ovunque (voluto).

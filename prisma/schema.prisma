@@ -53,6 +53,8 @@ model User {
   email                                String                                 @unique(map: "user_email_idx")
   emailVerified                        DateTime?                              @db.Timestamp(6)
   image                                String?
+  /// Copia avatar 512 px di `image` (chiave R2 `<image>.avatar-512.jpg`); vale solo se deriva dall'`image` attuale.
+  imageAvatar                          String?
   signatureKey                         String?
   password                             String?
   role                                 String                                 @default("user")

@@ -4,6 +4,7 @@ import { prisma } from '@/db/prisma';
 import { getR2Bucket, getR2Client, getSignedAssetUrl } from '@/lib/storage/r2';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
+import { saveAvatarVariant } from '@/lib/storage/avatar';
 
 export const runtime = 'nodejs';
 
@@ -68,6 +69,7 @@ export async function POST(request: Request) {
       where: { id: userId },
       data: { image: key },
     });
+    await saveAvatarVariant({ userId, imageKey: key, original: buffer });
 
     const url = await getSignedAssetUrl(key);
 

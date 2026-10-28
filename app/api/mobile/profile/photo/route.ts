@@ -4,6 +4,7 @@ import { parseBearerToken, getMobileToken } from '@/lib/mobile-auth';
 import { getR2Bucket, getR2Client, getSignedAssetUrl } from '@/lib/storage/r2';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
+import { saveAvatarVariant } from '@/lib/storage/avatar';
 
 export const runtime = 'nodejs';
 
@@ -77,6 +78,8 @@ export async function POST(request: Request) {
       where: { id: mobileToken.userId },
       data: { image: key },
     });
+    // Copia avatar 512 px accanto all'originale (che resta intatto).
+    await saveAvatarVariant({ userId: mobileToken.userId, imageKey: key, original: buffer });
 
     const url = await getSignedAssetUrl(key);
 

@@ -17,6 +17,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { getActiveCompanyContext } from '@/lib/company-context';
+import { saveAvatarVariant } from '@/lib/storage/avatar';
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const UPLOAD_URL_TTL = 60;
@@ -88,6 +89,8 @@ export async function saveUserAvatar(
       where: { id: userId },
       data: { image: payload.key },
     });
+    // Caricata direttamente su R2 dal browser: la copia avatar la legge da lì.
+    await saveAvatarVariant({ userId, imageKey: payload.key });
 
     const url = await getSignedAssetUrl(payload.key);
 

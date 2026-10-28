@@ -10,6 +10,7 @@ import {
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
 import { getSignedAssetUrl } from '@/lib/storage/r2';
+import { saveAvatarVariant } from '@/lib/storage/avatar';
 
 export const runtime = 'nodejs';
 
@@ -205,11 +206,12 @@ export async function POST(
     }
 
     const key = `users/${studentUserId}/photo-${randomUUID()}.${extension}`;
+    const original = Buffer.from(await file.arrayBuffer());
     await getR2Client().send(
       new PutObjectCommand({
         Bucket: getR2Bucket(),
         Key: key,
-        Body: Buffer.from(await file.arrayBuffer()),
+        Body: original,
         ContentType: file.type,
       })
     );
@@ -217,6 +219,8 @@ export async function POST(
       where: { id: studentUserId },
       data: { image: key },
     });
+    // Copia avatar 512 px accanto all'originale (che resta intatto).
+    await saveAvatarVariant({ userId: studentUserId, imageKey: key, original });
 
     const url = await getSignedAssetUrl(key);
     return NextResponse.json({ success: true, data: { key, url } });

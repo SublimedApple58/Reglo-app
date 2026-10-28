@@ -4,6 +4,7 @@ import { prisma } from '@/db/prisma';
 import { requireServiceAccess } from '@/lib/service-access';
 import { getSignedAssetUrl } from '@/lib/storage/r2';
 import { formatError } from '@/lib/utils';
+import { currentAvatarKey } from '@/lib/images/avatar-variant';
 
 const MAX_IDS = 500;
 
@@ -19,6 +20,9 @@ export type UserPhotoUrlsResult = {
  * Company-scoped: risolve solo utenti membri (e istruttori) dell'autoscuola
  * attiva del chiamante. Funziona sia da web (sessione) sia da mobile (Bearer),
  * via getActiveCompanyContext.
+ *
+ * REG-639 giro Road: per gli avatar si serve la copia 512 px (`imageAvatar`)
+ * quando è quella della foto attuale; altrimenti l'originale come prima.
  */
 export async function getUserPhotoUrls(input: {
   userIds?: string[];
@@ -39,13 +43,13 @@ export async function getUserPhotoUrls(input: {
               image: { not: null },
               companyMembers: { some: { companyId } },
             },
-            select: { id: true, image: true },
+            select: { id: true, image: true, imageAvatar: true },
           })
         : [],
       instructorIds.length
         ? prisma.autoscuolaInstructor.findMany({
             where: { id: { in: instructorIds }, companyId },
-            select: { id: true, user: { select: { image: true } } },
+            select: { id: true, user: { select: { image: true, imageAvatar: true } } },
           })
         : [],
     ]);
@@ -55,7 +59,9 @@ export async function getUserPhotoUrls(input: {
     await Promise.all([
       ...users.map(async (user) => {
         try {
-          result.users[user.id] = await getSignedAssetUrl(user.image as string);
+          result.users[user.id] = await getSignedAssetUrl(
+            currentAvatarKey(user.image, user.imageAvatar) ?? (user.image as string),
+          );
         } catch {
           result.users[user.id] = null;
         }
@@ -67,7 +73,9 @@ export async function getUserPhotoUrls(input: {
           return;
         }
         try {
-          result.instructors[instructor.id] = await getSignedAssetUrl(image);
+          result.instructors[instructor.id] = await getSignedAssetUrl(
+            currentAvatarKey(image, instructor.user?.imageAvatar) ?? image,
+          );
         } catch {
           result.instructors[instructor.id] = null;
         }
