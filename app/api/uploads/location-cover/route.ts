@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/db/prisma";
 import { requireServiceAccess } from "@/lib/service-access";
+import { ACTIVE_COMPANY_REQUIRED, NO_COMPANY_FOUND } from "@/lib/company-context";
 import { isOwner } from "@/lib/autoscuole/roles";
 import {
   coverPhotoUrl,
@@ -23,8 +24,23 @@ const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
  * Foto di copertina della SEDE (REG-639). POST `file` = carica o sostituisce,
  * DELETE = rimuove. Solo il titolare, solo la sede dell'autoscuola attiva.
  */
+/** Errori di accesso di `requireServiceAccess` → 401/403, mai 500. */
+const ACCESS_ERRORS: Record<string, { status: number; message: string }> = {
+  USER_NOT_AUTHENTICATED: { status: 401, message: "Accedi per continuare." },
+  [NO_COMPANY_FOUND]: { status: 403, message: "Nessuna autoscuola associata." },
+  [ACTIVE_COMPANY_REQUIRED]: { status: 403, message: "Scegli prima un'autoscuola." },
+  SERVICE_NOT_ACTIVE: { status: 403, message: "Servizio non attivo." },
+};
+
 async function resolveSede() {
-  const { membership } = await requireServiceAccess("AUTOSCUOLE");
+  let membership;
+  try {
+    ({ membership } = await requireServiceAccess("AUTOSCUOLE"));
+  } catch (error) {
+    const known = error instanceof Error ? ACCESS_ERRORS[error.message] : undefined;
+    if (!known) throw error;
+    return { error: NextResponse.json({ success: false, message: known.message }, { status: known.status }) };
+  }
   if (!isOwner(membership.autoscuolaRole)) {
     return { error: NextResponse.json({ success: false, message: "Solo il titolare può cambiare la foto della sede." }, { status: 403 }) };
   }
