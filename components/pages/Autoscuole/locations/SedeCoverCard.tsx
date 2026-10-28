@@ -143,7 +143,10 @@ export function SedeCoverCard({ name, address, coverPhotoUrl, onChange }: Props)
           <div className="mt-3 flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-foreground">{name}</div>
-              <div className="mt-0.5 truncate text-xs font-medium text-[#929292]">Sede principale · {address}</div>
+              {/* A capo su due righe (mai i puntini): l'indirizzo deve leggersi tutto anche a 390 px. */}
+              <div className="mt-0.5 line-clamp-2 text-xs font-medium leading-[1.45] text-[#929292] [overflow-wrap:anywhere]">
+                Sede principale · {address}
+              </div>
             </div>
             {coverPhotoUrl ? (
               <div className="flex shrink-0 gap-3.5">

@@ -29,13 +29,30 @@ allievi, agenda piena). Tutti gli account hanno la **stessa password**:
 
 ---
 
-## 🚪 Come si accede a staging (è protetto)
+## 🚪 Come si accede a staging (è pubblico)
 
-Staging è dietro **Vercel Deployment Protection**: non è pubblico.
-- **Da browser**: se sei nel team Vercel e loggato, `staging.reglo.it` si apre.
-- **Da strumenti/test/app mobile**: serve l'header **`x-vercel-protection-bypass`**
-  con il *Protection Bypass for Automation* secret (Vercel → `reglo` → Settings →
-  Deployment Protection). In CI è il GitHub secret `VERCEL_AUTOMATION_BYPASS_SECRET`.
+Dal **7 settembre 2026** la Vercel Deployment Protection è **spenta**:
+`staging.reglo.it` (e i preview) si aprono da browser, Playwright, curl e app
+mobile **senza** header di bypass né login Vercel. L'header
+`x-vercel-protection-bypass` non serve più (se qualche script lo manda ancora,
+viene ignorato).
+
+### Catture con Playwright: la finestra «Novità»
+
+Al primo accesso di ogni dispositivo la web app apre lo splash «Novità»
+(`AgendaPauseNewsDialog`, «una volta per dispositivo» in `AutoscuoleShell`),
+che copre la pagina e rovina screenshot e test. In un browser pulito va segnato
+come già visto PRIMA di navigare:
+
+```js
+await context.addInitScript(() => {
+  localStorage.setItem("reglo-news-seen:agenda-pausa-2026-07", "1");
+});
+```
+
+Se in futuro cambia la chiave (costante `AGENDA_PAUSE_NEWS_KEY` in
+`components/Layout/AutoscuoleShell.tsx`) o si aggiunge un'altra novità, aggiorna
+questo snippet.
 
 ---
 
