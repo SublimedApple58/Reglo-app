@@ -9,7 +9,7 @@ Concept di partenza: `/tmp/hiro-anteprime/road-idee/` (3-punti-critici, 4-piano-
 3. **Punti critici** visibili **anche all'istruttore** nell'app mobile (task mobile REG-646).
 4. **Segnalazioni a voce**: fuori da questo piano, idea a parte più avanti.
 5. Idee 1 (riassunto AI / rivedi la guida) e 2 (prontezza all'esame): ferme.
-6. Rilascio massimo fino a staging; produzione solo con ok esplicito.
+6. **Rilascio diretto** (regola di Tiziano del 29/10, sostituisce «massimo fino a staging»): task finito e verificato → staging → produzione senza aspettare l'ok (Road in prod è acceso solo su «Autoscuola Maltese», tenant di prova); Done su Linear solo quando è in prod. Mobile: OTA in produzione **solo sul runtime 2.4.0** (TestFlight), mai agli store 2.3.0; niente build nativa.
 
 Il piano si regge sui dati che Road già registra: ogni segnalazione ha posizione, via, giudizio (bene / da migliorare) e data; il briefing «nelle ultime 5 guide» esiste già (`lib/autoscuole/road/suggestions.ts`); la web app ha già la mappa (MapLibre). Nessuna build nativa: la parte mobile va in OTA sulla 2.4.0.
 
@@ -76,7 +76,7 @@ Ordine delle tappe «più vicina prima», minuti stimati in linea d'aria a 25 km
 | REG-652 | Mappa in Road: linea suggerita, tappe e punti critici dell'allievo | Mobile | 3 | 648 |
 | REG-651 | Interruttori web, giro nel dettaglio guida, documentazione | Web | 1 | 648 |
 
-Totale **31 punti** (erano 27: +1 a REG-648 per la linea, +3 con il nuovo task mobile, spacchettato da REG-650). Ordine dopo 646: 647 → 648 → 649 → 650 → 652 → 651. Ordine: 641 → 642 → 643 → 644 → 645 → 646, poi 647 → 651. Un task alla volta, ognuno con il suo branch `feat/reg-<num>-<slug>` da `origin/staging` e worktree `reglo-worktrees/reg-<num>`; massimo fino a staging.
+Totale **31 punti** (erano 27: +1 a REG-648 per la linea, +3 con il nuovo task mobile, spacchettato da REG-650). Ordine dopo 646: 647 → 648 → 649 → 650 → 652 → 651. Ordine: 641 → 642 → 643 → 644 → 645 → 646, poi 647 → 651. Un task alla volta, ognuno con il suo branch `feat/reg-<num>-<slug>` da `origin/staging` e worktree `reglo-worktrees/reg-<num>`; rilascio diretto fino in produzione (decisione 6).
 
 ## Regole UI (tutte le schermate)
 Design premium, niente pillole/badge decorativi; animazioni veloci (150–200 ms) che non si spengono con `prefers-reduced-motion` / «Riduci movimento»; web responsive a 390 px; mobile: form sheet nativi senza grabber, skeleton, fluidità §15. Verifica con Playwright, screenshot ritagliati in `/tmp/hiro-anteprime/road-punti-critici/`.
@@ -104,3 +104,4 @@ Design premium, niente pillole/badge decorativi; animazioni veloci (150–200 ms
 - 29/10 — REG-646: punti critici nell'app istruttore (tab Road › «Punti critici», mappa + lista, foglio del punto), OTA solo runtime 2.4.0 (master 8c4235a). Approvato da Tiziano.
 - 29/10 — **Modifica al giro (Tiziano)**: in Road i punti critici dell'allievo sulla mappa e una navigazione suggerita sulle strade vere (Routes API + cache REG-642), non obbligatoria, senza ricalcoli insistenti né voce. Sostituisce «non la strada, solo tappe». REG-648 passa a 3 punti; la parte mappa di REG-650 diventa il nuovo REG-652 (3 punti).
 - 29/10 — REG-647: motore del giro (`lesson-plan.ts` + `lesson-plan-service.ts`): punti critici dell'allievo (errori ripetuti in ≥ 2 guide), tappe per priorità con durata, copertura dei percorsi d'esame (30 m, cache 10 min). Nessuna API: arriva con REG-648.
+- 29/10 — REG-648: API del giro (`GET /road/plan`, `POST /road/plan/route`), `plan` all'ingresso in Road, `planReached` a fine guida, interruttori `roadPlanEnabled` / `roadPlanAlertsEnabled` (accesi se assenti) in impostazioni e in `/road/state`. Modifica: il giro NON entra in `/road/free` né in `eligibleLesson` di `/road/state` (si chiede al foglio di partenza con allievo e durata: `/road/state` è interrogato spesso e il giro costa una lettura dei tracciati).

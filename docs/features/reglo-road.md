@@ -26,8 +26,8 @@ Tutte rispondono `{ success: true, data } | { success: false, message, code? }` 
 
 | Metodo | Path | Chi | Cosa |
 |---|---|---|---|
-| GET | `/road/state` | istruttore | `{ roadEnabled, catalog: { base: [{key,label}], custom: [{id,label}] }, activeSession: Session+{lesson} \| null, eligibleLesson: Lesson \| null }` |
-| POST | `/road/sessions` `{ appointmentId }` | istruttore della guida | crea o **riprende** (`resumed: true`) → `Session + { lesson, resumed }` |
+| GET | `/road/state` | istruttore | `{ roadEnabled, planEnabled, planAlertsEnabled, catalog: { base: [{key,label}], custom: [{id,label}] }, activeSession: Session+{lesson} \| null, eligibleLesson: Lesson \| null }` |
+| POST | `/road/sessions` `{ appointmentId, plan? }` | istruttore della guida | crea o **riprende** (`resumed: true`) → `Session + { lesson, resumed }` |
 | GET | `/road/sessions/[id]` | istruttore della guida, titolare | `Detail` |
 | POST | `/road/sessions/[id]/points` `{ seq, points, street? }` | istruttore | `{ accepted, duplicate? , reason? }` — `accepted:false, reason:"SESSION_CLOSED"` se chiusa |
 | POST | `/road/sessions/[id]/markers` `{ clientId, kind, label?, note?, lat, lng, street?, recordedAt? }` | istruttore | `Marker` (idempotente su clientId; accettato fino a 2 h dopo la chiusura) |
@@ -38,10 +38,12 @@ Tutte rispondono `{ success: true, data } | { success: false, message, code? }` 
 | GET | `/road/live` | titolare | `{ now, base: {name,lat,lng}\|null, sessions: [Session+{lesson, markerCount, markerKinds, recentMarkers}], atBase: [{id,name,plate,carColor,freeUntil}] }` |
 | GET | `/road/today` | titolare | `[Lesson + { road: Session+{markerCount, markerKinds} \| null }]` guide singole in auto di oggi (Europa/Roma) |
 | GET | `/road/history?from&to&instructorId&studentId&cursor&limit` | titolare | `{ items: [Session+{lesson, markerCount, markerKinds}], nextCursor }` |
+| GET | `/road/plan?studentId&durationMin&lat&lng` | istruttore | `{ planEnabled, planAlertsEnabled, plan: { stops: PlanStop[], minutes } \| null, studentHotspots }` (REG-648) |
+| POST | `/road/plan/route` `{ start: {lat,lng}, stops }` | istruttore | `{ line: [[lat,lng]] \| null, lengthMeters }` linea suggerita (REG-648) |
 
 Tipi:
 - `Lesson` = `{ appointmentId, startsAt, endsAt, status, student: {id,name}|null, instructor: {id,name,color,phone}|null, vehicle: {id,name,plate}|null, carColor }` — `phone` serve al «Chiama» del titolare; all'allievo arriva sempre `null`. `carColor` = chiave della variante colore dell'auto 3D, già risolta dal server (vedi «Colore delle auto»).
-- `Session` = `{ id, appointmentId, status, startedAt, endedAt, distanceMeters, durationSec, lastSeq, last: {lat,lng,speed,heading,street,at}|null }`
+- `Session` = `{ id, appointmentId, status, startedAt, endedAt, distanceMeters, durationSec, lastSeq, last: {lat,lng,speed,heading,street,at}|null, plan: { stops, minutes, chosenAt } | null, planReached: { reached: string[], total } | null }` (`plan`/`planReached` da REG-648; all'allievo arrivano sempre `null`)
 - `Marker` = `{ id, clientId, kind, label, note, lat, lng, street, recordedAt }`
 - `Detail` = `Session + { lesson, markers: Marker[], track: [[lat,lng,tMs]], evaluation?: { items: [{label, scaleMax, score, notApplicable}], updatedAt } | null }`
 
@@ -51,6 +53,7 @@ Tipi:
 - `lib/autoscuole/road/catalog.ts` — catalogo segnalazioni, parse custom, etichette.
 - `lib/autoscuole/road/geo.ts` — punti, distanza (haversine con filtri).
 - `lib/autoscuole/road/service.ts` — tutta la logica delle route (auth, regole).
+  ⚠️ Si porta dietro l'autenticazione (`requireServiceAccess` → `@/auth` → `next-auth`): ogni modulo che la importa (`hotspots-service`, `lesson-plan-service`, `plan-service`) non si carica in uno script fuori da Next senza dirottare `next-auth`. Come fare: `docs/STAGING.md` › Reglo Road › «Script che chiamano i service Road».
 - `lib/autoscuole/road/maintenance.ts` — chiusura sessioni orfane + retention (prisma iniettato, usato dal job).
 - `trigger/autoscuole-road-maintenance.ts` — job ogni 15 min (va in prod con `pnpm trigger:deploy:prod`, **dopo** `migrate:prod`).
 - `app/api/autoscuole/road/**` — route sottili.
@@ -178,3 +181,14 @@ Solo backend, nessuna API ancora: la espone REG-648 (che controlla ruolo, alliev
 - **Loader** `lib/autoscuole/road/lesson-plan-service.ts`: `computeLessonPlan({ companyId, studentId, durationMin, start })` → `{ plan, studentHotspots }`; `loadStudentHotspots` per la sola mappa. Legge le segnalazioni «da migliorare» dell'allievo (12 mesi), i punti critici dell'autoscuola con `companyHotspots` (`hotspots-service.ts`, stessa cache della lista senza filtri) e, se ci sono percorsi d'esame, i tracciati delle ultime 30 guide dell'allievo (un punto ogni 3). Copertura in cache 10 minuti nel segmento `road`, chiave = allievo + guide + percorsi con `updatedAt`.
 - Verificato su staging (Autoscuola Reglo, sola lettura): circa 0,7 s a freddo e 0,1 s dopo.
 - Test: `tests/unit/road/road-lesson-plan.test.ts`.
+
+### Giro della prossima guida — API, salvataggio e interruttori (REG-648, 29/10)
+
+- **Interruttori** in `limits` (niente migrazione), **accesi se assenti**: `roadPlanEnabled` («Proponi il giro della prossima guida») e `roadPlanAlertsEnabled` («Avvisi delle tappe durante la guida»). `planSettings(limits)` in `lesson-plan.ts`. Esposti in `AutoscuolaSettingsData` e salvati da `updateAutoscuolaSettings` (UI web in REG-651); la mobile li legge da `/road/state` (`planEnabled`, `planAlertsEnabled`).
+- **`GET /road/plan`** (`plan-service.ts › getRoadPlan`, solo istruttore, allievo dell'autoscuola, durata 15–240): giro proposto (`computeLessonPlan`) + `studentHotspots` (i suoi errori ripetuti, per la mappa in Road REG-652). Con «Proponi il giro» spento `plan: null`, i punti dell'allievo restano. Partenza = `lat/lng` del telefono, o la sede se mancano.
+- **`POST /road/plan/route`** (`getRoadPlanRoute`): la **navigazione suggerita**. Pezzi (`planRoutePieces`): tratti partenza → tappe agganciati con `snapWaypoints` (Routes API + cache per tratto `road:snap:v1:*` di REG-642), i percorsi d'esame si usano come sono salvati e si riparte dalla loro fine. Una partenza entro 150 m dalla sede diventa la sede (`planStart`), così i tratti pescano dalla cache. La mobile la chiede **una volta** alla partenza; Google giù o nessuna strada = `line: null` (risposta riuscita, niente errore a schermo).
+- **Salvataggio**: `POST /road/sessions` e `POST /road/free` accettano `plan` (le tappe scelte, come arrivano da `/road/plan`). `parseStoredPlan` tiene solo i campi noti, max 3 tappe; vuoto/assente = senza giro, malformato o interruttore spento = si parte senza giro (mai un errore). In ripresa di sessione il giro non si riscrive.
+- **Esito**: a «Termina guida» `savePlanReached` scrive `RoadSession.planReached` = `{ reached: [key], total }`: tappa raggiunta se il tracciato passa entro 40 m; percorso d'esame se il tracciato lo copre almeno al 60%. Le sessioni chiuse come abbandonate dal job non lo calcolano.
+- **Allievo**: non vede il giro (`plan`/`planReached` azzerati in `getRoadForAppointment`).
+- Modifica al piano: il giro non entra in `/road/free` né in `eligibleLesson` (vedi registro del piano 003).
+- Test: unit `tests/unit/road/road-lesson-plan.test.ts`; e2e `tests/e2e/reg648-road-plan.auth.spec.ts` (istruttore con token mobile, sola lettura; la linea chiama Google per pochi tratti).

@@ -20,6 +20,14 @@ import { isBookingBlockActive } from "@/lib/autoscuole/booking-block";
 import { LESSON_BUFFER_BLOCK_REASON } from "@/lib/autoscuole/lesson-buffer";
 import { AUTOSCUOLE_CACHE_SEGMENTS, invalidateAutoscuoleCache } from "@/lib/autoscuole/cache";
 import { buildBriefing, rankSuggestions, type Briefing, type SuggestionCandidate } from "@/lib/autoscuole/road/suggestions";
+import {
+  computePlanReached,
+  parseStoredPlan,
+  planSettings,
+  type PlanReached,
+  type StoredPlan,
+} from "@/lib/autoscuole/road/lesson-plan";
+import type { LatLng } from "@/lib/autoscuole/road/exam-routes";
 
 /**
  * REG-638 Reglo Road — logica server. Le route in `app/api/autoscuole/road/**`
@@ -62,7 +70,7 @@ export type RoadCtx = Awaited<ReturnType<typeof roadContext>>;
 
 export const canSeeAll = (ctx: RoadCtx) => ctx.membership.role === "admin" || isOwner(ctx.membership.autoscuolaRole);
 
-async function ownInstructorId(ctx: RoadCtx) {
+export async function ownInstructorId(ctx: RoadCtx) {
   if (!isInstructor(ctx.membership.autoscuolaRole)) return null;
   const row = await prisma.autoscuolaInstructor.findFirst({
     where: { companyId: ctx.companyId, userId: ctx.membership.userId, status: { not: "inactive" } },
@@ -141,6 +149,8 @@ const sessionSelect = {
   lastHeading: true,
   lastStreet: true,
   lastPointAt: true,
+  plan: true,
+  planReached: true,
 } satisfies Prisma.RoadSessionSelect;
 type SessionRow = Prisma.RoadSessionGetPayload<{ select: typeof sessionSelect }>;
 
@@ -166,6 +176,9 @@ function sessionDTO(s: SessionRow, lessonStartsAt: Date) {
             at: s.lastPointAt?.toISOString() ?? null,
           }
         : null,
+    // REG-648: il giro scelto alla partenza (null = senza giro) e, a fine guida, le tappe raggiunte.
+    plan: (s.plan as StoredPlan | null) ?? null,
+    planReached: (s.planReached as PlanReached | null) ?? null,
   };
 }
 
@@ -235,6 +248,8 @@ export async function getRoadState() {
       // Il campo resta per le app 2.4.0 che lo leggono ancora.
       freeStartEnabled: ctx.roadEnabled,
       catalog: { base: ROAD_BASE_MARKERS, custom: ctx.customMarkers },
+      // REG-648: «Proponi il giro» e «Avvisi delle tappe», accesi di default.
+      ...planSettings(ctx.limits),
     };
     if (!ctx.roadEnabled) return ok({ ...base, activeSession: null, eligibleLesson: null });
 
@@ -275,7 +290,7 @@ export async function getRoadState() {
 
 // ─── sessione: avvio / ripresa ──────────────────────────────────────────────
 
-export async function startRoadSession(input: { appointmentId: string }) {
+export async function startRoadSession(input: { appointmentId: string; plan?: unknown }) {
   try {
     const ctx = await roadContext();
     if (!ctx.roadEnabled) return fail("Reglo Road non è attivo per questa autoscuola.", "ROAD_DISABLED");
@@ -309,6 +324,9 @@ export async function startRoadSession(input: { appointmentId: string }) {
       return fail(`Road si apre ${ROAD_ENTRY_OPENS_MIN} minuti prima della guida.`, "TOO_EARLY");
     }
 
+    const parsedPlan = planSettings(ctx.limits).planEnabled ? parseStoredPlan(input.plan, now) : null;
+    const plan = parsedPlan ?? null;
+
     // Un istruttore ha una sola sessione attiva: quella vecchia (guida
     // precedente dimenticata aperta) si chiude come abbandonata.
     await prisma.roadSession.updateMany({
@@ -325,6 +343,8 @@ export async function startRoadSession(input: { appointmentId: string }) {
           studentId: appointment.studentId,
           vehicleId: appointment.vehicleId,
           startedAt: now,
+          // Giro scelto nel foglio di partenza; malformato o interruttore spento = senza giro.
+          ...(plan ? { plan: plan as unknown as Prisma.InputJsonValue } : {}),
         },
         select: sessionSelect,
       });
@@ -512,11 +532,32 @@ export async function endRoadSession(sessionId: string) {
         data: { status: "completed" },
       });
       await trimFreeLessonEnd(session.appointmentId, endedAt);
+      await savePlanReached(sessionId, ctx.companyId).catch((e) => console.warn("[road] planReached", e));
     }
     return getRoadSessionDetail(sessionId);
   } catch (error) {
     return fail(formatError(error));
   }
+}
+
+/** REG-648: a fine guida, quali tappe del giro il tracciato ha toccato. */
+async function savePlanReached(sessionId: string, companyId: string) {
+  const s = await prisma.roadSession.findUnique({ where: { id: sessionId }, select: { plan: true } });
+  const plan = parseStoredPlan(s?.plan);
+  if (!plan) return;
+  const examIds = plan.stops.map((x) => x.examRouteId).filter((x): x is string => !!x);
+  const [track, routes] = await Promise.all([
+    loadTrack(sessionId),
+    examIds.length
+      ? prisma.roadExamRoute.findMany({ where: { companyId, id: { in: examIds } }, select: { id: true, path: true } })
+      : Promise.resolve([]),
+  ]);
+  const examPaths = new Map(routes.map((r) => [r.id, (Array.isArray(r.path) ? r.path : []) as LatLng[]]));
+  const reached = computePlanReached(plan.stops, track.map((p) => [p[1], p[2]] as LatLng), examPaths);
+  await prisma.roadSession.update({
+    where: { id: sessionId },
+    data: { planReached: reached as unknown as Prisma.InputJsonValue },
+  });
 }
 
 /**
@@ -650,7 +691,8 @@ export async function getRoadForAppointment(appointmentId: string) {
       const detail = await buildDetail(session.id, ctx.companyId);
       // Il telefono dell'istruttore serve solo al «Chiama» del titolare in web.
       if (detail?.lesson.instructor) detail.lesson.instructor.phone = null;
-      return ok(detail);
+      // Il giro non lo vede l'allievo (piano 003): i motivi parlano dei suoi errori e di quelli degli altri.
+      return ok(detail ? { ...detail, plan: null, planReached: null } : null);
     }
     if (!canSeeAll(ctx)) {
       const mine = await ownInstructorId(ctx);
@@ -1124,6 +1166,7 @@ export async function startFreeRoadSession(input: {
   confirmWeeklyLimit?: boolean;
   confirmNoBuffer?: boolean;
   confirmStudentBlocked?: boolean;
+  plan?: unknown;
 }) {
   try {
     const ctx = await roadContext();
@@ -1206,7 +1249,7 @@ export async function startFreeRoadSession(input: {
     });
     await invalidateFreeLessonAgenda(ctx.companyId);
 
-    const session = await startRoadSession({ appointmentId });
+    const session = await startRoadSession({ appointmentId, plan: input.plan });
     if (!session.success) return session;
     return ok({ ...session.data, appointmentId });
   } catch (error) {

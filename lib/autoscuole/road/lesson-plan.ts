@@ -341,3 +341,128 @@ export function buildLessonPlan(input: LessonPlanInput): LessonPlan {
   }
   return { stops: [], minutes: 0 };
 }
+
+// ─── REG-648: interruttori, giro salvato, tappe raggiunte, linea suggerita ──
+
+/** Interruttori in `limits`: assenti = accesi (decisione di Tiziano, 29/10). */
+export function planSettings(limits: Record<string, unknown>) {
+  return {
+    planEnabled: limits.roadPlanEnabled !== false,
+    planAlertsEnabled: limits.roadPlanAlertsEnabled !== false,
+  };
+}
+
+/** Tappa raggiunta: il tracciato passa entro tanti metri. */
+export const PLAN_REACHED_M = 40;
+/** Percorso d'esame fatto: il tracciato ne copre almeno questa quota. */
+export const PLAN_EXAM_REACHED = 0.6;
+/** Partenza entro tanti metri dalla sede = la sede (così la linea pesca dalla cache). */
+export const PLAN_HQ_SNAP_M = 150;
+
+export type StoredPlanStop = Pick<
+  PlanStop,
+  "key" | "source" | "kind" | "title" | "reason" | "lat" | "lng" | "minutes" | "examRouteId" | "endLat" | "endLng"
+>;
+/** Quello che va in `RoadSession.plan`: le tappe scelte alla partenza. */
+export type StoredPlan = { stops: StoredPlanStop[]; minutes: number; chosenAt: string };
+/** Quello che va in `RoadSession.planReached` a fine guida. */
+export type PlanReached = { reached: string[]; total: number };
+
+const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const lat = (v: unknown) => isNum(v) && Math.abs(v) <= 90;
+const lng = (v: unknown) => isNum(v) && Math.abs(v) <= 180;
+const str = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
+const SOURCES = new Set<PlanSource>(["student", "school", "exam"]);
+
+/**
+ * Il giro mandato dalla mobile all'ingresso in Road. `null`/assente = «Senza
+ * giro»; `undefined` = malformato (si parte comunque, senza giro).
+ */
+export function parseStoredPlan(raw: unknown, now = new Date()): StoredPlan | null | undefined {
+  if (raw == null) return null;
+  if (typeof raw !== "object" || !Array.isArray((raw as { stops?: unknown }).stops)) return undefined;
+  const r = raw as { stops: unknown[]; minutes?: unknown };
+  if (r.stops.length === 0) return null;
+  if (r.stops.length > PLAN_MAX_STOPS) return undefined;
+  const stops: StoredPlanStop[] = [];
+  for (const s of r.stops) {
+    if (!s || typeof s !== "object") return undefined;
+    const o = s as Record<string, unknown>;
+    const key = str(o.key, 120);
+    const title = str(o.title, 120);
+    if (!key || !title || !SOURCES.has(o.source as PlanSource) || !lat(o.lat) || !lng(o.lng)) return undefined;
+    const exam = o.source === "exam";
+    if (exam && (!str(o.examRouteId, 40) || !lat(o.endLat) || !lng(o.endLng))) return undefined;
+    stops.push({
+      key,
+      source: o.source as PlanSource,
+      kind: str(o.kind, 60),
+      title,
+      reason: str(o.reason, 200) ?? "",
+      lat: o.lat as number,
+      lng: o.lng as number,
+      minutes: isNum(o.minutes) ? Math.max(0, Math.round(o.minutes)) : 0,
+      examRouteId: exam ? str(o.examRouteId, 40) : null,
+      endLat: exam ? (o.endLat as number) : null,
+      endLng: exam ? (o.endLng as number) : null,
+    });
+  }
+  return { stops, minutes: isNum(r.minutes) ? Math.max(0, Math.round(r.minutes)) : 0, chosenAt: now.toISOString() };
+}
+
+/** A fine guida: quali tappe il tracciato ha toccato (percorso d'esame: coperto almeno al 60%). */
+export function computePlanReached(
+  stops: StoredPlanStop[],
+  track: LatLng[],
+  examPaths: Map<string, LatLng[]>,
+): PlanReached {
+  const reached: string[] = [];
+  for (const s of stops) {
+    if (s.source === "exam") {
+      const path = s.examRouteId ? examPaths.get(s.examRouteId) : undefined;
+      if (path && path.length >= 2 && examRouteCoverage(path, [track]) >= PLAN_EXAM_REACHED) reached.push(s.key);
+    } else if (track.some(([la, ln]) => haversineMeters(la, ln, s.lat, s.lng) <= PLAN_REACHED_M)) {
+      reached.push(s.key);
+    }
+  }
+  return { reached, total: stops.length };
+}
+
+/**
+ * La linea suggerita a pezzi: tratti da agganciare alle strade (partenza →
+ * tappa → …) e percorsi d'esame già salvati, da usare così come sono. Dopo un
+ * percorso d'esame si riparte dalla sua fine.
+ */
+export type RoutePiece = { kind: "snap"; points: LatLng[] } | { kind: "path"; path: LatLng[] };
+
+export function planRoutePieces(
+  start: { lat: number; lng: number },
+  stops: StoredPlanStop[],
+  examPaths: Map<string, LatLng[]>,
+): RoutePiece[] {
+  const pieces: RoutePiece[] = [];
+  let run: LatLng[] = [[start.lat, start.lng]];
+  for (const s of stops) {
+    const path = s.source === "exam" && s.examRouteId ? examPaths.get(s.examRouteId) : undefined;
+    if (path && path.length >= 2) {
+      run.push(path[0]);
+      if (run.length >= 2) pieces.push({ kind: "snap", points: run });
+      pieces.push({ kind: "path", path });
+      run = [path[path.length - 1]];
+    } else {
+      run.push([s.lat, s.lng]);
+    }
+  }
+  if (run.length >= 2) pieces.push({ kind: "snap", points: run });
+  return pieces;
+}
+
+/** Se la partenza è vicino alla sede si usa la sede: stessi tratti, stessa cache. */
+export function planStart(
+  start: { lat: number; lng: number } | null,
+  hq: { lat: number; lng: number } | null,
+): { lat: number; lng: number } | null {
+  if (!start) return hq;
+  if (hq && haversineMeters(start.lat, start.lng, hq.lat, hq.lng) <= PLAN_HQ_SNAP_M) return hq;
+  return start;
+}

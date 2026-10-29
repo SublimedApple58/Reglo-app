@@ -199,3 +199,83 @@ describe("Reglo Road — giro: tappe", () => {
     expect(plan.stops[0]).toMatchObject({ key: "a", minutes: 0 });
   });
 });
+
+import {
+  computePlanReached,
+  parseStoredPlan,
+  planRoutePieces,
+  planSettings,
+  planStart,
+  type StoredPlanStop,
+} from "@/lib/autoscuole/road/lesson-plan";
+
+const stop = (over: Partial<StoredPlanStop> & { dLat?: number }): StoredPlanStop => ({
+  key: over.key ?? `k${over.dLat ?? 0}`,
+  source: "student",
+  kind: "precedenza",
+  title: "Via Roma",
+  reason: "Precedenza da migliorare 3 volte in 2 guide",
+  lat: BASE.lat + (over.dLat ?? 0),
+  lng: BASE.lng,
+  minutes: 2,
+  examRouteId: null,
+  endLat: null,
+  endLng: null,
+  ...over,
+});
+
+describe("Reglo Road — giro: API (REG-648)", () => {
+  it("interruttori accesi se assenti", () => {
+    expect(planSettings({})).toEqual({ planEnabled: true, planAlertsEnabled: true });
+    expect(planSettings({ roadPlanEnabled: false, roadPlanAlertsEnabled: true })).toEqual({
+      planEnabled: false,
+      planAlertsEnabled: true,
+    });
+  });
+
+  it("giro dalla mobile: vuoto = senza giro, malformato = undefined, tiene solo i campi noti", () => {
+    expect(parseStoredPlan(undefined)).toBeNull();
+    expect(parseStoredPlan({ stops: [] })).toBeNull();
+    expect(parseStoredPlan({ stops: "x" })).toBeUndefined();
+    expect(parseStoredPlan({ stops: [stop({}), stop({}), stop({}), stop({})] })).toBeUndefined();
+    expect(parseStoredPlan({ stops: [{ ...stop({}), lat: 200 }] })).toBeUndefined();
+    expect(parseStoredPlan({ stops: [{ ...stop({ source: "exam" }) }] })).toBeUndefined(); // senza percorso
+    const now = new Date("2026-10-29T10:00:00Z");
+    const p = parseStoredPlan({ stops: [{ ...stop({ key: "a" }), extra: "via" }], minutes: 17.4 }, now)!;
+    expect(p).toEqual({ stops: [stop({ key: "a" })], minutes: 17, chosenAt: now.toISOString() });
+  });
+
+  it("tappe raggiunte: entro 40 m; percorso d'esame coperto almeno al 60%", () => {
+    const track: LatLng[] = Array.from({ length: 100 }, (_, i) => [BASE.lat + (i * 0.002) / 100, BASE.lng]);
+    const exam = stop({ key: "exam:r", source: "exam", examRouteId: "r", endLat: BASE.lat + 0.002, endLng: BASE.lng });
+    const r = computePlanReached(
+      [stop({ key: "sulla", dLat: 0.001 }), stop({ key: "lontana", dLat: 0.01 }), exam],
+      track,
+      new Map([["r", line(0, 0.002)]]),
+    );
+    expect(r).toEqual({ reached: ["sulla", "exam:r"], total: 3 });
+    // Percorso d'esame a 200 m: non fatto.
+    expect(computePlanReached([exam], track, new Map([["r", line(0, 0.002, BASE.lng + 0.0026)]])).reached).toEqual([]);
+  });
+
+  it("linea a pezzi: si aggancia fino al percorso d'esame, lo si usa com'è, si riparte dalla sua fine", () => {
+    const path = line(0.005, 0.008);
+    const pieces = planRoutePieces(
+      BASE,
+      [stop({ dLat: 0.001 }), stop({ key: "exam:r", source: "exam", examRouteId: "r", dLat: 0.005 }), stop({ dLat: 0.01 })],
+      new Map([["r", path]]),
+    );
+    expect(pieces).toEqual([
+      { kind: "snap", points: [[BASE.lat, BASE.lng], [BASE.lat + 0.001, BASE.lng], path[0]] },
+      { kind: "path", path },
+      { kind: "snap", points: [path[1], [BASE.lat + 0.01, BASE.lng]] },
+    ]);
+  });
+
+  it("partenza vicino alla sede = la sede", () => {
+    const hq = { lat: BASE.lat, lng: BASE.lng };
+    expect(planStart({ lat: BASE.lat + 0.001, lng: BASE.lng }, hq)).toBe(hq); // ~111 m
+    expect(planStart({ lat: BASE.lat + 0.01, lng: BASE.lng }, hq)).toEqual({ lat: BASE.lat + 0.01, lng: BASE.lng });
+    expect(planStart(null, hq)).toBe(hq);
+  });
+});

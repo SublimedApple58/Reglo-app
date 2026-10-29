@@ -482,6 +482,9 @@ const autoscuolaSettingsPatchSchema = z
       )
       .max(ROAD_CUSTOM_MARKERS_MAX)
       .optional(),
+    // REG-648 Road: giro della prossima guida e avvisi delle tappe (accesi di default).
+    roadPlanEnabled: z.boolean().optional(),
+    roadPlanAlertsEnabled: z.boolean().optional(),
     // Ordine custom delle colonne istruttore in agenda (REG-449): elenco di id,
     // anche parziale. Array vuoto = si torna all'ordine alfabetico.
     agendaInstructorOrder: z.array(z.string()).optional(),
@@ -703,6 +706,10 @@ export type AutoscuolaSettingsData = {
   roadEnabled: boolean;
   /** REG-638: segnalazioni personalizzate dell'autoscuola. */
   roadCustomMarkers: RoadCustomMarker[];
+  /** REG-648: «Proponi il giro della prossima guida», acceso se assente. */
+  roadPlanEnabled: boolean;
+  /** REG-648: «Avvisi delle tappe durante la guida», acceso se assente. */
+  roadPlanAlertsEnabled: boolean;
   agendaInstructorOrder: string[];
   studentNameOrder: StudentNameOrder;
 };
@@ -1114,6 +1121,9 @@ const resolveAutoscuolaSettingsData = async (
     // REG-638: modulo Road, nasce SPENTO e si accende solo dal backoffice.
     roadEnabled: limits.roadEnabled === true,
     roadCustomMarkers: parseRoadCustomMarkers(limits.roadCustomMarkers),
+    // REG-648: nascono ACCESI (decisione di Tiziano, 29/10).
+    roadPlanEnabled: limits.roadPlanEnabled !== false,
+    roadPlanAlertsEnabled: limits.roadPlanAlertsEnabled !== false,
     agendaInstructorOrder: asAgendaInstructorOrder(limits.agendaInstructorOrder),
     studentNameOrder: asStudentNameOrder(limits.studentNameOrder),
   };
@@ -1839,6 +1849,8 @@ export async function updateAutoscuolaSettings(
         payload.cancelledLessonBlocks ?? limits.cancelledLessonBlocks === true,
       agendaShowVehicle: payload.agendaShowVehicle ?? limits.agendaShowVehicle === true,
       roadCustomMarkers: payload.roadCustomMarkers ?? parseRoadCustomMarkers(limits.roadCustomMarkers),
+      roadPlanEnabled: payload.roadPlanEnabled ?? limits.roadPlanEnabled !== false,
+      roadPlanAlertsEnabled: payload.roadPlanAlertsEnabled ?? limits.roadPlanAlertsEnabled !== false,
       studentNameOrder: asStudentNameOrder(
         payload.studentNameOrder ?? limits.studentNameOrder,
       ),

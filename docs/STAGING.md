@@ -105,6 +105,26 @@ di `titolare@reglo.it`, dal 29/10/2026); «Reglo E2E» resta spento.
 - **Dati di prova dei punti critici** (8 guide passate con segnalazioni in tre
   incroci di Torino; idempotente, `--remove` per toglierle):
   `scripts/seed-road-hotspots.ts`, stesso comando con `.env.staging` o `.env.dev`.
+- **Script che chiamano i service Road** (`lib/autoscuole/road/*-service.ts`,
+  `service.ts`): il codice Road **si porta dietro l'autenticazione**.
+  `hotspots-service.ts`, `lesson-plan-service.ts` e `plan-service.ts` importano
+  `road/service.ts`, che importa `requireServiceAccess` → `@/auth` → `next-auth`, e
+  fuori da Next `next-auth` non si carica (`Cannot find module …/next/server`).
+  Nello script, prima dei `require` del codice di prodotto, oltre a `server-only` e
+  agli alias `@/` va dirottato anche `next-auth` (e `@/auth`) su un modulo finto:
+
+  ```ts
+  NodeModule._resolveFilename = function (request: string, ...rest: unknown[]) {
+    if (/^(next-auth|@\/auth)(\/|$)/.test(request)) return "/percorso/stub.js"; // module.exports = new Proxy({}, { get: () => () => ({}) })
+    if (request === "server-only") return originalResolve.call(this, "path", ...rest);
+    const target = request.startsWith("@/") ? nodePath.join(REPO_ROOT, request.slice(2)) : request;
+    return originalResolve.call(this, target, ...rest);
+  };
+  ```
+
+  Così si possono chiamare le funzioni senza controlli di ruolo (es.
+  `computeLessonPlan`, `companyHotspots`); quelle che passano da `roadContext()`
+  invece richiedono una sessione vera e vanno provate con gli e2e.
 - Gli e2e Road (`tests/e2e/reg64*-road-*.auth.spec.ts`) girano sul titolare; quello
   dei punti critici entra anche come istruttore (`istruttore@reglo.it`) con token
   mobile e header `x-reglo-company-id`, perché l'account è in due autoscuole.
