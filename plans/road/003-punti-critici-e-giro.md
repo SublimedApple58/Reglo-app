@@ -77,10 +77,12 @@ Design premium, niente pillole/badge decorativi; animazioni veloci (150–200 ms
 - **Pochi dati**: stato vuoto chiaro («servono ancora circa N guide registrate»); il giro funziona anche solo col briefing.
 - **Conservazione 12 mesi**: la mappa guarda al massimo un anno (scritto in pagina).
 - **Privacy**: dati aggregati (≥ 2 allievi); l'istruttore vede la mappa aggregata ma nel dettaglio solo i suoi allievi.
-- **Routes API**: va verificato che sia abilitata sulla chiave; costo per richiesta solo mentre si modifica un percorso, endpoint protetto da login.
+- **Routes API**: abilitata sulla chiave (verificato 29/10, la stessa su dev e staging). Costo per richiesta solo mentre si modifica un percorso, endpoint solo titolare. Decisione di Tiziano (29/10): chiamare Google solo quando si lascia o si salva un punto (debounce nell'editor), cache dei tratti già calcolati e ricalcolo solo del tratto toccato → cache Redis per tratto + tratti consecutivi in una richiesta (≤ 10 intermedi, tariffa base).
 - **Percorsi «d'esame»**: non ufficiali della motorizzazione → «I tuoi percorsi d'esame».
 - **Distrazione**: una card alla volta, testo breve, solo vibrazione, interruttore.
 - **Stima tempi**: indicativa.
 
 ## Avanzamento
 - 29/10 — piano approvato, task creati, avvio REG-641.
+- 29/10 — REG-641 su staging (82b995c). Road acceso sull'autoscuola di test di staging «Autoscuola Reglo» (solo quella).
+- 29/10 — REG-642: `POST /road/exam-routes/snap` (aggancio con cache per tratto) e `POST /road/exam-routes/from-session` (scorciatoia A).

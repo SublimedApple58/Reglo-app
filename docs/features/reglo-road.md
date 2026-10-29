@@ -114,4 +114,21 @@ Piano: `plans/road/003-punti-critici-e-giro.md` (punti critici, percorsi d'esame
 | PATCH | `/road/exam-routes/[id]` (campi parziali, `restore: true` toglie dall'archivio) | titolare | modifica |
 | DELETE | `/road/exam-routes/[id]` | titolare | archivia → `{ archived: true }` |
 
-Codici: `ROAD_DISABLED`, `FORBIDDEN`, `INVALID`, `NOT_FOUND`. Test: `tests/unit/road/road-exam-routes.test.ts`, e2e API `tests/e2e/reg641-road-exam-routes.auth.spec.ts`. L'aggancio alle strade (`/road/exam-routes/snap`) e la scorciatoia da guida Road arrivano con REG-642.
+Codici: `ROAD_DISABLED`, `FORBIDDEN`, `INVALID`, `NOT_FOUND`. Test: `tests/unit/road/road-exam-routes.test.ts`, e2e API `tests/e2e/reg641-road-exam-routes.auth.spec.ts`. 
+
+### Aggancio alle strade e scorciatoia da guida Road (REG-642, 29/10)
+
+- **`lib/autoscuole/road/snap.ts`** — `snapWaypoints(waypoints)`: ogni tratto fra due punti consecutivi diventa la strada in auto (Google Routes API `computeRoutes`, `TRAFFIC_UNAWARE`, punti intermedi come tappe → una «leg» per tratto; chiave server `GOOGLE_MAPS_API_KEY`, la stessa del proxy Places, abilitata il 29/10). Ogni tratto è semplificato a ~10 m.
+- **Costo contenuto** (si paga a richiesta):
+  - cache Redis per tratto `road:snap:v1:<lat,lng>><lat,lng>` (coordinate a 5 decimali ≈ 1 m, TTL 90 giorni; niente companyId né APP_ENV perché le strade sono uguali in ogni ambiente) → spostare un punto ricalcola solo i due tratti che lo toccano;
+  - i tratti mancanti consecutivi vanno in una richiesta sola, al massimo 10 intermedi (oltre Google applica la tariffa Advanced): `planSnapRuns`;
+  - il client (editor REG-645) chiama solo quando un punto viene lasciato o al salvataggio, con debounce, mai al movimento del mouse.
+- Errori espliciti, mai una linea dritta salvata di nascosto: `SNAP_UNAVAILABLE` (Google non risponde, timeout 10 s, chiave assente), `NO_ROUTE` (nessuna strada in auto fra due punti).
+- Scorciatoia: `examRouteFromSession` prende il tracciato GPS (`loadRoadTrack`) fra `fromMs` e `toMs` (istanti dei punti, quelli del `track` del dettaglio sessione; assenti = tutta la guida) → `path` semplificata + `waypoints` (≤ 25, `waypointsFromTrack` con tolleranza crescente) per riaprirla nell'editor.
+
+| Metodo | Path | Chi | Cosa |
+|---|---|---|---|
+| POST | `/road/exam-routes/snap` `{ waypoints }` | titolare | `{ segments: LatLng[][], path, lengthMeters }` (la `path` si passa così com'è al POST/PATCH) |
+| POST | `/road/exam-routes/from-session` `{ sessionId, fromMs?, toMs? }` | titolare | bozza `{ sourceSessionId, waypoints, path, lengthMeters }` |
+
+Codici in più: `SNAP_UNAVAILABLE`, `NO_ROUTE`. Test: `tests/unit/road/road-snap.test.ts` (Google e cache finti: raggruppamento, solo i tratti toccati, errori), e2e `tests/e2e/reg642-road-snap.auth.spec.ts` (una chiamata vera, la seconda dalla cache).

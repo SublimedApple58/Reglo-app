@@ -1,13 +1,24 @@
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { canSeeAll, roadContext } from "@/lib/autoscuole/road/service";
-import { parseExamRouteInput, type LatLng } from "@/lib/autoscuole/road/exam-routes";
+import {
+  EXAM_ROUTE_MAX_WAYPOINTS,
+  parseExamRouteInput,
+  parseLatLngList,
+  pathLengthMeters,
+  simplifyPath,
+  type LatLng,
+} from "@/lib/autoscuole/road/exam-routes";
+import { loadRoadTrack } from "@/lib/autoscuole/road/maintenance";
+import { SnapError, snapWaypoints, waypointsFromTrack } from "@/lib/autoscuole/road/snap";
 
 /**
  * REG-641 Reglo Road — percorsi d'esame dell'autoscuola (API).
  * - leggere: titolare e istruttori (servono alla mappa dei punti critici e al
  *   giro della prossima guida);
- * - creare / modificare / archiviare: solo titolare (o admin).
+ * - creare / modificare / archiviare: solo titolare (o admin);
+ * - aggancio alle strade e scorciatoia da guida Road (REG-642): solo titolare,
+ *   perché servono solo all'editor (e l'aggancio costa a richiesta).
  * Tutto spento se Road non è attivo.
  */
 
@@ -56,6 +67,8 @@ export type RoadExamRouteDTO = {
   createdAt: string;
   updatedAt: string;
 };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const asLatLng = (v: unknown): LatLng[] => (Array.isArray(v) ? (v as LatLng[]) : []);
 
@@ -180,6 +193,61 @@ export async function archiveRoadExamRoute(id: string) {
     });
     if (!res.count) return fail("Percorso non trovato.", "NOT_FOUND");
     return ok({ archived: true });
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
+/**
+ * REG-642: i punti del titolare → la linea che segue le strade. Se Google non
+ * risponde l'errore è esplicito: nessuna linea dritta salvata di nascosto.
+ */
+export async function snapRoadExamRoute(raw: unknown) {
+  try {
+    const loaded = await loadCtx(true);
+    if ("error" in loaded) return loaded.error!;
+    const waypoints = parseLatLngList((raw as Record<string, unknown> | null)?.waypoints, {
+      min: 2,
+      max: EXAM_ROUTE_MAX_WAYPOINTS,
+    });
+    if (!waypoints) return fail(`Servono da 2 a ${EXAM_ROUTE_MAX_WAYPOINTS} punti sulla mappa.`, "INVALID");
+    const res = await snapWaypoints(waypoints);
+    return ok({ segments: res.segments, path: res.path, lengthMeters: res.lengthMeters });
+  } catch (error) {
+    if (error instanceof SnapError) return fail(error.message, error.code);
+    return fail(formatError(error));
+  }
+}
+
+/**
+ * REG-642 scorciatoia: un tratto del tracciato di una guida Road (fra `fromMs`
+ * e `toMs`, istanti dei punti GPS; assenti = tutta la guida) diventa la bozza
+ * di un percorso: la linea vera più i punti per riaprirla nell'editor.
+ */
+export async function examRouteFromSession(raw: unknown) {
+  try {
+    const loaded = await loadCtx(true);
+    if ("error" in loaded) return loaded.error!;
+    const { ctx } = loaded;
+    const body = (raw ?? {}) as Record<string, unknown>;
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
+    const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    const fromMs = num(body.fromMs);
+    const toMs = num(body.toMs);
+    if (fromMs != null && toMs != null && toMs <= fromMs) return fail("Il tratto scelto è vuoto.", "INVALID");
+    if (!UUID_RE.test(sessionId)) return fail("Guida non valida.", "INVALID");
+    if (!(await sessionBelongs(ctx.companyId, sessionId))) return fail("Guida non trovata.", "NOT_FOUND");
+    const track = (await loadRoadTrack(prisma, sessionId))
+      .filter((p) => (fromMs == null || p[0] >= fromMs) && (toMs == null || p[0] <= toMs))
+      .map((p) => [p[1], p[2]] as LatLng);
+    if (track.length < 2) return fail("In quel tratto la guida non ha abbastanza punti GPS.", "INVALID");
+    const path = simplifyPath(track);
+    return ok({
+      sourceSessionId: sessionId,
+      waypoints: waypointsFromTrack(track, EXAM_ROUTE_MAX_WAYPOINTS),
+      path,
+      lengthMeters: pathLengthMeters(path),
+    });
   } catch (error) {
     return fail(formatError(error));
   }
