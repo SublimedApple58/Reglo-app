@@ -52,4 +52,5 @@ Stato: **IN CORSO**. Approvato da Tiziano il 29/10/2026. Task: REG-655 → REG-6
 `LocationFormDialog` (Places autocomplete/details), `upsertDefaultLocation`, la geocodifica di `headquarters.ts`, `ROAD_IMAGES.base`, `addHtmlMarker`/`htmlElement`, su mobile `<FormSheet>`/`FORM_SHEET` e il campo `headquarters` della tab Road.
 
 ## Avanzamento
-- (in corso) REG-655
+- **REG-655 in prod** 29/10 (main 4863e12).
+- REG-656: `canEdit` = solo titolare (gli admin non possono salvare la sede); «Usa la mia posizione attuale» sceglie fra i 10 luoghi più vicini il primo con via e numero (il più vicino a volte è solo la zona).
