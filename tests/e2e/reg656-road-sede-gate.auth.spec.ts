@@ -59,6 +59,10 @@ test("foglio della sede: bloccante per il titolare, si sblocca salvando", async 
     await shot(page, "03-web-foglio-sede-ricerca");
     await first.click();
     await expect(page.getByTestId("road-hq-picked")).toContainText("Da Google Maps", { timeout: 30_000 });
+    // Si salva con la posizione (45.4654, 9.1859): la sede di staging resta dov'era.
+    await page.getByRole("button", { name: "Cambia" }).click();
+    await page.getByTestId("road-hq-locate").click();
+    await expect(page.getByTestId("road-hq-picked")).toContainText("Dalla tua posizione attuale", { timeout: 30_000 });
     await page.getByTestId("road-hq-save").click();
     await expect(gate).toBeHidden({ timeout: 30_000 });
     await expect.poll(async () => (await hqStatus(page)).data?.missing, { timeout: 30_000 }).toBe(false);
@@ -69,8 +73,8 @@ test("foglio della sede: bloccante per il titolare, si sblocca salvando", async 
       await page.goto("/it/user/autoscuole/road");
       const gate = page.getByTestId("road-hq-gate");
       await gate.waitFor({ timeout: 60_000 });
-      await page.getByTestId("road-hq-address").fill("Via Roma 42 Milano");
-      await gate.locator("button").filter({ hasText: "Via Roma" }).first().click();
+      await page.getByTestId("road-hq-locate").click();
+      await page.getByTestId("road-hq-picked").waitFor({ timeout: 30_000 });
       await page.getByTestId("road-hq-save").click();
       await expect(gate).toBeHidden({ timeout: 30_000 });
     }
@@ -94,9 +98,6 @@ test("foglio della sede a 390 px", async ({ page }) => {
   await expect(page.getByTestId("road-hq-picked")).toBeVisible({ timeout: 30_000 });
   await page.waitForTimeout(400);
   await shot(page, "04-web-foglio-sede-390");
-  await page.getByRole("button", { name: "Cambia" }).click();
-  await page.getByTestId("road-hq-address").fill("Via Roma 42 Milano");
-  await gate.locator("button").filter({ hasText: "Via Roma" }).first().click();
   await page.getByTestId("road-hq-save").click();
   await expect(gate).toBeHidden({ timeout: 30_000 });
 });

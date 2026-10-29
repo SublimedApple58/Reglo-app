@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireServiceAccess } from "@/lib/service-access";
+import { pickStreetAddress } from "@/lib/places/nearby-address";
 
 // REG-656: l'indirizzo più vicino a una posizione (il titolare sceglie «Usa la
 // mia posizione attuale» nel foglio della sede di Road). Places API (New)
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         locationRestriction: { circle: { center: { latitude: lat, longitude: lng }, radius: RADIUS_M } },
         rankPreference: "DISTANCE",
-        maxResultCount: 1,
+        maxResultCount: 10,
         languageCode: "it",
         regionCode: "IT",
       }),
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
     });
     if (!res.ok) return NextResponse.json({ error: "upstream" }, { status: 502 });
     const data = (await res.json().catch(() => null)) as { places?: Array<{ formattedAddress?: string }> } | null;
-    return NextResponse.json({ address: data?.places?.[0]?.formattedAddress ?? null });
+    return NextResponse.json({ address: pickStreetAddress((data?.places ?? []).map((p) => p.formattedAddress)) });
   } catch {
     return NextResponse.json({ error: "upstream" }, { status: 502 });
   }
