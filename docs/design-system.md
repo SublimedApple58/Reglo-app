@@ -209,6 +209,7 @@ CSS variables per animazioni in `globals.css`:
 - Niente `useReducedMotion()` per decidere se animare, niente `MotionConfig reducedMotion="user"`.
 - Niente `@media (prefers-reduced-motion: reduce)` che azzeri o accorci `animation`/`transition`, niente classi Tailwind `motion-reduce:` / `motion-safe:`.
 - Con `motion/react` lascia il default o, se serve essere espliciti, `<MotionConfig reducedMotion="never">`.
+- **MapLibre** (mappe di Reglo Road) di suo salta `easeTo` / `flyTo` / `fitBounds` con «Riduci movimento» attivo: passa sempre `essential: true` (REG-644; corretto anche `RoadLiveView`).
 - Perché: sul Mac di Tiziano «Riduci movimento» è attivo e con le transizioni spente l'interfaccia andava a scatti (hover della ciambella del Round pre-seed, 25/10).
 - Codice nato prima della regola che la rispetta ancora (da allineare quando ci si passa): `BackofficeKpiPage.tsx`, `kpi/KpiPrimitives.tsx`, `Autoscuole/NeverAccessedNudge.tsx`, `Investor/InvestorKpiPage.tsx`, e le media query di `globals.css` fuori dal Round (es. il megafono).
 

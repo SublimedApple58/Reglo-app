@@ -299,7 +299,7 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
     // la card (330×~400 in alto a destra) la coprirebbe
     const underCard = p.x > w - 370 && p.y < 420;
     if (outside || underCard) {
-      map.easeTo({ center: car.pos, offset: [-170, 60], duration: 600 });
+      map.easeTo({ center: car.pos, offset: [-170, 60], duration: 600, essential: true });
     }
   }, [handle, selectedId]);
 

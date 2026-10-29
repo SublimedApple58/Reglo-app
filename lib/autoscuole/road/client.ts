@@ -88,6 +88,63 @@ export type RoadDetail = RoadSession & {
   evaluation?: RoadEvaluation | null;
 };
 
+/** Punto critico (REG-643): dove gli allievi sbagliano più spesso. */
+export type RoadHotspot = {
+  key: string;
+  kind: string;
+  label: string;
+  lat: number;
+  lng: number;
+  street: string | null;
+  errors: number;
+  students: number;
+  sessions: number;
+  lastAt: string;
+  examRoutes: Array<{ id: string; name: string }>;
+};
+
+export type RoadHotspots = {
+  from: string;
+  to: string;
+  hotspots: RoadHotspot[];
+  totalErrors: number;
+  examRoutes: number;
+};
+
+export type RoadHotspotDetail = {
+  hotspot: RoadHotspot;
+  sessions: Array<{
+    id: string;
+    startedAt: string;
+    student: { id: string; name: string | null } | null;
+    instructor: { id: string; name: string } | null;
+    errors: number;
+    lastAt: string;
+  }>;
+  students: Array<{ id: string; name: string | null; errors: number }>;
+  hiddenSessions: number;
+};
+
+export type RoadHotspotFilters = {
+  from?: string | null;
+  instructorId?: string | null;
+  license?: string | null;
+  kind?: string | null;
+};
+
+/** Percorso d'esame (REG-641), coordinate [lat, lng]. */
+export type RoadExamRoute = {
+  id: string;
+  name: string;
+  examSite: string | null;
+  licenseCategories: string[];
+  waypoints: Array<[number, number]>;
+  path: Array<[number, number]>;
+  lengthMeters: number;
+  sourceSessionId: string | null;
+  archivedAt: string | null;
+};
+
 export class RoadApiError extends Error {
   constructor(
     message: string,
@@ -115,6 +172,14 @@ async function call<T>(path: string, signal?: AbortSignal): Promise<T> {
   return body.data;
 }
 
+function query(params: Record<string, string | number | null | undefined>) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v != null && v !== "") q.set(k, String(v));
+  }
+  return q.toString();
+}
+
 export const roadApi = {
   live: (signal?: AbortSignal) => call<RoadLive>("/live", signal),
   today: (signal?: AbortSignal) => call<RoadTodayItem[]>("/today", signal),
@@ -135,6 +200,11 @@ export const roadApi = {
     }
     return call<{ items: RoadHistoryItem[]; nextCursor: string | null }>(`/history?${q}`, signal);
   },
+  hotspots: (params: RoadHotspotFilters, signal?: AbortSignal) =>
+    call<RoadHotspots>(`/hotspots?${query(params)}`, signal),
+  hotspot: (key: string, params: RoadHotspotFilters, signal?: AbortSignal) =>
+    call<RoadHotspotDetail>(`/hotspots/${encodeURIComponent(key)}?${query(params)}`, signal),
+  examRoutes: (signal?: AbortSignal) => call<RoadExamRoute[]>("/exam-routes", signal),
   student: (studentId: string, signal?: AbortSignal) =>
     call<{ items: RoadStudentItem[] }>(`/students/${encodeURIComponent(studentId)}`, signal),
   session: (id: string, signal?: AbortSignal) =>

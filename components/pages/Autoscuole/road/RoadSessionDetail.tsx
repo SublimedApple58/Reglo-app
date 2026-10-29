@@ -40,8 +40,13 @@ import {
 } from "./road-ui";
 
 const POLL_MS = 5000;
-type RoadView = "live" | "today" | "history";
-const VIEW_LABEL: Record<RoadView, string> = { live: "Dal vivo", today: "Guide di oggi", history: "Storico" };
+type RoadView = "live" | "today" | "history" | "hotspots";
+const VIEW_LABEL: Record<RoadView, string> = {
+  live: "Dal vivo",
+  today: "Guide di oggi",
+  history: "Storico",
+  hotspots: "Punti critici",
+};
 
 /**
  * Dettaglio di una guida registrata con Road (W2): percorso, segnalazioni in
