@@ -8,6 +8,8 @@ import { expect, test, type Page } from "@playwright/test";
  */
 
 test.setTimeout(150_000);
+// MapLibre vuole WebGL: in headless serve quello software.
+test.use({ launchOptions: { args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] } });
 
 const SHOTS = process.env.HIRO_SHOT_DIR;
 const shot = async (page: Page, name: string) => {
