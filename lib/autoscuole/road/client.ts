@@ -145,6 +145,23 @@ export type RoadExamRoute = {
   archivedAt: string | null;
 };
 
+export type RoadExamRouteInput = {
+  name: string;
+  examSite: string | null;
+  licenseCategories: string[];
+  waypoints: Array<[number, number]>;
+  path: Array<[number, number]>;
+  sourceSessionId?: string | null;
+};
+
+/** Bozza ricavata da una guida Road (scorciatoia «Usa come percorso d'esame»). */
+export type RoadExamRouteDraft = {
+  sourceSessionId: string;
+  waypoints: Array<[number, number]>;
+  path: Array<[number, number]>;
+  lengthMeters: number;
+};
+
 export class RoadApiError extends Error {
   constructor(
     message: string,
@@ -156,11 +173,22 @@ export class RoadApiError extends Error {
 
 type Envelope<T> = { success: true; data: T } | { success: false; message: string; code?: string };
 
-async function call<T>(path: string, signal?: AbortSignal): Promise<T> {
+async function call<T>(
+  path: string,
+  signal?: AbortSignal,
+  init?: { method: "POST" | "PATCH" | "DELETE"; body?: unknown },
+): Promise<T> {
   const res = await fetch(`/api/autoscuole/road${path}`, {
     cache: "no-store",
     credentials: "same-origin",
     signal,
+    ...(init
+      ? {
+          method: init.method,
+          headers: init.body !== undefined ? { "content-type": "application/json" } : undefined,
+          body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+        }
+      : {}),
   });
   let body: Envelope<T>;
   try {
@@ -204,7 +232,23 @@ export const roadApi = {
     call<RoadHotspots>(`/hotspots?${query(params)}`, signal),
   hotspot: (key: string, params: RoadHotspotFilters, signal?: AbortSignal) =>
     call<RoadHotspotDetail>(`/hotspots/${encodeURIComponent(key)}?${query(params)}`, signal),
-  examRoutes: (signal?: AbortSignal) => call<RoadExamRoute[]>("/exam-routes", signal),
+  examRoutes: (signal?: AbortSignal, opts?: { archived?: boolean }) =>
+    call<RoadExamRoute[]>(opts?.archived ? "/exam-routes?archived=1" : "/exam-routes", signal),
+  createExamRoute: (body: RoadExamRouteInput) =>
+    call<RoadExamRoute>("/exam-routes", undefined, { method: "POST", body }),
+  updateExamRoute: (id: string, body: Partial<RoadExamRouteInput> & { restore?: boolean }) =>
+    call<RoadExamRoute>(`/exam-routes/${encodeURIComponent(id)}`, undefined, { method: "PATCH", body }),
+  archiveExamRoute: (id: string) =>
+    call<{ archived: true }>(`/exam-routes/${encodeURIComponent(id)}`, undefined, { method: "DELETE" }),
+  /** Aggancio alle strade (REG-642): solo al rilascio di un punto o al salvataggio. */
+  snapExamRoute: (waypoints: Array<[number, number]>, signal?: AbortSignal) =>
+    call<{ segments: Array<Array<[number, number]>>; path: Array<[number, number]>; lengthMeters: number }>(
+      "/exam-routes/snap",
+      signal,
+      { method: "POST", body: { waypoints } },
+    ),
+  examRouteFromSession: (body: { sessionId: string; fromMs?: number | null; toMs?: number | null }, signal?: AbortSignal) =>
+    call<RoadExamRouteDraft>("/exam-routes/from-session", signal, { method: "POST", body }),
   student: (studentId: string, signal?: AbortSignal) =>
     call<{ items: RoadStudentItem[] }>(`/students/${encodeURIComponent(studentId)}`, signal),
   session: (id: string, signal?: AbortSignal) =>

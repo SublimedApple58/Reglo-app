@@ -1,5 +1,7 @@
 import { getRedis } from "@/lib/cache/redis";
-import { pathLengthMeters, simplifyPath, type LatLng } from "@/lib/autoscuole/road/exam-routes";
+import { joinSegments, pathLengthMeters, simplifyPath, type LatLng } from "@/lib/autoscuole/road/exam-routes";
+
+export { joinSegments };
 
 /**
  * REG-642 Reglo Road — aggancio dei percorsi d'esame alle strade vere.
@@ -45,18 +47,6 @@ export function planSnapRuns(missing: number[], maxLegs = SNAP_MAX_INTERMEDIATES
   return runs;
 }
 
-/** Unisce i tratti in una linea sola, senza doppiare il punto di giunzione. */
-export function joinSegments(segments: LatLng[][]): LatLng[] {
-  const out: LatLng[] = [];
-  for (const seg of segments) {
-    for (const p of seg) {
-      const prev = out[out.length - 1];
-      if (prev && prev[0] === p[0] && prev[1] === p[1]) continue;
-      out.push(p);
-    }
-  }
-  return out;
-}
 
 export class SnapError extends Error {
   constructor(

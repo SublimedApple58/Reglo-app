@@ -38,6 +38,19 @@ export function parseLatLngList(raw: unknown, opts: { min: number; max: number }
   return out;
 }
 
+/** Unisce i tratti in una linea sola, senza doppiare il punto di giunzione. */
+export function joinSegments(segments: LatLng[][]): LatLng[] {
+  const out: LatLng[] = [];
+  for (const seg of segments) {
+    for (const p of seg) {
+      const prev = out[out.length - 1];
+      if (prev && prev[0] === p[0] && prev[1] === p[1]) continue;
+      out.push(p);
+    }
+  }
+  return out;
+}
+
 export function pathLengthMeters(path: LatLng[]) {
   let total = 0;
   for (let i = 1; i < path.length; i++) {

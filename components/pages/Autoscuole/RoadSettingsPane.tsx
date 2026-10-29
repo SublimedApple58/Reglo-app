@@ -17,6 +17,7 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { RoadExamRoutesSection } from "./road/RoadExamRoutesSection";
 
 const newId = () =>
   (typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -28,7 +29,8 @@ const newId = () =>
  * Impostazioni › Reglo Road (REG-638): la lista base delle segnalazioni (sola
  * lettura) e quelle personalizzate dell'autoscuola, che compaiono agli
  * istruttori nella sezione «Della tua autoscuola». Ogni modifica si salva
- * subito (`updateAutoscuolaSettings({ roadCustomMarkers })`).
+ * subito (`updateAutoscuolaSettings({ roadCustomMarkers })`). Sotto, i percorsi
+ * d'esame (REG-645, `RoadExamRoutesSection`).
  */
 export function RoadSettingsPane() {
   const toast = useFeedbackToast();
@@ -231,6 +233,8 @@ export function RoadSettingsPane() {
         Le segnalazioni personalizzate compaiono agli istruttori nella sezione «Della tua autoscuola». Rinominarle o
         toglierle non cambia le guide già fatte.
       </p>
+
+      <RoadExamRoutesSection />
     </div>
   );
 }

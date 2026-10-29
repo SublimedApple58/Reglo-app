@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
 import { useAtomValue } from "jotai";
 import { Star } from "lucide-react";
@@ -10,6 +11,8 @@ import type { Marker as MlMarker } from "maplibre-gl";
 import { companyAtom } from "@/atoms/company.store";
 import { getServiceLimits } from "@/lib/services";
 import { roadApi, type RoadDetail } from "@/lib/autoscuole/road/client";
+import { nearestIndex } from "@/lib/autoscuole/road/exam-route-editor";
+import { pathLengthMeters, type LatLng } from "@/lib/autoscuole/road/exam-routes";
 import { roadCarImages, roadMarkerSymbol, ROAD_IMAGES } from "@/lib/autoscuole/road/symbols";
 import { cn } from "@/lib/utils";
 import {
@@ -17,6 +20,7 @@ import {
   escapeHtml,
   htmlElement,
   lineBounds,
+  removeRoute,
   toLngLat,
   upsertRoute,
   useRoadMap,
@@ -40,6 +44,9 @@ import {
 } from "./road-ui";
 
 const POLL_MS = 5000;
+const EASE = "cubic-bezier(0.2, 0, 0, 1)";
+/** Tratto scelto per «Usa come percorso d'esame»: indici nel tracciato. */
+type Trim = { a: number; b: number };
 type RoadView = "live" | "today" | "history" | "hotspots";
 const VIEW_LABEL: Record<RoadView, string> = {
   live: "Dal vivo",
@@ -55,7 +62,10 @@ const VIEW_LABEL: Record<RoadView, string> = {
  */
 export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from: RoadView }) {
   const locale = useLocale();
+  const router = useRouter();
   const company = useAtomValue(companyAtom);
+  const isOwner = company?.role === "admin";
+  const [trim, setTrim] = React.useState<Trim | null>(null);
   const studentSees = getServiceLimits(company?.services ?? null, "AUTOSCUOLE").studentNotesEnabled === true;
   const [detail, setDetail] = React.useState<RoadDetail | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -146,6 +156,87 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
 
   React.useEffect(() => () => markersRef.current.forEach((m) => m.remove()), []);
 
+  // ── «Usa come percorso d'esame» (REG-645): due maniglie scorrono sul tracciato ──
+  const trimming = trim != null;
+  const trimRef = React.useRef<Trim | null>(null);
+  trimRef.current = trim;
+  React.useEffect(() => {
+    if (!handle || !detail || !trimming) return;
+    const { map } = handle;
+    const track: LatLng[] = detail.track.map((p) => [p[0], p[1]]);
+    const coords = track.map(toLngLat);
+    upsertRoute(map, "road-detail", coords, { width: 6, color: "#c3bcae", opacity: 1 });
+    markersRef.current.forEach((m) => (m.getElement().style.visibility = "hidden"));
+    const drawSel = (t: Trim) =>
+      upsertRoute(map, "road-trim", coords.slice(t.a, t.b + 1), { width: 6, color: "#111111", opacity: 1 });
+    drawSel(trimRef.current!);
+    // Tutto il tracciato in vista, sopra la card del tratto.
+    const bounds = lineBounds(handle.lib, coords);
+    if (bounds) {
+      const small = map.getContainer().clientWidth < 640;
+      map.fitBounds(bounds, {
+        padding: small ? { top: 60, left: 40, right: 40, bottom: 190 } : { top: 60, left: 440, right: 80, bottom: 60 },
+        duration: 260,
+        essential: true,
+        maxZoom: 16,
+      });
+    }
+    const handles = (["a", "b"] as const).map((side) => {
+      const el = htmlElement(
+        `<div class="road-trim-h"><b data-testid="road-trim-${side === "a" ? "start" : "end"}"></b><span>${side === "a" ? "Inizio" : "Fine"}</span></div>`,
+      );
+      const marker = new handle.lib.Marker({ element: el, draggable: true, anchor: "center" })
+        .setLngLat(coords[trimRef.current![side]])
+        .addTo(map);
+      marker.on("dragstart", () => el.classList.add("drag"));
+      marker.on("drag", () => {
+        const ll = marker.getLngLat();
+        const t = trimRef.current!;
+        const { index } = nearestIndex(track, [ll.lat, ll.lng]);
+        const next = side === "a" ? { a: Math.min(index, t.b - 1), b: t.b } : { a: t.a, b: Math.max(index, t.a + 1) };
+        trimRef.current = next;
+        drawSel(next);
+        setTrim(next);
+      });
+      marker.on("dragend", () => {
+        el.classList.remove("drag");
+        marker.setLngLat(coords[trimRef.current![side]]);
+      });
+      return marker;
+    });
+    return () => {
+      handles.forEach((m) => m.remove());
+      markersRef.current.forEach((m) => (m.getElement().style.visibility = ""));
+      // Uscendo dalla pagina la mappa è già stata smontata: niente da ripristinare.
+      try {
+        removeRoute(map, "road-trim");
+        upsertRoute(map, "road-detail", coords, { width: 6, color: "#111111", opacity: 1 });
+      } catch {
+        /* mappa già rimossa */
+      }
+    };
+  }, [handle, detail, trimming]);
+
+  const trimInfo = React.useMemo(() => {
+    if (!trim || !detail) return null;
+    const part: LatLng[] = detail.track.slice(trim.a, trim.b + 1).map((p) => [p[0], p[1]]);
+    return {
+      meters: pathLengthMeters(part),
+      from: new Date(detail.track[trim.a][2]),
+      to: new Date(detail.track[trim.b][2]),
+    };
+  }, [trim, detail]);
+
+  const continueTrim = () => {
+    if (!trim || !detail) return;
+    const q = new URLSearchParams({
+      session: detail.id,
+      fromMs: String(detail.track[trim.a][2]),
+      toMs: String(detail.track[trim.b][2]),
+    });
+    router.push(`${base}/percorsi/nuovo?${q}`);
+  };
+
   if (error && !detail) {
     return (
       <div className="py-16 text-center">
@@ -171,6 +262,15 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
   return (
     <div className="w-full lg:-mt-2.5" data-testid="road-detail">
       <RoadMarkerStyles />
+      <style>{`
+.road-trim-h{width:0;height:0;cursor:grab}
+.road-trim-h b{position:absolute;left:-11px;top:-11px;width:22px;height:22px;border-radius:50%;background:#fff;border:5px solid #111;box-shadow:0 2px 8px rgba(0,0,0,.28);transition:transform 200ms ${EASE}}
+.road-trim-h span{position:absolute;left:0;top:-38px;transform:translateX(-50%);height:26px;padding:0 10px;border-radius:13px;background:#111;color:#fff;font-size:12px;font-weight:600;display:grid;place-items:center;white-space:nowrap;font-family:inherit;pointer-events:none}
+.road-trim-h.drag{cursor:grabbing}
+.road-trim-h.drag b{transform:scale(1.2)}
+.road-trim-card{animation:road-trim-in 240ms ${EASE} backwards}
+@keyframes road-trim-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+`}</style>
       <nav className="flex items-center gap-2 text-[13.5px] text-[#6a6a6a]" aria-label="Percorso">
         <Link href={base} className="hover:text-[#111111]">
           Road
@@ -207,8 +307,19 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
           </p>
         </div>
         {detail ? (
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             <RoadStatusChip kind={active ? "live" : detail.status === "abandoned" ? "auto" : "done"} />
+            {isOwner && !active && detail.track.length >= 2 ? (
+              <button
+                type="button"
+                data-testid="road-use-as-exam"
+                disabled={trimming}
+                onClick={() => setTrim({ a: 0, b: detail.track.length - 1 })}
+                className="grid h-11 cursor-pointer place-items-center rounded-[22px] bg-[#f2f2f2] px-[18px] text-[14.5px] font-semibold text-[#111111] transition-colors duration-200 hover:bg-[#e8e8e8] disabled:cursor-default disabled:opacity-40"
+              >
+                Usa come percorso d&apos;esame
+              </button>
+            ) : null}
             <Link
               href={`/${locale}/user/autoscuole?tab=agenda&date=${romeYmd(detail.lesson.startsAt)}`}
               className="grid h-11 place-items-center rounded-[22px] bg-[#f2f2f2] px-[18px] text-[14.5px] font-semibold text-[#111111] transition-colors hover:bg-[#e8e8e8]"
@@ -226,7 +337,48 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
           <div ref={containerRef} className="h-full w-full" />
         </div>
           {!handle ? <RoadMapFallback failed={failed} /> : null}
-          {handle ? <ZoomControls onIn={() => handle.map.zoomIn()} onOut={() => handle.map.zoomOut()} /> : null}
+          {handle ? (
+            <div className={trimming ? "max-sm:hidden" : undefined}>
+              <ZoomControls onIn={() => handle.map.zoomIn()} onOut={() => handle.map.zoomOut()} />
+            </div>
+          ) : null}
+          {trimming && trimInfo ? (
+            <div
+              data-testid="road-trim-card"
+              className="road-trim-card absolute bottom-3 left-3 right-3 z-[4] rounded-[20px] bg-white px-[18px] py-4 shadow-[0_4px_24px_rgba(0,0,0,0.16)] sm:bottom-4 sm:left-4 sm:right-auto sm:w-[380px]"
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <b className="text-[15.5px] font-semibold text-[#111111]">Scegli il tratto dell&apos;esame</b>
+                <span className="shrink-0 text-[13px] tabular-nums text-[#6a6a6a]">
+                  <b className="text-[17px] font-semibold text-[#111111]">{km(trimInfo.meters)}</b> km
+                </span>
+              </div>
+              <p className="mt-1 text-[13.5px] leading-[1.45] text-[#6a6a6a]">
+                <span className="tabular-nums">
+                  {hhmm(trimInfo.from)} – {hhmm(trimInfo.to)}
+                </span>
+                <span className="max-sm:hidden"> · Trascina Inizio e Fine lungo il percorso, poi lo sistemi nell&apos;editor.</span>
+                <span className="sm:hidden"> · Trascina Inizio e Fine.</span>
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setTrim(null)}
+                  className="grid h-11 cursor-pointer place-items-center rounded-[22px] bg-[#f2f2f2] text-[14.5px] font-semibold text-[#111111] transition-colors duration-200 hover:bg-[#e8e8e8]"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="button"
+                  data-testid="road-trim-continue"
+                  onClick={continueTrim}
+                  className="grid h-11 cursor-pointer place-items-center rounded-[22px] bg-[#111111] text-[14.5px] font-semibold text-white transition-colors duration-200 hover:bg-[#2a2a2a]"
+                >
+                  Continua
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="grid content-start gap-3.5 leading-[1.25]">
