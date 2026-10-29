@@ -1,6 +1,6 @@
 # Plan: Road — la sede è una sola, ed è obbligatoria
 
-Stato: **IN CORSO**. Approvato da Tiziano il 29/10/2026. Task: REG-655 → REG-658.
+Stato: **COMPLETATO (30/10/2026)**: REG-655 → REG-658 tutti in produzione. Approvato da Tiziano il 29/10/2026.
 
 ## Decisioni di Tiziano (29/10)
 1. Il ritorno in sede del giro non deve dipendere dal ricordarsi di mettere l'indirizzo: sulla web il **titolare** viene fermato da un foglio bloccante finché la sede non ha l'indirizzo con le coordinate.
@@ -54,4 +54,5 @@ Stato: **IN CORSO**. Approvato da Tiziano il 29/10/2026. Task: REG-655 → REG-6
 ## Avanzamento
 - **REG-655 in prod** 29/10 (main 4863e12).
 - **REG-656 in prod** 29/10 (main a2ecced). `canEdit` = solo titolare (gli admin non possono salvare la sede); «Usa la mia posizione attuale» sceglie fra i 10 luoghi più vicini il primo con via e numero (il più vicino a volte è solo la zona).
-- REG-657: luoghi anche nell'editor dei percorsi; voce «Luogo» nella legenda della mappa live.
+- **REG-657 in prod** 29/10 (main ca0db2e): luoghi anche nell'editor dei percorsi; voce «Luogo» nella legenda della mappa live.
+- **REG-658 in prod** 30/10: master mobile 6d12e02, OTA 2.4.0 iOS 01a189f0-3e72 / Android 01a189f0-e42e. Un foglio alla volta: l'avviso aspetta se «Appena finita» si è appena aperto (sul simulatore si sovrapponevano).
