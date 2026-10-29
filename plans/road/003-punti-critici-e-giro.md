@@ -41,15 +41,20 @@ Il piano si regge sui dati che Road già registra: ogni segnalazione ha posizion
 | Scelta per guida | «Parti con questo giro» / «Senza giro» | Nel foglio | Istruttore | Mobile | Flusso «Parti con …» |
 | Avvisi in guida (card ~300 m prima, vibrazione, tappa raggiunta entro 40 m) | **Configurabile, acceso di default**: «Avvisi delle tappe durante la guida»; distanza fissa | Web › Impostazioni › Reglo Road | Istruttore in Road | Mobile | `tracking.ts`, `roadStore` |
 | **Punti critici dell'allievo sulla mappa in Road** (i SUOI errori ripetuti: stesso tipo entro 60 m in almeno 2 guide diverse, ultimi 12 mesi; non quelli dell'autoscuola) | Fisso: con Road acceso | — | Istruttore in Road | Backend, mobile | Raggruppamento di `hotspots.ts`, `RoadMarkerPin` |
-| **Navigazione suggerita**: linea discreta sulle strade vere da posizione → tappe → eventuale percorso d'esame | Fisso: c'è quando la guida ha un giro (segue l'interruttore del giro) | — | Istruttore in Road | Backend, mobile | Routes API + cache per tratto di REG-642 (`snap.ts`) |
+| **Navigazione suggerita**: linea discreta sulle strade vere da posizione → tappe (ordine ottimizzato) → eventuale percorso d'esame → **sede**, con riaggancio se si devia | Fisso: c'è quando la guida ha un giro (segue l'interruttore del giro) | — | Istruttore in Road | Backend, mobile | Routes API + cache per tratto di REG-642 (`snap.ts`) |
 | Esito («2 tappe su 3») | Fisso | Riepilogo Road, dettaglio guida web | Istruttore, titolare | Mobile, web, backend | Riepilogo, `RoadSessionDetail` |
 | Allievo | Non vede il giro (forse in futuro) | — | — | — | — |
 
 **Modifica di Tiziano (29/10, dopo l'ok ai punti critici in app)** — sostituisce la vecchia riga «non la strada, solo tappe»:
-- In Road la mappa mostra le tappe numerate **e una navigazione suggerita, non obbligatoria**: una linea discreta che segue le strade vere e collega posizione di partenza → tappe del giro → eventuale percorso d'esame (dall'inizio del percorso, che poi si disegna com'è salvato). Calcolata **una volta alla partenza** con la Routes API, riusando la cache per tratto di REG-642 (`road:snap:v1:*`, coordinate arrotondate: le partenze dalla sede dell'autoscuola pescano dalla cache).
-- Se l'istruttore va altrove **non succede niente**: nessun ricalcolo insistente (al più uno quando si raggiunge una tappa fuori ordine), niente voce, niente indicazioni svolta per svolta. I tratti già percorsi si attenuano.
+- In Road la mappa mostra le tappe numerate **e una navigazione suggerita, non obbligatoria**: una linea discreta che segue le strade vere, calcolata con la Routes API e la cache per tratto di REG-642 (`road:snap:v1:*`).
 - Sulla mappa in Road compaiono anche i **punti critici di quell'allievo** (i suoi errori ripetuti), non quelli dell'autoscuola.
+- Niente voce, niente indicazioni svolta per svolta: solo la linea e le tappe.
 - Se la Routes API non risponde: restano tappe e punti, senza linea; nessun errore a schermo.
+
+**Seconda decisione di Tiziano (29/10 sera)** — corregge la prima su due punti (REG-653, REG-654):
+- **Il giro si chiude sempre in sede**: posizione di partenza → tappe sui punti critici dell'allievo (ed eventuale percorso d'esame) → **sede dell'autoscuola**. Coordinate della sede già salvate (`AutoscuolaLocation`); se mancano, geocodifica dell'indirizzo, risultato in cache. Anche i minuti del giro contano il ritorno in sede.
+- **Ordine delle tappe ottimizzato** con `optimizeWaypointOrder` della Routes API, una volta alla partenza (tariffa più alta, quindi una richiesta sola); il percorso d'esame resta un blocco (entra dall'inizio, esce dalla fine).
+- **Riaggancio se si devia** (sostituisce «nessun ricalcolo»): fuori percorso = oltre ~50 m dalla linea per almeno 10–15 s; allora la linea si ricalcola dalla posizione attuale alla prossima tappa non raggiunta, poi il resto fino alla sede. Al massimo un ricalcolo ogni 30–60 s, con la cache per tratto di REG-642. Una tappa saltata apposta, dopo un po', si lascia perdere e si prosegue. La linea si aggiorna in modo morbido; niente voce né svolta per svolta.
 
 Ordine delle tappe «più vicina prima», minuti stimati in linea d'aria a 25 km/h (indicativi).
 
@@ -73,10 +78,12 @@ Ordine delle tappe «più vicina prima», minuti stimati in linea d'aria a 25 km
 | REG-648 | Giro: API, salvataggio, interruttori (accesi), linea suggerita sulle strade (Routes API + cache) | Backend | 3 | 647, 642 |
 | REG-649 | Giro nei fogli di partenza | Mobile | 3 | 648 |
 | REG-650 | Giro: avvisi in Road ed esito nel riepilogo | Mobile | 3 | 648 |
-| REG-652 | Mappa in Road: linea suggerita, tappe e punti critici dell'allievo | Mobile | 3 | 648 |
+| REG-653 | Linea che si chiude in sede, ordine ottimizzato (`optimizeWaypointOrder`), sede geocodificata | Backend | 2 | 648 |
+| REG-652 | Mappa in Road: linea suggerita, tappe e punti critici dell'allievo | Mobile | 3 | 648, 653 |
+| REG-654 | Riaggancio quando si esce dal percorso (50 m per 10–15 s, max un ricalcolo ogni 30–60 s, tappa saltata lasciata perdere) | Mobile | 3 | 652, 653 |
 | REG-651 | Interruttori web, giro nel dettaglio guida, documentazione | Web | 1 | 648 |
 
-Totale **31 punti** (erano 27: +1 a REG-648 per la linea, +3 con il nuovo task mobile, spacchettato da REG-650). Ordine dopo 646: 647 → 648 → 649 → 650 → 652 → 651. Ordine: 641 → 642 → 643 → 644 → 645 → 646, poi 647 → 651. Un task alla volta, ognuno con il suo branch `feat/reg-<num>-<slug>` da `origin/staging` e worktree `reglo-worktrees/reg-<num>`; rilascio diretto fino in produzione (decisione 6).
+Totale **36 punti** (erano 27: +1 a REG-648 per la linea, +3 con REG-652 spacchettato da REG-650, +2 con REG-653 e +3 con REG-654 per la seconda decisione). Ordine: 641 → 646, poi 647 → 648 → 649 → 650 → 653 → 652 → 654 → 651. Un task alla volta, ognuno con il suo branch `feat/reg-<num>-<slug>` da `origin/staging` e worktree `reglo-worktrees/reg-<num>`; rilascio diretto fino in produzione (decisione 6).
 
 ## Regole UI (tutte le schermate)
 Design premium, niente pillole/badge decorativi; animazioni veloci (150–200 ms) che non si spengono con `prefers-reduced-motion` / «Riduci movimento»; web responsive a 390 px; mobile: form sheet nativi senza grabber, skeleton, fluidità §15. Verifica con Playwright, screenshot ritagliati in `/tmp/hiro-anteprime/road-punti-critici/`.
@@ -86,9 +93,10 @@ Design premium, niente pillole/badge decorativi; animazioni veloci (150–200 ms
 - **Pochi dati**: stato vuoto chiaro («servono ancora circa N guide registrate»); il giro funziona anche solo col briefing.
 - **Conservazione 12 mesi**: la mappa guarda al massimo un anno (scritto in pagina).
 - **Privacy**: dati aggregati (≥ 2 allievi); l'istruttore vede la mappa aggregata ma nel dettaglio solo i suoi allievi.
+- **Costo del giro in Road**: una richiesta con `optimizeWaypointOrder` alla partenza (tariffa Advanced), poi riagganci limitati a uno ogni 30–60 s e quasi sempre dalla cache per tratto.
 - **Routes API**: abilitata sulla chiave (verificato 29/10, la stessa su dev e staging). Costo per richiesta solo mentre si modifica un percorso, endpoint solo titolare. Decisione di Tiziano (29/10): chiamare Google solo quando si lascia o si salva un punto (debounce nell'editor), cache dei tratti già calcolati e ricalcolo solo del tratto toccato → cache Redis per tratto + tratti consecutivi in una richiesta (≤ 10 intermedi, tariffa base).
 - **Percorsi «d'esame»**: non ufficiali della motorizzazione → «I tuoi percorsi d'esame».
-- **Distrazione**: linea sottile e neutra, nessun ricalcolo né avviso se si esce dal giro; una card alla volta, testo breve, solo vibrazione, interruttore.
+- **Distrazione**: linea sottile e neutra che si riaggancia da sola e in modo morbido (niente avvisi né voce quando si esce dal giro); una card alla volta, testo breve, solo vibrazione, interruttore.
 - **Stima tempi**: indicativa.
 
 ## Avanzamento
@@ -105,3 +113,5 @@ Design premium, niente pillole/badge decorativi; animazioni veloci (150–200 ms
 - 29/10 — **Modifica al giro (Tiziano)**: in Road i punti critici dell'allievo sulla mappa e una navigazione suggerita sulle strade vere (Routes API + cache REG-642), non obbligatoria, senza ricalcoli insistenti né voce. Sostituisce «non la strada, solo tappe». REG-648 passa a 3 punti; la parte mappa di REG-650 diventa il nuovo REG-652 (3 punti).
 - 29/10 — REG-647: motore del giro (`lesson-plan.ts` + `lesson-plan-service.ts`): punti critici dell'allievo (errori ripetuti in ≥ 2 guide), tappe per priorità con durata, copertura dei percorsi d'esame (30 m, cache 10 min). Nessuna API: arriva con REG-648.
 - 29/10 — REG-648: API del giro (`GET /road/plan`, `POST /road/plan/route`), `plan` all'ingresso in Road, `planReached` a fine guida, interruttori `roadPlanEnabled` / `roadPlanAlertsEnabled` (accesi se assenti) in impostazioni e in `/road/state`. Modifica: il giro NON entra in `/road/free` né in `eligibleLesson` di `/road/state` (si chiede al foglio di partenza con allievo e durata: `/road/state` è interrogato spesso e il giro costa una lettura dei tracciati).
+- 29/10 — REG-649 in produzione (OTA 2.4.0, master mobile 9c61658): il giro nei fogli di partenza.
+- 29/10 sera — **Seconda decisione di Tiziano sul giro**: il giro si chiude in sede (coordinate della sede, o geocodifica in cache), ordine delle tappe con `optimizeWaypointOrder`, riaggancio se si devia (50 m per 10–15 s, max uno ogni 30–60 s, tappa saltata lasciata perdere). Nuovi REG-653 (backend, 2) e REG-654 (mobile, 3); REG-652 aggiornato. Totale 36 punti.
