@@ -45,7 +45,7 @@ const MAX_POINTS_PER_BATCH = 600;
 
 // ─── contesto ────────────────────────────────────────────────────────────────
 
-async function roadContext() {
+export async function roadContext() {
   const ctx = await requireServiceAccess("AUTOSCUOLE");
   const limits = await getCachedCompanyServiceLimits(ctx.membership.companyId);
   return {
@@ -58,9 +58,9 @@ async function roadContext() {
     customMarkers: parseRoadCustomMarkers(limits.roadCustomMarkers),
   };
 }
-type RoadCtx = Awaited<ReturnType<typeof roadContext>>;
+export type RoadCtx = Awaited<ReturnType<typeof roadContext>>;
 
-const canSeeAll = (ctx: RoadCtx) => ctx.membership.role === "admin" || isOwner(ctx.membership.autoscuolaRole);
+export const canSeeAll = (ctx: RoadCtx) => ctx.membership.role === "admin" || isOwner(ctx.membership.autoscuolaRole);
 
 async function ownInstructorId(ctx: RoadCtx) {
   if (!isInstructor(ctx.membership.autoscuolaRole)) return null;

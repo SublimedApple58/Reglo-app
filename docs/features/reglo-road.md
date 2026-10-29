@@ -96,3 +96,22 @@ Piano approvato: `plans/road/002-road-libero.md` (accesso A2, tab «Road»).
 - **Fine**: «Termina guida» su una guida `bookingSource: "road"` riporta `endsAt` all'ora reale arrotondata ai 5' (min 5', mai oltre la fine prenotata: dopo può esserci un'altra guida) — `freeLessonEnd` in `geo.ts`. **Prezzo e crediti restano quelli fissati alla creazione** con la durata scelta (scelta voluta: ricalcolare dopo toccherebbe pagamenti già registrati).
 - **Agenda web**: i blocchi delle guide nate da Road hanno «Road ·» nella riga dell'orario (`bookingSource` ora viaggia nel bootstrap agenda). KPI backoffice: `road` conta come «Staff (agenda)».
 - Test: `tests/unit/road/road-free-start.test.ts`.
+
+## Percorsi d'esame e giro — modello e API (REG-641, 29/10)
+
+Piano: `plans/road/003-punti-critici-e-giro.md` (punti critici, percorsi d'esame, giro della prossima guida; task REG-641 → REG-651).
+
+- **Migrazione `20261103120000_road_exam_routes`** (solo additiva):
+  - tabella `RoadExamRoute` — percorso d'esame dell'autoscuola: `name`, `examSite?`, `licenseCategories[]`, `waypoints` (punti messi dal titolare, per riaprire l'editor), `path` (linea che segue le strade, semplificata a ~10 m), `lengthMeters`, `sourceSessionId?` (guida Road di origine, senza FK: le sessioni si cancellano dopo 12 mesi, il percorso resta), `createdById?`, `archivedAt?`. Non scade, si archivia.
+  - colonne `RoadSession.plan` / `RoadSession.planReached` (Json, nullable): tappe del giro scelte alla partenza e quelle raggiunte (le scrive REG-648).
+- **Logica pura** `lib/autoscuole/road/exam-routes.ts`: `parseExamRouteInput` (crea / modifica parziale; max 25 punti, nome ≤ 60, sede ≤ 80, patenti maiuscole senza doppioni), `simplifyPath` (Douglas-Peucker in metri), `pathLengthMeters`. La linea si semplifica e la lunghezza si ricalcola **sempre sul server**.
+- **Service** `lib/autoscuole/road/exam-routes-service.ts` (usa `roadContext` / `canSeeAll` esportati da `service.ts`): leggere = titolare e istruttori (servono a punti critici e giro); scrivere = solo titolare/admin; tutto spento senza Road.
+
+| Metodo | Path | Chi | Cosa |
+|---|---|---|---|
+| GET | `/road/exam-routes?archived=1` | titolare, istruttore | percorsi attivi (con `archived=1` anche gli archiviati, solo titolare) |
+| POST | `/road/exam-routes` `{ name, examSite?, licenseCategories?, waypoints, path, sourceSessionId? }` | titolare | crea → `RoadExamRouteDTO` |
+| PATCH | `/road/exam-routes/[id]` (campi parziali, `restore: true` toglie dall'archivio) | titolare | modifica |
+| DELETE | `/road/exam-routes/[id]` | titolare | archivia → `{ archived: true }` |
+
+Codici: `ROAD_DISABLED`, `FORBIDDEN`, `INVALID`, `NOT_FOUND`. Test: `tests/unit/road/road-exam-routes.test.ts`, e2e API `tests/e2e/reg641-road-exam-routes.auth.spec.ts`. L'aggancio alle strade (`/road/exam-routes/snap`) e la scorciatoia da guida Road arrivano con REG-642.

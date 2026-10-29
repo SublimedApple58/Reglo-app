@@ -242,6 +242,7 @@ model Company {
   autoscuolaLessonCreditLedger         AutoscuolaStudentLessonCreditLedger[]
   autoscuolaPaymentEvents              AutoscuolaAppointmentPaymentEvent[]
   roadSessions                         RoadSession[]
+  roadExamRoutes                       RoadExamRoute[]
   autoscuolaAppointmentPayments        AutoscuolaAppointmentPayment[]
   autoscuolaMessageTemplates           AutoscuolaMessageTemplate[]
   autoscuolaMessageRules               AutoscuolaMessageRule[]
@@ -2522,6 +2523,10 @@ model RoadSession {
   lastHeading    Float?
   lastStreet     String?
   lastPointAt    DateTime? @db.Timestamp(6)
+  /// Giro della prossima guida (REG-648): tappe scelte alla partenza, null = senza giro.
+  plan           Json?
+  /// Tappe del giro raggiunte, calcolate a fine guida.
+  planReached    Json?
   createdAt      DateTime  @default(now()) @db.Timestamp(6)
   updatedAt      DateTime  @default(now()) @updatedAt @db.Timestamp(6)
 
@@ -2534,6 +2539,30 @@ model RoadSession {
   @@index([companyId, startedAt])
   @@index([studentId, startedAt])
   @@index([status, startedAt])
+}
+
+/// Percorso d'esame dell'autoscuola (REG-641): lo disegna il titolare (punti
+/// agganciati alle strade) o lo prende da una guida Road. Non scade, si archivia.
+/// `waypoints` = [[lat,lng],...] messi dal titolare (per riaprire l'editor);
+/// `path` = [[lat,lng],...] linea che segue le strade, semplificata.
+model RoadExamRoute {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId         String    @db.Uuid
+  name              String
+  examSite          String?
+  licenseCategories String[]  @default([])
+  waypoints         Json
+  path              Json
+  lengthMeters      Int       @default(0)
+  sourceSessionId   String?   @db.Uuid
+  createdById       String?   @db.Uuid
+  archivedAt        DateTime? @db.Timestamp(6)
+  createdAt         DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt         DateTime  @default(now()) @updatedAt @db.Timestamp(6)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, archivedAt])
 }
 
 /// Lotto di punti GPS inviato dal telefono. `seq` progressivo per sessione:

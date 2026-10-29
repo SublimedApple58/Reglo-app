@@ -371,6 +371,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Allievi / Istruttori / Veicoli**: la web Road legge nome e colore istruttore (`AutoscuolaInstructor.color`, fallback palette in `road-ui.tsx`), telefono istruttore (solo titolare, per «Chiama»; nascosto all'allievo), veicoli attivi per «In sede». Filtri Storico: `getAutoscuolaInstructors` + `getAutoscuolaStudentsList`.
 - → **Pagellino (REG-443)**: il dettaglio Road mostra in sola lettura le valutazioni della guida (`evaluationSummary`).
 - → **Sede e luoghi**: la «sede» sulla mappa dal vivo è la prima `AutoscuolaLocation` con coordinate (default prima).
+- → **Percorsi d'esame (REG-641)**: `RoadExamRoute` per autoscuola (API `/road/exam-routes`, `exam-routes-service.ts`), letti da punti critici (REG-643) e giro della prossima guida (REG-647/648); `RoadSession.plan/planReached` tengono il giro. `sourceSessionId` senza FK: la retention 12 mesi di `autoscuole-road-maintenance` cancella la sessione, il percorso resta.
 
 ### Reglo Aula
 - → **Quiz Teoria**: riusa **read-only** `QuizQuestion` + `QuizChapter` (DB) + immagini quiz su R2 per le domande del live (filtro per capitolo). Aula non scrive sulla banca — asset aziendale già centralizzato, non duplicato.
