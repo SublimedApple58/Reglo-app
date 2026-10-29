@@ -14,6 +14,7 @@ import {
 } from "@/lib/autoscuole/road/catalog";
 import { CUSTOM_MARKER_SYMBOL, ROAD_BASE_SYMBOLS } from "@/lib/autoscuole/road/symbols";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { InlineToggle } from "@/components/ui/inline-toggle";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,10 @@ const newId = () =>
  * istruttori nella sezione «Della tua autoscuola». Ogni modifica si salva
  * subito (`updateAutoscuolaSettings({ roadCustomMarkers })`). Sotto, i percorsi
  * d'esame (REG-645, `RoadExamRoutesSection`).
+ *
+ * In cima (REG-651) i due interruttori del giro, accesi di default e salvati
+ * al tocco: «Proponi il giro» (`roadPlanEnabled`) e «Avvisi delle tappe»
+ * (`roadPlanAlertsEnabled`, conta solo col giro acceso).
  */
 export function RoadSettingsPane() {
   const toast = useFeedbackToast();
@@ -38,13 +43,20 @@ export function RoadSettingsPane() {
   const [draft, setDraft] = React.useState("");
   const [saving, setSaving] = React.useState<"add" | string | null>(null);
   const [editing, setEditing] = React.useState<{ id: string; label: string } | null>(null);
+  const [plan, setPlan] = React.useState<{ roadPlanEnabled: boolean; roadPlanAlertsEnabled: boolean } | null>(null);
+  const [planSaving, setPlanSaving] = React.useState<PlanKey | null>(null);
 
   React.useEffect(() => {
     let alive = true;
     void getAutoscuolaSettings().then((res) => {
       if (!alive) return;
-      if (res.success && res.data) setItems(res.data.roadCustomMarkers ?? []);
-      else {
+      if (res.success && res.data) {
+        setItems(res.data.roadCustomMarkers ?? []);
+        setPlan({
+          roadPlanEnabled: res.data.roadPlanEnabled !== false,
+          roadPlanAlertsEnabled: res.data.roadPlanAlertsEnabled !== false,
+        });
+      } else {
         setItems([]);
         toast.error({ description: res.message ?? "Impossibile caricare le segnalazioni." });
       }
@@ -66,6 +78,19 @@ export function RoadSettingsPane() {
     setItems(next);
     toast.success({ description: done });
     return true;
+  };
+
+  const togglePlan = async (key: PlanKey) => {
+    if (!plan || planSaving) return;
+    const value = !plan[key];
+    setPlanSaving(key);
+    const res = await updateAutoscuolaSettings({ [key]: value });
+    setPlanSaving(null);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile salvare l'impostazione." });
+      return;
+    }
+    setPlan({ ...plan, [key]: value });
   };
 
   const add = async () => {
@@ -111,6 +136,37 @@ export function RoadSettingsPane() {
         Durante la guida l&apos;istruttore segna gli errori sul punto esatto del percorso. Qui scegli quali
         segnalazioni avere sotto mano oltre a quelle di base.
       </p>
+
+      <div className="mt-[30px] text-base font-semibold text-[#222222]">Il giro</div>
+      <div className="mt-3.5 rounded-[18px] border border-[#ebebeb]" data-testid="road-plan-settings">
+        {!plan ? (
+          <div className="space-y-3 p-[18px]">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-2/3" />
+          </div>
+        ) : (
+          <>
+            <PlanToggleRow
+              title="Proponi il giro della prossima guida"
+              description="Prima di partire l'istruttore vede le tappe consigliate: gli errori ripetuti dell'allievo, i punti critici della zona e i percorsi d'esame. In guida, una linea suggerita le collega e torna in sede."
+              checked={plan.roadPlanEnabled}
+              saving={planSaving === "roadPlanEnabled"}
+              onToggle={() => void togglePlan("roadPlanEnabled")}
+              testId="road-plan-toggle"
+            />
+            <PlanToggleRow
+              title="Avvisi delle tappe durante la guida"
+              description="Poco prima di ogni tappa compare un avviso sullo schermo dell'istruttore, senza voce."
+              checked={plan.roadPlanAlertsEnabled}
+              disabled={!plan.roadPlanEnabled}
+              saving={planSaving === "roadPlanAlertsEnabled"}
+              onToggle={() => void togglePlan("roadPlanAlertsEnabled")}
+              testId="road-plan-alerts-toggle"
+              divided
+            />
+          </>
+        )}
+      </div>
 
       <div className="mt-[30px] flex items-baseline justify-between text-base font-semibold text-[#222222]">
         Segnalazioni di base
@@ -235,6 +291,41 @@ export function RoadSettingsPane() {
       </p>
 
       <RoadExamRoutesSection />
+    </div>
+  );
+}
+
+type PlanKey = "roadPlanEnabled" | "roadPlanAlertsEnabled";
+
+function PlanToggleRow({
+  title,
+  description,
+  checked,
+  disabled,
+  saving,
+  onToggle,
+  testId,
+  divided,
+}: {
+  title: string;
+  description: string;
+  checked: boolean;
+  disabled?: boolean;
+  saving: boolean;
+  onToggle: () => void;
+  testId: string;
+  divided?: boolean;
+}) {
+  return (
+    <div className={cn("flex items-center gap-4 px-[18px] py-4", divided && "border-t border-[#f0f0f0]")}>
+      <div className={cn("min-w-0 flex-1", disabled && "opacity-50")}>
+        <b className="block text-[15px] font-medium text-[#222222]">{title}</b>
+        <span className="mt-0.5 block text-[13.5px] leading-[1.45] text-[#6a6a6a]">{description}</span>
+      </div>
+      {saving ? <LoadingDots className="mr-1" /> : null}
+      <div data-testid={testId}>
+        <InlineToggle checked={checked} onChange={onToggle} disabled={disabled || saving} size="lg" />
+      </div>
     </div>
   );
 }

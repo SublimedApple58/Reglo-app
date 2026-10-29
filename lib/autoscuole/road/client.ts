@@ -5,6 +5,7 @@
  */
 
 import type { CarColorKey } from "@/lib/autoscuole/road/car-colors";
+import type { PlanReached, StoredPlan } from "@/lib/autoscuole/road/lesson-plan";
 
 export type RoadLesson = {
   appointmentId: string;
@@ -37,6 +38,9 @@ export type RoadSession = {
     street: string | null;
     at: string | null;
   } | null;
+  /** REG-648: il giro scelto alla partenza (null = senza giro) e, a fine guida, le tappe raggiunte. */
+  plan?: StoredPlan | null;
+  planReached?: PlanReached | null;
 };
 
 export type RoadMarker = {

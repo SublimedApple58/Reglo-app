@@ -397,6 +397,8 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
             ) : null}
           </div>
 
+          {detail?.plan?.stops.length ? <RoadPlanBlock plan={detail.plan} reached={detail.planReached ?? null} /> : null}
+
           <div className="rounded-[22px] border border-[#ebebeb] px-5 py-[18px]" data-testid="road-detail-markers">
             <h4 className="flex items-baseline justify-between text-[15.5px] font-semibold text-[#111111]">
               Segnalazioni <span className="text-[13px] font-medium text-[#6a6a6a]">in ordine di tempo</span>
@@ -491,6 +493,66 @@ function Big({ value, unit, label, divided }: { value: string; unit?: string; la
         {unit ? <small className="ml-1 text-sm font-medium tracking-normal text-[#6a6a6a]">{unit}</small> : null}
       </b>
       <span className="text-[12.5px] text-[#6a6a6a]">{label}</span>
+    </div>
+  );
+}
+
+/**
+ * REG-651: il giro proposto alla partenza, con le tappe raggiunte. L'esito lo
+ * calcola il server a «Termina guida» (tracciato entro 40 m, percorso d'esame
+ * coperto al 60%): finché la guida è in corso le tappe non hanno ancora esito.
+ */
+function RoadPlanBlock({
+  plan,
+  reached,
+}: {
+  plan: NonNullable<RoadDetail["plan"]>;
+  reached: NonNullable<RoadDetail["planReached"]> | null;
+}) {
+  const done = reached ? reached.reached.length : null;
+  return (
+    <div className="rounded-[22px] border border-[#ebebeb] px-5 py-[18px]" data-testid="road-detail-plan">
+      <h4 className="flex items-baseline justify-between text-[15.5px] font-semibold text-[#111111]">
+        Giro
+        <span className="text-[13px] font-medium text-[#6a6a6a]">
+          {done == null
+            ? `${plan.stops.length} ${plan.stops.length === 1 ? "tappa" : "tappe"} · circa ${plan.minutes} min`
+            : `${done} ${done === 1 ? "tappa raggiunta" : "tappe raggiunte"} su ${reached!.total}`}
+        </span>
+      </h4>
+      <div className="mt-1.5">
+        {plan.stops.map((stop, i) => {
+          const ok = reached?.reached.includes(stop.key) ?? null;
+          return (
+            <div
+              key={stop.key}
+              data-testid="road-detail-plan-stop"
+              className={cn(
+                "grid grid-cols-[26px_minmax(0,1fr)_auto] items-center gap-2.5 py-2.5",
+                i > 0 && "border-t border-[#f2f2f2]",
+              )}
+            >
+              <div
+                className={cn(
+                  "grid size-6 place-items-center rounded-full text-xs font-semibold",
+                  ok === false ? "bg-[#f2f2f2] text-[#6a6a6a]" : "bg-[#111111] text-white",
+                )}
+              >
+                {i + 1}
+              </div>
+              <div className="min-w-0">
+                <b className="block truncate text-[14.5px] font-medium text-[#111111]">{stop.title}</b>
+                <span className="text-[13px] text-[#6a6a6a]">{stop.reason}</span>
+              </div>
+              {ok == null ? null : (
+                <span className={cn("text-[13.5px]", ok ? "font-medium text-[#111111]" : "text-[#6a6a6a]")}>
+                  {ok ? "Raggiunta" : "Non raggiunta"}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
