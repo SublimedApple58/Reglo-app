@@ -125,6 +125,12 @@ di `titolare@reglo.it`, dal 29/10/2026); «Reglo E2E» resta spento.
   Così si possono chiamare le funzioni senza controlli di ruolo (es.
   `computeLessonPlan`, `companyHotspots`); quelle che passano da `roadContext()`
   invece richiedono una sessione vera e vanno provate con gli e2e.
+- **Lo spec REG-638 non gira contro staging.** `tests/e2e/reg638-road.auth.spec.ts`
+  prepara (e poi cancella) i suoi dati con `scripts/seed-reg638-road.ts` sempre sul
+  **DB di dev** (`.env.dev` fisso nel `beforeAll`), qualunque sia `E2E_BASE_URL`.
+  Contro `staging.reglo.it` il test «Dal vivo» non trova auto in guida e fallisce
+  sempre: non è una regressione. Va lanciato solo contro il dev server locale; su
+  staging valgono gli spec `reg64*`.
 - Gli e2e Road (`tests/e2e/reg64*-road-*.auth.spec.ts`) girano sul titolare; quello
   dei punti critici entra anche come istruttore (`istruttore@reglo.it`) con token
   mobile e header `x-reglo-company-id`, perché l'account è in due autoscuole.
