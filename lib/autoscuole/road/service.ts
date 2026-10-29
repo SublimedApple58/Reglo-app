@@ -4,6 +4,7 @@ import { resolveCarColor } from "@/lib/autoscuole/road/car-colors";
 import { normalizeSentiment } from "@/lib/autoscuole/road/catalog";
 import { prisma } from "@/db/prisma";
 import { requireServiceAccess } from "@/lib/service-access";
+import { roadHeadquarters } from "@/lib/autoscuole/road/headquarters";
 import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
 import { isInstructor, isOwner, isStudent } from "@/lib/autoscuole/roles";
 import { formatError } from "@/lib/utils";
@@ -809,6 +810,21 @@ function markerSummary(counts: Map<string, MarkerCount>, sessionId: string) {
   return { markerCount: c?.count ?? 0, markerKinds: c?.kinds ?? [], markerGood: c?.good ?? 0, markerBad: c?.bad ?? 0 };
 }
 
+/**
+ * REG-655: la sede manca? Con Road acceso e la sede senza coordinate (né un
+ * indirizzo che si riesca a geocodificare) il giro non sa dove chiudersi: la web
+ * ferma il titolare finché non la inserisce (REG-656), gli altri vedono un avviso.
+ */
+export async function getRoadHeadquartersStatus() {
+  try {
+    const ctx = await roadContext();
+    const missing = ctx.roadEnabled ? (await roadHeadquarters(ctx.companyId)) == null : false;
+    return ok({ roadEnabled: ctx.roadEnabled, missing, canEdit: canSeeAll(ctx) });
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
 export async function getRoadLive() {
   try {
     const loaded = await requireWebRoad();
@@ -864,19 +880,23 @@ export async function getRoadLive() {
         freeUntil: upcoming.find((a) => a.vehicleId === v.id && a.startsAt > now)?.startsAt.toISOString() ?? null,
       }));
 
-    const base = await prisma.autoscuolaLocation
-      .findFirst({
-        where: { companyId: ctx.companyId, latitude: { not: null }, longitude: { not: null } },
+    // REG-655: la sede è solo quella vera (`isDefault`); gli altri luoghi vanno
+    // a parte, con il loro segnaposto (REG-657). Prima la «sede» era il primo
+    // luogo con le coordinate, anche archiviato.
+    const locations = await prisma.autoscuolaLocation
+      .findMany({
+        where: { companyId: ctx.companyId, archivedAt: null, latitude: { not: null }, longitude: { not: null } },
         orderBy: [{ isDefault: "desc" }, { name: "asc" }],
-        select: { name: true, latitude: true, longitude: true },
+        select: { id: true, name: true, isDefault: true, latitude: true, longitude: true },
       })
-      .catch(() => null);
+      .catch(() => []);
+    const pin = (l: (typeof locations)[number]) => ({ name: l.name, lat: Number(l.latitude), lng: Number(l.longitude) });
+    const base = locations.find((l) => l.isDefault);
 
     return ok({
       now: now.toISOString(),
-      base: base?.latitude != null && base.longitude != null
-        ? { name: base.name, lat: Number(base.latitude), lng: Number(base.longitude) }
-        : null,
+      base: base ? pin(base) : null,
+      places: locations.filter((l) => !l.isDefault).map((l) => ({ id: l.id, ...pin(l) })),
       sessions: active.map((s) => ({
         ...sessionDTO(s, s.appointment.startsAt),
         lesson: lessonDTO(s.appointment),
@@ -1329,7 +1349,7 @@ async function roadTabExtras(
       select: { ...sessionSelect, appointment: { select: appointmentSelect } },
     }),
     prisma.autoscuolaLocation.findFirst({
-      where: { companyId: ctx.companyId, isDefault: true, latitude: { not: null }, longitude: { not: null } },
+      where: { companyId: ctx.companyId, isDefault: true, archivedAt: null, latitude: { not: null }, longitude: { not: null } },
       select: { name: true, latitude: true, longitude: true },
     }),
     vehicleIds.length

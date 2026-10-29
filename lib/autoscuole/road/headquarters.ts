@@ -12,9 +12,10 @@ import { getRedis } from "@/lib/cache/redis";
  *    va in cache Redis (90 giorni, anche il «non trovato» per un giorno) e
  *    sulla sede, ma solo se nel frattempo l'indirizzo non è cambiato e le
  *    coordinate sono ancora vuote.
- * 3. Altrimenti il primo altro luogo dell'autoscuola con le coordinate (com'era
- *    in REG-648). Niente di tutto questo = `null`: la linea finisce all'ultima
- *    tappa.
+ * Niente sede, o sede senza coordinate né indirizzo trovato = `null`: la linea
+ * finisce all'ultima tappa. REG-655: niente più ripieghi su un altro luogo
+ * (prima il primo luogo con le coordinate): la sede è una sola, quella vera, e
+ * se manca la web chiede al titolare di inserirla (REG-656).
  */
 
 export type Pt = { lat: number; lng: number };
@@ -85,31 +86,21 @@ const toPt = (lat: unknown, lng: unknown) => (lat != null && lng != null ? valid
 
 export async function roadHeadquarters(companyId: string, geocode: Geocode = geocodeWithPlaces): Promise<Pt | null> {
   const hq = await prisma.autoscuolaLocation.findFirst({
-    where: { companyId, archivedAt: null },
-    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    where: { companyId, isDefault: true, archivedAt: null },
     select: { id: true, address: true, latitude: true, longitude: true },
   });
-  if (hq) {
-    const own = toPt(hq.latitude, hq.longitude);
-    if (own) return own;
-    const address = hq.address?.trim();
-    if (address) {
-      const pt = await geocodeAddress(address, geocode);
-      if (pt) {
-        await prisma.autoscuolaLocation
-          .updateMany({
-            where: { id: hq.id, address: hq.address, latitude: null, longitude: null },
-            data: { latitude: pt.lat, longitude: pt.lng },
-          })
-          .catch(() => undefined);
-        return pt;
-      }
-    }
-  }
-  const other = await prisma.autoscuolaLocation.findFirst({
-    where: { companyId, archivedAt: null, latitude: { not: null }, longitude: { not: null } },
-    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
-    select: { latitude: true, longitude: true },
-  });
-  return other ? toPt(other.latitude, other.longitude) : null;
+  if (!hq) return null;
+  const own = toPt(hq.latitude, hq.longitude);
+  if (own) return own;
+  const address = hq.address?.trim();
+  if (!address) return null;
+  const pt = await geocodeAddress(address, geocode);
+  if (!pt) return null;
+  await prisma.autoscuolaLocation
+    .updateMany({
+      where: { id: hq.id, address: hq.address, latitude: null, longitude: null },
+      data: { latitude: pt.lat, longitude: pt.lng },
+    })
+    .catch(() => undefined);
+  return pt;
 }

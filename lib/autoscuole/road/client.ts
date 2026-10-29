@@ -65,9 +65,14 @@ export type RoadMarkerSummary = { markerCount: number; markerKinds: string[]; ma
 export type RoadLiveSession = RoadSession &
   RoadMarkerSummary & { lesson: RoadLesson; recentMarkers: RoadMarker[] };
 
+export type RoadHeadquartersStatus = { roadEnabled: boolean; missing: boolean; canEdit: boolean };
+
 export type RoadLive = {
   now: string;
+  /** La sede vera (`isDefault`), o null se non ha le coordinate. */
   base: { name: string; lat: number; lng: number } | null;
+  /** REG-655: gli altri luoghi con le coordinate (segnaposto diverso dalla sede). */
+  places?: Array<{ id: string; name: string; lat: number; lng: number }>;
   sessions: RoadLiveSession[];
   atBase: Array<{ id: string; name: string; plate: string | null; carColor: CarColorKey; freeUntil: string | null }>;
 };
@@ -214,6 +219,7 @@ function query(params: Record<string, string | number | null | undefined>) {
 
 export const roadApi = {
   live: (signal?: AbortSignal) => call<RoadLive>("/live", signal),
+  headquarters: (signal?: AbortSignal) => call<RoadHeadquartersStatus>("/headquarters", signal),
   today: (signal?: AbortSignal) => call<RoadTodayItem[]>("/today", signal),
   history: (
     params: {
