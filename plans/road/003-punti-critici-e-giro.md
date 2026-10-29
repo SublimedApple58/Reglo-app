@@ -86,3 +86,5 @@ Design premium, niente pillole/badge decorativi; animazioni veloci (150–200 ms
 - 29/10 — piano approvato, task creati, avvio REG-641.
 - 29/10 — REG-641 su staging (82b995c). Road acceso sull'autoscuola di test di staging «Autoscuola Reglo» (solo quella).
 - 29/10 — REG-642: `POST /road/exam-routes/snap` (aggancio con cache per tratto) e `POST /road/exam-routes/from-session` (scorciatoia A).
+- 29/10 — REG-643: `GET /road/hotspots` e `/road/hotspots/[key]`. Modifica al piano: i gruppi si fanno per tipo + 60 m e la via non li divide (a un incrocio la stessa manovra arriva su due vie diverse); la via più frequente dà il nome.
+- 29/10 — Nuova regola di Tiziano per il lavoro Road: task finito e verificato → staging → produzione senza attendere l'ok (Road in prod è acceso solo su «Autoscuola Maltese», tenant di prova); Done su Linear solo quando è in prod. Mobile: OTA produzione runtime 2.4.0, niente build nativa.

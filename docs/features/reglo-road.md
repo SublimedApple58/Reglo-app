@@ -132,3 +132,21 @@ Codici: `ROAD_DISABLED`, `FORBIDDEN`, `INVALID`, `NOT_FOUND`. Test: `tests/unit/
 | POST | `/road/exam-routes/from-session` `{ sessionId, fromMs?, toMs? }` | titolare | bozza `{ sourceSessionId, waypoints, path, lengthMeters }` |
 
 Codici in più: `SNAP_UNAVAILABLE`, `NO_ROUTE`. Test: `tests/unit/road/road-snap.test.ts` (Google e cache finti: raggruppamento, solo i tratti toccati, errori), e2e `tests/e2e/reg642-road-snap.auth.spec.ts` (una chiamata vera, la seconda dalla cache).
+
+### Punti critici — calcolo e API (REG-643, 29/10)
+
+- **Logica pura** `lib/autoscuole/road/hotspots.ts`:
+  - `clusterMarkers`: segnalazioni «da migliorare» (`sentiment = bad`) dello stesso tipo entro **60 m** dal centro del gruppo; raggruppamento goloso e deterministico (ordine di tempo, poi id), il centro è la media. **La via non divide i gruppi**: a un incrocio la stessa manovra finisce ora su una via ora sull'altra; la via più frequente dà il nome.
+  - soglia fissa **≥ 3 errori da ≥ 2 allievi** (`HOTSPOT_MIN_ERRORS` / `HOTSPOT_MIN_STUDENTS`);
+  - `examRoutes`: percorsi d'esame attivi che passano a ≤ **50 m** dal centro (`distanceToPathMeters`);
+  - `key` = `tipo~lat~lng` (centro a 4 decimali); `findHotspot` la ritrova anche se il centro si è spostato di poco (stesso tipo, entro 60 m);
+  - `parseHotspotFilters`: periodo mai oltre i 12 mesi di conservazione (default: ultimi 12 mesi), `instructorId` uuid, `license` maiuscola, `kind`.
+- **Service** `lib/autoscuole/road/hotspots-service.ts`: titolare/admin = tutta l'autoscuola; **istruttore** = stessa mappa aggregata, ma nel dettaglio solo le guide sue (`hiddenSessions` conta le altre); allievo = `FORBIDDEN`. Funziona con cookie web e con token mobile (REG-646).
+- **Cache**: lista in Redis 10 min per autoscuola + filtri nel nuovo segmento `AUTOSCUOLE_CACHE_SEGMENTS.ROAD`; i percorsi d'esame (crea / modifica / archivia) lo invalidano, così il segno «sul percorso d'esame» è subito giusto. Il dettaglio si calcola al tocco.
+
+| Metodo | Path | Chi | Cosa |
+|---|---|---|---|
+| GET | `/road/hotspots?from&to&instructorId&license&kind` | titolare, istruttore | `{ from, to, hotspots: Hotspot[], totalErrors, examRoutes }` (`totalErrors` conta anche le segnalazioni sotto soglia: serve allo stato vuoto) |
+| GET | `/road/hotspots/[key]` (stessi filtri) | titolare, istruttore | `{ hotspot, sessions[{ id, startedAt, student, instructor, errors, lastAt }], students[{ id, name, errors }], hiddenSessions }` |
+
+`Hotspot` = `{ key, kind, label, lat, lng, street, errors, students, sessions, lastAt, examRoutes[{ id, name }] }`, ordinati per errori, poi allievi, poi il più recente. Test: `tests/unit/road/road-hotspots.test.ts`, e2e `tests/e2e/reg643-road-hotspots.auth.spec.ts` (servono i dati di prova di `scripts/seed-road-hotspots.ts`, vedi `docs/STAGING.md` › Reglo Road su staging).

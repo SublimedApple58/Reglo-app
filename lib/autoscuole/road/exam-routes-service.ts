@@ -1,5 +1,6 @@
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
+import { AUTOSCUOLE_CACHE_SEGMENTS, invalidateAutoscuoleCache } from "@/lib/autoscuole/cache";
 import { canSeeAll, roadContext } from "@/lib/autoscuole/road/service";
 import {
   EXAM_ROUTE_MAX_WAYPOINTS,
@@ -69,6 +70,10 @@ export type RoadExamRouteDTO = {
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** I punti critici portano il segno «sul percorso d'esame»: vanno ricalcolati. */
+const invalidateHotspots = (companyId: string) =>
+  invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.ROAD] }).catch(() => undefined);
 
 const asLatLng = (v: unknown): LatLng[] => (Array.isArray(v) ? (v as LatLng[]) : []);
 
@@ -143,6 +148,7 @@ export async function createRoadExamRoute(raw: unknown) {
       },
       select: routeSelect,
     });
+    await invalidateHotspots(ctx.companyId);
     return ok(routeDTO(row));
   } catch (error) {
     return fail(formatError(error));
@@ -175,6 +181,7 @@ export async function updateRoadExamRoute(id: string, raw: unknown) {
       },
       select: routeSelect,
     });
+    await invalidateHotspots(ctx.companyId);
     return ok(routeDTO(row));
   } catch (error) {
     return fail(formatError(error));
@@ -192,6 +199,7 @@ export async function archiveRoadExamRoute(id: string) {
       data: { archivedAt: new Date() },
     });
     if (!res.count) return fail("Percorso non trovato.", "NOT_FOUND");
+    await invalidateHotspots(ctx.companyId);
     return ok({ archived: true });
   } catch (error) {
     return fail(formatError(error));

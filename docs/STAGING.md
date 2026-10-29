@@ -85,6 +85,33 @@ La CI **Staging Smoke** (`.github/workflows/staging-smoke.yml`) gira a ogni push
 
 ---
 
+## 🚗 Reglo Road su staging
+
+Road nasce spento (`CompanyService.limits.roadEnabled`, vale solo `=== true`). Su
+staging è **acceso solo su «Autoscuola Reglo»** (`655e408a-…`, l'autoscuola attiva
+di `titolare@reglo.it`, dal 29/10/2026); «Reglo E2E» resta spento.
+
+- **Dal backoffice** (`/backoffice` › Autoscuole › «Gestisci» › card «Reglo Road»),
+  se hai un accesso personale al backoffice di staging.
+- **Da terminale** (stessa scrittura del backoffice + invalidazione della cache
+  Redis delle impostazioni; rifiuta il DB di produzione):
+
+  ```bash
+  DOTENV_CONFIG_PATH=.env.staging NODE_OPTIONS=--require=dotenv/config \
+    npx ts-node --transpile-only --compiler-options '{"module":"commonjs","moduleResolution":"node","esModuleInterop":true}' \
+    scripts/road-toggle.ts --on        # oppure --off, e --company <id> per un'altra autoscuola
+  ```
+
+- **Dati di prova dei punti critici** (8 guide passate con segnalazioni in tre
+  incroci di Torino; idempotente, `--remove` per toglierle):
+  `scripts/seed-road-hotspots.ts`, stesso comando con `.env.staging` o `.env.dev`.
+- Gli e2e Road (`tests/e2e/reg64*-road-*.auth.spec.ts`) girano sul titolare; quello
+  dei punti critici entra anche come istruttore (`istruttore@reglo.it`) con token
+  mobile e header `x-reglo-company-id`, perché l'account è in due autoscuole.
+
+In **produzione** Road si accende solo dal backoffice: oggi è acceso solo su
+«Autoscuola Maltese», il tenant di prova di Tiziano.
+
 ## 📱 Mobile su staging (`reglo-mobile/`)
 
 ```bash

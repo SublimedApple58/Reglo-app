@@ -7,6 +7,7 @@ const STRIPE_SEGMENT = "stripe";
 const FIC_SEGMENT = "fic";
 const QUIZ_SEGMENT = "quiz";
 const AULA_SEGMENT = "aula";
+const ROAD_SEGMENT = "road";
 const CACHE_NAMESPACE = "autoscuole:v1";
 
 const SETTINGS_SEGMENT = "settings";
@@ -19,6 +20,8 @@ export const AUTOSCUOLE_CACHE_SEGMENTS = {
   QUIZ: QUIZ_SEGMENT,
   AULA: AULA_SEGMENT,
   SETTINGS: SETTINGS_SEGMENT,
+  /** Reglo Road: punti critici (REG-643), invalidati quando cambiano i percorsi d'esame. */
+  ROAD: ROAD_SEGMENT,
 } as const;
 
 export type AutoscuoleCacheSegment =
