@@ -165,3 +165,16 @@ Vedi la riga «Punti critici» nella sezione Web. File: `components/pages/Autosc
 - **Scorciatoia** dal dettaglio guida: «Usa come percorso d'esame» → due maniglie «Inizio» / «Fine» che scorrono sul tracciato (`nearestIndex`), card con km e orari del tratto → «Continua» apre l'editor con la bozza di `POST /road/exam-routes/from-session`.
 - Animazioni 200–260 ms `cubic-bezier(0.2,0,0,1)` (puntine, card, righe), mai spente da «Riduci movimento» (MapLibre `essential: true`). A 390 px: mappa sopra, pannello sotto, card del tratto compatta.
 - Test: unit `tests/unit/road/road-exam-route-editor.test.ts`, e2e `tests/e2e/reg645-road-exam-route-editor.auth.spec.ts` (chiama davvero Google Routes per pochi tratti; archivia il percorso creato).
+
+### Giro della prossima guida — motore (REG-647, 29/10)
+
+Solo backend, nessuna API ancora: la espone REG-648 (che controlla ruolo, allievo dell'autoscuola e interruttori prima di chiamare qui).
+
+- **Logica pura** `lib/autoscuole/road/lesson-plan.ts`:
+  - `buildStudentHotspots(markers)`: **punti critici dell'allievo**, cioè i SUOI errori ripetuti (segnalazioni «da migliorare» raggruppate come `clusterMarkers`, stesso tipo entro 60 m, in almeno 2 guide diverse). Mai quelli dell'autoscuola. Servono alla tappa 1 e alla mappa in Road (REG-652). `studentErrorKinds` = i suoi tipi di errore dal più frequente.
+  - `examRouteCoverage(path, tracks)`: quota del percorso d'esame (campionato ogni 10 m) passata entro 30 m dai tracciati delle sue guide; griglia di celle per restare veloce.
+  - `buildLessonPlan(input)`: max 3 tappe per priorità: 1) punti dell'allievo (max 2 se ci sono le altre fonti); 2) punto critico dell'autoscuola per il suo errore più frequente, non già tra le sue tappe; 3) percorso d'esame meno coperto (sotto l'80%), tappa all'inizio del percorso, da lì si riparte dalla fine. Ordine «più vicina prima» dalla partenza (senza partenza: ordine di priorità). Minuti in linea d'aria a 25 km/h, 5 min di lavoro per tappa (il percorso d'esame: la sua lunghezza a 25 km/h); si tolgono le tappe meno importanti finché andata + lavoro + ritorno stanno nella durata della guida.
+  - Ogni tappa (`PlanStop`): `key` (chiave del punto critico o `exam:<id>`, per `planReached`), `source`, `kind`, `title` (via o nome), `reason` («Precedenza da migliorare 3 volte in 2 guide», «Qui sbagliano in tanti: stop, 7 errori di 4 allievi», «Percorso d'esame fatto al 20%»), `minutes`, `lat/lng`, `endLat/endLng` per il percorso d'esame.
+- **Loader** `lib/autoscuole/road/lesson-plan-service.ts`: `computeLessonPlan({ companyId, studentId, durationMin, start })` → `{ plan, studentHotspots }`; `loadStudentHotspots` per la sola mappa. Legge le segnalazioni «da migliorare» dell'allievo (12 mesi), i punti critici dell'autoscuola con `companyHotspots` (`hotspots-service.ts`, stessa cache della lista senza filtri) e, se ci sono percorsi d'esame, i tracciati delle ultime 30 guide dell'allievo (un punto ogni 3). Copertura in cache 10 minuti nel segmento `road`, chiave = allievo + guide + percorsi con `updatedAt`.
+- Verificato su staging (Autoscuola Reglo, sola lettura): circa 0,7 s a freddo e 0,1 s dopo.
+- Test: `tests/unit/road/road-lesson-plan.test.ts`.

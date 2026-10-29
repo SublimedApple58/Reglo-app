@@ -125,6 +125,51 @@ export type RoadHotspotsDTO = {
   examRoutes: number;
 };
 
+async function cachedHotspots(companyId: string, f: CleanHotspotFilters, key: string | null): Promise<RoadHotspotsDTO> {
+  if (key) {
+    const cached = await readAutoscuoleCache<RoadHotspotsDTO>(key).catch(() => null);
+    if (cached) return cached;
+  }
+  const [markers, routes] = await Promise.all([loadMarkers(companyId, f), loadExamRoutes(companyId)]);
+  const data: RoadHotspotsDTO = {
+    from: f.from.toISOString(),
+    to: f.to.toISOString(),
+    hotspots: buildHotspots(markers, routes),
+    totalErrors: markers.length,
+    examRoutes: routes.length,
+  };
+  if (key) await writeAutoscuoleCache(key, data, HOTSPOTS_CACHE_TTL_S).catch(() => undefined);
+  return data;
+}
+
+const listCacheKey = (companyId: string, input: HotspotFilters, f: CleanHotspotFilters) => {
+  // Il «fino a» arrotondato al minuto: con «adesso» la chiave cambierebbe a ogni chiamata.
+  const minute = (d: Date) => Math.floor(d.getTime() / 60_000);
+  return buildAutoscuoleCacheKey({
+    companyId,
+    segment: AUTOSCUOLE_CACHE_SEGMENTS.ROAD,
+    scope: `hotspots:${hashCacheInput({
+      from: input.from ? minute(f.from) : "default",
+      to: input.to ? minute(f.to) : "now",
+      instructorId: f.instructorId,
+      license: f.license,
+      kind: f.kind,
+    })}`,
+  }).catch(() => null);
+};
+
+/**
+ * REG-647: i punti critici di tutta l'autoscuola sugli ultimi 12 mesi, senza
+ * filtri e senza controlli di ruolo (li fa chi chiama). Stessa cache della
+ * lista senza filtri.
+ */
+export async function companyHotspots(companyId: string): Promise<Hotspot[]> {
+  const parsed = parseHotspotFilters({});
+  if (!parsed.ok) return [];
+  const data = await cachedHotspots(companyId, parsed.value, await listCacheKey(companyId, {}, parsed.value));
+  return data.hotspots;
+}
+
 export async function getRoadHotspots(input: HotspotFilters) {
   try {
     const loaded = await loadCtx();
@@ -134,34 +179,8 @@ export async function getRoadHotspots(input: HotspotFilters) {
     if (!parsed.ok) return fail(parsed.message, "INVALID");
     const f = parsed.value;
 
-    // Il «fino a» arrotondato al minuto: con «adesso» la chiave cambierebbe a ogni chiamata.
-    const minute = (d: Date) => Math.floor(d.getTime() / 60_000);
-    const key = await buildAutoscuoleCacheKey({
-      companyId: ctx.companyId,
-      segment: AUTOSCUOLE_CACHE_SEGMENTS.ROAD,
-      scope: `hotspots:${hashCacheInput({
-        from: input.from ? minute(f.from) : "default",
-        to: input.to ? minute(f.to) : "now",
-        instructorId: f.instructorId,
-        license: f.license,
-        kind: f.kind,
-      })}`,
-    }).catch(() => null);
-    if (key) {
-      const cached = await readAutoscuoleCache<RoadHotspotsDTO>(key).catch(() => null);
-      if (cached) return ok(cached);
-    }
-
-    const [markers, routes] = await Promise.all([loadMarkers(ctx.companyId, f), loadExamRoutes(ctx.companyId)]);
-    const data: RoadHotspotsDTO = {
-      from: f.from.toISOString(),
-      to: f.to.toISOString(),
-      hotspots: buildHotspots(markers, routes),
-      totalErrors: markers.length,
-      examRoutes: routes.length,
-    };
-    if (key) await writeAutoscuoleCache(key, data, HOTSPOTS_CACHE_TTL_S).catch(() => undefined);
-    return ok(data);
+    const key = await listCacheKey(ctx.companyId, input, f);
+    return ok(await cachedHotspots(ctx.companyId, f, key));
   } catch (error) {
     return fail(formatError(error));
   }

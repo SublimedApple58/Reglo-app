@@ -40,14 +40,22 @@ Il piano si regge sui dati che Road già registra: ogni segnalazione ha posizion
 | Dove compare | Fisso: tab Road › «Con chi guidi?» (sotto il briefing), invito «Entri in Road?», foglio della guida | — | Istruttore | Mobile | `BriefStack`, `road-invite`, `manage-lesson` |
 | Scelta per guida | «Parti con questo giro» / «Senza giro» | Nel foglio | Istruttore | Mobile | Flusso «Parti con …» |
 | Avvisi in guida (card ~300 m prima, vibrazione, tappa raggiunta entro 40 m) | **Configurabile, acceso di default**: «Avvisi delle tappe durante la guida»; distanza fissa | Web › Impostazioni › Reglo Road | Istruttore in Road | Mobile | `tracking.ts`, `roadStore` |
+| **Punti critici dell'allievo sulla mappa in Road** (i SUOI errori ripetuti: stesso tipo entro 60 m in almeno 2 guide diverse, ultimi 12 mesi; non quelli dell'autoscuola) | Fisso: con Road acceso | — | Istruttore in Road | Backend, mobile | Raggruppamento di `hotspots.ts`, `RoadMarkerPin` |
+| **Navigazione suggerita**: linea discreta sulle strade vere da posizione → tappe → eventuale percorso d'esame | Fisso: c'è quando la guida ha un giro (segue l'interruttore del giro) | — | Istruttore in Road | Backend, mobile | Routes API + cache per tratto di REG-642 (`snap.ts`) |
 | Esito («2 tappe su 3») | Fisso | Riepilogo Road, dettaglio guida web | Istruttore, titolare | Mobile, web, backend | Riepilogo, `RoadSessionDetail` |
 | Allievo | Non vede il giro (forse in futuro) | — | — | — | — |
 
-La mappa del giro mostra le tappe numerate in ordine (al più un tratteggio), non la strada: l'istruttore conosce la città. Ordine «più vicina prima», minuti stimati in linea d'aria a 25 km/h.
+**Modifica di Tiziano (29/10, dopo l'ok ai punti critici in app)** — sostituisce la vecchia riga «non la strada, solo tappe»:
+- In Road la mappa mostra le tappe numerate **e una navigazione suggerita, non obbligatoria**: una linea discreta che segue le strade vere e collega posizione di partenza → tappe del giro → eventuale percorso d'esame (dall'inizio del percorso, che poi si disegna com'è salvato). Calcolata **una volta alla partenza** con la Routes API, riusando la cache per tratto di REG-642 (`road:snap:v1:*`, coordinate arrotondate: le partenze dalla sede dell'autoscuola pescano dalla cache).
+- Se l'istruttore va altrove **non succede niente**: nessun ricalcolo insistente (al più uno quando si raggiunge una tappa fuori ordine), niente voce, niente indicazioni svolta per svolta. I tratti già percorsi si attenuano.
+- Sulla mappa in Road compaiono anche i **punti critici di quell'allievo** (i suoi errori ripetuti), non quelli dell'autoscuola.
+- Se la Routes API non risponde: restano tappe e punti, senza linea; nessun errore a schermo.
+
+Ordine delle tappe «più vicina prima», minuti stimati in linea d'aria a 25 km/h (indicativi).
 
 ## Modello dati e migrazioni (solo additive, una migrazione in REG-641)
 - **Nuova tabella `RoadExamRoute`**: `id`, `companyId`, `name`, `examSite?`, `licenseCategories String[]`, `waypoints Json` (punti del titolare), `path Json` (linea agganciata `[[lat,lng],…]`), `lengthMeters Int`, `sourceSessionId?`, `createdById?`, `archivedAt?`, `createdAt`, `updatedAt`; indice `(companyId, archivedAt)`.
-- **Nuove colonne `RoadSession`**: `plan Json?` (tappe scelte alla partenza), `planReached Json?` (tappe raggiunte, a fine guida).
+- **Nuove colonne `RoadSession`**: `plan Json?` (tappe scelte alla partenza), `planReached Json?` (tappe raggiunte, a fine guida). La linea suggerita non si salva: si ricalcola dalla cache per tratto.
 - **Punti critici**: nessuna tabella, calcolo alla lettura sugli ultimi 12 mesi + cache Redis 10 min (job notturno Trigger solo se diventa lento).
 - **Impostazioni** nel JSON `limits` esistente, nessuna migrazione: `roadPlanEnabled`, `roadPlanAlertsEnabled` (assenti = accesi).
 
@@ -61,13 +69,14 @@ La mappa del giro mostra le tappe numerate in ordine (al più un tratteggio), no
 | REG-644 | Punti critici: vista web nella pagina Road | Web | 3 | 643 |
 | REG-645 | Percorsi d'esame: editor web in Impostazioni con aggancio | Web | 3 | 642 |
 | REG-646 | Punti critici nell'app istruttore | Mobile | 3 | 643 |
-| REG-647 | Giro: calcolo delle tappe e copertura dei percorsi d'esame | Backend | 3 | 643 |
-| REG-648 | Giro: API, salvataggio, interruttori (accesi) | Backend | 2 | 647, 641 |
+| REG-647 | Giro: calcolo delle tappe, punti critici dell'allievo, copertura dei percorsi d'esame | Backend | 3 | 643 |
+| REG-648 | Giro: API, salvataggio, interruttori (accesi), linea suggerita sulle strade (Routes API + cache) | Backend | 3 | 647, 642 |
 | REG-649 | Giro nei fogli di partenza | Mobile | 3 | 648 |
 | REG-650 | Giro: avvisi in Road ed esito nel riepilogo | Mobile | 3 | 648 |
+| REG-652 | Mappa in Road: linea suggerita, tappe e punti critici dell'allievo | Mobile | 3 | 648 |
 | REG-651 | Interruttori web, giro nel dettaglio guida, documentazione | Web | 1 | 648 |
 
-Totale **27 punti**. Ordine: 641 → 642 → 643 → 644 → 645 → 646, poi 647 → 651. Un task alla volta, ognuno con il suo branch `feat/reg-<num>-<slug>` da `origin/staging` e worktree `reglo-worktrees/reg-<num>`; massimo fino a staging.
+Totale **31 punti** (erano 27: +1 a REG-648 per la linea, +3 con il nuovo task mobile, spacchettato da REG-650). Ordine dopo 646: 647 → 648 → 649 → 650 → 652 → 651. Ordine: 641 → 642 → 643 → 644 → 645 → 646, poi 647 → 651. Un task alla volta, ognuno con il suo branch `feat/reg-<num>-<slug>` da `origin/staging` e worktree `reglo-worktrees/reg-<num>`; massimo fino a staging.
 
 ## Regole UI (tutte le schermate)
 Design premium, niente pillole/badge decorativi; animazioni veloci (150–200 ms) che non si spengono con `prefers-reduced-motion` / «Riduci movimento»; web responsive a 390 px; mobile: form sheet nativi senza grabber, skeleton, fluidità §15. Verifica con Playwright, screenshot ritagliati in `/tmp/hiro-anteprime/road-punti-critici/`.
@@ -79,7 +88,7 @@ Design premium, niente pillole/badge decorativi; animazioni veloci (150–200 ms
 - **Privacy**: dati aggregati (≥ 2 allievi); l'istruttore vede la mappa aggregata ma nel dettaglio solo i suoi allievi.
 - **Routes API**: abilitata sulla chiave (verificato 29/10, la stessa su dev e staging). Costo per richiesta solo mentre si modifica un percorso, endpoint solo titolare. Decisione di Tiziano (29/10): chiamare Google solo quando si lascia o si salva un punto (debounce nell'editor), cache dei tratti già calcolati e ricalcolo solo del tratto toccato → cache Redis per tratto + tratti consecutivi in una richiesta (≤ 10 intermedi, tariffa base).
 - **Percorsi «d'esame»**: non ufficiali della motorizzazione → «I tuoi percorsi d'esame».
-- **Distrazione**: una card alla volta, testo breve, solo vibrazione, interruttore.
+- **Distrazione**: linea sottile e neutra, nessun ricalcolo né avviso se si esce dal giro; una card alla volta, testo breve, solo vibrazione, interruttore.
 - **Stima tempi**: indicativa.
 
 ## Avanzamento
@@ -92,3 +101,6 @@ Design premium, niente pillole/badge decorativi; animazioni veloci (150–200 ms
 - 29/10 — **Runtime mobile (chiarito da Tiziano)**: sugli store c'è la **2.3.0**; la **2.4.0** (moduli nativi di Road) è solo la build **TestFlight** con cui si prova Road. Store e TestFlight leggono lo stesso canale EAS `production`: a separarli è solo il `runtimeVersion`. Le OTA di Road (REG-646, 649, 650) vanno **solo sul runtime 2.4.0**, mai agli utenti 2.3.0: prima di ogni `eas update` verificare `app.json` → `runtimeVersion: "2.4.0"`, `--branch production` e il runtime stampato da eas update. Floor force-update resta 2.3.0.
 - 29/10 — REG-644: vista web «Punti critici» nella pagina Road. MapLibre con `essential: true` per non perdere le animazioni con «Riduci movimento» (corretto anche «Dal vivo»).
 - 29/10 — REG-645: editor web dei percorsi d'esame (Impostazioni › Reglo Road, rotta `road/percorsi/[id]`) + «Usa come percorso d'esame» con maniglie Inizio/Fine nel dettaglio guida. Google solo al rilascio/aggiunta/rimozione di un punto (350 ms) o al salvataggio, solo i tratti mancanti; verificato con Playwright (trascinamento = 0 richieste, rilascio = 1).
+- 29/10 — REG-646: punti critici nell'app istruttore (tab Road › «Punti critici», mappa + lista, foglio del punto), OTA solo runtime 2.4.0 (master 8c4235a). Approvato da Tiziano.
+- 29/10 — **Modifica al giro (Tiziano)**: in Road i punti critici dell'allievo sulla mappa e una navigazione suggerita sulle strade vere (Routes API + cache REG-642), non obbligatoria, senza ricalcoli insistenti né voce. Sostituisce «non la strada, solo tappe». REG-648 passa a 3 punti; la parte mappa di REG-650 diventa il nuovo REG-652 (3 punti).
+- 29/10 — REG-647: motore del giro (`lesson-plan.ts` + `lesson-plan-service.ts`): punti critici dell'allievo (errori ripetuti in ≥ 2 guide), tappe per priorità con durata, copertura dei percorsi d'esame (30 m, cache 10 min). Nessuna API: arriva con REG-648.
