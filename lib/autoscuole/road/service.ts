@@ -814,12 +814,26 @@ function markerSummary(counts: Map<string, MarkerCount>, sessionId: string) {
  * REG-655: la sede manca? Con Road acceso e la sede senza coordinate (né un
  * indirizzo che si riesca a geocodificare) il giro non sa dove chiudersi: la web
  * ferma il titolare finché non la inserisce (REG-656), gli altri vedono un avviso.
+ * `canEdit` = titolare (REG-656: prima anche gli admin, che però non possono salvarla).
  */
 export async function getRoadHeadquartersStatus() {
   try {
     const ctx = await roadContext();
     const missing = ctx.roadEnabled ? (await roadHeadquarters(ctx.companyId)) == null : false;
-    return ok({ roadEnabled: ctx.roadEnabled, missing, canEdit: canSeeAll(ctx) });
+    // Il nome resta quello della sede che c'è già (nasce «Sede {autoscuola}»).
+    const sede = missing
+      ? await prisma.autoscuolaLocation.findFirst({
+          where: { companyId: ctx.companyId, isDefault: true, archivedAt: null },
+          select: { name: true },
+        })
+      : null;
+    return ok({
+      roadEnabled: ctx.roadEnabled,
+      missing,
+      // Solo il titolare salva la sede (`updateDefaultAutoscuolaLocation`): gli altri vedono l'avviso.
+      canEdit: isOwner(ctx.membership.autoscuolaRole),
+      sedeName: sede?.name ?? null,
+    });
   } catch (error) {
     return fail(formatError(error));
   }

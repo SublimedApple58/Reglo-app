@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { MapPin, Search, X } from "lucide-react";
 
@@ -14,6 +14,7 @@ import { LoadingDots } from "@/components/ui/loading-dots";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { licenseCategoryGroupsForMode } from "@/lib/autoscuole/license";
 import { cn } from "@/lib/utils";
+import { usePlacesAutocomplete, type PlaceSuggestion } from "./use-places-autocomplete";
 
 export type LocationFormValues = {
   name: string;
@@ -47,12 +48,6 @@ export type LocationFormDialogProps = {
   showLicenseCategories?: boolean;
 };
 
-type Suggestion = {
-  placeId: string;
-  primaryText: string;
-  secondaryText: string;
-};
-
 /** Input della modale dal proto: bg #f7f8fa, bordo 1.5 #ededed, radius 12,
  *  al focus bordo near-black e fondo bianco. */
 const FIELD_CLASS =
@@ -83,20 +78,15 @@ export function LocationFormDialog({
   const [longitude, setLongitude] = useState<number | null>(null);
   const [placeId, setPlaceId] = useState<string | null>(null);
   const [licenseCategories, setLicenseCategories] = useState<string[]>([]);
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const toast = useFeedbackToast();
-  const sessionTokenRef = useRef<string>("");
-  // Selezionando un suggerimento impostiamo l'indirizzo COMPLETO: senza questo
-  // flag l'effetto di ricerca (dipendente da `address`) rifarebbe la query e
-  // riaprirebbe la dropdown sopra il tasto Salva (REG-396). Lo alziamo prima di
-  // impostare l'indirizzo da selezione e lo consumiamo una volta nell'effetto.
-  const skipNextSearchRef = useRef(false);
+  // Autocompletamento Places (REG-396), estratto in un hook in REG-656.
+  const places = usePlacesAutocomplete(address, isPrecise);
+  const { suggestions, searching, resetSession } = places;
 
   useEffect(() => {
     if (open) {
-      sessionTokenRef.current = crypto.randomUUID();
+      resetSession();
       setName(initialValue?.name ?? (mode === "default" ? "Sede dell'autoscuola" : ""));
       setIsPrecise(initialValue?.isPrecise ?? false);
       setAddress(initialValue?.address ?? "");
@@ -104,95 +94,20 @@ export function LocationFormDialog({
       setLongitude(initialValue?.longitude ?? null);
       setPlaceId(initialValue?.placeId ?? null);
       setLicenseCategories(initialValue?.licenseCategories ?? []);
-      setSuggestions([]);
     }
-  }, [open, mode, initialValue]);
+  }, [open, mode, initialValue, resetSession]);
 
-  useEffect(() => {
-    if (!isPrecise) return;
-    if (skipNextSearchRef.current) {
-      skipNextSearchRef.current = false;
-      setSuggestions([]);
-      return;
-    }
-    if (!address || address.length < 3) {
-      setSuggestions([]);
-      return;
-    }
-    let cancelled = false;
-    setSearching(true);
-    const timer = setTimeout(async () => {
-      try {
-        // Proxy server-side (REG-396): la chiave e la chiamata a Google vivono
-        // nel backend, così si evita il blocco CORS del fetch client-side.
-        const res = await fetch("/api/places/autocomplete", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            input: address,
-            sessionToken: sessionTokenRef.current,
-          }),
-        });
-        if (!res.ok) {
-          setSuggestions([]);
-          return;
-        }
-        const data = await res.json();
-        if (cancelled) return;
-        const items: Suggestion[] =
-          (data.suggestions ?? [])
-            .map((s: unknown) => {
-              const obj = s as {
-                placePrediction?: {
-                  placeId?: string;
-                  structuredFormat?: {
-                    mainText?: { text?: string };
-                    secondaryText?: { text?: string };
-                  };
-                };
-              };
-              const pp = obj.placePrediction;
-              if (!pp?.placeId) return null;
-              return {
-                placeId: pp.placeId,
-                primaryText: pp.structuredFormat?.mainText?.text ?? "",
-                secondaryText: pp.structuredFormat?.secondaryText?.text ?? "",
-              } satisfies Suggestion;
-            })
-            .filter(Boolean) as Suggestion[];
-        setSuggestions(items.slice(0, 5));
-      } catch {
-        setSuggestions([]);
-      } finally {
-        if (!cancelled) setSearching(false);
-      }
-    }, 350);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [address, isPrecise]);
-
-  const selectSuggestion = async (suggestion: Suggestion) => {
+  const selectSuggestion = async (suggestion: PlaceSuggestion) => {
     try {
-      const res = await fetch(
-        `/api/places/details?placeId=${encodeURIComponent(suggestion.placeId)}`,
-        { method: "GET" },
-      );
-      if (!res.ok) {
+      const picked = await places.select(suggestion);
+      if (!picked) {
         toast.error({ description: "Impossibile leggere il luogo selezionato." });
         return;
       }
-      const data = (await res.json()) as {
-        formattedAddress?: string;
-        location?: { latitude?: number; longitude?: number };
-      };
-      skipNextSearchRef.current = true;
-      setAddress(data.formattedAddress ?? `${suggestion.primaryText}, ${suggestion.secondaryText}`);
-      setLatitude(data.location?.latitude ?? null);
-      setLongitude(data.location?.longitude ?? null);
-      setPlaceId(suggestion.placeId);
-      setSuggestions([]);
+      setAddress(picked.address);
+      setLatitude(picked.latitude);
+      setLongitude(picked.longitude);
+      setPlaceId(picked.placeId);
     } catch {
       toast.error({ description: "Errore nella selezione del luogo." });
     }
@@ -340,7 +255,7 @@ export function LocationFormDialog({
                 <input
                   value={address}
                   onChange={(e) => {
-                    skipNextSearchRef.current = false;
+                    places.typed();
                     setAddress(e.target.value);
                     setPlaceId(null);
                     setLatitude(null);

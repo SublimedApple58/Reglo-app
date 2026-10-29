@@ -19,6 +19,7 @@ import { LoadingDots } from "@/components/ui/loading-dots";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { RoadExamRoutesSection } from "./road/RoadExamRoutesSection";
+import { RoadHeadquartersGate } from "./road/RoadHeadquartersGate";
 
 const newId = () =>
   (typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -132,6 +133,8 @@ export function RoadSettingsPane() {
 
   return (
     <div className="-mt-7" data-testid="road-settings-pane">
+      {/* REG-656: senza l'indirizzo della sede il titolare viene fermato qui come nelle pagine Road. */}
+      <RoadHeadquartersGate />
       <p className="max-w-[680px] text-[15px] leading-[1.5] text-[#6a6a6a]">
         Durante la guida l&apos;istruttore segna gli errori sul punto esatto del percorso. Qui scegli quali
         segnalazioni avere sotto mano oltre a quelle di base.

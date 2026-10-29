@@ -65,7 +65,7 @@ export type RoadMarkerSummary = { markerCount: number; markerKinds: string[]; ma
 export type RoadLiveSession = RoadSession &
   RoadMarkerSummary & { lesson: RoadLesson; recentMarkers: RoadMarker[] };
 
-export type RoadHeadquartersStatus = { roadEnabled: boolean; missing: boolean; canEdit: boolean };
+export type RoadHeadquartersStatus = { roadEnabled: boolean; missing: boolean; canEdit: boolean; sedeName?: string | null };
 
 export type RoadLive = {
   now: string;
