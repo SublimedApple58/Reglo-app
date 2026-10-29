@@ -241,6 +241,22 @@ export function htmlElement(html: string): HTMLElement {
   return d.firstElementChild as HTMLElement;
 }
 
+/** Glifo monocromatico del segnaposto di un luogo (lucide «map-pin», 16 px). */
+const PIN_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>';
+
+/**
+ * REG-657: segnaposto di un luogo dell'autoscuola (non la sede): tondo bianco
+ * col glifo e il nome sotto su fondo chiaro. La sede resta l'edificio 3D con
+ * l'etichetta nera (`.road-sede`), così le due cose non si confondono.
+ */
+export function placeMarkerElement(name: string): HTMLElement {
+  return htmlElement(
+    // Il wrapper esterno lo trasla MapLibre: lo spostamento sta sul figlio.
+    `<div><div class="road-luogo" title="${escapeHtml(name)}"><div class="pin">${PIN_SVG}</div><span>${escapeHtml(name)}</span></div></div>`,
+  );
+}
+
 export function addHtmlMarker(
   handle: RoadMapHandle,
   at: [number, number],

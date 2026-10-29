@@ -13,7 +13,7 @@ import { getServiceLimits } from "@/lib/services";
 import { roadApi, type RoadDetail } from "@/lib/autoscuole/road/client";
 import { nearestIndex } from "@/lib/autoscuole/road/exam-route-editor";
 import { pathLengthMeters, type LatLng } from "@/lib/autoscuole/road/exam-routes";
-import { roadCarImages, roadMarkerSymbol, ROAD_IMAGES } from "@/lib/autoscuole/road/symbols";
+import { roadCarImages, roadMarkerSymbol } from "@/lib/autoscuole/road/symbols";
 import { cn } from "@/lib/utils";
 import {
   addHtmlMarker,
@@ -118,13 +118,13 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
     const start = coords[0];
     if (start) {
       markersRef.current.push(addHtmlMarker(handle, start, htmlElement(`<div class="road-start"></div>`)));
+      // REG-657: la partenza è un punto con l'orario, non l'icona della sede
+      // (si parte anche da un luogo o da casa dell'allievo).
       markersRef.current.push(
         addHtmlMarker(
           handle,
           start,
-          htmlElement(
-            `<div class="road-sede small"><img src="${ROAD_IMAGES.base}" alt=""><span>Partenza ${hhmm(detail.startedAt)}</span></div>`,
-          ),
+          htmlElement(`<div><div class="road-start-lab">Partenza ${hhmm(detail.startedAt)}</div></div>`),
           "bottom",
         ),
       );

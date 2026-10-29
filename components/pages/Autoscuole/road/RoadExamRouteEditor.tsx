@@ -10,7 +10,7 @@ import type { GeoJSONSource, MapMouseEvent, Marker as MlMarker } from "maplibre-
 
 import { companyAtom } from "@/atoms/company.store";
 import { getAutoscuolaVehicles } from "@/lib/actions/autoscuole.actions";
-import { roadApi, RoadApiError, type RoadExamRoute } from "@/lib/autoscuole/road/client";
+import { roadApi, RoadApiError, type RoadExamRoute, type RoadLive } from "@/lib/autoscuole/road/client";
 import {
   editorLengthMeters,
   joinedPath,
@@ -30,7 +30,7 @@ import { ROAD_IMAGES } from "@/lib/autoscuole/road/symbols";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { cn } from "@/lib/utils";
-import { addHtmlMarker, htmlElement, lineBounds, toLngLat, useRoadMap } from "./road-map";
+import { addHtmlMarker, htmlElement, lineBounds, placeMarkerElement, toLngLat, useRoadMap } from "./road-map";
 import { km, ROAD_MAP_BOX_CLASS, RoadMapFallback, RoadMarkerStyles, ZoomControls } from "./road-ui";
 
 /** Attesa dopo l'ultima modifica prima di chiedere l'aggancio: più punti messi di fila = una richiesta. */
@@ -97,6 +97,7 @@ export function RoadExamRouteEditor({ source }: { source: ExamRouteEditorSource 
   const [saving, setSaving] = React.useState(false);
   const [archiving, setArchiving] = React.useState(false);
   const [base, setBase] = React.useState<{ name: string; lat: number; lng: number } | null>(null);
+  const [places, setPlaces] = React.useState<NonNullable<RoadLive["places"]>>([]);
 
   const seedLegs = React.useCallback((path: LatLng[], wps: LatLng[]) => {
     const legs = splitPathAtWaypoints(path, wps);
@@ -113,7 +114,10 @@ export function RoadExamRouteEditor({ source }: { source: ExamRouteEditorSource 
     });
     roadApi
       .live(ctrl.signal)
-      .then((l) => setBase(l.base))
+      .then((l) => {
+        setBase(l.base);
+        setPlaces(l.places ?? []);
+      })
       .catch(() => undefined);
 
     const start = (wps: LatLng[], path: LatLng[]) => {
@@ -391,6 +395,13 @@ export function RoadExamRouteEditor({ source }: { source: ExamRouteEditorSource 
       "bottom",
     );
   }, [handle, base]);
+
+  // REG-657: gli altri luoghi, col segnaposto diverso dalla sede.
+  React.useEffect(() => {
+    if (!handle || !places.length) return;
+    const markers = places.map((p) => addHtmlMarker(handle, [p.lng, p.lat], placeMarkerElement(p.name)));
+    return () => markers.forEach((m) => m.remove());
+  }, [handle, places]);
 
   // Inquadratura iniziale: il percorso, altrimenti la sede.
   React.useEffect(() => {

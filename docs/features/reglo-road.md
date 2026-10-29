@@ -215,6 +215,11 @@ Solo backend, nessuna API ancora: la espone REG-648 (che controlla ruolo, alliev
   - **altri** (admin Reglo; le pagine Road web sono già solo titolare/admin): avviso «Manca l'indirizzo della sede», si chiude, una volta per sessione (`sessionStorage` `reglo:road-hq-notice`).
 - Sotto 640 px il foglio è lo sheet dal basso di `reglo-dialog`. Test: e2e `reg656-road-sede-gate.auth.spec.ts` (spegne «Posizione precisa» sulla sede di staging, foglio in Impostazioni e in Road, Esc non chiude, posizione → indirizzo, ricerca, salvataggio con la posizione: la sede di staging resta a 45.4654, 9.1859); unit `road-nearby-address.test.ts`.
 
+### Segnaposto dei luoghi e partenza (REG-657, 29/10)
+- **Mappa live** (`RoadLiveView`) ed **editor dei percorsi** (`RoadExamRouteEditor`): oltre alla sede (edificio 3D `ROAD_IMAGES.base`, etichetta nera `.road-sede`) i luoghi di `GET /road/live › places` con `placeMarkerElement` (`road-map.ts`): tondo bianco col glifo «map-pin» monocromatico e il nome sotto su fondo chiaro (`.road-luogo` in `RoadMarkerStyles`), senza clic. Nella legenda della mappa live compare «Luogo» quando ce n'è almeno uno. L'inquadratura iniziale non cambia (percorsi e sede).
+- **Dettaglio guida** (`RoadSessionDetail`): la partenza è il punto `.road-start` con l'etichetta bianca «Partenza HH:MM» (`.road-start-lab`); prima aveva l'icona della sede, e una guida partita da un luogo sembrava partire dalla sede.
+- Test: e2e `reg657-road-segnaposto-luoghi.auth.spec.ts` (una sede, un `.road-luogo` per luogo, nel dettaglio nessuna `.road-sede`).
+
 ### Riaggancio in guida (REG-654, mobile, 29/10)
 
 Nessuna modifica al backend: l'app istruttore richiama `POST /road/plan/route` con `optimize: false` quando l'istruttore esce dalla linea (oltre 50 m per 12 s), al massimo una volta ogni 45 s e solo se l'auto si è spostata, con le sole tappe rimaste (le tappe saltate apposta si lasciano perdere). L'esito (`planReached`) resta quello calcolato dal server sul tracciato. Dettagli in `reglo-mobile/docs/features/reglo-road.md` › «Riaggancio dopo una deviazione».

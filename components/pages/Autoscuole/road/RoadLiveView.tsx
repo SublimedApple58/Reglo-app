@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import type { Marker as MlMarker } from "maplibre-gl";
+import { MapPin } from "lucide-react";
 
 import { roadApi, type RoadLive, type RoadLiveSession } from "@/lib/autoscuole/road/client";
 import { roadCarImages, roadMarkerSymbol, ROAD_IMAGES } from "@/lib/autoscuole/road/symbols";
@@ -11,6 +12,7 @@ import {
   escapeHtml,
   htmlElement,
   lineBounds,
+  placeMarkerElement,
   raiseRoute,
   removeRoute,
   toLngLat,
@@ -154,6 +156,8 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
   const carsRef = React.useRef(new Map<string, CarEntry>());
   const symbolsRef = React.useRef(new Map<string, MlMarker>());
   const baseRef = React.useRef<MlMarker | null>(null);
+  // REG-657: gli altri luoghi dell'autoscuola, col loro segnaposto.
+  const placesRef = React.useRef(new Map<string, MlMarker>());
   const fittedRef = React.useRef(false);
 
   const sessions = React.useMemo(() => live?.sessions ?? [], [live]);
@@ -193,6 +197,19 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
         `<div class="road-sede"><img src="${ROAD_IMAGES.base}" alt=""><span>${escapeHtml(live.base.name)}</span></div>`,
       );
       baseRef.current = addHtmlMarker(handle, toLngLat(live.base), el, "bottom");
+    }
+
+    // luoghi (REG-657): un segnaposto diverso dalla sede
+    const placeIds = new Set((live.places ?? []).map((p) => p.id));
+    for (const p of live.places ?? []) {
+      if (placesRef.current.has(p.id)) continue;
+      placesRef.current.set(p.id, addHtmlMarker(handle, toLngLat(p), placeMarkerElement(p.name)));
+    }
+    for (const [id, mk] of placesRef.current) {
+      if (!placeIds.has(id)) {
+        mk.remove();
+        placesRef.current.delete(id);
+      }
     }
 
     // segnalazioni (le ultime di ogni guida)
@@ -278,10 +295,12 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
   React.useEffect(() => {
     const cars = carsRef.current;
     const symbols = symbolsRef.current;
+    const places = placesRef.current;
     return () => {
       for (const c of cars.values()) if (c.raf) cancelAnimationFrame(c.raf);
       cars.clear();
       symbols.clear();
+      places.clear();
       baseRef.current = null;
     };
   }, []);
@@ -441,6 +460,12 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
             <img src={roadMarkerSymbol("stop")} alt="" width={16} />
             Segnalazione
           </div>
+          {live?.places?.length ? (
+            <div className="flex h-8 items-center gap-[7px] rounded-2xl bg-white px-3 text-[13px] font-medium text-[#222] shadow-[0_1px_6px_rgba(0,0,0,0.1)]">
+              <MapPin className="size-3.5 text-[#3a3a3a]" strokeWidth={2} />
+              Luogo
+            </div>
+          ) : null}
         </div>
 
         {selected ? <SelectedCard s={selected} now={now} onOpen={() => onOpen(selected.id)} /> : null}

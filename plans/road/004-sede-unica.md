@@ -53,4 +53,5 @@ Stato: **IN CORSO**. Approvato da Tiziano il 29/10/2026. Task: REG-655 → REG-6
 
 ## Avanzamento
 - **REG-655 in prod** 29/10 (main 4863e12).
-- REG-656: `canEdit` = solo titolare (gli admin non possono salvare la sede); «Usa la mia posizione attuale» sceglie fra i 10 luoghi più vicini il primo con via e numero (il più vicino a volte è solo la zona).
+- **REG-656 in prod** 29/10 (main a2ecced). `canEdit` = solo titolare (gli admin non possono salvare la sede); «Usa la mia posizione attuale» sceglie fra i 10 luoghi più vicini il primo con via e numero (il più vicino a volte è solo la zona).
+- REG-657: luoghi anche nell'editor dei percorsi; voce «Luogo» nella legenda della mappa live.

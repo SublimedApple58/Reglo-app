@@ -353,6 +353,11 @@ export function RoadMarkerStyles() {
 .road-sede.small img{width:46px}
 .road-sede span{margin-top:-2px;height:26px;padding:0 10px;border-radius:13px;background:#111;color:#fff;font-size:12px;font-weight:600;display:grid;place-items:center;white-space:nowrap;font-family:inherit}
 .road-start{width:14px;height:14px;border-radius:50%;background:#fff;border:4px solid #111;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.road-luogo{display:flex;flex-direction:column;align-items:center;transform:translateY(15px);pointer-events:none}
+.road-luogo .pin{width:30px;height:30px;border-radius:50%;background:#fff;color:#3a3a3a;display:grid;place-items:center;box-shadow:0 0 0 1.5px rgba(17,17,17,.1),0 2px 8px rgba(0,0,0,.16)}
+.road-luogo .pin svg{width:16px;height:16px}
+.road-luogo span{margin-top:4px;max-width:160px;overflow:hidden;text-overflow:ellipsis;height:22px;line-height:22px;padding:0 9px;border-radius:11px;background:rgba(255,255,255,.94);color:#3a3a3a;font-size:11.5px;font-weight:600;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.12);font-family:inherit}
+.road-start-lab{transform:translateY(-16px);height:26px;line-height:26px;padding:0 10px;border-radius:13px;background:#fff;color:#111;font-size:12px;font-weight:600;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.08),0 4px 12px rgba(0,0,0,.14);font-family:inherit}
 `}</style>
   );
 }
