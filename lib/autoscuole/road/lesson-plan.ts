@@ -202,6 +202,8 @@ export type LessonPlanInput = {
   durationMin: number;
   /** Da dove parte la guida (sede o posizione); null = sconosciuto. */
   start: { lat: number; lng: number } | null;
+  /** Dove si chiude il giro: la sede (REG-653). Null/assente = all'ultima tappa. */
+  end?: { lat: number; lng: number } | null;
   studentHotspots: StudentHotspot[];
   /** Tipi di errore dell'allievo, dal più frequente (`studentErrorKinds`). */
   studentKinds: string[];
@@ -306,29 +308,55 @@ const travelMin = (a: { lat: number; lng: number }, b: { lat: number; lng: numbe
 
 const exitOf = (c: Candidate) => (c.endLat != null && c.endLng != null ? { lat: c.endLat, lng: c.endLng } : c);
 
-/** «Più vicina prima» dalla partenza; senza partenza si comincia dalla più importante. */
-function orderStops(cands: Candidate[], start: LessonPlanInput["start"]) {
-  const left = [...cands];
-  const out: PlanStop[] = [];
-  let at: { lat: number; lng: number } | null = start;
-  let total = 0;
-  while (left.length) {
-    let idx = 0;
-    if (at) {
-      let best = Infinity;
-      left.forEach((c, i) => {
-        const d = haversineMeters(at!.lat, at!.lng, c.lat, c.lng);
-        if (d < best) [best, idx] = [d, i];
-      });
+type Pt = { lat: number; lng: number };
+const dist = (a: Pt, b: Pt) => haversineMeters(a.lat, a.lng, b.lat, b.lng);
+
+function permutations<T>(items: T[]): T[][] {
+  if (items.length <= 1) return [items];
+  return items.flatMap((x, i) => permutations([...items.slice(0, i), ...items.slice(i + 1)]).map((p) => [x, ...p]));
+}
+
+/**
+ * REG-653: l'ordine che fa meno strada (in linea d'aria) partenza → tappe →
+ * sede. Le tappe sono al massimo 3, quindi si provano tutte le combinazioni. A
+ * parità (un giro chiuso fatto al contrario) vince quella che comincia dalla
+ * più vicina. È l'ordine della card; alla partenza la linea lo raffina con
+ * `optimizeWaypointOrder` sulle strade vere (`plan-route.ts`).
+ */
+function bestOrder(cands: Candidate[], start: Pt, end: Pt | null) {
+  let best: Candidate[] = cands;
+  let bestCost = Infinity;
+  let bestFirst = Infinity;
+  for (const perm of permutations(cands)) {
+    let at: Pt = start;
+    let cost = 0;
+    for (const c of perm) {
+      cost += dist(at, c);
+      at = exitOf(c);
     }
-    const [c] = left.splice(idx, 1);
+    if (end) cost += dist(at, end);
+    const first = dist(start, perm[0]);
+    if (cost < bestCost - 1 || (Math.abs(cost - bestCost) <= 1 && first < bestFirst)) {
+      [best, bestCost, bestFirst] = [perm, cost, first];
+    }
+  }
+  return best;
+}
+
+/** Senza partenza si va in ordine di importanza; il giro si chiude in sede se c'è. */
+function orderStops(cands: Candidate[], start: LessonPlanInput["start"], end: Pt | null) {
+  const ordered = start && cands.length ? bestOrder(cands, start, end) : cands;
+  const out: PlanStop[] = [];
+  let at: Pt | null = start;
+  let total = 0;
+  for (const c of ordered) {
     const minutes = at ? travelMin(at, c) : 0;
     const { workMin, ...stop } = c;
     out.push({ ...stop, minutes });
     total += minutes + workMin;
     at = exitOf(c);
   }
-  if (start && at && out.length) total += travelMin(at, start);
+  if (end && at && out.length) total += travelMin(at, end);
   return { stops: out, minutes: total };
 }
 
@@ -336,7 +364,7 @@ export function buildLessonPlan(input: LessonPlanInput): LessonPlan {
   const cands = planCandidates(input);
   // Si tolgono le meno importanti finché il giro sta nella guida.
   for (let n = cands.length; n > 0; n--) {
-    const plan = orderStops(cands.slice(0, n), input.start);
+    const plan = orderStops(cands.slice(0, n), input.start, input.end ?? null);
     if (plan.minutes <= input.durationMin) return plan;
   }
   return { stops: [], minutes: 0 };
@@ -430,8 +458,9 @@ export function computePlanReached(
 
 /**
  * La linea suggerita a pezzi: tratti da agganciare alle strade (partenza →
- * tappa → …) e percorsi d'esame già salvati, da usare così come sono. Dopo un
- * percorso d'esame si riparte dalla sua fine.
+ * tappa → … → sede) e percorsi d'esame già salvati, da usare così come sono.
+ * Dopo un percorso d'esame si riparte dalla sua fine. Senza sede la linea
+ * finisce all'ultima tappa (REG-653).
  */
 export type RoutePiece = { kind: "snap"; points: LatLng[] } | { kind: "path"; path: LatLng[] };
 
@@ -439,6 +468,7 @@ export function planRoutePieces(
   start: { lat: number; lng: number },
   stops: StoredPlanStop[],
   examPaths: Map<string, LatLng[]>,
+  end: { lat: number; lng: number } | null = null,
 ): RoutePiece[] {
   const pieces: RoutePiece[] = [];
   let run: LatLng[] = [[start.lat, start.lng]];
@@ -453,8 +483,52 @@ export function planRoutePieces(
       run.push([s.lat, s.lng]);
     }
   }
+  if (end) run.push([end.lat, end.lng]);
   if (run.length >= 2) pieces.push({ kind: "snap", points: run });
   return pieces;
+}
+
+/**
+ * REG-653: i punti da dare a `optimizeWaypointOrder` — partenza, una tappa per
+ * intermedio (il percorso d'esame entra dal suo inizio, è un blocco unico),
+ * sede. Senza sede o con meno di due tappe non c'è niente da ottimizzare.
+ */
+export function optimizeWaypoints(
+  start: { lat: number; lng: number },
+  stops: StoredPlanStop[],
+  end: { lat: number; lng: number } | null,
+): LatLng[] | null {
+  if (!end || stops.length < 2) return null;
+  return [[start.lat, start.lng], ...stops.map((s) => [s.lat, s.lng] as LatLng), [end.lat, end.lng]];
+}
+
+/** L'ordine di Google (`optimizedIntermediateWaypointIndex`) se è valido, altrimenti quello dato. */
+export function applyStopOrder<T>(stops: T[], order: unknown): T[] {
+  const n = stops.length;
+  if (!Array.isArray(order) || order.length !== n) return stops;
+  const seen = new Set<number>();
+  for (const i of order) {
+    if (!Number.isInteger(i) || i < 0 || i >= n || seen.has(i)) return stops;
+    seen.add(i);
+  }
+  return (order as number[]).map((i) => stops[i]);
+}
+
+/**
+ * REG-653: oltre questa distanza dalla partenza la sede non chiude il giro
+ * (coordinate sbagliate, un luogo di un'altra città, l'istruttore fuori zona):
+ * tornarci mangerebbe tutta la guida e il giro resterebbe vuoto.
+ */
+export const PLAN_HQ_MAX_M = 15_000;
+
+/** Dove si chiude il giro: la sede, se è a portata della partenza. */
+export function planEnd(
+  start: { lat: number; lng: number } | null,
+  hq: { lat: number; lng: number } | null,
+): { lat: number; lng: number } | null {
+  if (!hq) return null;
+  if (start && haversineMeters(start.lat, start.lng, hq.lat, hq.lng) > PLAN_HQ_MAX_M) return null;
+  return hq;
 }
 
 /** Se la partenza è vicino alla sede si usa la sede: stessi tratti, stessa cache. */

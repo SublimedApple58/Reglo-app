@@ -39,7 +39,7 @@ Tutte rispondono `{ success: true, data } | { success: false, message, code? }` 
 | GET | `/road/today` | titolare | `[Lesson + { road: Session+{markerCount, markerKinds} \| null }]` guide singole in auto di oggi (Europa/Roma) |
 | GET | `/road/history?from&to&instructorId&studentId&cursor&limit` | titolare | `{ items: [Session+{lesson, markerCount, markerKinds}], nextCursor }` |
 | GET | `/road/plan?studentId&durationMin&lat&lng` | istruttore | `{ planEnabled, planAlertsEnabled, plan: { stops: PlanStop[], minutes } \| null, studentHotspots }` (REG-648) |
-| POST | `/road/plan/route` `{ start: {lat,lng}, stops }` | istruttore | `{ line: [[lat,lng]] \| null, lengthMeters }` linea suggerita (REG-648) |
+| POST | `/road/plan/route` `{ start: {lat,lng}, stops, optimize? }` | istruttore | `{ line: [[lat,lng]] \| null, lengthMeters, order: string[], end: {lat,lng} \| null }` linea suggerita chiusa in sede, ordine delle tappe (REG-648, REG-653) |
 
 Tipi:
 - `Lesson` = `{ appointmentId, startsAt, endsAt, status, student: {id,name}|null, instructor: {id,name,color,phone}|null, vehicle: {id,name,plate}|null, carColor }` — `phone` serve al «Chiama» del titolare; all'allievo arriva sempre `null`. `carColor` = chiave della variante colore dell'auto 3D, già risolta dal server (vedi «Colore delle auto»).
@@ -192,3 +192,13 @@ Solo backend, nessuna API ancora: la espone REG-648 (che controlla ruolo, alliev
 - **Allievo**: non vede il giro (`plan`/`planReached` azzerati in `getRoadForAppointment`).
 - Modifica al piano: il giro non entra in `/road/free` né in `eligibleLesson` (vedi registro del piano 003).
 - Test: unit `tests/unit/road/road-lesson-plan.test.ts`; e2e `tests/e2e/reg648-road-plan.auth.spec.ts` (istruttore con token mobile, sola lettura; la linea chiama Google per pochi tratti).
+
+### Giro chiuso in sede, ordine ottimizzato, sede geocodificata (REG-653, 29/10)
+
+- **Sede** (`headquarters.ts › roadHeadquarters`): la `AutoscuolaLocation` di default non archiviata. Senza coordinate ma con l'indirizzo: geocodifica con **Places API (New) `places:searchText`** (stessa API e chiave server del proxy Places, niente Geocoding API da abilitare), cache Redis `road:geocode:v1:<indirizzo>` 90 giorni (il «non trovato» 1 giorno, un errore di Google non va in cache) e salvataggio sulla sede solo se indirizzo e coordinate non sono cambiati nel frattempo (`updateMany` condizionato). Altrimenti il primo altro luogo con coordinate (com'era in REG-648). In prod, al 29/10, 15 sedi su 19 non hanno né coordinate né indirizzo: per loro conta il ripiego o niente sede.
+- **Sede a portata** (`planEnd`, `PLAN_HQ_MAX_M` = 15 km): oltre 15 km dalla partenza la sede non chiude il giro (coordinate sbagliate, luogo di un'altra città, istruttore fuori zona), altrimenti il ritorno mangerebbe la guida e il giro resterebbe vuoto. Su staging è il caso normale: sede a Milano, dati a Torino (`docs/STAGING.md`).
+- **Minuti e ordine della card** (`buildLessonPlan` con `end`): il giro conta il ritorno in **sede** (non più alla partenza; senza sede finisce all'ultima tappa). L'ordine è quello che fa meno strada in linea d'aria partenza → tappe → sede, provando tutte le combinazioni (max 3 tappe); a parità comincia dalla più vicina.
+- **Linea** (`planRoutePieces(..., end)`): partenza → tappe (percorso d'esame come blocco: si entra dall'inizio, si riparte dalla fine) → sede.
+- **Ordine sulle strade vere** (`plan-route.ts › optimizeStopOrder`): alla partenza una `computeRoutes` con `optimizeWaypointOrder` (tariffa più alta, quindi solo con sede e ≥ 2 tappe), ordine in cache `road:order:v1:<punti>` 90 giorni; i tratti della risposta vanno nella cache per tratto `road:snap:v1:*` (tranne quelli che escono dall'ingresso di un percorso d'esame), così la linea che segue non rifà richieste. Errore = ordine dato. `applyStopOrder` usa l'ordine di Google solo se è una permutazione valida.
+- **`POST /road/plan/route`** ora restituisce `order` (chiavi delle tappe nell'ordine della linea) ed `end` (la sede usata, o null). Per il riaggancio (REG-654): `start` = posizione attuale, `stops` = solo le tappe rimaste (anche `[]`: dritti in sede), `optimize: false` (nessuna richiesta di ottimizzazione).
+- Test: unit in `road-lesson-plan.test.ts` (ordine con ritorno, `planEnd`, pezzi chiusi in sede, ottimizzazione con fetch finto, cache dei tratti, geocodifica); e2e `reg648-road-plan.auth.spec.ts` esteso (Torino: `end: null`; riaggancio con ordine dato; vicino alla sede di Milano senza tappe: la linea arriva in sede).

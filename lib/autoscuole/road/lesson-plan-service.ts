@@ -122,6 +122,8 @@ export async function computeLessonPlan(input: {
   studentId: string;
   durationMin: number;
   start: { lat: number; lng: number } | null;
+  /** La sede, dove si chiude il giro (REG-653). */
+  end?: { lat: number; lng: number } | null;
   now?: Date;
 }): Promise<LessonPlanResult> {
   const now = input.now ?? new Date();
@@ -134,6 +136,7 @@ export async function computeLessonPlan(input: {
   const plan = buildLessonPlan({
     durationMin: input.durationMin,
     start: input.start,
+    end: input.end ?? null,
     studentHotspots,
     studentKinds: studentErrorKinds(markers),
     schoolHotspots,

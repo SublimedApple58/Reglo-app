@@ -163,21 +163,40 @@ describe("Reglo Road — giro: tappe", () => {
     expect(c[0]).toMatchObject({ key: "exam:mai", source: "exam", title: "C", reason: "Percorso d'esame mai fatto" });
   });
 
-  it("ordine «più vicina prima» e minuti a 25 km/h", () => {
+  it("giro chiuso in sede: a parità comincia dalla più vicina, minuti a 25 km/h", () => {
     const plan = buildLessonPlan(
-      input({ studentHotspots: [sh({ key: "lontana", dLat: 0.02 }), sh({ key: "vicina", dLat: 0.005 })] }),
+      input({ end: BASE, studentHotspots: [sh({ key: "lontana", dLat: 0.02 }), sh({ key: "vicina", dLat: 0.005 })] }),
     );
     expect(plan.stops.map((s) => s.key)).toEqual(["vicina", "lontana"]);
     // ~556 m a 25 km/h ≈ 1,3 min → 2.
     expect(plan.stops[0].minutes).toBe(2);
     expect(plan.stops[0].reason).toBe("Precedenza da migliorare 3 volte in 2 guide");
-    // Andata 2 + 5 (~1,7 km fra le due) + ritorno 6 (~2,2 km) + lavoro 2×5.
+    // Andata 2 + 5 (~1,7 km fra le due) + ritorno in sede 6 (~2,2 km) + lavoro 2×5.
     expect(plan.minutes).toBe(2 + 5 + 6 + 2 * PLAN_STOP_MINUTES);
+    // Senza sede il giro finisce all'ultima tappa: niente ritorno.
+    expect(buildLessonPlan(input({ studentHotspots: [sh({ key: "vicina", dLat: 0.005 })] })).minutes).toBe(
+      2 + PLAN_STOP_MINUTES,
+    );
+  });
+
+  it("REG-653: l'ordine tiene conto del ritorno in sede", () => {
+    // Sede 3,3 km a nord. «Più vicina prima» farebbe nord (333 m) → sud → sede, 4,5 km;
+    // conviene sud (444 m) → nord → sede, 4,2 km.
+    const plan = buildLessonPlan(
+      input({
+        durationMin: 120,
+        end: { lat: BASE.lat + 0.03, lng: BASE.lng },
+        studentHotspots: [sh({ key: "nord", dLat: 0.003 }), sh({ key: "sud", dLat: -0.004 })],
+      }),
+    );
+    expect(plan.stops.map((s) => s.key)).toEqual(["sud", "nord"]);
+    // 2 (444 m) + 2 (777 m) + 8 in sede (3 km) + lavoro.
+    expect(plan.minutes).toBe(2 + 2 + 8 + 2 * PLAN_STOP_MINUTES);
   });
 
   it("toglie le tappe meno importanti se il giro non sta nella guida", () => {
     const far = sh({ key: "seconda", dLat: 0.1 }); // ~11 km: 27 min andata e ritorno
-    const plan = buildLessonPlan(input({ durationMin: 30, studentHotspots: [sh({ key: "prima", dLat: 0.005 }), far] }));
+    const plan = buildLessonPlan(input({ durationMin: 30, end: BASE, studentHotspots: [sh({ key: "prima", dLat: 0.005 }), far] }));
     expect(plan.stops.map((s) => s.key)).toEqual(["prima"]);
     expect(buildLessonPlan(input({ durationMin: 5, studentHotspots: [sh({ dLat: 0.005 })] }))).toEqual({ stops: [], minutes: 0 });
   });
@@ -277,5 +296,96 @@ describe("Reglo Road — giro: API (REG-648)", () => {
     expect(planStart({ lat: BASE.lat + 0.001, lng: BASE.lng }, hq)).toBe(hq); // ~111 m
     expect(planStart({ lat: BASE.lat + 0.01, lng: BASE.lng }, hq)).toEqual({ lat: BASE.lat + 0.01, lng: BASE.lng });
     expect(planStart(null, hq)).toBe(hq);
+  });
+});
+
+import { applyStopOrder, optimizeWaypoints, planEnd } from "@/lib/autoscuole/road/lesson-plan";
+import { legsToCache, optimizeStopOrder } from "@/lib/autoscuole/road/plan-route";
+import { geocodeAddress } from "@/lib/autoscuole/road/headquarters";
+import { segmentKey, type SnapCache } from "@/lib/autoscuole/road/snap";
+
+jest.mock("@/lib/cache/redis", () => ({ getRedis: () => null }));
+jest.mock("@/db/prisma", () => ({ prisma: {} }));
+
+describe("Reglo Road — giro chiuso in sede e ordine ottimizzato (REG-653)", () => {
+  const hq = { lat: BASE.lat + 0.03, lng: BASE.lng };
+  const a = stop({ key: "a", dLat: 0.003 });
+  const b = stop({ key: "b", dLat: -0.004 });
+  const exam = stop({ key: "exam:r", source: "exam", examRouteId: "r", dLat: 0.01, endLat: BASE.lat + 0.02, endLng: BASE.lng });
+
+  it("la linea a pezzi si chiude in sede, anche dopo un percorso d'esame", () => {
+    const path = line(0.01, 0.02);
+    expect(planRoutePieces(BASE, [a], new Map(), hq)).toEqual([
+      { kind: "snap", points: [[BASE.lat, BASE.lng], [a.lat, a.lng], [hq.lat, hq.lng]] },
+    ]);
+    expect(planRoutePieces(BASE, [exam], new Map([["r", path]]), hq)).toEqual([
+      { kind: "snap", points: [[BASE.lat, BASE.lng], path[0]] },
+      { kind: "path", path },
+      { kind: "snap", points: [path[1], [hq.lat, hq.lng]] },
+    ]);
+    // Riaggancio senza tappe rimaste: dritti in sede.
+    expect(planRoutePieces(BASE, [], new Map(), hq)).toEqual([
+      { kind: "snap", points: [[BASE.lat, BASE.lng], [hq.lat, hq.lng]] },
+    ]);
+  });
+
+  it("la sede chiude il giro solo se è entro 15 km dalla partenza", () => {
+    expect(planEnd(BASE, hq)).toBe(hq);
+    expect(planEnd(null, hq)).toBe(hq);
+    expect(planEnd(BASE, null)).toBeNull();
+    expect(planEnd(BASE, { lat: 45.4654, lng: 9.1859 })).toBeNull(); // Torino → Milano
+  });
+
+  it("si ottimizza solo con la sede e almeno due tappe; l'ordine di Google si usa solo se valido", () => {
+    expect(optimizeWaypoints(BASE, [a, b], null)).toBeNull();
+    expect(optimizeWaypoints(BASE, [a], hq)).toBeNull();
+    expect(optimizeWaypoints(BASE, [a, b], hq)).toEqual([[BASE.lat, BASE.lng], [a.lat, a.lng], [b.lat, b.lng], [hq.lat, hq.lng]]);
+    expect(applyStopOrder([a, b], [1, 0])).toEqual([b, a]);
+    for (const bad of [[0], [0, 0], [0, 2], [0.5, 1], null, "1,0"]) expect(applyStopOrder([a, b], bad)).toEqual([a, b]);
+  });
+
+  it("i tratti della risposta vanno in cache, tranne quelli che escono da un percorso d'esame", () => {
+    const legs: LatLng[][] = [line(0, 0.003), line(0.003, 0.01), line(0.01, 0.03)];
+    const entries = legsToCache([BASE.lat, BASE.lng], [a, exam], [hq.lat, hq.lng], legs);
+    expect(entries.map(([k]) => k)).toEqual([
+      segmentKey([BASE.lat, BASE.lng], [a.lat, a.lng]),
+      segmentKey([a.lat, a.lng], [exam.lat, exam.lng]),
+    ]);
+    expect(legsToCache([BASE.lat, BASE.lng], [a], [hq.lat, hq.lng], legs)).toEqual([]); // legs che non tornano
+  });
+
+  it("optimizeStopOrder: una richiesta, ordine applicato, tratti in cache; errore = ordine dato", async () => {
+    const saved: Array<[string, LatLng[]]> = [];
+    const snapCache: SnapCache = { getMany: async (k) => k.map(() => null), setMany: async (e) => void saved.push(...e) };
+    const fetchOptimized = jest.fn(async () => ({ order: [1, 0], legs: [line(0, -0.004), line(-0.004, 0.003), line(0.003, 0.03)] }));
+    const r = await optimizeStopOrder(BASE, [a, b], hq, { fetchOptimized, snapCache });
+    expect(r).toEqual({ stops: [b, a], optimized: true, requests: 1 });
+    expect(saved).toHaveLength(3);
+    expect(fetchOptimized).toHaveBeenCalledWith([[BASE.lat, BASE.lng], [a.lat, a.lng], [b.lat, b.lng], [hq.lat, hq.lng]]);
+
+    const broken = jest.fn(async () => {
+      throw new Error("giù");
+    });
+    expect(await optimizeStopOrder(BASE, [a, b], hq, { fetchOptimized: broken, snapCache })).toEqual({
+      stops: [a, b],
+      optimized: false,
+      requests: 1,
+    });
+    // Senza sede niente richiesta.
+    const never = jest.fn();
+    expect((await optimizeStopOrder(BASE, [a, b], null, { fetchOptimized: never, snapCache })).requests).toBe(0);
+    expect(never).not.toHaveBeenCalled();
+  });
+
+  it("geocodifica della sede: il risultato di Google, null se non trova o se Google è giù", async () => {
+    expect(await geocodeAddress("Via Roma 1, Torino", async () => ({ lat: 45.07, lng: 7.68 }))).toEqual({ lat: 45.07, lng: 7.68 });
+    expect(await geocodeAddress("Via Inesistente", async () => null)).toBeNull();
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+    expect(
+      await geocodeAddress("Via Roma 1", async () => {
+        throw new Error("403");
+      }),
+    ).toBeNull();
+    warn.mockRestore();
   });
 });

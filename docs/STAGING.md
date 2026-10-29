@@ -105,6 +105,16 @@ di `titolare@reglo.it`, dal 29/10/2026); «Reglo E2E» resta spento.
 - **Dati di prova dei punti critici** (8 guide passate con segnalazioni in tre
   incroci di Torino; idempotente, `--remove` per toglierle):
   `scripts/seed-road-hotspots.ts`, stesso comando con `.env.staging` o `.env.dev`.
+- **La sede è a Milano, i dati di prova a Torino.** La sede di «Autoscuola Reglo»
+  su staging è a Milano (circa 45.4654, 9.1859), mentre i punti critici e i
+  percorsi d'esame di prova sono a Torino. Il giro (REG-647+) sceglie solo le
+  tappe che stanno nella durata della guida, partendo dalla posizione
+  dell'istruttore o, se manca, dalla sede: partendo da Milano il giro è vuoto e
+  la card non compare. Per provarlo si parte da Torino: sul simulatore
+  `xcrun simctl location booted set 45.0712,7.6855` (a volte va ripetuto e
+  riaperta l'app), sulle API si passano `lat`/`lng` di Torino. Dal REG-653 la
+  linea si chiude in sede: da Torino il ritorno a Milano allunga molto i minuti,
+  quindi i test del ritorno in sede usano dati propri o sedi finte.
 - **Script che chiamano i service Road** (`lib/autoscuole/road/*-service.ts`,
   `service.ts`): il codice Road **si porta dietro l'autenticazione**.
   `hotspots-service.ts`, `lesson-plan-service.ts` e `plan-service.ts` importano
