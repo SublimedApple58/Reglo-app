@@ -1,6 +1,6 @@
 # Plan: Road mobile — redesign dopo la QA (piano 005)
 
-Stato: **APPROVATO (30/10/2026)**, in corso. Task REG-659 → REG-663.
+Stato: **COMPLETATO (30/10/2026)**: REG-659 → REG-663 tutti in produzione (web main 8461f2d; mobile master c065304, OTA solo runtime 2.4.0).
 
 ## Decisioni di Tiziano (30/10)
 1. Bug Punti critici: il contenuto in fondo finisce sotto la tab bar e non si scrolla; deve stare tutto, con lo spazio della barra.
@@ -53,4 +53,12 @@ Ordine: anteprime → A → D (web staging → prod) → B → C → E.
 ## Registro
 - 30/10: piano approvato, task creati, anteprime in `/tmp/hiro-anteprime/road-redesign/`.
 - 30/10: anteprime approvate da Tiziano tranne Punti critici. Correzione chiesta: copertina e foglio scorrono insieme, niente altezza gonfiata per forzare lo scroll; con poco contenuto la mappa prende lo spazio libero e il foglio arriva alla tab bar; stato vuoto in una card composta. Nuove anteprime 09–12 in attesa del suo ok (REG-659 fermo fino ad allora).
-- 30/10: ok esplicito a partire con REG-660 → 661 → 662 → 663.
+- 30/10: ok esplicito a partire con REG-660 → 661 → 662 → 663; poi Tiziano approva le anteprime v2 di Punti critici (REG-659 in coda dopo 663) e chiede due ritocchi alla home (aloni sfumati, logo «Maps / Legal» sopra il foglio).
+
+## Cosa è stato fatto (30/10)
+- REG-660 (web main 8461f2d): `GET /road/students/[id]` + pagellino per guida e punti dell'allievo.
+- REG-661 (master 156c8fd, OTA iOS a472e767 / Android b2737a15): home Road generica con `StretchyCover`. Ritocchi (master 34bf7a9, OTA iOS 4e3963cf / Android 5a43aef4): aloni a 24 anelli sfumati, logo Maps sopra il foglio.
+- REG-662 (master e8671c3, OTA iOS 2f297de2 / Android 00296781): avvio in tre fogli (`avvia`, `avvia-allievo`, `avvia-parti`), X = `dismissAll`.
+- REG-663 (master 5ec695e, OTA iOS 3b811960 / Android eae71fab): riga «Road» nel dettaglio allievo e foglio «Road di <nome>».
+- REG-659 (master c065304, OTA iOS 6121b20f / Android 47d59831): Punti critici con copertina elastica v2, spazio della tab bar misurato, stato vuoto in card, segnaposti a posti fissi (corretto un difetto di REG-646: al cambio periodo spariva un simbolo).
+- Scostamenti: invito e foglio della guida in agenda non passano dal foglio 2 (mostrano già la card del giro); su Punti critici il tocco sul simbolo della mappa apre il dettaglio solo dove la lista non copre la mappa.
