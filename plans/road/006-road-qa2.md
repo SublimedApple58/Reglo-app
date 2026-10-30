@@ -1,10 +1,15 @@
 # Piano 006 — Road QA 2: tracce, giro, punti critici, note
 
-**Stato**: approvato da Tiziano il 30/10/2026. In corso.
-- REG-664 (T2, note e tastiera) — IN PROD 30/10 (mobile 6bfde21, OTA 2.4.0 iOS b740c7ca / Android 074e026d)
-- REG-665 (T1, tracce pulite e soste) — in corso
-- REG-666 (T3, punti critici con mappa) — anteprima da approvare prima del codice
-- REG-667 (T4, giro suggerito con mappa) — anteprima da approvare prima del codice
+**Stato**: COMPLETATO, tutto in prod il 30/10/2026.
+- REG-664 (T2, note e tastiera) — mobile 6bfde21, OTA 2.4.0 iOS b740c7ca / Android 074e026d
+- REG-665 (T1, tracce pulite e soste) — web d8acf92 (migrazione `20261104120000_road_clean_track` su prod), mobile 567b9c8 (OTA iOS d56b930b / Android e034d65e); demo: backup `~/Developer/reglo/backups/maltese-2026-10-30T14-48-03-247Z`, 176 tracce riscritte (script `chore/maltese-demo` 09fe2b0), 177 tracce agganciate (175 + 1 da riprovare in automatico dopo 24 h), 66 soste
+- REG-666 (T3, punti critici a tutto schermo) — mobile 9b5e41c (OTA iOS 50e124ad / Android c6e4e2c7)
+- REG-667 (T4, giro con miniatura e foglio) — mobile bd97701 (OTA iOS 1f4eca4a / Android 2de0515d); nessun backend nuovo (`POST /road/plan/route` esistente)
+
+## Emendamenti in corso d'opera
+- T1: dove Google devia o taglia dritto (strade che non ha nel grafo) restano i punti puliti; un fix «scappato» per meno di 60 s non interrompe una sosta. La prima riscrittura delle tracce demo aveva lasciato il groviglio in 65 guide (fase in sede riconosciuta anche dalla distanza, ma i fix gaussiani andavano oltre i 40 m): rifatta da capo dal backup, riconoscendo la fase dal passo di 8 s. Segno della sosta = cerchio nero con la «pausa» (il punto nero si confondeva con quelli delle segnalazioni).
+- T3: i tocchi sui `Marker` di react-native-maps non arrivavano in modo affidabile → aree `Pressable` trasparenti sopra i segnaposto, riposizionate a ogni fine movimento.
+- T4: riordino con `PanResponder` (il Pan di gesture-handler nel form sheet nativo non scattava); un tocco sulla maniglia sale di un posto. Il trascinamento vero non è stato verificabile con Maestro sul simulatore: da provare a mano. Il giro modificato vive in memoria (come «Segui il giro») e in Road tiene l'ordine dell'istruttore.
 
 ## Cosa è emerso dall'analisi
 - Scarabocchi: nella demo li aveva creati il seed («ferma in sede» con un fix ogni 8 s sparso fino a 12 m). Con un GPS vero succede lo stesso da fermi. Nessuno puliva la traccia.
