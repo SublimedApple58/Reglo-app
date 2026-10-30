@@ -242,6 +242,7 @@ model Company {
   autoscuolaLessonCreditLedger         AutoscuolaStudentLessonCreditLedger[]
   autoscuolaPaymentEvents              AutoscuolaAppointmentPaymentEvent[]
   roadSessions                         RoadSession[]
+  roadLessonPlans                      RoadLessonPlan[]
   roadExamRoutes                       RoadExamRoute[]
   autoscuolaAppointmentPayments        AutoscuolaAppointmentPayment[]
   autoscuolaMessageTemplates           AutoscuolaMessageTemplate[]
@@ -670,6 +671,8 @@ model AutoscuolaAppointment {
   paymentEvents            AutoscuolaAppointmentPaymentEvent[]
   /// REG-638 Reglo Road: sessione GPS della guida (una sola per guida).
   roadSession              RoadSession?
+  /// REG-668: il giro modificato dall'istruttore per questa guida.
+  roadLessonPlan           RoadLessonPlan?
   messageLogs              AutoscuolaMessageLog[]
   voiceCalls               AutoscuolaVoiceCall[]
   swapOffers               AutoscuolaSwapOffer[]
@@ -2502,6 +2505,26 @@ model RoundInteraction {
 /// dell'istruttore, percorso e segnalazioni. Una per guida (`appointmentId`
 /// unico). `last*` = ultima posizione nota, letta dalla vista «Dal vivo».
 /// Conservata 12 mesi, poi la cancella il job `autoscuole-road-maintenance`.
+/// REG-668 Reglo Road: il giro di una guida futura modificato dall'istruttore
+/// (tappe tolte, riordinate, aggiunte). Una fotografia: vale così com'è finché
+/// non si torna al giro suggerito (riga cancellata). Alla partenza in Road
+/// diventa `RoadSession.plan`.
+model RoadLessonPlan {
+  appointmentId String   @id @db.Uuid
+  companyId     String   @db.Uuid
+  /// Tappe nell'ordine dell'istruttore (stessa forma di `RoadSession.plan.stops`).
+  stops         Json
+  minutes       Int      @default(0)
+  updatedById   String?  @db.Uuid
+  createdAt     DateTime @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime @default(now()) @updatedAt @db.Timestamp(6)
+
+  company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  appointment AutoscuolaAppointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
 model RoadSession {
   id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId      String    @db.Uuid

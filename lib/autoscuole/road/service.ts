@@ -57,7 +57,7 @@ const fail = (message: string, code?: string): Result<never> => ({ success: fals
 const MOTO_CATEGORIES = new Set(["AM", "A1", "A2", "A"]);
 /** L'invito a entrare in Road si apre 15 minuti prima dell'inizio. */
 export const ROAD_ENTRY_OPENS_MIN = 15;
-const ROAD_ELIGIBLE_STATUSES = ["scheduled", "confirmed", "checked_in"];
+export const ROAD_ELIGIBLE_STATUSES = ["scheduled", "confirmed", "checked_in"];
 const MAX_POINTS_PER_BATCH = 600;
 
 // ─── contesto ────────────────────────────────────────────────────────────────
@@ -307,7 +307,11 @@ export async function startRoadSession(input: { appointmentId: string; plan?: un
 
     const appointment = await prisma.autoscuolaAppointment.findFirst({
       where: { id: input.appointmentId, companyId: ctx.companyId },
-      select: { ...appointmentSelect, roadSession: { select: { ...sessionSelect, instructorId: true } } },
+      select: {
+        ...appointmentSelect,
+        roadSession: { select: { ...sessionSelect, instructorId: true } },
+        roadLessonPlan: { select: { stops: true, minutes: true } },
+      },
     });
     if (!appointment) return fail("Guida non trovata.", "NOT_FOUND");
 
@@ -334,7 +338,13 @@ export async function startRoadSession(input: { appointmentId: string; plan?: un
     }
 
     const parsedPlan = planSettings(ctx.limits).planEnabled ? parseStoredPlan(input.plan, now) : null;
-    const plan = parsedPlan ?? null;
+    // REG-668: con il giro acceso vince quello salvato per questa guida (anche
+    // se il telefono non l'ha ancora caricato), nell'ordine dell'istruttore.
+    const saved =
+      parsedPlan && appointment.roadLessonPlan
+        ? parseStoredPlan({ stops: appointment.roadLessonPlan.stops, minutes: appointment.roadLessonPlan.minutes }, now)
+        : null;
+    const plan: StoredPlan | null = saved ? { ...saved, custom: true } : (parsedPlan ?? null);
 
     // Un istruttore ha una sola sessione attiva: quella vecchia (guida
     // precedente dimenticata aperta) si chiude come abbandonata.

@@ -238,3 +238,11 @@ Nessuna modifica al backend: l'app istruttore richiama `POST /road/plan/route` c
 - **Web**: `RoadSessionDetail` disegna le soste (punto nero + etichetta «Sosta X min», stile `road-stop`).
 - **Script**: `scripts/road/backfill-clean-tracks.ts [--company <id>] [--prod --yes]` calcola le tracce delle sessioni finite che non ce l'hanno (≈ 0,07 € a guida).
 - **Costo**: Roads API ~10 $/1000 richieste; 6–8 richieste per un'ora di guida, una volta sola.
+
+### Giro modificato salvato sul server (REG-668, 30/10)
+- **Perché**: il giro modificato nel foglio «Il giro» (REG-667) viveva solo nella memoria dell'app e si perdeva riavviandola.
+- **Dove vive**: tabella `RoadLessonPlan` (migrazione additiva `20261105120000_road_lesson_plan`), una riga per guida (`appointmentId` chiave): `stops` (stessa forma di `RoadSession.plan.stops`, nell'ordine dell'istruttore), `minutes`, `updatedById`, `updatedAt`.
+- **API** (`lib/autoscuole/road/saved-plan-service.ts`, route `app/api/autoscuole/road/plan/saved/route.ts`): `GET ?appointmentId` → `{ saved: {stops, minutes, updatedAt} | null }`; `PUT {appointmentId, stops, minutes}` (validato con `parseStoredPlan`, max 3 tappe) → upsert; `DELETE ?appointmentId` = «Torna al giro suggerito».
+- **Chi**: l'istruttore della guida o il titolare/admin (`canSeeAll`). Si scrive solo su guide in programma (`ROAD_ELIGIBLE_STATUSES`) e non ancora partite in Road (`STARTED`).
+- **Giro di base che cambia**: quello salvato è una fotografia e resta com'è finché non si torna al suggerito.
+- **Partenza in Road**: `startRoadSession`, con il giro acceso (il telefono manda un giro), usa quello salvato per la guida e lo segna `plan.custom = true`, così la mobile non riottimizza l'ordine. «Senza giro» resta senza giro.

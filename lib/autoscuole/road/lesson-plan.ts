@@ -392,7 +392,8 @@ export type StoredPlanStop = Pick<
   "key" | "source" | "kind" | "title" | "reason" | "lat" | "lng" | "minutes" | "examRouteId" | "endLat" | "endLng"
 >;
 /** Quello che va in `RoadSession.plan`: le tappe scelte alla partenza. */
-export type StoredPlan = { stops: StoredPlanStop[]; minutes: number; chosenAt: string };
+/** `custom`: giro modificato dall'istruttore (REG-668), tiene il suo ordine. */
+export type StoredPlan = { stops: StoredPlanStop[]; minutes: number; chosenAt: string; custom?: boolean };
 /** Quello che va in `RoadSession.planReached` a fine guida. */
 export type PlanReached = { reached: string[]; total: number };
 
