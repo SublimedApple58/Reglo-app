@@ -229,6 +229,42 @@ const markerSelect = {
   recordedAt: true,
 } as const;
 
+/** REG-677: ripasso «Meglio / No» su un punto critico dell'allievo. */
+function hotspotCheckDTO(c: {
+  id: string;
+  clientId: string;
+  hotspotKey: string;
+  kind: string;
+  label: string;
+  lat: number;
+  lng: number;
+  outcome: string;
+  recordedAt: Date;
+}) {
+  return {
+    id: c.id,
+    clientId: c.clientId,
+    hotspotKey: c.hotspotKey,
+    kind: c.kind,
+    label: c.label,
+    lat: c.lat,
+    lng: c.lng,
+    outcome: (c.outcome === "better" ? "better" : "worse") as "better" | "worse",
+    recordedAt: c.recordedAt.toISOString(),
+  };
+}
+const hotspotCheckSelect = {
+  id: true,
+  clientId: true,
+  hotspotKey: true,
+  kind: true,
+  label: true,
+  lat: true,
+  lng: true,
+  outcome: true,
+  recordedAt: true,
+} as const;
+
 /**
  * Sessione dell'istruttore: deve essere sua (istruttore della guida) e attiva
  * per le scritture. Gli admin passano sempre (debug/assistenza).
@@ -236,7 +272,7 @@ const markerSelect = {
 async function loadOwnSession(ctx: RoadCtx, sessionId: string) {
   const session = await prisma.roadSession.findFirst({
     where: { id: sessionId, companyId: ctx.companyId },
-    select: { ...sessionSelect, instructorId: true, companyId: true },
+    select: { ...sessionSelect, instructorId: true, studentId: true, companyId: true },
   });
   if (!session) return { error: fail("Sessione Road non trovata.", "NOT_FOUND") };
   if (!canSeeAll(ctx)) {
@@ -531,6 +567,104 @@ export async function removeRoadMarker(sessionId: string, markerIdOrClientId: st
   }
 }
 
+// ─── ripasso sui punti critici (REG-677) ────────────────────────────────────
+
+/**
+ * Passando su un punto critico dell'allievo l'istruttore tocca «Meglio» o «No».
+ * Come le segnalazioni: idempotente su clientId (coda offline), accettato fino
+ * a 2 ore dopo la chiusura; l'allievo è quello della sessione. Il punto si
+ * copia (chiave, tipo, nome, centro): il ripasso si riaggancia al punto per
+ * tipo e distanza in `buildStudentHotspots`.
+ */
+export async function addRoadHotspotCheck(
+  sessionId: string,
+  input: {
+    clientId: string;
+    hotspotKey: string;
+    kind: string;
+    label?: string | null;
+    lat: number;
+    lng: number;
+    outcome: string;
+    recordedAt?: string;
+  },
+) {
+  try {
+    const ctx = await roadContext();
+    const loaded = await loadOwnSession(ctx, sessionId);
+    if ("error" in loaded) return loaded.error!;
+    const { session } = loaded;
+    if (session.status !== "active") {
+      const closedAt = session.endedAt?.getTime() ?? 0;
+      if (Date.now() - closedAt > 2 * 60 * 60 * 1000) return fail("La guida è chiusa.", "SESSION_CLOSED");
+    }
+    const clientId = typeof input?.clientId === "string" ? input.clientId.trim().slice(0, 64) : "";
+    if (!clientId) return fail("Ripasso non valido.", "INVALID");
+    const hotspotKey = typeof input?.hotspotKey === "string" ? input.hotspotKey.trim().slice(0, 160) : "";
+    if (!hotspotKey) return fail("Punto critico mancante.", "INVALID");
+    const outcome = input?.outcome;
+    if (outcome !== "better" && outcome !== "worse") return fail("Esito non valido.", "INVALID");
+    const lat = Number(input?.lat);
+    const lng = Number(input?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+      return fail("Posizione non valida.", "INVALID");
+    }
+    const kind = typeof input?.kind === "string" ? input.kind.trim() : "";
+    const label = resolveMarkerLabel(kind, ctx.customMarkers, input?.label);
+    if (!label) return fail("Tipo di segnalazione sconosciuto.", "INVALID");
+    const recordedAt = input?.recordedAt ? new Date(input.recordedAt) : new Date();
+
+    const existing = await prisma.roadHotspotCheck.findUnique({ where: { clientId }, select: hotspotCheckSelect });
+    if (existing) return ok({ id: existing.id, clientId: existing.clientId });
+
+    const check = await prisma.roadHotspotCheck.create({
+      data: {
+        companyId: ctx.companyId,
+        sessionId,
+        studentId: session.studentId,
+        clientId,
+        hotspotKey,
+        kind,
+        label,
+        lat,
+        lng,
+        outcome,
+        recordedAt: Number.isNaN(recordedAt.getTime()) ? new Date() : recordedAt,
+      },
+      select: { id: true, clientId: true },
+    });
+    return ok(check);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const again = await prisma.roadHotspotCheck.findUnique({
+        where: { clientId: String(input.clientId).trim().slice(0, 64) },
+        select: { id: true, clientId: true },
+      });
+      if (again) return ok(again);
+    }
+    return fail(formatError(error));
+  }
+}
+
+/** «Annulla» dopo un ripasso: si cancella per id o per clientId. */
+export async function removeRoadHotspotCheck(sessionId: string, checkIdOrClientId: string) {
+  try {
+    const ctx = await roadContext();
+    const loaded = await loadOwnSession(ctx, sessionId);
+    if ("error" in loaded) return loaded.error!;
+    const isUuid = /^[0-9a-f-]{36}$/i.test(checkIdOrClientId);
+    await prisma.roadHotspotCheck.deleteMany({
+      where: {
+        sessionId,
+        OR: [{ clientId: checkIdOrClientId }, ...(isUuid ? [{ id: checkIdOrClientId }] : [])],
+      },
+    });
+    return ok({ removed: true });
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
 // ─── fine guida ─────────────────────────────────────────────────────────────
 
 const loadTrack = (sessionId: string) => loadRoadTrack(prisma, sessionId);
@@ -641,6 +775,7 @@ async function buildDetail(sessionId: string, companyId: string) {
       ...sessionSelect,
       appointment: { select: appointmentSelect },
       markers: { orderBy: { recordedAt: "asc" }, select: markerSelect },
+      hotspotChecks: { orderBy: { recordedAt: "asc" }, select: hotspotCheckSelect },
     },
   });
   if (!s) return null;
@@ -651,6 +786,8 @@ async function buildDetail(sessionId: string, companyId: string) {
     ...(clean.saved ? { distanceMeters: clean.track.distanceMeters } : {}),
     lesson: lessonDTO(s.appointment),
     markers: s.markers.map(markerDTO),
+    // REG-677: i ripassi «Meglio / No» sui punti critici dell'allievo in questa guida.
+    hotspotChecks: s.hotspotChecks.map(hotspotCheckDTO),
     // Per la mappa bastano [lat, lng]; il tempo serve a disegnare il "fatto fin qui".
     // REG-665: traccia pulita (e sulle strade a guida finita) + soste ≥ 5 min.
     track: clean.track.path,

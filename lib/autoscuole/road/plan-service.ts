@@ -3,7 +3,7 @@ import { formatError } from "@/lib/utils";
 import type { LatLng } from "@/lib/autoscuole/road/exam-routes";
 import { joinSegments, pathLengthMeters } from "@/lib/autoscuole/road/exam-routes";
 import { ownInstructorId, roadContext } from "@/lib/autoscuole/road/service";
-import { snapWaypoints } from "@/lib/autoscuole/road/snap";
+import { snapWaypointsWithSteps, type RoadStep } from "@/lib/autoscuole/road/snap";
 import { computeLessonPlan } from "@/lib/autoscuole/road/lesson-plan-service";
 import { roadHeadquarters } from "@/lib/autoscuole/road/headquarters";
 import { optimizeStopOrder } from "@/lib/autoscuole/road/plan-route";
@@ -28,7 +28,8 @@ import {
  *   partenza ordina le tappe con `optimizeWaypointOrder` e restituisce l'ordine
  *   scelto; nel riaggancio (REG-654) la mobile manda la posizione attuale, solo
  *   le tappe rimaste e `optimize: false`. Google giù = `line: null`, non un
- *   errore.
+ *   errore. Dal REG-676 porta anche le svolte (`steps`) per la navigazione
+ *   passo passo; i percorsi d'esame non ne hanno.
  */
 
 type Result<T> = { success: true; data: T } | { success: false; message: string; code?: string };
@@ -100,6 +101,8 @@ export type RoadPlanRouteDTO = {
   order: string[];
   /** Dove si chiude la linea: la sede, o null se non c'è o è oltre 15 km dalla partenza. */
   end: { lat: number; lng: number } | null;
+  /** REG-676: le svolte in ordine di linea (i percorsi d'esame non ne portano); `[]` se Google non risponde. */
+  steps: RoadStep[];
 };
 
 export async function getRoadPlanRoute(input: { start?: unknown; stops?: unknown; optimize?: unknown }) {
@@ -133,17 +136,22 @@ export async function getRoadPlanRoute(input: { start?: unknown; stops?: unknown
     const order = stops.map((x) => x.key);
 
     // Niente tappe e niente sede (o già in sede): non c'è una linea da disegnare.
-    if (!stops.length && (!hq || start === hq)) return ok<RoadPlanRouteDTO>({ line: null, lengthMeters: null, order, end: hq });
+    if (!stops.length && (!hq || start === hq)) return ok<RoadPlanRouteDTO>({ line: null, lengthMeters: null, order, end: hq, steps: [] });
     try {
       const pieces = planRoutePieces(start, stops, examPaths, hq);
-      const lines = await Promise.all(
-        pieces.map(async (p) => (p.kind === "path" ? p.path : (await snapWaypoints(p.points)).path)),
+      const parts = await Promise.all(
+        pieces.map(async (p) => {
+          if (p.kind === "path") return { path: p.path, steps: [] as RoadStep[] };
+          const snapped = await snapWaypointsWithSteps(p.points);
+          return { path: snapped.path, steps: snapped.steps };
+        }),
       );
-      const line = joinSegments(lines);
-      return ok<RoadPlanRouteDTO>({ line, lengthMeters: pathLengthMeters(line), order, end: hq });
+      const line = joinSegments(parts.map((p) => p.path));
+      const steps = parts.flatMap((p) => p.steps);
+      return ok<RoadPlanRouteDTO>({ line, lengthMeters: pathLengthMeters(line), order, end: hq, steps });
     } catch (error) {
       console.warn("[road/plan/route] linea non disponibile", error instanceof Error ? error.message : error);
-      return ok<RoadPlanRouteDTO>({ line: null, lengthMeters: null, order, end: hq });
+      return ok<RoadPlanRouteDTO>({ line: null, lengthMeters: null, order, end: hq, steps: [] });
     }
   } catch (error) {
     return fail(formatError(error));

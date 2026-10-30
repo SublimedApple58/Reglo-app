@@ -1,13 +1,16 @@
 import type { Hotspot, HotspotMarker } from "@/lib/autoscuole/road/hotspots";
 import {
   buildLessonPlan,
+  assignChecks,
   buildStudentHotspots,
   examRouteCoverage,
+  hotspotStatus,
   planCandidates,
   samplePath,
   studentErrorKinds,
   COVERAGE_DONE,
   PLAN_STOP_MINUTES,
+  type HotspotCheck,
   type LessonPlanInput,
   type StudentHotspot,
 } from "@/lib/autoscuole/road/lesson-plan";
@@ -28,6 +31,7 @@ function m(over: Partial<HotspotMarker> & { dLat?: number; session?: string }): 
     lng: over.lng ?? BASE.lng,
     street: over.street === undefined ? "Via Roma" : over.street,
     recordedAt: over.recordedAt ?? new Date(Date.UTC(2026, 9, 1, 10, 0, seq)),
+    note: over.note ?? null,
   };
 }
 
@@ -41,6 +45,21 @@ const sh = (over: Partial<StudentHotspot> & { dLat?: number }): StudentHotspot =
   errors: 3,
   sessions: 2,
   lastAt: "2026-10-20T10:00:00.000Z",
+  note: null,
+  checks: { better: 0, worse: 0 },
+  lastCheck: null,
+  status: "open",
+  ...over,
+});
+
+let checkSeq = 0;
+const chk = (over: Partial<HotspotCheck> & { dLat?: number; day?: number }): HotspotCheck => ({
+  id: `c${++checkSeq}`,
+  kind: "precedenza",
+  lat: BASE.lat + (over.dLat ?? 0),
+  lng: BASE.lng,
+  outcome: "better",
+  recordedAt: new Date(Date.UTC(2026, 9, over.day ?? 10, 10)),
   ...over,
 });
 
@@ -92,6 +111,68 @@ describe("Reglo Road — giro: punti critici dell'allievo", () => {
       "precedenza",
       "stop",
     ]);
+  });
+});
+
+describe("Reglo Road — ripasso sui punti critici (REG-677)", () => {
+  const ev = (type: "error" | "better", day: number) => ({ type, at: Date.UTC(2026, 9, day) });
+
+  it("stato dalla coda dopo l'ultimo errore: 0 open, 1 improving, ≥2 overcome", () => {
+    expect(hotspotStatus([])).toBe("open");
+    expect(hotspotStatus([ev("error", 1)])).toBe("open");
+    expect(hotspotStatus([ev("error", 1), ev("better", 2)])).toBe("improving");
+    expect(hotspotStatus([ev("better", 3), ev("error", 1), ev("better", 2)])).toBe("overcome");
+    // Un errore (segnalazione o «No») dopo i «Meglio» riapre il punto.
+    expect(hotspotStatus([ev("error", 1), ev("better", 2), ev("better", 3), ev("error", 4)])).toBe("open");
+    expect(hotspotStatus([ev("error", 1), ev("better", 2), ev("better", 3), ev("error", 4), ev("better", 5)])).toBe("improving");
+    // A pari istante l'errore conta dopo.
+    expect(hotspotStatus([ev("better", 2), ev("better", 3), ev("error", 3)])).toBe("open");
+  });
+
+  it("ogni ripasso va al punto più vicino dello stesso tipo, entro 60 m", () => {
+    const near = { kind: "precedenza", lat: BASE.lat, lng: BASE.lng };
+    const close = { kind: "precedenza", lat: BASE.lat + 0.0004, lng: BASE.lng }; // ~44 m
+    const other = { kind: "stop", lat: BASE.lat, lng: BASE.lng };
+    const a = chk({ dLat: 0.0003 }); // più vicino a `close`
+    const b = chk({ dLat: 0 });
+    const c = chk({ dLat: 0.01 }); // lontano da tutti
+    const d = chk({ kind: "rotonda" }); // tipo che non c'è
+    const out = assignChecks([near, close, other], [a, b, c, d]);
+    expect(out.get(near)).toEqual([b]);
+    expect(out.get(close)).toEqual([a]);
+    expect(out.get(other)).toEqual([]);
+  });
+
+  it("buildStudentHotspots: nota più recente, conteggi, ultimo ripasso e stato", () => {
+    const markers = [
+      m({ session: "s1", note: "Guarda a destra", recordedAt: new Date(Date.UTC(2026, 9, 1)) }),
+      m({ session: "s2", note: "   ", recordedAt: new Date(Date.UTC(2026, 9, 3)) }),
+      m({ session: "s3", note: "Rallenta prima", recordedAt: new Date(Date.UTC(2026, 9, 2)) }),
+    ];
+    const base = buildStudentHotspots(markers);
+    expect(base[0]).toMatchObject({ note: "Rallenta prima", checks: { better: 0, worse: 0 }, lastCheck: null, status: "open" });
+
+    const one = buildStudentHotspots(markers, [chk({ day: 5 }), chk({ day: 4, outcome: "worse" })]);
+    expect(one[0]).toMatchObject({
+      checks: { better: 1, worse: 1 },
+      lastCheck: { outcome: "better", at: new Date(Date.UTC(2026, 9, 5, 10)).toISOString() },
+      status: "improving",
+    });
+    const two = buildStudentHotspots(markers, [chk({ day: 5 }), chk({ day: 6 })]);
+    expect(two[0].status).toBe("overcome");
+    // «Meglio» precedenti all'ultimo errore non contano.
+    expect(buildStudentHotspots(markers, [chk({ day: 1 }), chk({ day: 2 })])[0].status).toBe("open");
+  });
+
+  it("un punto superato non diventa una tappa né lascia il posto al punto dell'autoscuola lì vicino", () => {
+    const c = planCandidates(
+      input({
+        studentHotspots: [sh({ key: "superato", status: "overcome" }), sh({ key: "aperto", dLat: 0.01, status: "improving" })],
+        studentKinds: ["precedenza"],
+        schoolHotspots: [school({ kind: "precedenza", label: "Precedenza", dLat: 0.0002 })],
+      }),
+    );
+    expect(c.map((x) => x.key)).toEqual(["aperto"]);
   });
 });
 
@@ -300,9 +381,9 @@ describe("Reglo Road — giro: API (REG-648)", () => {
 });
 
 import { applyStopOrder, optimizeWaypoints, planEnd } from "@/lib/autoscuole/road/lesson-plan";
-import { legsToCache, optimizeStopOrder } from "@/lib/autoscuole/road/plan-route";
+import { legsToCache, optimizeStopOrder, stepsToCache } from "@/lib/autoscuole/road/plan-route";
 import { geocodeAddress } from "@/lib/autoscuole/road/headquarters";
-import { segmentKey, type SnapCache } from "@/lib/autoscuole/road/snap";
+import { segmentKey, stepsKey, type SnapCache, type StepsCache } from "@/lib/autoscuole/road/snap";
 
 jest.mock("@/lib/cache/redis", () => ({ getRedis: () => null }));
 jest.mock("@/db/prisma", () => ({ prisma: {} }));
@@ -354,6 +435,17 @@ describe("Reglo Road — giro chiuso in sede e ordine ottimizzato (REG-653)", ()
     expect(legsToCache([BASE.lat, BASE.lng], [a], [hq.lat, hq.lng], legs)).toEqual([]); // legs che non tornano
   });
 
+  it("REG-676: le svolte della risposta vanno nella cache delle svolte con le stesse regole", () => {
+    const legs: LatLng[][] = [line(0, 0.003), line(0.003, 0.01), line(0.01, 0.03)];
+    const turn = (text: string) => [{ lat: BASE.lat, lng: BASE.lng, maneuver: "TURN_LEFT", text }];
+    const entries = stepsToCache([BASE.lat, BASE.lng], [a, exam], [hq.lat, hq.lng], legs, [turn("1"), turn("2"), turn("3")]);
+    expect(entries).toEqual([
+      [stepsKey([BASE.lat, BASE.lng], [a.lat, a.lng]), turn("1")],
+      [stepsKey([a.lat, a.lng], [exam.lat, exam.lng]), turn("2")],
+    ]);
+    expect(stepsToCache([BASE.lat, BASE.lng], [a, exam], [hq.lat, hq.lng], legs, [turn("1")])).toEqual([]);
+  });
+
   it("optimizeStopOrder: una richiesta, ordine applicato, tratti in cache; errore = ordine dato", async () => {
     const saved: Array<[string, LatLng[]]> = [];
     const snapCache: SnapCache = { getMany: async (k) => k.map(() => null), setMany: async (e) => void saved.push(...e) };
@@ -361,6 +453,17 @@ describe("Reglo Road — giro chiuso in sede e ordine ottimizzato (REG-653)", ()
     const r = await optimizeStopOrder(BASE, [a, b], hq, { fetchOptimized, snapCache });
     expect(r).toEqual({ stops: [b, a], optimized: true, requests: 1 });
     expect(saved).toHaveLength(3);
+
+    // REG-676: con le svolte nella risposta, anche la cache delle svolte.
+    const savedSteps: Array<[string, unknown]> = [];
+    const stepsCache: StepsCache = { getMany: async (k) => k.map(() => null), setMany: async (e) => void savedSteps.push(...e) };
+    const withSteps = jest.fn(async () => ({
+      order: [1, 0],
+      legs: [line(0, -0.004), line(-0.004, 0.003), line(0.003, 0.03)],
+      steps: [[], [], []],
+    }));
+    await optimizeStopOrder(BASE, [a, b], hq, { fetchOptimized: withSteps, snapCache, stepsCache });
+    expect(savedSteps).toHaveLength(3);
     expect(fetchOptimized).toHaveBeenCalledWith([[BASE.lat, BASE.lng], [a.lat, a.lng], [b.lat, b.lng], [hq.lat, hq.lng]]);
 
     const broken = jest.fn(async () => {

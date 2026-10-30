@@ -32,6 +32,8 @@ Tutte rispondono `{ success: true, data } | { success: false, message, code? }` 
 | POST | `/road/sessions/[id]/points` `{ seq, points, street? }` | istruttore | `{ accepted, duplicate? , reason? }` — `accepted:false, reason:"SESSION_CLOSED"` se chiusa |
 | POST | `/road/sessions/[id]/markers` `{ clientId, kind, label?, note?, lat, lng, street?, recordedAt? }` | istruttore | `Marker` (idempotente su clientId; accettato fino a 2 h dopo la chiusura) |
 | DELETE | `/road/sessions/[id]/markers/[markerId\|clientId]` | istruttore | `{ removed: true }` («Annulla») |
+| POST | `/road/sessions/[id]/hotspot-checks` `{ clientId, hotspotKey, kind, label, lat, lng, outcome: "better"\|"worse", recordedAt }` | istruttore | `{ id, clientId }` ripasso «Meglio / No» su un punto critico dell'allievo (REG-677; idempotente su clientId, fino a 2 h dopo la chiusura) |
+| DELETE | `/road/sessions/[id]/hotspot-checks/[checkId\|clientId]` | istruttore | `{ removed: true }` («Annulla», REG-677) |
 | POST | `/road/sessions/[id]/end` | istruttore | chiude + guida `completed` → `Detail` |
 | GET | `/road/sessions/[id]/track?afterSeq=n` | titolare | `{ lastSeq, points: [[lat,lng,tMs]] }` (solo lotti nuovi) |
 | GET | `/road/appointments/[appointmentId]` | allievo (con setting), istruttore, titolare | `Detail \| null` |
@@ -39,13 +41,15 @@ Tutte rispondono `{ success: true, data } | { success: false, message, code? }` 
 | GET | `/road/today` | titolare | `[Lesson + { road: Session+{markerCount, markerKinds} \| null }]` guide singole in auto di oggi (Europa/Roma) |
 | GET | `/road/history?from&to&instructorId&studentId&cursor&limit` | titolare | `{ items: [Session+{lesson, markerCount, markerKinds}], nextCursor }` |
 | GET | `/road/plan?studentId&durationMin&lat&lng` | istruttore | `{ planEnabled, planAlertsEnabled, plan: { stops: PlanStop[], minutes } \| null, studentHotspots }` (REG-648) |
-| POST | `/road/plan/route` `{ start: {lat,lng}, stops, optimize? }` | istruttore | `{ line: [[lat,lng]] \| null, lengthMeters, order: string[], end: {lat,lng} \| null }` linea suggerita chiusa in sede, ordine delle tappe (REG-648, REG-653) |
+| POST | `/road/plan/route` `{ start: {lat,lng}, stops, optimize? }` | istruttore | `{ line: [[lat,lng]] \| null, lengthMeters, order: string[], end: {lat,lng} \| null, steps: RoadStep[] }` linea suggerita chiusa in sede, ordine delle tappe (REG-648, REG-653), svolte (REG-676) |
 
 Tipi:
 - `Lesson` = `{ appointmentId, startsAt, endsAt, status, student: {id,name}|null, instructor: {id,name,color,phone}|null, vehicle: {id,name,plate}|null, carColor }` — `phone` serve al «Chiama» del titolare; all'allievo arriva sempre `null`. `carColor` = chiave della variante colore dell'auto 3D, già risolta dal server (vedi «Colore delle auto»).
 - `Session` = `{ id, appointmentId, status, startedAt, endedAt, distanceMeters, durationSec, lastSeq, last: {lat,lng,speed,heading,street,at}|null, plan: { stops, minutes, chosenAt } | null, planReached: { reached: string[], total } | null }` (`plan`/`planReached` da REG-648; all'allievo arrivano sempre `null`)
 - `Marker` = `{ id, clientId, kind, label, note, lat, lng, street, recordedAt }`
-- `Detail` = `Session + { lesson, markers: Marker[], track: [[lat,lng,tMs]], evaluation?: { items: [{label, scaleMax, score, notApplicable}], updatedAt } | null }`
+- `Detail` = `Session + { lesson, markers: Marker[], hotspotChecks: HotspotCheck[], track: [[lat,lng,tMs]], evaluation?: { items: [{label, scaleMax, score, notApplicable}], updatedAt } | null }`
+- `HotspotCheck` = `{ id, clientId, hotspotKey, kind, label, lat, lng, outcome: "better"|"worse", recordedAt }` (REG-677)
+- `RoadStep` = `{ lat, lng, maneuver, text }` (REG-676)
 
 «Titolare» = membership `admin` o ruolo OWNER/INSTRUCTOR_OWNER.
 
@@ -246,3 +250,24 @@ Nessuna modifica al backend: l'app istruttore richiama `POST /road/plan/route` c
 - **Chi**: l'istruttore della guida o il titolare/admin (`canSeeAll`). Si scrive solo su guide in programma (`ROAD_ELIGIBLE_STATUSES`) e non ancora partite in Road (`STARTED`).
 - **Giro di base che cambia**: quello salvato è una fotografia e resta com'è finché non si torna al suggerito.
 - **Partenza in Road**: `startRoadSession`, con il giro acceso (il telefono manda un giro), usa quello salvato per la guida e lo segna `plan.custom = true`, così la mobile non riottimizza l'ordine. «Senza giro» resta senza giro.
+
+### Svolte del giro (REG-676)
+- **Perché**: navigazione passo passo in Road sulla linea suggerita del giro.
+- **`snap.ts › snapWaypointsWithSteps`**: come `snapWaypoints`, ma la richiesta `computeRoutes` chiede anche `routes.legs.steps.navigationInstruction,startLocation,distanceMeters` (stessa richiesta, campi in più). Ogni passo → `RoadStep` `{ lat, lng, maneuver, text }`: posizione d'inizio della manovra, `maneuver` = valore di Google (TURN_RIGHT, ROUNDABOUT_LEFT, NAME_CHANGE…, `STRAIGHT` se manca), `text` = prima riga dell'istruzione in italiano. Via i passi DEPART (`legSteps`).
+- **Cache**: le svolte per tratto in `road:steps:v1:<lat,lng>><lat,lng>` (stesse chiavi per coordinate e TTL 90 giorni della linea). Un tratto «manca» se manca la linea o le svolte; quelli richiesti rinfrescano entrambe. Stesso raggruppamento (max 10 intermedi per richiesta). `snapWaypoints` / `fetchLegsFromGoogle` (editor dei percorsi d'esame) non cambiano.
+- **Ottimizzazione** (`plan-route.ts`): la richiesta con `optimizeWaypointOrder` porta anche le svolte e semina `road:steps:v1:*` con le stesse regole dei tratti (`stepsToCache`), così la linea con le svolte che segue non rifà richieste.
+- **`POST /road/plan/route`** → `steps: RoadStep[]` in ordine di linea; i percorsi d'esame non ne portano. Qualunque errore (o `line: null`) = `steps: []`, mai un errore per la mobile.
+- Test: `road-snap.test.ts` (parsing, cache mancante solo per le svolte, raggruppamento, errori), `road-lesson-plan.test.ts` (`stepsToCache`, semina in `optimizeStopOrder`).
+
+### Ripasso sui punti critici dell'allievo (REG-677)
+- **Cosa**: passando su un suo punto critico l'istruttore tocca «Meglio» (questa volta meglio) o «No» (ancora no), con «Annulla».
+- **Modello** (migrazione additiva `20261106120000_road_hotspot_checks`, solo tabella nuova): `RoadHotspotCheck` — `companyId`, `sessionId` (FK con cascade: si cancella con la sessione, quindi con la retention 12 mesi di `runRoadMaintenance`, nient'altro da toccare), `studentId?` (dalla sessione), `clientId` unico (idempotenza), copia del punto `hotspotKey`/`kind`/`label`/`lat`/`lng`, `outcome` `better|worse`, `recordedAt`. Indici `(sessionId, recordedAt)`, `(companyId, studentId, recordedAt)`.
+- **API** (`service.ts › addRoadHotspotCheck` / `removeRoadHotspotCheck`, stesse regole delle segnalazioni: istruttore della guida o admin, accettato fino a 2 h dopo la chiusura). Codici: `INVALID`, `SESSION_CLOSED`, `NOT_FOUND`, `FORBIDDEN`.
+- **Punti dell'allievo** (`lesson-plan.ts › buildStudentHotspots(markers, checks?)`, loader `loadStudentHotspots` / `computeLessonPlan` che leggono i ripassi dell'allievo nei 12 mesi): `StudentHotspot` ha in più
+  - `note` = la nota più recente non vuota dell'istruttore sulle segnalazioni del punto;
+  - `checks: { better, worse }`, `lastCheck: { outcome, at } | null`: ogni ripasso va al solo punto più vicino dello stesso tipo entro 60 m dal centro (`assignChecks`);
+  - `status`: storia del punto in ordine di tempo (segnalazione «da migliorare» e «No» = errore, «Meglio» = meglio; a pari istante l'errore dopo); «Meglio» di fila dopo l'ultimo errore: 0 `open`, 1 `improving`, ≥ 2 `overcome` (`hotspotStatus`).
+  Arrivano in `GET /road/plan › studentHotspots` e `GET /road/students/[id] › hotspots`.
+- **Giro**: un punto `overcome` non diventa una tappa (resta sulla mappa) e non lascia il posto al punto dell'autoscuola dello stesso tipo lì vicino.
+- **Riepilogo e dettaglio**: `Detail.hotspotChecks` (in ordine di tempo) in `GET /road/sessions/[id]`, `POST /road/sessions/[id]/end` e `GET /road/appointments/[id]`. Web: blocco «Ripassi sui punti critici» in `RoadSessionDetail` (sotto le segnalazioni, solo se ce ne sono; «Meglio» / «Ancora no» in testo semplice).
+- Test: `road-lesson-plan.test.ts` (stato, assegnazione, nota, tappe senza i punti superati).

@@ -15,6 +15,7 @@ import {
   buildStudentHotspots,
   examRouteCoverage,
   studentErrorKinds,
+  type HotspotCheck,
   type LessonPlan,
   type StudentHotspot,
 } from "@/lib/autoscuole/road/lesson-plan";
@@ -46,14 +47,39 @@ async function loadStudentMarkers(companyId: string, studentId: string, now: Dat
     where: { companyId, sentiment: "bad", recordedAt: { gte: retentionStart(now) }, session: { studentId } },
     orderBy: { recordedAt: "desc" },
     take: MAX_STUDENT_MARKERS,
-    select: { id: true, sessionId: true, kind: true, label: true, lat: true, lng: true, street: true, recordedAt: true },
+    select: {
+      id: true,
+      sessionId: true,
+      kind: true,
+      label: true,
+      note: true,
+      lat: true,
+      lng: true,
+      street: true,
+      recordedAt: true,
+    },
   });
   return rows.map((r) => ({ ...r, studentId }));
 }
 
-/** I punti critici dell'allievo (i suoi errori ripetuti): per la tappa 1 e la mappa in Road. */
+/** REG-677: i ripassi «Meglio / No» dell'allievo sui suoi punti (stessa conservazione delle segnalazioni). */
+async function loadStudentChecks(companyId: string, studentId: string, now: Date): Promise<HotspotCheck[]> {
+  const rows = await prisma.roadHotspotCheck.findMany({
+    where: { companyId, studentId, recordedAt: { gte: retentionStart(now) } },
+    orderBy: { recordedAt: "desc" },
+    take: MAX_STUDENT_MARKERS,
+    select: { id: true, kind: true, lat: true, lng: true, outcome: true, recordedAt: true },
+  });
+  return rows.map((r) => ({ ...r, outcome: r.outcome === "better" ? "better" : "worse" }));
+}
+
+/** I punti critici dell'allievo (i suoi errori ripetuti, con i ripassi): per la tappa 1 e la mappa in Road. */
 export async function loadStudentHotspots(companyId: string, studentId: string, now = new Date()) {
-  return buildStudentHotspots(await loadStudentMarkers(companyId, studentId, now));
+  const [markers, checks] = await Promise.all([
+    loadStudentMarkers(companyId, studentId, now),
+    loadStudentChecks(companyId, studentId, now),
+  ]);
+  return buildStudentHotspots(markers, checks);
 }
 
 async function loadExamRoutesWithCoverage(companyId: string, studentId: string, now: Date) {
@@ -127,12 +153,13 @@ export async function computeLessonPlan(input: {
   now?: Date;
 }): Promise<LessonPlanResult> {
   const now = input.now ?? new Date();
-  const [markers, schoolHotspots, examRoutes] = await Promise.all([
+  const [markers, checks, schoolHotspots, examRoutes] = await Promise.all([
     loadStudentMarkers(input.companyId, input.studentId, now),
+    loadStudentChecks(input.companyId, input.studentId, now),
     companyHotspots(input.companyId),
     loadExamRoutesWithCoverage(input.companyId, input.studentId, now),
   ]);
-  const studentHotspots = buildStudentHotspots(markers);
+  const studentHotspots = buildStudentHotspots(markers, checks);
   const plan = buildLessonPlan({
     durationMin: input.durationMin,
     start: input.start,

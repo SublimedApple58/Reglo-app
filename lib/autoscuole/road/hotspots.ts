@@ -31,6 +31,8 @@ export type HotspotMarker = {
   lng: number;
   street: string | null;
   recordedAt: Date;
+  /** REG-677: la nota dell'istruttore (letta solo per i punti dell'allievo). */
+  note?: string | null;
 };
 
 export type HotspotExamRoute = { id: string; name: string; path: LatLng[] };

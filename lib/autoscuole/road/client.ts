@@ -90,9 +90,24 @@ export type RoadEvaluation = {
   updatedAt: string;
 };
 
+/** REG-677: ripasso «Meglio / No» su un punto critico dell'allievo. */
+export type RoadHotspotCheck = {
+  id: string;
+  clientId: string;
+  hotspotKey: string;
+  kind: string;
+  label: string;
+  lat: number;
+  lng: number;
+  outcome: "better" | "worse";
+  recordedAt: string;
+};
+
 export type RoadDetail = RoadSession & {
   lesson: RoadLesson;
   markers: RoadMarker[];
+  /** REG-677: i ripassi sui punti critici dell'allievo in questa guida (assente sul backend vecchio). */
+  hotspotChecks?: RoadHotspotCheck[];
   track: RoadTrackPoint[];
   /** REG-665: soste di almeno 5 minuti (sempre presenti dal backend nuovo). */
   stops?: RoadStop[];

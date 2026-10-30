@@ -439,6 +439,8 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
             </div>
           </div>
 
+          {detail?.hotspotChecks?.length ? <RoadHotspotChecksBlock checks={detail.hotspotChecks} /> : null}
+
           <div className="rounded-[22px] border border-[#ebebeb] px-5 py-[18px]">
             <h4 className="flex items-baseline justify-between text-[15.5px] font-semibold text-[#111111]">
               Pagellino
@@ -501,6 +503,41 @@ function Big({ value, unit, label, divided }: { value: string; unit?: string; la
         {unit ? <small className="ml-1 text-sm font-medium tracking-normal text-[#6a6a6a]">{unit}</small> : null}
       </b>
       <span className="text-[12.5px] text-[#6a6a6a]">{label}</span>
+    </div>
+  );
+}
+
+/**
+ * REG-677: i ripassi «Meglio / No» che l'istruttore ha toccato passando sui
+ * punti critici dell'allievo, in ordine di tempo. Testo semplice, niente pillole.
+ */
+function RoadHotspotChecksBlock({ checks }: { checks: NonNullable<RoadDetail["hotspotChecks"]> }) {
+  return (
+    <div className="rounded-[22px] border border-[#ebebeb] px-5 py-[18px]" data-testid="road-detail-hotspot-checks">
+      <h4 className="flex items-baseline justify-between text-[15.5px] font-semibold text-[#111111]">
+        Ripassi sui punti critici
+        <span className="text-[13px] font-medium text-[#6a6a6a]">in ordine di tempo</span>
+      </h4>
+      <div className="mt-1.5">
+        {checks.map((c, i) => (
+          <div
+            key={c.id}
+            className={cn(
+              "grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-2.5 py-2.5",
+              i > 0 && "border-t border-[#f2f2f2]",
+            )}
+          >
+            <SymbolTile kind={c.kind} size={40} />
+            <div className="min-w-0">
+              <b className="block truncate text-[14.5px] font-medium text-[#111111]">{c.label}</b>
+              <time className="text-[13px] tabular-nums text-[#6a6a6a]">{hhmm(c.recordedAt)}</time>
+            </div>
+            <span className={cn("text-[13.5px]", c.outcome === "better" ? "font-medium text-[#111111]" : "text-[#6a6a6a]")}>
+              {c.outcome === "better" ? "Meglio" : "Ancora no"}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -2556,10 +2556,11 @@ model RoadSession {
   createdAt      DateTime  @default(now()) @db.Timestamp(6)
   updatedAt      DateTime  @default(now()) @updatedAt @db.Timestamp(6)
 
-  company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  appointment AutoscuolaAppointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  batches     RoadPointBatch[]
-  markers     RoadMarker[]
+  company       Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  appointment   AutoscuolaAppointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  batches       RoadPointBatch[]
+  markers       RoadMarker[]
+  hotspotChecks RoadHotspotCheck[]
 
   @@index([companyId, status])
   @@index([companyId, startedAt])
@@ -2630,4 +2631,31 @@ model RoadMarker {
 
   @@index([sessionId, recordedAt])
   @@index([companyId, kind])
+}
+
+/// Ripasso su un punto critico dell'allievo (REG-677): passando sul punto
+/// l'istruttore tocca «Meglio» o «No». `hotspotKey`/`kind`/`label`/`lat`/`lng`
+/// sono la copia del punto al momento del ripasso (il centro del gruppo si
+/// sposta col tempo: il ripasso si riaggancia al punto per tipo e distanza).
+/// `clientId` unico = idempotenza dalla coda offline. Si cancella con la sessione.
+model RoadHotspotCheck {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId  String   @db.Uuid
+  sessionId  String   @db.Uuid
+  studentId  String?  @db.Uuid
+  clientId   String   @unique
+  hotspotKey String
+  kind       String
+  label      String
+  lat        Float
+  lng        Float
+  /// "better" (questa volta meglio) | "worse" (ancora no)
+  outcome    String
+  recordedAt DateTime @db.Timestamp(6)
+  createdAt  DateTime @default(now()) @db.Timestamp(6)
+
+  session RoadSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, recordedAt])
+  @@index([companyId, studentId, recordedAt])
 }

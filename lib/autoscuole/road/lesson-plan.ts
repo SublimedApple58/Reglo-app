@@ -18,6 +18,9 @@ import {
  * - Tappe (max 3), per priorità: 1) punti critici dell'allievo; 2) punto
  *   critico dell'autoscuola per il suo errore più frequente; 3) percorso
  *   d'esame meno coperto dalle sue guide.
+ * - Ripasso (REG-677): sui punti dell'allievo l'istruttore tocca «Meglio» o
+ *   «No»; due «Meglio» di fila dopo l'ultimo errore = punto superato, che non
+ *   diventa più una tappa (resta sulla mappa).
  * - Ordine «più vicina prima» dalla partenza; minuti in linea d'aria a
  *   25 km/h (indicativi); si tolgono le tappe meno importanti finché il giro
  *   (andata, lavoro sulle tappe e ritorno) sta nella durata della guida.
@@ -42,6 +45,28 @@ const metersPerMinute = (PLAN_SPEED_KMH * 1000) / 60;
 
 // ─── Punti critici dell'allievo ──────────────────────────────────────────────
 
+/** REG-677: «Meglio» (questa volta meglio) / «No» (ancora no) su un punto dell'allievo. */
+export type HotspotCheckOutcome = "better" | "worse";
+
+/**
+ * REG-677: stato del punto, dalla coda della storia del punto (errori segnalati
+ * e «No» = errore; «Meglio» = meglio): nessun «Meglio» dopo l'ultimo errore =
+ * `open`, uno = `improving`, due o più = `overcome` (superato).
+ */
+export type HotspotStatus = "open" | "improving" | "overcome";
+
+/** «Meglio» di fila dopo l'ultimo errore per dire superato un punto. */
+export const HOTSPOT_OVERCOME_STREAK = 2;
+
+export type HotspotCheck = {
+  id: string;
+  kind: string;
+  lat: number;
+  lng: number;
+  outcome: HotspotCheckOutcome;
+  recordedAt: Date;
+};
+
 export type StudentHotspot = {
   key: string;
   kind: string;
@@ -52,6 +77,12 @@ export type StudentHotspot = {
   errors: number;
   sessions: number;
   lastAt: string;
+  /** REG-677: la nota più recente (non vuota) dell'istruttore sulle segnalazioni del punto. */
+  note: string | null;
+  /** REG-677: i ripassi sul punto. */
+  checks: { better: number; worse: number };
+  lastCheck: { outcome: HotspotCheckOutcome; at: string } | null;
+  status: HotspotStatus;
 };
 
 function mostFrequent(values: Array<string | null>): string | null {
@@ -63,13 +94,59 @@ function mostFrequent(values: Array<string | null>): string | null {
   return best;
 }
 
-/** Le segnalazioni «da migliorare» di UN allievo → i suoi punti ripetuti, i più frequenti prima. */
-export function buildStudentHotspots(markers: HotspotMarker[]): StudentHotspot[] {
+/**
+ * Stato del punto dalla sua storia. A pari istante l'errore conta dopo il
+ * «Meglio» (in dubbio il punto resta da lavorare).
+ */
+export function hotspotStatus(events: Array<{ at: number; type: "error" | "better" }>): HotspotStatus {
+  const sorted = [...events].sort((a, b) => a.at - b.at || (a.type === b.type ? 0 : a.type === "error" ? 1 : -1));
+  let streak = 0;
+  for (const e of sorted) streak = e.type === "error" ? 0 : streak + 1;
+  if (streak >= HOTSPOT_OVERCOME_STREAK) return "overcome";
+  return streak === 1 ? "improving" : "open";
+}
+
+/**
+ * Ogni ripasso va al punto più vicino dello stesso tipo entro `HOTSPOT_RADIUS_M`
+ * dal centro (uno solo); quelli lontani da tutti i punti si ignorano.
+ */
+export function assignChecks<P extends { kind: string; lat: number; lng: number }>(
+  points: P[],
+  checks: HotspotCheck[],
+): Map<P, HotspotCheck[]> {
+  const out = new Map<P, HotspotCheck[]>(points.map((p) => [p, []]));
+  for (const c of checks) {
+    let best: P | null = null;
+    let bestD = Infinity;
+    for (const p of points) {
+      if (p.kind !== c.kind) continue;
+      const d = haversineMeters(p.lat, p.lng, c.lat, c.lng);
+      if (d <= HOTSPOT_RADIUS_M && d < bestD) [best, bestD] = [p, d];
+    }
+    if (best) out.get(best)!.push(c);
+  }
+  return out;
+}
+
+/**
+ * Le segnalazioni «da migliorare» di UN allievo → i suoi punti ripetuti, i più
+ * frequenti prima. `checks` (REG-677, facoltativi) = i suoi ripassi «Meglio / No».
+ */
+export function buildStudentHotspots(markers: HotspotMarker[], checks: HotspotCheck[] = []): StudentHotspot[] {
+  const clusters = clusterMarkers(markers).filter(
+    (c) => new Set(c.markers.map((m) => m.sessionId)).size >= STUDENT_HOTSPOT_MIN_SESSIONS,
+  );
+  const byCluster = assignChecks(clusters, checks);
   const out: StudentHotspot[] = [];
-  for (const c of clusterMarkers(markers)) {
+  for (const c of clusters) {
     const sessions = new Set(c.markers.map((m) => m.sessionId)).size;
-    if (sessions < STUDENT_HOTSPOT_MIN_SESSIONS) continue;
     const last = c.markers[c.markers.length - 1];
+    const mine = byCluster.get(c) ?? [];
+    let lastCheck: HotspotCheck | null = null;
+    for (const k of mine) if (!lastCheck || k.recordedAt > lastCheck.recordedAt) lastCheck = k;
+    // `clusterMarkers` tiene le segnalazioni in ordine di tempo: la nota più recente è in fondo.
+    let note: string | null = null;
+    for (let i = c.markers.length - 1; i >= 0 && !note; i--) note = c.markers[i].note?.trim() || null;
     out.push({
       key: hotspotKey(c.kind, c.lat, c.lng),
       kind: c.kind,
@@ -80,6 +157,16 @@ export function buildStudentHotspots(markers: HotspotMarker[]): StudentHotspot[]
       errors: c.markers.length,
       sessions,
       lastAt: last.recordedAt.toISOString(),
+      note,
+      checks: {
+        better: mine.filter((k) => k.outcome === "better").length,
+        worse: mine.filter((k) => k.outcome === "worse").length,
+      },
+      lastCheck: lastCheck ? { outcome: lastCheck.outcome, at: lastCheck.recordedAt.toISOString() } : null,
+      status: hotspotStatus([
+        ...c.markers.map((m) => ({ at: m.recordedAt.getTime(), type: "error" as const })),
+        ...mine.map((k) => ({ at: k.recordedAt.getTime(), type: k.outcome === "better" ? ("better" as const) : ("error" as const) })),
+      ]),
     });
   }
   return out.sort((a, b) => b.errors - a.errors || b.sessions - a.sessions || b.lastAt.localeCompare(a.lastAt));
@@ -280,12 +367,14 @@ function examCandidate(r: PlanExamRoute): Candidate {
 
 /** Le candidate in ordine di priorità (la prima è la più importante). */
 export function planCandidates(input: LessonPlanInput): Candidate[] {
-  const student = input.studentHotspots.map(studentCandidate);
+  // REG-677: un punto superato (due «Meglio» di fila) non è più una tappa.
+  const student = input.studentHotspots.filter((h) => h.status !== "overcome").map(studentCandidate);
 
   let school: Candidate | null = null;
   for (const kind of input.studentKinds) {
     const h = input.schoolHotspots
-      .filter((x) => x.kind === kind && !student.some((s) => s.kind === kind && near(s, x)))
+      // Anche un punto superato dell'allievo esclude quello dell'autoscuola lì: non lo si ripropone da un'altra parte.
+      .filter((x) => x.kind === kind && !input.studentHotspots.some((s) => s.kind === kind && near(s, x)))
       .sort((a, b) => b.errors - a.errors || b.students - a.students)[0];
     if (h) {
       school = schoolCandidate(h);
