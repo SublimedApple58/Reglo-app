@@ -2527,6 +2527,9 @@ model RoadSession {
   plan           Json?
   /// Tappe del giro raggiunte, calcolate a fine guida.
   planReached    Json?
+  /// REG-665: traccia pulita e agganciata alla strada + soste, calcolata una
+  /// volta a fine guida (o alla prima lettura). Vedi lib/autoscuole/road/clean-track.ts.
+  cleanTrack     Json?
   createdAt      DateTime  @default(now()) @db.Timestamp(6)
   updatedAt      DateTime  @default(now()) @updatedAt @db.Timestamp(6)
 

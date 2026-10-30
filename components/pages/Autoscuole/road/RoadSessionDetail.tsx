@@ -135,6 +135,14 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
       );
       markersRef.current.push(addHtmlMarker(handle, toLngLat(m), el));
     });
+    // REG-665: soste di almeno 5 minuti (la traccia pulita le accorpa in un punto).
+    (detail.stops ?? []).forEach((st) => {
+      const at = toLngLat([st.lat, st.lng]);
+      markersRef.current.push(addHtmlMarker(handle, at, htmlElement(`<div class="road-stop"></div>`)));
+      markersRef.current.push(
+        addHtmlMarker(handle, at, htmlElement(`<div><div class="road-start-lab">Sosta ${st.minutes} min</div></div>`), "bottom"),
+      );
+    });
     if (detail.status === "active" && coords.length) {
       const last = coords[coords.length - 1];
       const prev = coords[Math.max(0, coords.length - 4)];

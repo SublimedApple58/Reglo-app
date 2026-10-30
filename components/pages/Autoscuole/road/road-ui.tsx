@@ -353,6 +353,7 @@ export function RoadMarkerStyles() {
 .road-sede.small img{width:46px}
 .road-sede span{margin-top:-2px;height:26px;padding:0 10px;border-radius:13px;background:#111;color:#fff;font-size:12px;font-weight:600;display:grid;place-items:center;white-space:nowrap;font-family:inherit}
 .road-start{width:14px;height:14px;border-radius:50%;background:#fff;border:4px solid #111;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.road-stop{width:12px;height:12px;border-radius:50%;background:#111;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.25)}
 .road-luogo{display:flex;flex-direction:column;align-items:center;transform:translateY(15px);pointer-events:none}
 .road-luogo .pin{width:30px;height:30px;border-radius:50%;background:#fff;color:#3a3a3a;display:grid;place-items:center;box-shadow:0 0 0 1.5px rgba(17,17,17,.1),0 2px 8px rgba(0,0,0,.16)}
 .road-luogo .pin svg{width:16px;height:16px}

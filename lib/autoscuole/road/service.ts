@@ -15,6 +15,14 @@ import {
   type RoadCustomMarker,
 } from "@/lib/autoscuole/road/catalog";
 import { drivingSeconds, freeLessonEnd, sanitizePoints, trackDistanceMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
+import {
+  buildCleanTrack,
+  CLEAN_TRACK_VERSION,
+  cleanTrackPoints,
+  needsRebuild,
+  thumbPath,
+  type CleanTrack,
+} from "@/lib/autoscuole/road/clean-track";
 import { finalizeRoadSession, loadRoadTrack } from "@/lib/autoscuole/road/maintenance";
 import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
 import { isBookingBlockActive } from "@/lib/autoscuole/booking-block";
@@ -534,6 +542,8 @@ export async function endRoadSession(sessionId: string) {
       });
       await trimFreeLessonEnd(session.appointmentId, endedAt);
       await savePlanReached(sessionId, ctx.companyId).catch((e) => console.warn("[road] planReached", e));
+      // REG-665: traccia pulita e sulle strade, una volta sola (la legge il riepilogo qui sotto).
+      await sessionCleanTrack(sessionId, "completed").catch((e) => console.warn("[road] cleanTrack", e));
     }
     return getRoadSessionDetail(sessionId);
   } catch (error) {
@@ -624,14 +634,58 @@ async function buildDetail(sessionId: string, companyId: string) {
     },
   });
   if (!s) return null;
-  const track = await loadTrack(sessionId);
+  const clean = await sessionCleanTrack(sessionId, s.status);
   return {
     ...sessionDTO(s, s.appointment.startsAt),
+    // REG-665: i km della traccia pulita (il GPS da fermo gonfiava i km).
+    ...(clean.saved ? { distanceMeters: clean.track.distanceMeters } : {}),
     lesson: lessonDTO(s.appointment),
     markers: s.markers.map(markerDTO),
     // Per la mappa bastano [lat, lng]; il tempo serve a disegnare il "fatto fin qui".
-    track: track.map((p) => [p[1], p[2], p[0]] as [number, number, number]),
+    // REG-665: traccia pulita (e sulle strade a guida finita) + soste ≥ 5 min.
+    track: clean.track.path,
+    stops: clean.track.stops,
   };
+}
+
+/**
+ * REG-665: la traccia pulita di una sessione. Guida in corso: solo pulita, mai
+ * salvata (cresce). Guida finita: calcolata una volta (con Google Roads) e
+ * salvata sulla sessione, insieme ai km ricalcolati; si ricalcola solo se
+ * cambia la versione o se l'aggancio era fallito ed è ora di riprovare.
+ */
+async function sessionCleanTrack(sessionId: string, status: string): Promise<{ track: CleanTrack; saved: boolean }> {
+  if (status === "active") {
+    return { track: await buildCleanTrack(await loadTrack(sessionId), { snap: false }), saved: false };
+  }
+  const row = await prisma.roadSession.findUnique({ where: { id: sessionId }, select: { cleanTrack: true } });
+  if (row && !needsRebuild(row.cleanTrack)) return { track: row.cleanTrack as unknown as CleanTrack, saved: true };
+  const track = await buildCleanTrack(await loadTrack(sessionId));
+  await prisma.roadSession.update({
+    where: { id: sessionId },
+    data: { cleanTrack: track as unknown as Prisma.InputJsonValue, distanceMeters: track.distanceMeters },
+  });
+  return { track, saved: true };
+}
+
+/**
+ * Miniature per le liste: dalla traccia salvata (solo il campo `thumb`, senza
+ * leggere tutto il percorso); per le sessioni senza, pulita al volo e senza
+ * Google (la versione agganciata arriva alla prima apertura del dettaglio).
+ */
+async function sessionThumbs(ids: string[]): Promise<Map<string, Array<[number, number]>>> {
+  const out = new Map<string, Array<[number, number]>>();
+  if (!ids.length) return out;
+  const rows = await prisma.$queryRaw<Array<{ id: string; thumb: Array<[number, number]> | null }>>`
+    SELECT id::text AS id, "cleanTrack"->'thumb' AS thumb FROM "RoadSession"
+    WHERE id = ANY(${ids}::uuid[]) AND ("cleanTrack"->>'v')::int = ${CLEAN_TRACK_VERSION}`;
+  for (const r of rows) if (Array.isArray(r.thumb)) out.set(r.id, r.thumb);
+  await Promise.all(
+    ids
+      .filter((id) => !out.has(id))
+      .map(async (id) => out.set(id, thumbPath(cleanTrackPoints(await loadTrack(id)).path))),
+  );
+  return out;
 }
 
 export async function getRoadSessionDetail(sessionId: string) {
@@ -706,15 +760,6 @@ export async function getRoadForAppointment(appointmentId: string) {
   }
 }
 
-/** Al massimo N punti, presi a passo regolare: basta per la miniatura del percorso. */
-function thumbTrack(points: RoadPoint[], max = 60): Array<[number, number]> {
-  if (points.length <= max) return points.map((p) => [p[1], p[2]]);
-  const step = (points.length - 1) / (max - 1);
-  return Array.from({ length: max }, (_, i) => {
-    const p = points[Math.round(i * step)];
-    return [p[1], p[2]] as [number, number];
-  });
-}
 
 /**
  * Pagellino per guida: voci valutate (o «non applicabile») su voci attive.
@@ -762,11 +807,12 @@ export async function getRoadForStudent(studentId: string) {
     });
     const counts = await markerCounts(sessions.map((x) => x.id));
     const evaluations = await evaluationProgress(ctx, sessions.map((x) => x.appointmentId));
+    const thumbs = await sessionThumbs(sessions.map((x) => x.id));
     const items = await Promise.all(
       sessions.map(async (x) => ({
         ...sessionDTO(x, x.appointment.startsAt),
         ...markerSummary(counts, x.id),
-        thumb: thumbTrack(sanitizePoints(await loadRoadTrack(prisma, x.id))),
+        thumb: thumbs.get(x.id) ?? [],
         // REG-660: pagellino della guida (null se il pagellino è spento).
         evaluation: evaluations ? { done: evaluations.done.get(x.appointmentId) ?? 0, total: evaluations.total } : null,
       })),
@@ -1494,12 +1540,13 @@ async function roadTabExtras(
   }
 
   const sessionCounts = await markerCounts(mySessions.map((s) => s.id));
+  const thumbs = await sessionThumbs(mySessions.map((s) => s.id));
   const recentSessions = await Promise.all(
     mySessions.map(async (s) => ({
       ...sessionDTO(s, s.appointment.startsAt),
       ...markerSummary(sessionCounts, s.id),
       lesson: lessonDTO(s.appointment),
-      thumb: thumbTrack(sanitizePoints(await loadRoadTrack(prisma, s.id))),
+      thumb: thumbs.get(s.id) ?? [],
     })),
   );
 

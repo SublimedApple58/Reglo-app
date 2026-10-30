@@ -94,8 +94,12 @@ export type RoadDetail = RoadSession & {
   lesson: RoadLesson;
   markers: RoadMarker[];
   track: RoadTrackPoint[];
+  /** REG-665: soste di almeno 5 minuti (sempre presenti dal backend nuovo). */
+  stops?: RoadStop[];
   evaluation?: RoadEvaluation | null;
 };
+
+export type RoadStop = { lat: number; lng: number; startMs: number; endMs: number; minutes: number };
 
 /** Punto critico (REG-643): dove gli allievi sbagliano più spesso. */
 export type RoadHotspot = {
