@@ -717,6 +717,26 @@ function thumbTrack(points: RoadPoint[], max = 60): Array<[number, number]> {
 }
 
 /**
+ * Pagellino per guida: voci valutate (o «non applicabile») su voci attive.
+ * `null` se l'autoscuola ha il pagellino spento o senza voci.
+ */
+async function evaluationProgress(ctx: RoadCtx, appointmentIds: string[]) {
+  if (ctx.limits.evaluationSheetEnabled !== true) return null;
+  const total = await prisma.autoscuolaEvaluationItem.count({ where: { companyId: ctx.companyId, archivedAt: null } });
+  if (!total) return null;
+  const done = new Map<string, number>();
+  if (appointmentIds.length) {
+    const rows = await prisma.autoscuolaAppointmentEvaluation.groupBy({
+      by: ["appointmentId"],
+      where: { appointmentId: { in: appointmentIds }, OR: [{ score: { not: null } }, { notApplicable: true }] },
+      _count: { _all: true },
+    });
+    for (const r of rows) done.set(r.appointmentId, Math.min(r._count._all, total));
+  }
+  return { total, done };
+}
+
+/**
  * Percorsi Road delle guide di un allievo (dettaglio allievo web, storico guide
  * nell'app istruttore): per guida km, minuti, segnalazioni e una miniatura.
  * Titolare: tutte. Istruttore: solo le sue, come `getRoadForAppointment`.
@@ -741,17 +761,24 @@ export async function getRoadForStudent(studentId: string) {
       select: { ...sessionSelect, appointment: { select: { startsAt: true } } },
     });
     const counts = await markerCounts(sessions.map((x) => x.id));
+    const evaluations = await evaluationProgress(ctx, sessions.map((x) => x.appointmentId));
     const items = await Promise.all(
       sessions.map(async (x) => ({
         ...sessionDTO(x, x.appointment.startsAt),
         ...markerSummary(counts, x.id),
         thumb: thumbTrack(sanitizePoints(await loadRoadTrack(prisma, x.id))),
+        // REG-660: pagellino della guida (null se il pagellino è spento).
+        evaluation: evaluations ? { done: evaluations.done.get(x.appointmentId) ?? 0, total: evaluations.total } : null,
       })),
     );
     // Briefing per voce (tab Road «Parti con»): sulle guide di tutta
     // l'autoscuola, perché serve anche a chi porta l'allievo la prima volta.
     const briefing = (await loadBriefings(ctx.companyId, [studentId])).get(studentId) ?? null;
-    return ok({ items, briefing });
+    // REG-660: i suoi errori ripetuti (foglio «Road di <allievo>» nell'app).
+    // Import dinamico: lesson-plan-service importa già questo modulo.
+    const { loadStudentHotspots } = await import("@/lib/autoscuole/road/lesson-plan-service");
+    const hotspots = await loadStudentHotspots(ctx.companyId, studentId);
+    return ok({ items, briefing, hotspots });
   } catch (error) {
     return fail(formatError(error));
   }
