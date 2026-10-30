@@ -328,6 +328,16 @@ Si scrive **mobile-first**: classi base per il telefono, `md:`/`lg:` per allarga
 
 ---
 
+## 9b. Icone 3D condivise con il mobile (REG-672, 2026-10-30)
+
+Le icone 3D esistono una volta sola: la tabella di corrispondenza è in
+`reglo-mobile/docs/design-system.md` §0.9 «Icone condivise con la web app».
+Prima di generarne una nuova (su web o mobile) si controlla lì.
+Su scelta di Tiziano le auto Road (`public/images/road/cars/`), la stella
+(`menu/feedback-mid.png`) e il razzo (`menu/dai-un-boost.png`) sono le copie
+dei PNG mobile; il resto della tabella (calendario, campanella, sede,
+malattia, aeroplanino, emblema Road) va dal web al mobile.
+
 ## 10. Mapping Mobile ↔ Web
 
 > **I token NON sono più allineati.** Il passaggio a bianco/nero del 2026-09-17
