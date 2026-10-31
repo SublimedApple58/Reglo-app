@@ -34,6 +34,7 @@ import {
   RoadMapFallback,
   RoadMarkerStyles,
   shortDay,
+  signalLostLabel,
   SymbolTile,
   ZoomControls,
 } from "./road-ui";
@@ -263,6 +264,8 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
       (lab.querySelector("i") as HTMLElement).textContent = initials(s.lesson.instructor?.name);
       (lab.querySelector("span") as HTMLElement).textContent = label;
       car.el.classList.toggle("sel", selected);
+      // REG-695: segnale perso → auto grigia, senza alone.
+      car.el.classList.toggle("stale", signalLostLabel(s, live.now) != null);
       // la selezionata sopra le altre
       car.marker.getElement().style.zIndex = selected ? "3" : "2";
     }
@@ -370,6 +373,7 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
               {sessions.map((s) => {
                 const tint = instructorTint(s.lesson.instructor);
                 const isSel = s.id === selectedId;
+                const lost = live ? signalLostLabel(s, live.now) : null;
                 return (
                   <button
                     key={s.id}
@@ -383,7 +387,7 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
                         : "border-transparent hover:bg-[#fafafa]",
                     )}
                   >
-                    <Car3D color={s.lesson.carColor} tint={tint} label={initials(s.lesson.instructor?.name)} />
+                    <Car3D color={s.lesson.carColor} tint={tint} label={initials(s.lesson.instructor?.name)} stale={!!lost} />
                     <div className="min-w-0">
                       <div className="truncate text-[15px] font-semibold tracking-[-0.2px] text-[#111111]">
                         {s.lesson.instructor?.name ?? "Istruttore"}
@@ -391,7 +395,11 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
                       <div className="mt-px truncate text-[13.5px] text-[#444444]">
                         con {s.lesson.student?.name ?? "allievo"}
                       </div>
-                      {s.last?.street ? (
+                      {lost ? (
+                        <div className="mt-[3px] truncate text-[12.5px] font-medium text-[#222222]" data-testid="road-live-signal">
+                          {[lost, s.last?.street].filter(Boolean).join(" · ")}
+                        </div>
+                      ) : s.last?.street ? (
                         <div className="mt-[3px] flex items-center gap-1 truncate text-[12.5px] text-[#6a6a6a]">
                           <PinIcon />
                           <span className="truncate">{s.last.street}</span>
@@ -468,7 +476,9 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
           ) : null}
         </div>
 
-        {selected ? <SelectedCard s={selected} now={now} onOpen={() => onOpen(selected.id)} /> : null}
+        {selected && live ? (
+          <SelectedCard s={selected} now={now} lost={signalLostLabel(selected, live.now)} onOpen={() => onOpen(selected.id)} />
+        ) : null}
 
         {handle ? (
           <ZoomControls onIn={() => handle.map.zoomIn()} onOut={() => handle.map.zoomOut()} />
@@ -489,8 +499,20 @@ function Kpi({ value, label }: { value: number | null; label: string }) {
   );
 }
 
-function SelectedCard({ s, now, onOpen }: { s: RoadLiveSession; now: number; onOpen: () => void }) {
-  const speed = s.last?.speed != null ? Math.round(s.last.speed * 3.6) : null;
+function SelectedCard({
+  s,
+  now,
+  lost,
+  onOpen,
+}: {
+  s: RoadLiveSession;
+  now: number;
+  /** REG-695: «Ultimo segnale 4 min fa», null se il segnale c'è. */
+  lost: string | null;
+  onOpen: () => void;
+}) {
+  // senza segnale la velocità è vecchia: non la si mostra come «adesso»
+  const speed = !lost && s.last?.speed != null ? Math.round(s.last.speed * 3.6) : null;
   const vehicle = s.lesson.vehicle?.name;
   const phone = s.lesson.instructor?.phone;
   return (
@@ -499,10 +521,16 @@ function SelectedCard({ s, now, onOpen }: { s: RoadLiveSession; now: number; onO
       data-testid="road-live-card"
     >
       <div className="flex items-center justify-between text-[11.5px] font-semibold uppercase tracking-[0.7px] text-[#6a6a6a]">
-        <span className="flex items-center gap-[7px]">
-          <LiveDot />
-          Guida in corso
-        </span>
+        {lost ? (
+          <span className="normal-case tracking-normal text-[13px] font-semibold text-[#111111]" data-testid="road-live-card-signal">
+            {lost}
+          </span>
+        ) : (
+          <span className="flex items-center gap-[7px]">
+            <LiveDot />
+            Guida in corso
+          </span>
+        )}
         <b className="text-[13px] normal-case tracking-normal text-[#111111]">{minutesBetween(s.startedAt, now)} min</b>
       </div>
       <h3 className="mt-2 text-[21px] font-semibold tracking-[-0.4px] text-[#111111]">
