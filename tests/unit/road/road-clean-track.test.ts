@@ -32,6 +32,13 @@ function drive(lat: number, lng: number, from: number, seconds: number): RoadPoi
 }
 
 describe("cleanTrackPoints", () => {
+  it("un primo fix lontano (vecchio o del simulatore) non butta il percorso vero (REG-691)", () => {
+    const pts: RoadPoint[] = [[T0, 37.78, -122.41, 0, null, 5], ...drive(45.07, 7.68, T0 + 5000, 120)];
+    const { path } = cleanTrackPoints(pts);
+    expect(path.length).toBeGreaterThan(100);
+    expect(path.every((p) => p[0] > 45 && p[0] < 45.1)).toBe(true);
+  });
+
   it("accorpa 20 minuti da fermo in un punto e ne fa una sosta", () => {
     const pts = [...still(42.6, 13.7, T0, 20 * 60_000, 12), ...drive(42.6, 13.7, T0 + 20 * 60_000, 60)];
     const { path, stops } = cleanTrackPoints(pts);

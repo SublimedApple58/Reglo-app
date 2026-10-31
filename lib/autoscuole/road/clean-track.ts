@@ -57,19 +57,36 @@ export type CleanTrack = {
 const dist = (a: { 0: number; 1: number }, b: { 0: number; 1: number }) => haversineMeters(a[0], a[1], b[0], b[1]);
 
 /** Passi 1 e 2: filtra il rumore e accorpa i momenti da fermo. */
+/** Salti impossibili di fila prima di aprire un tratto nuovo. */
+const MAX_SPIKES = 3;
+
 export function cleanTrackPoints(points: RoadPoint[]): { path: TrackPoint[]; stops: TrackStop[] } {
-  // 1. fix buoni, in ordine, senza salti impossibili
-  const good: TrackPoint[] = [];
+  // 1. fix buoni, in ordine, senza salti impossibili. Un salto isolato è un
+  //    fix sbagliato e si scarta; se i salti continuano (REG-691: primo fix
+  //    vecchio di chilometri, simulatore) era sbagliato il riferimento: si apre
+  //    un tratto nuovo e alla fine si tiene il tratto con più punti, invece di
+  //    scartare tutto il percorso dopo il primo fix fuori posto.
+  const runs: TrackPoint[][] = [[]];
+  let spikes = 0;
   for (const p of [...points].sort((a, b) => a[0] - b[0])) {
     if (p[5] != null && p[5] > MAX_ACCURACY_M) continue;
-    const last = good[good.length - 1];
+    const run = runs[runs.length - 1];
+    const last = run[run.length - 1];
     if (last) {
-      const dt = Math.max(1, (p[0] - last[2]) / 1000);
-      if (dist([p[1], p[2]], last) / dt > MAX_SPEED_MS) continue;
       if (p[0] === last[2]) continue;
+      const dt = Math.max(1, (p[0] - last[2]) / 1000);
+      if (dist([p[1], p[2]], last) / dt > MAX_SPEED_MS) {
+        spikes++;
+        if (spikes < MAX_SPIKES) continue;
+        spikes = 0;
+        runs.push([[p[1], p[2], p[0]]]);
+        continue;
+      }
     }
-    good.push([p[1], p[2], p[0]]);
+    spikes = 0;
+    run.push([p[1], p[2], p[0]]);
   }
+  const good = runs.reduce((a, b) => (b.length > a.length ? b : a));
 
   // 2. gruppi da fermo: si allarga finché i fix restano vicini al centro
   const path: TrackPoint[] = [];
