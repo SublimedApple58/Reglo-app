@@ -109,14 +109,16 @@ export function initials(name: string | null | undefined) {
 }
 
 // Tinte di riserva per gli istruttori senza colore scelto (stesse dell'agenda).
-const FALLBACK_TINTS = ["#F97316", "#8B5CF6", "#10B981", "#0EA5E9", "#EC4899", "#F59E0B", "#14B8A6", "#6366F1"];
+/**
+ * Tinta dell'istruttore nelle viste Road (badge con le iniziali, barra di
+ * avanzamento, percorsi sulla mappa). Tiziano 31/10: niente colori (né blu né
+ * la palette dell'agenda) — un grigio neutro unico; la guida selezionata resta
+ * nera e l'istruttore si riconosce dalle iniziali e dal nome.
+ */
+export const ROAD_NEUTRAL_TINT = "#717171";
 
-export function instructorTint(instructor: { id: string; color: string | null } | null | undefined) {
-  if (instructor?.color && /^#[0-9a-f]{6}$/i.test(instructor.color)) return instructor.color;
-  const id = instructor?.id ?? "";
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return FALLBACK_TINTS[h % FALLBACK_TINTS.length];
+export function instructorTint(_instructor?: { id: string; color: string | null } | null) {
+  return ROAD_NEUTRAL_TINT;
 }
 
 export { pad };
@@ -223,11 +225,15 @@ export function SentimentCounts({ good, bad, className }: { good: number; bad: n
 }
 
 /** Pillola segnalazioni: ultimi simboli + conteggio, oppure «Nessuna» verde. */
+/**
+ * Segnalazioni di una guida in una riga discreta (niente pillola, niente
+ * colori): «Nessuna segnalazione» in grigio, oppure i simboli 3D delle ultime
+ * e il numero, con «N bene» quando ci sono segnalazioni positive.
+ */
 export function MarkerPill({
   count,
   kinds,
   good = 0,
-  bad = 0,
 }: {
   count: number;
   kinds: string[];
@@ -235,11 +241,7 @@ export function MarkerPill({
   bad?: number;
 }) {
   if (!count) {
-    return (
-      <span className="inline-flex h-[26px] items-center rounded-[13px] bg-[#e6f6ec] px-2.5 text-[12.5px] font-semibold text-[#067647]">
-        Nessuna
-      </span>
-    );
+    return <span className="text-[12.5px] text-[#6a6a6a]">Nessuna segnalazione</span>;
   }
   const shown: string[] = [];
   for (const k of [...kinds].reverse()) {
@@ -248,29 +250,13 @@ export function MarkerPill({
     if (shown.length === 3) break;
   }
   return (
-    <span className="inline-flex h-[26px] items-center gap-[3px] rounded-[13px] bg-[#fff0e6] pl-[5px] pr-[9px] text-[12.5px] font-semibold text-[#8a3a0c]">
+    <span className="inline-flex items-center gap-[3px] text-[12.5px] font-medium tabular-nums text-[#222222]">
       {shown.map((src) => (
         // eslint-disable-next-line @next/next/no-img-element
         <img key={src} src={src} alt="" className="size-[18px] object-contain" draggable={false} />
       ))}
-      {good || bad ? (
-        <span className="ml-0.5 flex items-center gap-1.5 tabular-nums">
-          {good ? (
-            <span className="flex items-center gap-1">
-              <i className="block size-[6px] rounded-full" style={{ background: SENTIMENT_GOOD }} />
-              {good}
-            </span>
-          ) : null}
-          {bad ? (
-            <span className="flex items-center gap-1">
-              <i className="block size-[6px] rounded-full" style={{ background: SENTIMENT_BAD }} />
-              {bad}
-            </span>
-          ) : null}
-        </span>
-      ) : (
-        count
-      )}
+      <span className="ml-0.5">{count}</span>
+      {good ? <span className="font-normal text-[#6a6a6a]">· {good} bene</span> : null}
     </span>
   );
 }
