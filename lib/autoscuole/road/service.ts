@@ -428,7 +428,15 @@ export async function appendRoadPoints(
     const loaded = await loadOwnSession(ctx, sessionId);
     if ("error" in loaded) return loaded.error!;
     const { session } = loaded;
-    if (session.status !== "active") return ok({ accepted: false, reason: "SESSION_CLOSED" as const });
+    if (session.status !== "active") {
+      // REG-691: gli ultimi punti partiti dopo «Termina» (rete ballerina) o
+      // dopo un nuovo login valgono ancora per 2 h: km e giro si ricalcolano.
+      const closedAt = session.endedAt?.getTime() ?? 0;
+      if (!closedAt || Date.now() - closedAt > LATE_POINTS_MS) {
+        return ok({ accepted: false, reason: "SESSION_CLOSED" as const });
+      }
+      return appendLatePoints(session, ctx.companyId, input);
+    }
 
     const seq = Number(input?.seq);
     if (!Number.isInteger(seq) || seq < 0) return fail("Lotto non valido.");
@@ -479,6 +487,60 @@ export async function appendRoadPoints(
   } catch (error) {
     return fail(formatError(error));
   }
+}
+
+/** REG-691: per quanto tempo dopo la chiusura si accettano ancora punti (stesso limite delle segnalazioni). */
+const LATE_POINTS_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * Lotto arrivato dopo la chiusura: si salva (idempotente su `seq`) e si
+ * ricalcolano km, punti e tappe raggiunte su tutto il percorso. La traccia
+ * pulita si rifà alla prossima lettura. Per una guida abbandonata la fine
+ * segue l'ultimo punto arrivato.
+ */
+async function appendLatePoints(
+  session: { id: string; status: string; startedAt: Date; endedAt: Date | null; lastPointAt: Date | null },
+  companyId: string,
+  input: { seq: number; points: unknown },
+) {
+  const seq = Number(input?.seq);
+  if (!Number.isInteger(seq) || seq < 0) return fail("Lotto non valido.");
+  const points = sanitizePoints(input?.points).slice(0, MAX_POINTS_PER_BATCH);
+  if (!points.length) return ok({ accepted: true, duplicate: false });
+  try {
+    await prisma.roadPointBatch.create({
+      data: { sessionId: session.id, seq, points: points as unknown as Prisma.InputJsonValue },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return ok({ accepted: true, duplicate: true });
+    }
+    throw error;
+  }
+  const track = await loadTrack(session.id);
+  const last = track[track.length - 1];
+  const lastAt = last ? new Date(last[0]) : null;
+  const extend = session.status === "abandoned" && lastAt && session.endedAt && lastAt > session.endedAt;
+  const lessonStartsAt = extend
+    ? (await prisma.roadSession.findUnique({ where: { id: session.id }, select: { appointment: { select: { startsAt: true } } } }))
+        ?.appointment?.startsAt
+    : null;
+  await prisma.roadSession.update({
+    where: { id: session.id },
+    data: {
+      distanceMeters: Math.round(trackDistanceMeters(track)),
+      pointCount: track.length,
+      cleanTrack: Prisma.DbNull,
+      ...(last && lastAt && (!session.lastPointAt || lastAt > session.lastPointAt)
+        ? { lastLat: last[1], lastLng: last[2], lastPointAt: lastAt }
+        : {}),
+      ...(extend ? { endedAt: lastAt, durationSec: drivingSeconds(session.startedAt, lastAt, lessonStartsAt) } : {}),
+    },
+  });
+  if (session.status === "completed") {
+    await savePlanReached(session.id, companyId).catch((e) => console.warn("[road] planReached (late)", e));
+  }
+  return ok({ accepted: true, duplicate: false, late: true });
 }
 
 // ─── segnalazioni ───────────────────────────────────────────────────────────
