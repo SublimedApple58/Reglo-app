@@ -60,6 +60,27 @@ export function minutesBetween(fromIso: string, to: number) {
   return Math.max(0, Math.floor((to - new Date(fromIso).getTime()) / 60000));
 }
 
+/**
+ * REG-695: oltre questa età dell'ultimo punto l'auto ha perso il segnale (il
+ * telefono manda i punti ogni pochi secondi). Si conta con l'ora del server
+ * (`RoadLive.now`), non con quella del PC: niente sfasamenti d'orologio.
+ */
+export const ROAD_SIGNAL_STALE_MIN = 2;
+
+/** Minuti dall'ultimo punto (dall'inizio se non ne è ancora arrivato nessuno). */
+export function signalAgeMin(s: { startedAt: string; last: { at: string | null } | null }, serverNowIso: string) {
+  const from = s.last?.at ?? s.startedAt;
+  return Math.max(0, Math.floor((new Date(serverNowIso).getTime() - new Date(from).getTime()) / 60000));
+}
+
+/** «Ultimo segnale 4 min fa» / «Nessun segnale da 3 min»; null se il segnale c'è. */
+export function signalLostLabel(s: { startedAt: string; last: { at: string | null } | null }, serverNowIso: string) {
+  const age = signalAgeMin(s, serverNowIso);
+  if (age < ROAD_SIGNAL_STALE_MIN) return null;
+  const span = age >= 60 ? `${Math.floor(age / 60)} h ${age % 60} min` : `${age} min`;
+  return s.last?.at ? `Ultimo segnale ${span} fa` : `Nessun segnale da ${span}`;
+}
+
 export function durationMin(sec: number) {
   return Math.max(0, Math.round(sec / 60));
 }
@@ -116,9 +137,20 @@ export function LiveDot({ className }: { className?: string }) {
 }
 
 /** Auto 3D 3/4 nel colore del veicolo, con il badge iniziali nella tinta dell'istruttore. */
-export function Car3D({ color, tint, label }: { color?: string | null; tint?: string; label?: string }) {
+export function Car3D({
+  color,
+  tint,
+  label,
+  stale,
+}: {
+  color?: string | null;
+  tint?: string;
+  label?: string;
+  /** REG-695: segnale perso → auto grigia. */
+  stale?: boolean;
+}) {
   return (
-    <div className="relative w-16">
+    <div className={cn("relative w-16 transition-[filter,opacity] duration-300 ease-out", stale && "opacity-60 grayscale")}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={roadCarImages(color).threeQuarter} alt="" className="block w-16" draggable={false} />
       {tint && label ? (
@@ -342,6 +374,9 @@ export function RoadMarkerStyles() {
 .road-car .lab{position:absolute;left:0;top:-42px;transform:translate(-50%,-50%);white-space:nowrap;height:30px;padding:0 11px 0 4px;border-radius:15px;background:#fff;display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08),0 6px 16px rgba(0,0,0,.14);color:#111;cursor:pointer;font-family:inherit}
 .road-car .lab i{width:22px;height:22px;border-radius:50%;color:#fff;font-style:normal;font-size:9.5px;font-weight:600;display:grid;place-items:center}
 .road-car.sel .lab{background:#111;color:#fff;z-index:2}
+.road-car .body img,.road-car .halo{transition:filter .3s ease-out,opacity .3s ease-out}
+.road-car.stale .body img{filter:grayscale(1) drop-shadow(0 4px 4px rgba(0,0,0,.2));opacity:.6}
+.road-car.stale .halo{opacity:0}
 .road-sg{width:34px;height:34px;border-radius:50%;background:#fff;display:grid;place-items:center;box-shadow:0 2px 8px rgba(0,0,0,.16)}
 .road-sg img{width:24px;height:24px;object-fit:contain}
 .road-sg.good{box-shadow:0 0 0 2.5px #16a34a,0 2px 8px rgba(0,0,0,.16)}
