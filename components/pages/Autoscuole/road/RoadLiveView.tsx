@@ -5,6 +5,7 @@ import type { Marker as MlMarker } from "maplibre-gl";
 import { MapPin } from "lucide-react";
 
 import { roadApi, type RoadLive, type RoadLiveSession } from "@/lib/autoscuole/road/client";
+import { RoadLiveReturn } from "./RoadLiveReturn";
 import { roadCarImages, roadMarkerSymbol, ROAD_IMAGES } from "@/lib/autoscuole/road/symbols";
 import { cn } from "@/lib/utils";
 import {
@@ -410,6 +411,7 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
                       <div className="text-sm font-semibold tabular-nums text-[#111111]">
                         {minutesBetween(s.startedAt, now)} min
                       </div>
+                      <RoadLiveReturn s={s} now={now} />
                       <MarkerPill count={s.markerCount} kinds={s.markerKinds} good={s.markerGood} bad={s.markerBad} />
                     </div>
                     <div className="absolute bottom-[7px] left-3.5 right-3.5 h-[3px] overflow-hidden rounded-sm bg-[#f0f0f0]">
@@ -541,6 +543,7 @@ function SelectedCard({
           .filter(Boolean)
           .join(" · ")}
       </div>
+      <RoadLiveReturn s={s} now={now} className="mt-1 text-[13.5px]" />
       <div className="mt-3.5 grid grid-cols-3 border-y border-[#ebebeb] py-3">
         <Stat value={`${km(s.distanceMeters)} km`} label="percorsi" />
         <Stat value={speed != null ? `${speed} km/h` : "–"} label="adesso" />

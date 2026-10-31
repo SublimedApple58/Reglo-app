@@ -2546,6 +2546,8 @@ model RoadSession {
   lastHeading    Float?
   lastStreet     String?
   lastPointAt    DateTime? @db.Timestamp(6)
+  /// REG-699: rientro stimato dal telefono (con il giro), per «Dal vivo».
+  lastEtaAt      DateTime? @db.Timestamp(6)
   /// Giro della prossima guida (REG-648): tappe scelte alla partenza, null = senza giro.
   plan           Json?
   /// Tappe del giro raggiunte, calcolate a fine guida.

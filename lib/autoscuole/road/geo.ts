@@ -53,16 +53,28 @@ const usable = (p: RoadPoint) => p[5] == null || p[5] <= MAX_ACCURACY_M;
  * Metri percorsi lungo i punti, partendo eventualmente da un punto precedente
  * (l'ultimo del lotto prima). Ignora fix imprecisi e salti impossibili.
  */
+/** Salti impossibili di fila prima di ripartire dal punto nuovo. */
+const MAX_SPIKES = 3;
+
 export function trackDistanceMeters(points: RoadPoint[], prev?: RoadPoint | null): number {
   let total = 0;
   let last = prev && usable(prev) ? prev : null;
+  let spikes = 0;
   for (const p of points) {
     if (!usable(p)) continue;
     if (last) {
       const d = haversineMeters(last[1], last[2], p[1], p[2]);
       const dt = Math.max(1, (p[0] - last[0]) / 1000);
-      if (d / dt <= MAX_SPEED_MS) total += d;
-      else continue; // salto: tieni il punto buono precedente
+      if (d / dt <= MAX_SPEED_MS) {
+        total += d;
+        spikes = 0;
+      } else if (++spikes < MAX_SPIKES) {
+        continue; // salto isolato: tieni il punto buono precedente
+      } else {
+        // REG-691: salti di fila = era sbagliato il punto di riferimento
+        // (primo fix vecchio di chilometri): si riparte da qui, senza il salto.
+        spikes = 0;
+      }
     }
     last = p;
   }

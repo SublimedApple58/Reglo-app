@@ -158,6 +158,7 @@ const sessionSelect = {
   lastHeading: true,
   lastStreet: true,
   lastPointAt: true,
+  lastEtaAt: true,
   plan: true,
   planReached: true,
 } satisfies Prisma.RoadSessionSelect;
@@ -188,6 +189,8 @@ function sessionDTO(s: SessionRow, lessonStartsAt: Date) {
     // REG-648: il giro scelto alla partenza (null = senza giro) e, a fine guida, le tappe raggiunte.
     plan: (s.plan as StoredPlan | null) ?? null,
     planReached: (s.planReached as PlanReached | null) ?? null,
+    // REG-699: rientro stimato dal telefono (solo con il giro, solo a guida in corso).
+    etaAt: s.status === "active" ? (s.lastEtaAt?.toISOString() ?? null) : null,
   };
 }
 
@@ -421,7 +424,7 @@ export async function startRoadSession(input: { appointmentId: string; plan?: un
 
 export async function appendRoadPoints(
   sessionId: string,
-  input: { seq: number; points: unknown; street?: string | null },
+  input: { seq: number; points: unknown; street?: string | null; eta?: unknown },
 ) {
   try {
     const ctx = await roadContext();
@@ -464,6 +467,10 @@ export async function appendRoadPoints(
     const inOrder = seq > session.lastSeq;
     const added = Math.round(trackDistanceMeters(points, inOrder ? prev : null));
     const street = typeof input?.street === "string" ? input.street.trim().slice(0, 120) : null;
+    // REG-699: rientro stimato dal telefono; numeri fuori da [adesso − 5 min, adesso + 6 h] non valgono.
+    const etaMs = typeof input?.eta === "number" ? input.eta : null;
+    const etaOk = etaMs != null && etaMs > Date.now() - 5 * 60_000 && etaMs < Date.now() + 6 * 60 * 60_000;
+    const etaPatch = input && "eta" in input ? { lastEtaAt: etaOk ? new Date(etaMs!) : null } : {};
 
     await prisma.roadSession.update({
       where: { id: sessionId },
@@ -479,6 +486,7 @@ export async function appendRoadPoints(
               lastHeading: last[4],
               lastPointAt: new Date(last[0]),
               ...(street ? { lastStreet: street } : {}),
+              ...etaPatch,
             }
           : {}),
       },
@@ -624,6 +632,57 @@ export async function removeRoadMarker(sessionId: string, markerIdOrClientId: st
       },
     });
     return ok({ removed: true });
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
+/**
+ * REG-696: correggere una segnalazione (anche dopo i 5 s dell'«Annulla»):
+ * giudizio («fatto bene» / «da migliorare») e posizione (il «qui / 10 s fa»
+ * del toast). Per id o clientId; solo l'istruttore della guida, fino a 2 h
+ * dopo la chiusura come le segnalazioni nuove.
+ */
+export async function updateRoadMarker(
+  sessionId: string,
+  markerIdOrClientId: string,
+  input: { sentiment?: string | null; lat?: number; lng?: number; recordedAt?: string; note?: string | null },
+) {
+  try {
+    const ctx = await roadContext();
+    const loaded = await loadOwnSession(ctx, sessionId);
+    if ("error" in loaded) return loaded.error!;
+    const { session } = loaded;
+    if (session.status !== "active") {
+      const closedAt = session.endedAt?.getTime() ?? 0;
+      if (Date.now() - closedAt > 2 * 60 * 60 * 1000) return fail("La guida è chiusa.", "SESSION_CLOSED");
+    }
+    const data: Prisma.RoadMarkerUpdateInput = {};
+    if (input && "sentiment" in input) data.sentiment = normalizeSentiment(input.sentiment);
+    if (input && "note" in input) {
+      data.note = typeof input.note === "string" && input.note.trim() ? input.note.trim().slice(0, 500) : null;
+    }
+    if (input?.lat != null || input?.lng != null) {
+      const lat = Number(input.lat);
+      const lng = Number(input.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+        return fail("Posizione non valida.");
+      }
+      data.lat = lat;
+      data.lng = lng;
+    }
+    if (input?.recordedAt) {
+      const at = new Date(input.recordedAt);
+      if (!Number.isNaN(at.getTime())) data.recordedAt = at;
+    }
+    const isUuid = /^[0-9a-f-]{36}$/i.test(markerIdOrClientId);
+    const marker = await prisma.roadMarker.findFirst({
+      where: { sessionId, OR: [{ clientId: markerIdOrClientId }, ...(isUuid ? [{ id: markerIdOrClientId }] : [])] },
+      select: { id: true },
+    });
+    if (!marker) return fail("Segnalazione non trovata.", "NOT_FOUND");
+    const updated = await prisma.roadMarker.update({ where: { id: marker.id }, data, select: markerSelect });
+    return ok(markerDTO(updated));
   } catch (error) {
     return fail(formatError(error));
   }

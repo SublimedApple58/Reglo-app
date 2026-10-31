@@ -32,6 +32,15 @@ describe("Reglo Road geo", () => {
     expect(d).toBeLessThan(230);
   });
 
+  it("trackDistanceMeters: un primo fix lontano non ferma i km di tutta la guida (REG-691)", () => {
+    // primo fix vecchio a 9000 km, poi 1 km di guida vera a 10 m/s
+    const pts: RoadPoint[] = [[0, 37.78, -122.41, null, null, 5]];
+    for (let i = 1; i <= 100; i++) pts.push([i * 1000, 45.0 + (i * 10) / 111_320, 7.0, 10, 0, 5]);
+    const d = trackDistanceMeters(pts);
+    expect(d).toBeGreaterThan(900);
+    expect(d).toBeLessThan(1000);
+  });
+
   it("trackDistanceMeters parte dall'ultimo punto del lotto precedente", () => {
     const prev: RoadPoint = [0, 45.0, 7.0, null, null, null];
     const d = trackDistanceMeters([[10_000, 45.001, 7.0, null, null, null]], prev);

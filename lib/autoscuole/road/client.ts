@@ -41,6 +41,8 @@ export type RoadSession = {
   /** REG-648: il giro scelto alla partenza (null = senza giro) e, a fine guida, le tappe raggiunte. */
   plan?: StoredPlan | null;
   planReached?: PlanReached | null;
+  /** REG-699: rientro stimato dal telefono (solo con il giro, solo a guida in corso). */
+  etaAt?: string | null;
 };
 
 export type RoadMarker = {
