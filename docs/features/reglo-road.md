@@ -32,6 +32,7 @@ Tutte rispondono `{ success: true, data } | { success: false, message, code? }` 
 | POST | `/road/sessions/[id]/points` `{ seq, points, street? }` | istruttore | `{ accepted, duplicate?, late?, reason? }` — guida chiusa da meno di 2 h: lotto accettato in ritardo (`late:true`, REG-691: km, punti e tappe raggiunte ricalcolati, traccia pulita rifatta alla lettura, fine della guida abbandonata spostata sull'ultimo punto); oltre: `accepted:false, reason:"SESSION_CLOSED"` |
 | POST | `/road/sessions/[id]/markers` `{ clientId, kind, label?, note?, lat, lng, street?, recordedAt? }` | istruttore | `Marker` (idempotente su clientId; accettato fino a 2 h dopo la chiusura) |
 | DELETE | `/road/sessions/[id]/markers/[markerId\|clientId]` | istruttore | `{ removed: true }` («Annulla») |
+| PATCH | `/road/sessions/[id]/markers/[markerId\|clientId]` `{ sentiment?, lat?, lng?, recordedAt?, note? }` | istruttore | segnalazione aggiornata (REG-696: «qui / 10 s fa» del toast e correzione dopo la guida; fino a 2 h dalla chiusura) |
 | POST | `/road/sessions/[id]/hotspot-checks` `{ clientId, hotspotKey, kind, label, lat, lng, outcome: "better"\|"worse", recordedAt }` | istruttore | `{ id, clientId }` ripasso «Meglio / No» su un punto critico dell'allievo (REG-677; idempotente su clientId, fino a 2 h dopo la chiusura) |
 | DELETE | `/road/sessions/[id]/hotspot-checks/[checkId\|clientId]` | istruttore | `{ removed: true }` («Annulla», REG-677) |
 | POST | `/road/sessions/[id]/end` | istruttore | chiude + guida `completed` → `Detail` |

@@ -629,6 +629,57 @@ export async function removeRoadMarker(sessionId: string, markerIdOrClientId: st
   }
 }
 
+/**
+ * REG-696: correggere una segnalazione (anche dopo i 5 s dell'«Annulla»):
+ * giudizio («fatto bene» / «da migliorare») e posizione (il «qui / 10 s fa»
+ * del toast). Per id o clientId; solo l'istruttore della guida, fino a 2 h
+ * dopo la chiusura come le segnalazioni nuove.
+ */
+export async function updateRoadMarker(
+  sessionId: string,
+  markerIdOrClientId: string,
+  input: { sentiment?: string | null; lat?: number; lng?: number; recordedAt?: string; note?: string | null },
+) {
+  try {
+    const ctx = await roadContext();
+    const loaded = await loadOwnSession(ctx, sessionId);
+    if ("error" in loaded) return loaded.error!;
+    const { session } = loaded;
+    if (session.status !== "active") {
+      const closedAt = session.endedAt?.getTime() ?? 0;
+      if (Date.now() - closedAt > 2 * 60 * 60 * 1000) return fail("La guida è chiusa.", "SESSION_CLOSED");
+    }
+    const data: Prisma.RoadMarkerUpdateInput = {};
+    if (input && "sentiment" in input) data.sentiment = normalizeSentiment(input.sentiment);
+    if (input && "note" in input) {
+      data.note = typeof input.note === "string" && input.note.trim() ? input.note.trim().slice(0, 500) : null;
+    }
+    if (input?.lat != null || input?.lng != null) {
+      const lat = Number(input.lat);
+      const lng = Number(input.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+        return fail("Posizione non valida.");
+      }
+      data.lat = lat;
+      data.lng = lng;
+    }
+    if (input?.recordedAt) {
+      const at = new Date(input.recordedAt);
+      if (!Number.isNaN(at.getTime())) data.recordedAt = at;
+    }
+    const isUuid = /^[0-9a-f-]{36}$/i.test(markerIdOrClientId);
+    const marker = await prisma.roadMarker.findFirst({
+      where: { sessionId, OR: [{ clientId: markerIdOrClientId }, ...(isUuid ? [{ id: markerIdOrClientId }] : [])] },
+      select: { id: true },
+    });
+    if (!marker) return fail("Segnalazione non trovata.", "NOT_FOUND");
+    const updated = await prisma.roadMarker.update({ where: { id: marker.id }, data, select: markerSelect });
+    return ok(markerDTO(updated));
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
 // ─── ripasso sui punti critici (REG-677) ────────────────────────────────────
 
 /**
