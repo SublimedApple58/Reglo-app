@@ -158,6 +158,7 @@ const sessionSelect = {
   lastHeading: true,
   lastStreet: true,
   lastPointAt: true,
+  lastEtaAt: true,
   plan: true,
   planReached: true,
 } satisfies Prisma.RoadSessionSelect;
@@ -188,6 +189,8 @@ function sessionDTO(s: SessionRow, lessonStartsAt: Date) {
     // REG-648: il giro scelto alla partenza (null = senza giro) e, a fine guida, le tappe raggiunte.
     plan: (s.plan as StoredPlan | null) ?? null,
     planReached: (s.planReached as PlanReached | null) ?? null,
+    // REG-699: rientro stimato dal telefono (solo con il giro, solo a guida in corso).
+    etaAt: s.status === "active" ? (s.lastEtaAt?.toISOString() ?? null) : null,
   };
 }
 
@@ -421,7 +424,7 @@ export async function startRoadSession(input: { appointmentId: string; plan?: un
 
 export async function appendRoadPoints(
   sessionId: string,
-  input: { seq: number; points: unknown; street?: string | null },
+  input: { seq: number; points: unknown; street?: string | null; eta?: unknown },
 ) {
   try {
     const ctx = await roadContext();
@@ -464,6 +467,10 @@ export async function appendRoadPoints(
     const inOrder = seq > session.lastSeq;
     const added = Math.round(trackDistanceMeters(points, inOrder ? prev : null));
     const street = typeof input?.street === "string" ? input.street.trim().slice(0, 120) : null;
+    // REG-699: rientro stimato dal telefono; numeri fuori da [adesso − 5 min, adesso + 6 h] non valgono.
+    const etaMs = typeof input?.eta === "number" ? input.eta : null;
+    const etaOk = etaMs != null && etaMs > Date.now() - 5 * 60_000 && etaMs < Date.now() + 6 * 60 * 60_000;
+    const etaPatch = input && "eta" in input ? { lastEtaAt: etaOk ? new Date(etaMs!) : null } : {};
 
     await prisma.roadSession.update({
       where: { id: sessionId },
@@ -479,6 +486,7 @@ export async function appendRoadPoints(
               lastHeading: last[4],
               lastPointAt: new Date(last[0]),
               ...(street ? { lastStreet: street } : {}),
+              ...etaPatch,
             }
           : {}),
       },

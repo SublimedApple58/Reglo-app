@@ -29,7 +29,7 @@ Tutte rispondono `{ success: true, data } | { success: false, message, code? }` 
 | GET | `/road/state` | istruttore | `{ roadEnabled, planEnabled, planAlertsEnabled, catalog: { base: [{key,label}], custom: [{id,label}] }, activeSession: Session+{lesson} \| null, eligibleLesson: Lesson \| null }` |
 | POST | `/road/sessions` `{ appointmentId, plan? }` | istruttore della guida | crea o **riprende** (`resumed: true`) → `Session + { lesson, resumed }` |
 | GET | `/road/sessions/[id]` | istruttore della guida, titolare | `Detail` |
-| POST | `/road/sessions/[id]/points` `{ seq, points, street? }` | istruttore | `{ accepted, duplicate?, late?, reason? }` — guida chiusa da meno di 2 h: lotto accettato in ritardo (`late:true`, REG-691: km, punti e tappe raggiunte ricalcolati, traccia pulita rifatta alla lettura, fine della guida abbandonata spostata sull'ultimo punto); oltre: `accepted:false, reason:"SESSION_CLOSED"` |
+| POST | `/road/sessions/[id]/points` `{ seq, points, street? }` | istruttore | `{ accepted, duplicate?, late?, reason? }` — guida chiusa da meno di 2 h: lotto accettato in ritardo (`late:true`, REG-691: km, punti e tappe raggiunte ricalcolati, traccia pulita rifatta alla lettura, fine della guida abbandonata spostata sull'ultimo punto); oltre: `accepted:false, reason:"SESSION_CLOSED"` — REG-699: `eta?` (ms) = rientro stimato dal telefono, salvato in `RoadSession.lastEtaAt` (fuori da [adesso − 5 min, adesso + 6 h] → null) |
 | POST | `/road/sessions/[id]/markers` `{ clientId, kind, label?, note?, lat, lng, street?, recordedAt? }` | istruttore | `Marker` (idempotente su clientId; accettato fino a 2 h dopo la chiusura) |
 | DELETE | `/road/sessions/[id]/markers/[markerId\|clientId]` | istruttore | `{ removed: true }` («Annulla») |
 | PATCH | `/road/sessions/[id]/markers/[markerId\|clientId]` `{ sentiment?, lat?, lng?, recordedAt?, note? }` | istruttore | segnalazione aggiornata (REG-696: «qui / 10 s fa» del toast e correzione dopo la guida; fino a 2 h dalla chiusura) |
@@ -272,3 +272,8 @@ Nessuna modifica al backend: l'app istruttore richiama `POST /road/plan/route` c
 - **Giro**: un punto `overcome` non diventa una tappa (resta sulla mappa) e non lascia il posto al punto dell'autoscuola dello stesso tipo lì vicino.
 - **Riepilogo e dettaglio**: `Detail.hotspotChecks` (in ordine di tempo) in `GET /road/sessions/[id]`, `POST /road/sessions/[id]/end` e `GET /road/appointments/[id]`. Web: blocco «Ripassi sui punti critici» in `RoadSessionDetail` (sotto le segnalazioni, solo se ce ne sono; «Meglio» / «Ancora no» in testo semplice).
 - Test: `road-lesson-plan.test.ts` (stato, assegnazione, nota, tappe senza i punti superati).
+
+
+## REG-699 — orario di rientro in «Dal vivo»
+- Il telefono stima il rientro (solo con il giro: distanza che manca sulla linea / velocità media della guida, 15–50 km/h) e lo manda col lotto di punti (`eta`). Il server lo tiene in `RoadSession.lastEtaAt` (migrazione additiva `20261107120000_road_session_eta`) e lo espone come `etaAt` nelle sessioni attive.
+- `components/pages/Autoscuole/road/RoadLiveReturn.tsx` (`returnInfo`): nella riga dell'auto e nella card «Rientro 10:52 · 3 min oltre»; senza giro «Fine 11:09 · tra 12 min» / «· 3 min oltre». Oltre la fine il testo passa al nero, niente colori.
