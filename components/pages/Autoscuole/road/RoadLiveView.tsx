@@ -397,8 +397,9 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
                         con {s.lesson.student?.name ?? "allievo"}
                       </div>
                       {lost ? (
-                        <div className="mt-[3px] truncate text-[12.5px] font-medium text-[#222222]" data-testid="road-live-signal">
-                          {[lost, s.last?.street].filter(Boolean).join(" · ")}
+                        // al posto della via e mai troncato: è l'informazione che conta
+                        <div className="mt-[3px] text-[12.5px] font-medium leading-[1.35] text-[#222222]" data-testid="road-live-signal">
+                          {lost}
                         </div>
                       ) : s.last?.street ? (
                         <div className="mt-[3px] flex items-center gap-1 truncate text-[12.5px] text-[#6a6a6a]">
