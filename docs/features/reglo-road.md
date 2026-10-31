@@ -276,4 +276,4 @@ Nessuna modifica al backend: l'app istruttore richiama `POST /road/plan/route` c
 
 ## REG-699 — orario di rientro in «Dal vivo»
 - Il telefono stima il rientro (solo con il giro: distanza che manca sulla linea / velocità media della guida, 15–50 km/h) e lo manda col lotto di punti (`eta`). Il server lo tiene in `RoadSession.lastEtaAt` (migrazione additiva `20261107120000_road_session_eta`) e lo espone come `etaAt` nelle sessioni attive.
-- `components/pages/Autoscuole/road/RoadLiveReturn.tsx` (`returnInfo`): nella riga dell'auto e nella card «Rientro 10:52 · 3 min oltre»; senza giro «Fine 11:09 · tra 12 min» / «· 3 min oltre». Oltre la fine il testo passa al nero, niente colori.
+- `components/pages/Autoscuole/road/RoadLiveReturn.tsx` (`returnInfo`): nella riga dell'auto e nella card «Rientro 10:52 · 3 min oltre»; senza giro «Mancano 12 min» / «3 min oltre la fine». Oltre la fine il testo passa al nero, niente colori.

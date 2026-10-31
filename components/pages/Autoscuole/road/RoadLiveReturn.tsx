@@ -5,7 +5,7 @@ import { hhmm } from "./road-ui";
 /**
  * REG-699: «rientra in tempo?» per la vista «Dal vivo».
  * - Con il giro il telefono manda il rientro stimato: «Rientro 10:52 · 3 min oltre».
- * - Senza: la fine della guida, «Fine 11:09 · tra 12 min» / «· 3 min oltre».
+ * - Senza: quanto manca alla fine, «Mancano 12 min» / «3 min oltre la fine».
  * Oltre la fine il testo passa al nero (niente colori: è un'informazione, non un allarme).
  */
 export function returnInfo(s: RoadLiveSession, now: number): { text: string; late: boolean } | null {
@@ -18,8 +18,8 @@ export function returnInfo(s: RoadLiveSession, now: number): { text: string; lat
     return { text: `Rientro ${hhmm(new Date(eta))} · ${tail}`, late: delta > 1 };
   }
   const left = end - now;
-  if (left >= 0) return { text: `Fine ${hhmm(new Date(end))} · tra ${Math.ceil(left / 60_000)} min`, late: false };
-  return { text: `Fine ${hhmm(new Date(end))} · ${Math.ceil(-left / 60_000)} min oltre`, late: true };
+  if (left >= 0) return { text: `Mancano ${Math.ceil(left / 60_000)} min`, late: false };
+  return { text: `${Math.ceil(-left / 60_000)} min oltre la fine`, late: true };
 }
 
 export function RoadLiveReturn({ s, now, className }: { s: RoadLiveSession; now: number; className?: string }) {
