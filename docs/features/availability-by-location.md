@@ -4,8 +4,8 @@ La disponibilità dell'istruttore si definisce per luogo e vale per gli allievi
 di quel luogo; ogni allievo può avere più luoghi. Piano completo e decisioni di
 Tiziano: `plans/availability/004-reg-705-706-disponibilita-per-luogo.md`.
 
-> **Stato**: 705-a (backend) e 705-b (UI luoghi allievo + interruttore) fatti.
-> Editor delle fasce (705-c), motore slot (705-d), prenotazione allievo (705-e)
+> **Stato**: 705-a (backend), 705-b (UI luoghi allievo + interruttore) e 705-c
+> (luogo sulle fasce) fatti. Motore slot (705-d), prenotazione allievo (705-e)
 > e codici per luogo (REG-706) arrivano nei sotto-task successivi.
 
 ## Regole
@@ -61,6 +61,28 @@ Tiziano: `plans/availability/004-reg-705-706-disponibilita-per-luogo.md`.
   Nella lista la colonna Luogo mostra il principale e `+N` per gli altri.
 - **Mobile**: vedi `reglo-mobile/docs/features/dettaglio-allievo.md` (foglio «Luoghi»).
 - **E2E**: `tests/e2e/reg705-luoghi-allievo.auth.spec.ts` (rimette setting e luoghi com'erano).
+
+## Luogo sulle fasce (705-c)
+- **Dato**: `locationId` dentro gli oggetti fascia dei JSON. Schema zod unico
+  `locatedRangeSchema` (`lib/autoscuole/range-locations.ts`); **ogni scrittura
+  passa da `sanitizeRangeLocations` / `sanitizeScheduleByDayLocations` /
+  `applyRangeLocations`**: tiene il luogo solo se è un luogo attivo
+  dell'autoscuola e il proprietario è un istruttore, e omette la chiave quando
+  è vuota (JSON identico a prima per chi non usa la funzione). Punti coperti:
+  `createAvailabilitySlots` (mobile), `setAutoscuolaInstructorWeeklyAvailability`
+  (web), `setWeeklyAvailabilityOverride`, `setRecurringAvailabilityOverride`,
+  `setDailyAvailabilityOverride`; il setter dei veicoli toglie sempre il luogo.
+- **Lettura**: `parseRanges`, `rangesForDay`, `publishInstructorWeek` e gli
+  helper di `weekly-schedule.ts` copiano l'oggetto intero, quindi il luogo
+  arriva a web, mobile e alle settimane pubblicate senza altre modifiche.
+- **Web**: `locations/RangeLocationSelect.tsx` (menu «Tutti i luoghi» + luoghi
+  con indirizzo) e `LocatedRangeList` in `tabs/InstructorsTab.tsx`, usati dal
+  Predefinito (orari condivisi e giorno aperto di «Orari diversi per giorno»);
+  `DayTimeline` mostra il nome del luogo sotto ogni tratto (grigio = tutti).
+  **Calendario e Pubblicazione** conservano il luogo quando cambiano gli orari
+  ma non hanno ancora il selettore (follow-up).
+- **E2E**: `tests/e2e/reg705-luogo-fasce.auth.spec.ts` (`--workers=1` insieme a
+  `reg705-luoghi-allievo`: toccano lo stesso setting).
 
 ## Connessioni
 - **Locations (REG-392/409)**: archiviare un luogo lo toglie dai luoghi degli

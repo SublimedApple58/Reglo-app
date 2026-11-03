@@ -54,6 +54,13 @@ import {
   LICENSE_PATH_BUCKET_LABELS,
 } from "@/lib/autoscuole/license";
 import { CodiceTab } from "@/components/pages/Autoscuole/instructor-qr/CodiceTab";
+import {
+  RangeLocationSelect,
+  type RangeLocationOption,
+} from "@/components/pages/Autoscuole/locations/RangeLocationSelect";
+import { getAutoscuolaLocations } from "@/lib/actions/autoscuola-locations.actions";
+import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
+import { availabilityByLocationEnabled } from "@/lib/autoscuole/location-availability";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -68,7 +75,8 @@ export type InstructorDetail = {
   _count?: { assignedStudents: number };
 };
 
-type Range = { startMinutes: number; endMinutes: number };
+/** `locationId` (REG-705c): luogo della fascia, assente = tutti i luoghi. */
+type Range = { startMinutes: number; endMinutes: number; locationId?: string | null };
 
 export type WeeklyAvailability = {
   daysOfWeek: number[];
@@ -193,23 +201,58 @@ const TIMELINE_TO = 24 * 60;
  * d'occhio la FORMA della settimana (mattina/pomeriggio, buchi, giorni pieni),
  * cosa che una colonna di orari non dice. Puramente decorativa.
  */
-function DayTimeline({ ranges }: { ranges: Range[] }) {
+function DayTimeline({
+  ranges,
+  locationNames,
+}: {
+  ranges: Range[];
+  /** REG-705c: con la disponibilità per luogo, il nome sotto ogni tratto; i
+   *  tratti senza luogo (tutti i luoghi) sono grigi e senza nome. */
+  locationNames?: Map<string, string> | null;
+}) {
   const span = TIMELINE_TO - TIMELINE_FROM;
+  const segments = ranges
+    .map((r) => {
+      const from = Math.max(r.startMinutes, TIMELINE_FROM);
+      const to = Math.min(r.endMinutes, TIMELINE_TO);
+      if (to <= from) return null;
+      return {
+        left: ((from - TIMELINE_FROM) / span) * 100,
+        width: ((to - from) / span) * 100,
+        name: locationNames && r.locationId ? locationNames.get(r.locationId) ?? null : null,
+      };
+    })
+    .filter((x): x is { left: number; width: number; name: string | null } => x !== null);
   return (
-    <div className="relative mt-2.5 h-[3px] w-full overflow-hidden rounded-full bg-[#f3f3f3]" aria-hidden>
-      {ranges.map((r, i) => {
-        const from = Math.max(r.startMinutes, TIMELINE_FROM);
-        const to = Math.min(r.endMinutes, TIMELINE_TO);
-        if (to <= from) return null;
-        return (
+    <>
+      <div className="relative mt-2.5 h-[3px] w-full overflow-hidden rounded-full bg-[#f3f3f3]" aria-hidden>
+        {segments.map((seg, i) => (
           <span
             key={i}
-            className="absolute inset-y-0 rounded-full bg-[#3d3d3d]"
-            style={{ left: `${((from - TIMELINE_FROM) / span) * 100}%`, width: `${((to - from) / span) * 100}%` }}
+            className={cn(
+              "absolute inset-y-0 rounded-full transition-colors duration-200",
+              locationNames && !seg.name ? "bg-[#a8a8a8]" : "bg-[#3d3d3d]",
+            )}
+            style={{ left: `${seg.left}%`, width: `${seg.width}%` }}
           />
-        );
-      })}
-    </div>
+        ))}
+      </div>
+      {locationNames && segments.some((seg) => seg.name) ? (
+        <div className="relative mt-1.5 h-4 w-full" aria-hidden>
+          {segments.map((seg, i) =>
+            seg.name ? (
+              <span
+                key={i}
+                className="absolute truncate text-[11px] font-semibold text-[#9a9a9a]"
+                style={{ left: `${seg.left}%`, maxWidth: `${Math.max(seg.width, 12)}%` }}
+              >
+                {seg.name}
+              </span>
+            ) : null,
+          )}
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -252,6 +295,79 @@ function TimeBand({
 }
 
 /** Comando "aggiungi": tratteggiato e in sordina, non compete con gli orari. */
+/**
+ * Fasce con il luogo (REG-705c, anteprima approvata il 03/11): una riga per
+ * fascia con orario, luogo e rimozione, «+ Aggiungi fascia» in fondo.
+ */
+function LocatedRangeList({
+  ranges,
+  locations,
+  onSide,
+  onLocation,
+  onRemove,
+  onAdd,
+  dayLabel,
+}: {
+  ranges: Range[];
+  locations: RangeLocationOption[];
+  onSide: (index: number, side: "a" | "b", label: string) => void;
+  onLocation: (index: number, locationId: string | null) => void;
+  onRemove?: (index: number) => void;
+  onAdd: () => void;
+  dayLabel?: string;
+}) {
+  return (
+    <div className="mb-4 overflow-hidden rounded-[14px] border border-[#e8e8e8]" data-testid="located-range-list">
+      <AnimatePresence initial={false}>
+        {ranges.map((r, i) => {
+          const span = `${mmToLabel(r.startMinutes)}–${mmToLabel(r.endMinutes)}`;
+          return (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="grid grid-cols-[auto_1fr_32px] items-center gap-3.5 border-b border-[#f2f2f2] py-3 pl-4 pr-3.5"
+              data-testid="located-range-row"
+            >
+              <TimeBand range={r} onSide={(side, v) => onSide(i, side, v)} />
+              <div className="min-w-0">
+                <RangeLocationSelect
+                  value={r.locationId ?? null}
+                  locations={locations}
+                  onChange={(id) => onLocation(i, id)}
+                  label={`Luogo della fascia ${span}${dayLabel ? ` di ${dayLabel}` : ""}`}
+                />
+              </div>
+              {onRemove ? (
+                <button
+                  type="button"
+                  onClick={() => onRemove(i)}
+                  aria-label={`Rimuovi la fascia ${span}${dayLabel ? ` di ${dayLabel}` : ""}`}
+                  className="grid size-8 cursor-pointer place-items-center rounded-[8px] text-[#9a9a9a] transition-colors duration-200 hover:bg-[#f4f4f4] hover:text-[#222222]"
+                >
+                  <X className="size-3.5" strokeWidth={1.8} />
+                </button>
+              ) : (
+                <span />
+              )}
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
+      <button
+        type="button"
+        onClick={onAdd}
+        className="flex w-full cursor-pointer items-center gap-2 bg-[#fcfcfc] px-4 py-3 text-left text-[13px] font-semibold text-[#222222] transition-colors duration-200 hover:bg-[#f7f7f7]"
+      >
+        <Plus className="size-3.5" strokeWidth={2} />
+        Aggiungi fascia
+      </button>
+    </div>
+  );
+}
+
 function AddBandButton({ onClick, label = "Fascia" }: { onClick: () => void; label?: string }) {
   return (
     <button
@@ -578,6 +694,36 @@ function DisponibilitaTab({
   });
   const hasWeekly = Boolean(weekly);
 
+  // REG-705c: luogo delle fasce, solo con «Disponibilità per luogo» accesa
+  // (Impostazioni → Sede e luoghi) e almeno due luoghi.
+  const [rangeLocations, setRangeLocations] = React.useState<RangeLocationOption[]>([]);
+  const [availabilityByLocationStored, setAvailabilityByLocationStored] = React.useState(false);
+  React.useEffect(() => {
+    let alive = true;
+    void Promise.all([getAutoscuolaLocations(), getAutoscuolaSettings()]).then(([locs, set]) => {
+      if (!alive) return;
+      if (locs.success && Array.isArray(locs.data)) {
+        setRangeLocations(
+          locs.data.map((l: { id: string; name: string; address?: string | null; isPrecise?: boolean }) => ({
+            id: l.id,
+            name: l.name,
+            address: l.address ?? null,
+            isPrecise: Boolean(l.isPrecise),
+          })),
+        );
+      }
+      if (set.success && set.data) setAvailabilityByLocationStored(set.data.availabilityByLocation === true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const locationMode = availabilityByLocationEnabled(availabilityByLocationStored, rangeLocations.length);
+  const locationNames = React.useMemo(
+    () => (locationMode ? new Map(rangeLocations.map((l) => [l.id, l.name])) : null),
+    [locationMode, rangeLocations],
+  );
+
   const days = DAY_ORDER.filter((d) => (schedule[d]?.length ?? 0) > 0);
   const sharedRanges: Range[] = (() => {
     const first = days[0];
@@ -643,6 +789,21 @@ function DisponibilitaTab({
   };
 
   const addRange = () => applyShared([...sharedRanges, nextRangeAfter(sharedRanges)], [...days]);
+
+  // REG-705c: luogo della fascia (null = tutti i luoghi) e rimozione di una
+  // fascia precisa nella lista con i luoghi.
+  const setRangeLocation = (i: number, locationId: string | null) => {
+    const next = sharedRanges.map((r, k) => (k === i ? { ...r, locationId } : { ...r }));
+    applyShared(next, [...days]);
+  };
+  const removeSharedRange = (i: number) => {
+    if (sharedRanges.length <= 1) return;
+    applyShared(sharedRanges.filter((_, k) => k !== i), [...days]);
+  };
+  const setDayRangeLocation = (day: number, i: number, locationId: string | null) => {
+    const dayRanges = (schedule[day] ?? []).map((r, k) => (k === i ? { ...r, locationId } : { ...r }));
+    commit({ ...schedule, [day]: dayRanges }, true);
+  };
 
   // ── modalità orari per giorno ──
   const setDayAvailable = (day: number, on: boolean) => {
@@ -878,6 +1039,17 @@ function DisponibilitaTab({
                             className="overflow-hidden"
                           >
                             <div className="pb-[15px] pl-7">
+                              {locationMode ? (
+                                <LocatedRangeList
+                                  ranges={dayRanges}
+                                  locations={rangeLocations}
+                                  onSide={(k, side, v) => setDayRangeSide(d, k, side, v)}
+                                  onLocation={(k, id) => setDayRangeLocation(d, k, id)}
+                                  onRemove={dayRanges.length > 1 ? (k) => removeDayRange(d, k) : undefined}
+                                  onAdd={() => addDayRange(d)}
+                                  dayLabel={DAY_FULL[d]}
+                                />
+                              ) : (
                               <div className="flex flex-wrap items-center gap-2">
                               <AnimatePresence initial={false}>
                                 {dayRanges.map((r, k) => (
@@ -900,9 +1072,10 @@ function DisponibilitaTab({
                               </AnimatePresence>
                                 <AddBandButton onClick={() => addDayRange(d)} />
                               </div>
+                              )}
                               {/* La barra spiega la fascia che stai modificando: sta
                                   nel giorno aperto, non sotto ogni riga chiusa. */}
-                              <DayTimeline ranges={dayRanges} />
+                              <DayTimeline ranges={dayRanges} locationNames={locationNames} />
                             </div>
                           </motion.div>
                         )}
@@ -929,6 +1102,16 @@ function DisponibilitaTab({
                   ))}
                 </div>
                 <div className={LBL}>Fasce orarie</div>
+                {locationMode ? (
+                  <LocatedRangeList
+                    ranges={sharedRanges}
+                    locations={rangeLocations}
+                    onSide={(i, side, v) => setRangeSide(i, side, v)}
+                    onLocation={setRangeLocation}
+                    onRemove={sharedRanges.length > 1 ? removeSharedRange : undefined}
+                    onAdd={addRange}
+                  />
+                ) : (
                 <div className="flex flex-wrap items-center gap-2">
                   <AnimatePresence initial={false}>
                     {sharedRanges.map((r, i) => (
@@ -945,7 +1128,8 @@ function DisponibilitaTab({
                   </AnimatePresence>
                   <AddBandButton onClick={addRange} />
                 </div>
-                <DayTimeline ranges={sharedRanges} />
+                )}
+                <DayTimeline ranges={sharedRanges} locationNames={locationNames} />
               </motion.div>
             )}
           </AnimatePresence>

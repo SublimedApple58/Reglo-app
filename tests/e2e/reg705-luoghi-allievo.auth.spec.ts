@@ -6,6 +6,9 @@ import { markNewsSeen } from "./news-seen";
  * nella scheda. Gira loggato come il titolare del seed (titolare@reglo.it,
  * «Autoscuola Reglo», che ha più luoghi). Alla fine rimette setting e luoghi
  * dell'allievo com'erano.
+ *
+ * Tocca un setting dell'autoscuola condiviso con `reg705-luogo-fasce`: lanciali
+ * con `--workers=1`, in parallelo si sovrascrivono a vicenda.
  */
 
 // Il dev server compila le pagine al primo giro: margine largo.
@@ -53,7 +56,7 @@ test("interruttore e pausa tra luoghi in Sede e luoghi", async ({ page, request 
     await expect(card).toBeVisible({ timeout: 60_000 });
     // Il clic prima dell'idratazione andrebbe perso: si aspetta che la card
     // abbia letto i setting (testo dello stato spento).
-    await expect(card.getByText("valgono per tutti gli allievi")).toBeVisible();
+    await expect(card.getByText("valgono per tutti gli allievi")).toBeVisible({ timeout: 30_000 });
     // La card sta in fondo al pane che scorre: centrata, il clic non finisce
     // sul contenitore.
     await card.evaluate((el) => el.scrollIntoView({ block: "center" }));

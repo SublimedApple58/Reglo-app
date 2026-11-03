@@ -1,5 +1,12 @@
 "use server";
 
+import {
+  applyRangeLocations,
+  loadValidRangeLocationIds,
+  locatedRangeSchema,
+  sanitizeRangeLocations,
+  sanitizeScheduleByDayLocations,
+} from "@/lib/autoscuole/range-locations";
 import { OFFER_CHANNELS } from "@/lib/autoscuole/channel-cascade";
 import { randomUUID } from "crypto";
 import { after } from "next/server";
@@ -108,19 +115,14 @@ const slotSchema = z.object({
   endsAt2: z.string().optional(),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
   weeks: z.number().int().min(1).max(12).optional(),
-  ranges: z.array(z.object({
-    startMinutes: z.number().int().min(0).max(1440),
-    endMinutes: z.number().int().min(0).max(1440),
-  })).optional(),
+  // REG-705c: ogni fascia può avere un luogo (sanificato in scrittura).
+  ranges: z.array(locatedRangeSchema).optional(),
   // Per-weekday schedule: { "1": [{startMinutes,endMinutes}], ... }. When present
   // it is authoritative; the flat daysOfWeek/ranges/startsAt fields are derived
   // from a representative day for legacy/back-compat consumers.
   scheduleByDay: z.record(
     z.string().regex(/^[0-6]$/),
-    z.array(z.object({
-      startMinutes: z.number().int().min(0).max(1440),
-      endMinutes: z.number().int().min(0).max(1440),
-    })),
+    z.array(locatedRangeSchema),
   ).optional(),
 });
 
@@ -851,6 +853,18 @@ export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>)
       finalEndMinutes2 = rep[1]?.endMinutes ?? null;
     }
 
+    // REG-705c: tiene il luogo delle fasce solo se valido (e mai sui veicoli).
+    {
+      const clean = await sanitizeScheduleByDayLocations(
+        membership.companyId,
+        payload.ownerType,
+        rangesByDayJson ?? {},
+        finalRanges,
+      );
+      if (rangesByDayJson) rangesByDayJson = clean.scheduleByDay;
+      finalRanges = clean.extra;
+    }
+
     const availability = await prisma.autoscuolaWeeklyAvailability.upsert({
       where: {
         companyId_ownerType_ownerId: {
@@ -1143,10 +1157,7 @@ const dayScheduleEntrySchema = z.object({
   endMinutes: z.number().int().min(0).max(1440),
   startMinutes2: z.number().int().min(0).max(1410).optional().nullable(),
   endMinutes2: z.number().int().min(0).max(1440).optional().nullable(),
-  ranges: z.array(z.object({
-    startMinutes: z.number().int().min(0).max(1440),
-    endMinutes: z.number().int().min(0).max(1440),
-  })).optional(),
+  ranges: z.array(locatedRangeSchema).optional(),
 });
 
 const setOverrideSchema = z.object({
@@ -1191,6 +1202,13 @@ export async function setWeeklyAvailabilityOverride(
       return { success: false as const, message: "Override massimo 12 settimane in avanti." };
     }
 
+    // REG-705c: luoghi validi per le fasce di questo proprietario (una query).
+    const validRangeLocations = await loadValidRangeLocationIds(
+      companyId,
+      payload.ownerType,
+      schedule.some((e) => e.ranges?.some((r) => !!r.locationId)),
+    );
+
     // Upsert daily overrides for each day entry in the schedule
     const upsertedOverrides = await Promise.all(
       schedule.map((entry) => {
@@ -1198,7 +1216,7 @@ export async function setWeeklyAvailabilityOverride(
         const dayOffset = entry.dayOfWeek === 0 ? 6 : entry.dayOfWeek - 1;
         const entryDate = new Date(weekStart.getTime() + dayOffset * 24 * 60 * 60 * 1000);
         const ranges: TimeRange[] = entry.ranges?.length
-          ? (entry.ranges as TimeRange[])
+          ? applyRangeLocations(entry.ranges, validRangeLocations)
           : (() => {
               const r: TimeRange[] = [{ startMinutes: entry.startMinutes, endMinutes: entry.endMinutes }];
               if (entry.startMinutes2 != null && entry.endMinutes2 != null && entry.endMinutes2 > entry.startMinutes2) {
@@ -1312,10 +1330,7 @@ const recurringOverrideSchema = z.object({
   ownerType: z.enum(["instructor", "vehicle"]),
   ownerId: z.string().uuid(),
   dayOfWeek: z.number().int().min(0).max(6),
-  ranges: z.array(z.object({
-    startMinutes: z.number().int().min(0).max(1440),
-    endMinutes: z.number().int().min(0).max(1440),
-  })), // empty = absent for the day
+  ranges: z.array(locatedRangeSchema), // empty = absent for the day
   weeksAhead: z.number().int().min(1).max(52).optional(),
   // Anchor date ("YYYY-MM-DD"): first occurrence is the target dayOfWeek ON or
   // AFTER this date. The web dialog passes the calendar day the user selected,
@@ -1347,6 +1362,10 @@ export async function setRecurringAvailabilityOverride(
     // the school read it as "gli orari non si salvano" / "prenotazioni in
     // orari non disponibili" (Robatto, 2026-06-12).
     const weeks = payload.weeksAhead ?? 52;
+    // REG-705c: luogo della fascia solo se valido.
+    const { ranges: recurringRanges } = await sanitizeRangeLocations(companyId, payload.ownerType, {
+      ranges: payload.ranges,
+    });
 
     // Generate dates for the target dayOfWeek for the next N weeks.
     // Anchor = the selected calendar day when provided (clamped to today so a
@@ -1381,13 +1400,13 @@ export async function setRecurringAvailabilityOverride(
               date,
             },
           },
-          update: { ranges: payload.ranges },
+          update: { ranges: recurringRanges },
           create: {
             companyId,
             ownerType: payload.ownerType,
             ownerId: payload.ownerId,
             date,
-            ranges: payload.ranges,
+            ranges: recurringRanges,
           },
         }),
       ),
@@ -1466,10 +1485,8 @@ export async function getWeeklyAvailabilityOverrides(
 
 // ── Per-day availability override CRUD (new API) ─────────────────────
 
-const timeRangeSchema = z.object({
-  startMinutes: z.number().int().min(0).max(1440),
-  endMinutes: z.number().int().min(0).max(1440),
-});
+// REG-705c: con il luogo opzionale della fascia.
+const timeRangeSchema = locatedRangeSchema;
 
 const setDailyOverrideSchema = z.object({
   ownerType: z.enum(["instructor", "vehicle"]),
@@ -1505,6 +1522,10 @@ export async function setDailyAvailabilityOverride(
       return { success: false as const, message: "Override massimo 52 settimane in avanti." };
     }
 
+    // REG-705c: luogo della fascia solo se valido.
+    const { ranges: dailyRanges } = await sanitizeRangeLocations(companyId, payload.ownerType, {
+      ranges: payload.ranges,
+    });
     const override = await prisma.autoscuolaDailyAvailabilityOverride.upsert({
       where: {
         companyId_ownerType_ownerId_date: {
@@ -1514,13 +1535,13 @@ export async function setDailyAvailabilityOverride(
           date,
         },
       },
-      update: { ranges: payload.ranges },
+      update: { ranges: dailyRanges },
       create: {
         companyId,
         ownerType: payload.ownerType,
         ownerId: payload.ownerId,
         date,
-        ranges: payload.ranges,
+        ranges: dailyRanges,
       },
     });
 

@@ -9,7 +9,8 @@
  * il payload di salvataggio, così web e app istruttore leggono/scrivono la stessa cosa.
  */
 
-export type TimeRange = { startMinutes: number; endMinutes: number };
+/** `locationId` (REG-705c): luogo della fascia; assente = tutti i luoghi. */
+export type TimeRange = { startMinutes: number; endMinutes: number; locationId?: string | null };
 
 /** Giorno della settimana (0=Dom..6=Sab) → fasce attive. Un giorno assente = riposo. */
 export type WeeklySchedule = Record<number, TimeRange[]>;
@@ -77,7 +78,7 @@ export const groupDaysByRanges = (
   for (const day of dayOrder) {
     const ranges = schedule[day];
     if (!ranges?.length) continue;
-    const key = ranges.map((r) => `${r.startMinutes}-${r.endMinutes}`).join("|");
+    const key = ranges.map((r) => `${r.startMinutes}-${r.endMinutes}-${r.locationId ?? ""}`).join("|");
     const existing = groups.find((g) => g.key === key);
     if (existing) existing.days.push(day);
     else groups.push({ key, days: [day], ranges: clone(ranges) });

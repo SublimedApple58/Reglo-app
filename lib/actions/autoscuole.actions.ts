@@ -42,6 +42,11 @@ import {
   setStudentDefaultLocationKeepingInvariant,
 } from "@/lib/autoscuole/member-locations";
 import {
+  applyRangeLocations,
+  locatedRangeSchema,
+  sanitizeScheduleByDayLocations,
+} from "@/lib/autoscuole/range-locations";
+import {
   EMPTY_OCCUPANCY,
   buildDeclaredIntervals,
   computeAgendaOccupancy,
@@ -7896,10 +7901,9 @@ export async function getAutoscuolaInstructorWeeklyAvailabilities() {
   }
 }
 
-const timeRangeSchema = z.object({
-  startMinutes: z.number().int().min(0).max(1440),
-  endMinutes: z.number().int().min(0).max(1440),
-});
+// REG-705c: con il luogo opzionale della fascia (sanificato in scrittura; i
+// veicoli non ne hanno mai).
+const timeRangeSchema = locatedRangeSchema;
 
 const setInstructorWeeklyAvailabilitySchema = z.object({
   instructorId: z.string().uuid(),
@@ -7933,7 +7937,7 @@ export async function setAutoscuolaInstructorWeeklyAvailability(
       return { success: false as const, message: "Istruttore non trovato." };
     }
 
-    type Range = { startMinutes: number; endMinutes: number };
+    type Range = { startMinutes: number; endMinutes: number; locationId?: string | null };
 
     let daysOfWeek = Array.from(new Set(payload.daysOfWeek)).sort((a, b) => a - b);
     let rangesJson: Range[] = payload.ranges?.length
@@ -7970,6 +7974,18 @@ export async function setAutoscuolaInstructorWeeklyAvailability(
       if (payload.endMinutes <= payload.startMinutes) {
         return { success: false as const, message: "Intervallo orario non valido." };
       }
+    }
+
+    // REG-705c: tiene il luogo delle fasce solo se è un luogo attivo.
+    {
+      const clean = await sanitizeScheduleByDayLocations(
+        companyId,
+        "instructor",
+        rangesByDayJson ?? {},
+        rangesJson,
+      );
+      if (rangesByDayJson) rangesByDayJson = clean.scheduleByDay;
+      rangesJson = clean.extra;
     }
 
     const availability = await prisma.autoscuolaWeeklyAvailability.upsert({
@@ -8137,9 +8153,13 @@ export async function setAutoscuolaVehicleWeeklyAvailability(
       return { success: false as const, message: "Intervallo orario non valido." };
     }
 
-    const rangesJson = payload.ranges?.length
-      ? payload.ranges
-      : [{ startMinutes: payload.startMinutes, endMinutes: payload.endMinutes }];
+    // I veicoli non hanno luoghi (REG-705c): le fasce si salvano senza.
+    const rangesJson = applyRangeLocations(
+      payload.ranges?.length
+        ? payload.ranges
+        : [{ startMinutes: payload.startMinutes, endMinutes: payload.endMinutes }],
+      null,
+    );
 
     const availability = await prisma.autoscuolaWeeklyAvailability.upsert({
       where: {
