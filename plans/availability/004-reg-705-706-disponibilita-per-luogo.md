@@ -192,6 +192,7 @@ Totale **18–20 punti** → spacchettato:
   (`CompanyMemberLocation` + principale) via `member-locations.ts`.
 - **Fuori v1**: allievi già iscritti che si aggiungono un luogo col codice.
 - **Stima**: 3 punti. Dipende da 705-a. Branch/worktree propri.
+- **Stato 03/11**: backend fatto (branch `feat/reg-706-codici-luogo`, worktree `reglo-worktrees/reg-706`, commit 441794b, migrazione applicata sul DB dev). Anteprime del modale in `/tmp/hiro-anteprime/reg-706/706-anteprima-*`, in attesa dell'ok.
 
 ---
 
