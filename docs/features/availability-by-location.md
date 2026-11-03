@@ -4,9 +4,9 @@ La disponibilità dell'istruttore si definisce per luogo e vale per gli allievi
 di quel luogo; ogni allievo può avere più luoghi. Piano completo e decisioni di
 Tiziano: `plans/availability/004-reg-705-706-disponibilita-per-luogo.md`.
 
-> **Stato**: 705-a fatto (backend: dati, setting, API di assegnazione). Editor
-> delle fasce, motore slot, UI web/mobile e codici per luogo (REG-706) arrivano
-> nei sotto-task successivi.
+> **Stato**: 705-a (backend) e 705-b (UI luoghi allievo + interruttore) fatti.
+> Editor delle fasce (705-c), motore slot (705-d), prenotazione allievo (705-e)
+> e codici per luogo (REG-706) arrivano nei sotto-task successivi.
 
 ## Regole
 - **Interruttore** `limits.availabilityByLocation` (default spento), effettivo
@@ -45,6 +45,22 @@ Tiziano: `plans/availability/004-reg-705-706-disponibilita-per-luogo.md`.
   dall'invariante; `locationIds` nelle liste allievi (`listDirectoryStudents`,
   `getAutoscuolaStudents`, `getAutoscuolaStudentsWithProgress`).
 - `lib/autoscuole/locations.ts` — `softDeleteLocation` stacca il luogo dagli allievi.
+
+## UI (705-b, anteprime approvate da Tiziano il 03/11)
+- **Impostazioni → Sede e luoghi**: `locations/LocationAvailabilityCard.tsx`, sotto
+  «Luoghi diversi per tipo di patente». Interruttore + riga «Pausa tra luoghi
+  diversi» (minuti − / +, salvati 500 ms dopo l'ultimo clic, + interruttore)
+  che si apre in 260 ms. Con la sola sede la card è spenta con la spiegazione.
+  Ogni salvataggio manda e unisce **solo i suoi campi** (bug trovato in e2e:
+  minuti salvati durante il salvataggio dell'interruttore riportavano la card
+  a spenta).
+- **Allievi → scheda**: `locations/StudentLocationsPicker.tsx` al posto del
+  selettore «Luogo di default» quando la funzione è accesa: casella «Dove fa
+  guida» + cerchio «Principale» (solo sui luoghi scelti), contatore «N di M» /
+  «Tutti». Ogni clic salva (`setStudentLocations` / `setStudentDefaultLocation`).
+  Nella lista la colonna Luogo mostra il principale e `+N` per gli altri.
+- **Mobile**: vedi `reglo-mobile/docs/features/dettaglio-allievo.md` (foglio «Luoghi»).
+- **E2E**: `tests/e2e/reg705-luoghi-allievo.auth.spec.ts` (rimette setting e luoghi com'erano).
 
 ## Connessioni
 - **Locations (REG-392/409)**: archiviare un luogo lo toglie dai luoghi degli

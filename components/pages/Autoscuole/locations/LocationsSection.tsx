@@ -12,6 +12,11 @@ import { FadeIn } from "@/components/ui/fade-in";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LocationFormDialog, type LocationFormValues } from "./LocationFormDialog";
 import { SedeCoverCard } from "./SedeCoverCard";
+import { LocationAvailabilityCard } from "./LocationAvailabilityCard";
+import {
+  readLocationAvailabilitySettings,
+  type LocationAvailabilitySettings,
+} from "@/lib/autoscuole/location-availability";
 
 type Location = {
   id: string;
@@ -45,6 +50,9 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
   // deduce dai luoghi, con la stessa funzione pura che usa il server.
   const [byLicenseStored, setByLicenseStored] = useState<boolean | null>(null);
   const [savingByLicense, setSavingByLicense] = useState(false);
+  // REG-705: «Disponibilità per luogo» + pausa tra luoghi diversi.
+  const [locationAvailability, setLocationAvailability] =
+    useState<LocationAvailabilitySettings | null>(null);
   const [editing, setEditing] = useState<{
     mode: "default" | "custom";
     initial?: Partial<LocationFormValues> & { id?: string };
@@ -63,6 +71,17 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
       const settings = await getAutoscuolaSettings();
       if (settings.success && settings.data) {
         setByLicenseStored(settings.data.locationsByLicense);
+        // Stesso oggetto se i valori non cambiano: `load` dipende da `toast`, e
+        // uno stato nuovo a ogni giro faceva ripartire il caricamento in loop.
+        const next = readLocationAvailabilitySettings(settings.data);
+        setLocationAvailability((prev) =>
+          prev &&
+          prev.availabilityByLocation === next.availabilityByLocation &&
+          prev.locationChangeBufferEnabled === next.locationChangeBufferEnabled &&
+          prev.locationChangeBufferMinutes === next.locationChangeBufferMinutes
+            ? prev
+            : next,
+        );
       }
     } catch {
       toast.error({ description: "Errore di rete." });
@@ -469,6 +488,16 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
         </div>
         <InlineToggle checked={byLicense} size="lg" />
       </div>
+
+      {locationAvailability ? (
+        <LocationAvailabilityCard
+          settings={locationAvailability}
+          activeLocationCount={locations.length}
+          onSaved={(patch) =>
+            setLocationAvailability((prev) => (prev ? { ...prev, ...patch } : prev))
+          }
+        />
+      ) : null}
 
       {editing ? (
         <LocationFormDialog

@@ -89,6 +89,9 @@ import {
   grantQuizSeat,
 } from "@/lib/actions/autoscuole-settings.actions";
 import { getAutoscuolaLocations } from "@/lib/actions/autoscuola-locations.actions";
+import { setStudentLocations } from "@/lib/actions/autoscuole-student-locations.actions";
+import { availabilityByLocationEnabled } from "@/lib/autoscuole/location-availability";
+import { StudentLocationsPicker } from "./locations/StudentLocationsPicker";
 import { StudentMediaSection } from "@/components/pages/Autoscuole/StudentMediaSection";
 import { useUserPhotoUrl, invalidateUserPhoto } from "@/components/ui/user-photo";
 import { ChangeStudentPhaseDialog } from "@/components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog";
@@ -235,6 +238,8 @@ type Student = StudentProfile & {
   // Luogo di default (REG-392): mostrato nella lista + modificabile nella scheda.
   defaultLocationId?: string | null;
   defaultLocationName?: string | null;
+  /** REG-705: luoghi dove fa guida (vuoto = tutti). */
+  locationIds?: string[];
   manualUnpaid?: number;
   theoryExamAt?: string | null;
   activeCase: {
@@ -901,9 +906,13 @@ export function AutoscuoleStudentsPage({
   const [examReadySaving, setExamReadySaving] = React.useState(false);
   // Luoghi guida (REG-392): per il selettore "Luogo di default" nella scheda allievo.
   const [locations, setLocations] = React.useState<
-    Array<{ id: string; name: string; isDefault: boolean; isPrecise: boolean }>
+    Array<{ id: string; name: string; isDefault: boolean; isPrecise: boolean; address: string | null }>
   >([]);
   const [defaultLocationSaving, setDefaultLocationSaving] = React.useState(false);
+  // REG-705: con «Disponibilità per luogo» accesa la scheda mostra i luoghi
+  // a scelta multipla al posto del solo luogo di default.
+  const [availabilityByLocationStored, setAvailabilityByLocationStored] = React.useState(false);
+  const [studentLocationsSaving, setStudentLocationsSaving] = React.useState(false);
   const registerRequestRef = React.useRef(0);
   const [credits, setCredits] = React.useState<StudentCredits | null>(null);
   const [creditsLoading, setCreditsLoading] = React.useState(false);
@@ -1951,18 +1960,56 @@ export function AutoscuoleStudentsPage({
         toast.error({ description: res.message ?? "Errore aggiornamento luogo." });
         return;
       }
-      const name = locationId
-        ? locations.find((l) => l.id === locationId)?.name ?? null
+      const nextDefaultId = res.data?.defaultLocation?.id ?? null;
+      const name = nextDefaultId
+        ? locations.find((l) => l.id === nextDefaultId)?.name ?? null
         : null;
       setStudents((prev) =>
         prev.map((s) =>
           s.id === selectedStudentId
-            ? { ...s, defaultLocationId: locationId, defaultLocationName: name }
+            ? {
+                ...s,
+                defaultLocationId: nextDefaultId,
+                defaultLocationName: name,
+                ...(res.data?.locationIds ? { locationIds: res.data.locationIds } : {}),
+              }
             : s,
         ),
       );
     },
     [selectedStudentId, defaultLocationSaving, locations, toast],
+  );
+
+  // Luoghi dell'allievo (REG-705): ogni spunta salva subito, come il resto
+  // della scheda. Il principale lo riallinea il server (resta tra i luoghi).
+  const handleToggleStudentLocation = React.useCallback(
+    async (locationId: string) => {
+      if (!selectedStudentId || studentLocationsSaving) return;
+      const student = students.find((s) => s.id === selectedStudentId);
+      const current = student?.locationIds ?? [];
+      const next = current.includes(locationId)
+        ? current.filter((id) => id !== locationId)
+        : [...current, locationId];
+      setStudentLocationsSaving(true);
+      const res = await setStudentLocations({ studentId: selectedStudentId, locationIds: next });
+      setStudentLocationsSaving(false);
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Errore aggiornamento luoghi." });
+        return;
+      }
+      const { locationIds, defaultLocationId } = res.data;
+      const name = defaultLocationId
+        ? locations.find((l) => l.id === defaultLocationId)?.name ?? null
+        : null;
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.id === selectedStudentId
+            ? { ...s, locationIds, defaultLocationId, defaultLocationName: name }
+            : s,
+        ),
+      );
+    },
+    [selectedStudentId, studentLocationsSaving, students, locations, toast],
   );
 
   const handleSetManualPayment = React.useCallback(
@@ -2189,11 +2236,12 @@ export function AutoscuoleStudentsPage({
     getAutoscuolaLocations().then((res) => {
       if (res.success && Array.isArray(res.data)) {
         setLocations(
-          res.data.map((l: { id: string; name: string; isDefault?: boolean; isPrecise?: boolean }) => ({
+          res.data.map((l: { id: string; name: string; isDefault?: boolean; isPrecise?: boolean; address?: string | null }) => ({
             id: l.id,
             name: l.name,
             isDefault: Boolean(l.isDefault),
             isPrecise: Boolean(l.isPrecise),
+            address: l.address ?? null,
           })),
         );
       }
@@ -2203,6 +2251,7 @@ export function AutoscuoleStudentsPage({
         setWeeklyLimitActive(res.data.weeklyBookingLimitEnabled ?? false);
         setExamPriorityEnabledGlobal(res.data.examPriorityEnabled ?? false);
         setGroupLessonsEnabledGlobal(res.data.groupLessonsEnabled === true);
+        setAvailabilityByLocationStored(res.data.availabilityByLocation === true);
         setLicenseDefaults({
           licenseCategory: res.data.defaultLicenseCategory ?? "B",
           transmission: res.data.defaultTransmission ?? "manual",
@@ -2525,6 +2574,12 @@ export function AutoscuoleStudentsPage({
                   <div className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
                     <MapPin className="size-3.5 shrink-0 text-[#9a9a9a]" strokeWidth={2} />
                     <span className="truncate">{student.defaultLocationName}</span>
+                    {/* REG-705: gli altri luoghi dell'allievo, come numero. */}
+                    {(student.locationIds?.length ?? 0) > 1 ? (
+                      <span className="shrink-0 tabular-nums text-[#9a9a9a]">
+                        +{(student.locationIds?.length ?? 1) - 1}
+                      </span>
+                    ) : null}
                   </div>
                 ) : (
                   <span className="text-[13px] font-medium text-[#c4c4c4]">—</span>
@@ -3001,7 +3056,16 @@ export function AutoscuoleStudentsPage({
 
         {/* Luogo di default (REG-392): precompila il Luogo quando si prenota
             una guida per questo allievo. */}
-        {locations.length > 0 && (
+        {availabilityByLocationEnabled(availabilityByLocationStored, locations.length) ? (
+          <StudentLocationsPicker
+            locations={locations}
+            selectedIds={selectedStudent?.locationIds ?? []}
+            primaryId={selectedStudent?.defaultLocationId ?? null}
+            saving={studentLocationsSaving || defaultLocationSaving}
+            onToggle={handleToggleStudentLocation}
+            onSetPrimary={(id) => void handleSetDefaultLocation(id)}
+          />
+        ) : locations.length > 0 && (
           <section className="border-b border-[#f2f2f2] py-7">
             <p className={sectionLabelClass}>Luogo di default</p>
             <Select
