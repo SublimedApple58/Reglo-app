@@ -4,9 +4,8 @@ La disponibilità dell'istruttore si definisce per luogo e vale per gli allievi
 di quel luogo; ogni allievo può avere più luoghi. Piano completo e decisioni di
 Tiziano: `plans/availability/004-reg-705-706-disponibilita-per-luogo.md`.
 
-> **Stato**: 705-a (backend), 705-b (UI luoghi allievo + interruttore) e 705-c
-> (luogo sulle fasce) fatti. Motore slot (705-d), prenotazione allievo (705-e)
-> e codici per luogo (REG-706) arrivano nei sotto-task successivi.
+> **Stato**: 705-a, 705-b, 705-c e 705-d (motore) fatti. Restano 705-e
+> (luogo sugli slot nell'app allievo) e REG-706 (codici per luogo).
 
 ## Regole
 - **Interruttore** `limits.availabilityByLocation` (default spento), effettivo
@@ -83,6 +82,37 @@ Tiziano: `plans/availability/004-reg-705-706-disponibilita-per-luogo.md`.
   ma non hanno ancora il selettore (follow-up).
 - **E2E**: `tests/e2e/reg705-luogo-fasce.auth.spec.ts` (`--workers=1` insieme a
   `reg705-luoghi-allievo`: toccano lo stesso setting).
+
+## Motore (705-d)
+Tutto in `lib/autoscuole/location-booking.ts` (puro + loader), test in
+`tests/unit/autoscuole/location-booking.test.ts`, e2e via API in
+`tests/e2e/reg705-motore-luoghi.auth.spec.ts`.
+- **Filtro**: `scopeResolver` avvolge il resolver di disponibilità degli
+  istruttori per le richieste di UN allievo: restano le fasce senza luogo o dei
+  suoi luoghi. Le guide stanno dentro una fascia sola, quindi non scavalcano mai
+  due luoghi. Applicato in `getAllAvailableSlots`, `getDateAvailabilityMap`,
+  `createBookingRequest`, `findBestAutoscuolaSlot` (suggerimento istruttore) e
+  `resolveSlotAssignmentForStudent` (waitlist: offerte, broadcast, accettazione).
+- **Luogo della guida**: quello della fascia (`locationOfCoveringRange`); se la
+  fascia non ne ha, la precedenza di sempre (`resolveStudentBookingLocationId`).
+  Vale per la prenotazione dell'allievo e per l'accettazione della waitlist;
+  `suggestInstructorBooking` restituisce `locationId`.
+- **Slot con luogo**: a funzione accesa la lista slot emette uno slot per luogo
+  (alla stessa ora istruttori liberi in luoghi diversi = due slot) con
+  `locationId` + `locationName`; spenta, la risposta è identica a prima.
+  `createBookingRequest` accetta `locationId` opzionale (assente = nessun vincolo,
+  app vecchie; `null` = solo fasce senza luogo; uuid = solo quel luogo).
+- **Pausa tra luoghi**: `passesLocationChangeBuffer` / `violatesLocationChangeBuffer`
+  scartano uno start a meno di N minuti da una guida dello stesso istruttore in
+  un luogo diverso (guide senza luogo = sede; fascia senza luogo = principale
+  dell'allievo → sede). Le guide col luogo si caricano solo con la pausa attiva
+  (`loadInstructorLocatedBusy`).
+- **Scambi**: `createSwapOffer` notifica solo chi ha il luogo della guida,
+  `getSwapOffers` mostra solo quelli, `respondSwapOffer` rifiuta chi non ce l'ha
+  (`studentCanTakeLocation`).
+- **Non coperto (follow-up)**: precompilazione del Luogo dalla fascia nelle
+  prenotazioni manuali dello staff (agenda web, `BookingForm` mobile) e selettore
+  del luogo in Calendario/Pubblicazione del web. Lo staff non è mai bloccato.
 
 ## Connessioni
 - **Locations (REG-392/409)**: archiviare un luogo lo toglie dai luoghi degli

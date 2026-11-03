@@ -1,5 +1,12 @@
 import { prisma } from "@/db/prisma";
 import {
+  loadLocationAssignmentContext,
+  locationOfCoveringRange,
+  scopeAvailabilityRecord,
+  violatesLocationChangeBuffer,
+  type LocationAssignmentContext,
+} from "@/lib/autoscuole/location-booking";
+import {
   buildVehicleResolutionMaps,
   pickBestInstructorVehicleSet,
   resolveVehiclesForInstructor,
@@ -104,6 +111,8 @@ export type SlotAssignmentContext = {
   pubFilter: PubFilter;
   /** ownerId (student/instructor/vehicle) → busy intervals in epoch ms. */
   intervals: Map<string, Array<{ start: number; end: number }>>;
+  /** REG-705d: luoghi degli allievi e pausa tra luoghi (assente/spento = nessun vincolo). */
+  location?: LocationAssignmentContext;
 };
 
 const rangesFor = (availability: AvailabilityLike, dayOfWeek: number) => {
@@ -137,6 +146,8 @@ export async function buildSlotAssignmentContext(args: {
   companyId: string;
   rangeStart: Date;
   rangeEnd: Date;
+  /** REG-705d: allievi per cui si risolverà, per caricarne i luoghi in un colpo. */
+  studentIds?: readonly string[];
 }): Promise<SlotAssignmentContext> {
   const { companyId, rangeStart, rangeEnd } = args;
   // Dynamic import: this module is imported BY the availability actions file,
@@ -234,6 +245,13 @@ export async function buildSlotAssignmentContext(args: {
     vehicleResolver,
     pubFilter,
     intervals,
+    location: await loadLocationAssignmentContext({
+      companyId: args.companyId,
+      studentIds: args.studentIds ?? [],
+      instructorIds: activeInstructorIds,
+      rangeStart: args.rangeStart,
+      rangeEnd: args.rangeEnd,
+    }),
   };
 }
 
@@ -241,6 +259,8 @@ export type SlotAssignment = {
   instructorId: string;
   vehicleId: string | null;
   followVehicleId: string | null;
+  /** REG-705d: luogo della fascia (null = senza luogo, si usa la precedenza). */
+  locationId: string | null;
 };
 
 /**
@@ -256,6 +276,8 @@ export function resolveSlotAssignmentForStudent(
     transmission: string | null;
     startsAt: Date;
     endsAt: Date;
+    /** REG-705d: per filtrare le fasce per i luoghi dell'allievo. */
+    studentId?: string | null;
   },
 ): SlotAssignment | null {
   const { startsAt, endsAt } = args;
@@ -264,12 +286,39 @@ export function resolveSlotAssignmentForStudent(
   const { weekday: dayOfWeek, minutes: startMin } = zonedParts(startsAt);
   const endMin = startMin + Math.round((endMs - startMs) / 60_000);
 
+  const loc: LocationAssignmentContext = ctx.location ?? {
+    enabled: false,
+    bufferMinutes: 0,
+    defaultLocationId: null,
+    locatedBusy: new Map(),
+    students: new Map(),
+  };
+  const studentLoc = loc.enabled && args.studentId ? loc.students.get(args.studentId) : undefined;
+  const scope = studentLoc?.scope ?? null;
   const availableInstructors: Array<{ id: string; score: number }> = [];
+  const rangeLocationByInstructor = new Map<string, string | null>();
   for (const instructorId of ctx.activeInstructorIds) {
     if (!ctx.pubFilter(instructorId, startsAt)) continue;
-    const availability = ctx.instructorResolver.resolve(instructorId, startsAt);
+    const availability = scopeAvailabilityRecord(ctx.instructorResolver.resolve(instructorId, startsAt), scope);
     if (!isOwnerAvailable(availability, dayOfWeek, startMin, endMin)) continue;
     if (overlaps(ctx.intervals.get(instructorId), startMs, endMs)) continue;
+    const rangeLocationId = loc.enabled
+      ? locationOfCoveringRange(rangesFor(availability!, dayOfWeek), startMin, endMin)
+      : null;
+    if (
+      loc.bufferMinutes > 0 &&
+      violatesLocationChangeBuffer({
+        startsAt,
+        endsAt,
+        locationId: rangeLocationId ?? studentLoc?.fallbackLocationId ?? loc.defaultLocationId,
+        busy: loc.locatedBusy.get(instructorId) ?? [],
+        bufferMinutes: loc.bufferMinutes,
+        defaultLocationId: loc.defaultLocationId,
+      })
+    ) {
+      continue;
+    }
+    rangeLocationByInstructor.set(instructorId, rangeLocationId);
     availableInstructors.push({ id: instructorId, score: 0 });
   }
   if (!availableInstructors.length) return null;
@@ -319,5 +368,6 @@ export function resolveSlotAssignmentForStudent(
     instructorId: pair.instructorId,
     vehicleId: pair.vehicleId,
     followVehicleId: pair.followVehicleId,
+    locationId: rangeLocationByInstructor.get(pair.instructorId) ?? null,
   };
 }

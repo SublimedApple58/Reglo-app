@@ -16,6 +16,13 @@ import {
 } from "@/lib/autoscuole/vehicle-resolution";
 import { vehicleServesLicense } from "@/lib/autoscuole/license";
 import {
+  loadInstructorLocatedBusy,
+  loadStudentLocationContext,
+  locationOfCoveringRange,
+  passesLocationChangeBuffer,
+  scopeResolver,
+} from "@/lib/autoscuole/location-booking";
+import {
   FOLLOW_CAR_CATEGORY,
   isFollowCarVehicle,
   parseFollowCarRulesFromLimits,
@@ -248,6 +255,8 @@ export type AutoscuolaSlotMatchResult = {
   resolvedLessonType: string;
   compatibleRequiredTypes: string[];
   missingRequiredTypes: string[];
+  /** REG-705d: luogo della fascia che contiene la guida (null = senza luogo). */
+  locationId: string | null;
 };
 
 export async function findBestAutoscuolaSlot(
@@ -404,12 +413,22 @@ export async function findBestAutoscuolaSlot(
     searchRangeEnd,
   );
 
-  const [instructorResolver, vehicleResolver] = await Promise.all([
+  const [baseInstructorResolver, vehicleResolver, locationCtx] = await Promise.all([
     buildAvailabilityResolver(input.companyId, "instructor", activeInstructorIds, searchRangeStart, searchRangeEnd),
     smVehiclesEnabled && activeVehicleIds.length
       ? buildAvailabilityResolver(input.companyId, "vehicle", activeVehicleIds, searchRangeStart, searchRangeEnd)
       : { resolve: () => null, defaultMap: new Map() },
+    loadStudentLocationContext(input.companyId, input.studentId),
   ]);
+  // REG-705d: solo le fasce dei luoghi dell'allievo + pausa tra luoghi.
+  const instructorResolver = scopeResolver(baseInstructorResolver, locationCtx.scope);
+  const locatedBusy = await loadInstructorLocatedBusy({
+    companyId: input.companyId,
+    instructorIds: activeInstructorIds,
+    rangeStart: searchRangeStart,
+    rangeEnd: searchRangeEnd,
+    bufferMinutes: locationCtx.bufferMinutes,
+  });
 
   // Batch-fetch all appointments for the full search range in one query
   // instead of one query per day inside the loop (N+1 elimination)
@@ -525,6 +544,7 @@ export async function findBestAutoscuolaSlot(
       const candidateEndMinutes = candidateStartMinutes + input.durationMinutes;
 
       const availableInstructors: Array<{ id: string; score: number }> = [];
+      const rangeLocationByInstructor = new Map<string, string | null>();
       for (const instructorId of activeInstructorIds) {
         if (!pubFilter(instructorId, startDate)) continue;
         const availability = instructorResolver.resolve(instructorId, startDate);
@@ -533,6 +553,17 @@ export async function findBestAutoscuolaSlot(
         }
         const intervals = appointmentMaps.intervals.get(instructorId);
         if (overlaps(intervals, startMs, endMs)) continue;
+        const rangeLocationId = locationOfCoveringRange(
+          availability?.ranges,
+          candidateStartMinutes,
+          candidateEndMinutes,
+        );
+        if (
+          !passesLocationChangeBuffer(locationCtx, locatedBusy, instructorId, startDate, endDate, rangeLocationId)
+        ) {
+          continue;
+        }
+        rangeLocationByInstructor.set(instructorId, rangeLocationId);
         const score =
           (appointmentMaps.ends.get(instructorId)?.has(startMs) ? 1 : 0) +
           (appointmentMaps.starts.get(instructorId)?.has(endMs) ? 1 : 0);
@@ -594,6 +625,7 @@ export async function findBestAutoscuolaSlot(
             (enforceRequiredTypes && compatibleRequiredTypes.length === 1
               ? compatibleRequiredTypes[0]
               : "guida"),
+          locationId: rangeLocationByInstructor.get(pair.instructorId) ?? null,
         };
       }
     }

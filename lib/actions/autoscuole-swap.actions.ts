@@ -1,5 +1,9 @@
 "use server";
 
+import {
+  loadLocationAssignmentContext,
+  studentCanTakeLocation,
+} from "@/lib/autoscuole/location-booking";
 import { OFFER_CHANNELS } from "@/lib/autoscuole/channel-cascade";
 import { z } from "zod";
 import { prisma } from "@/db/prisma";
@@ -308,6 +312,27 @@ export async function createSwapOffer(
           )
         : students;
 
+    // REG-705d: con la disponibilità per luogo, lo scambio va solo a chi ha il
+    // luogo della guida (allievi senza luoghi: tutti).
+    if (eligibleStudents.length) {
+      const swapLocationCtx = await loadLocationAssignmentContext({
+        companyId: membership.companyId,
+        studentIds: eligibleStudents.map((s) => s.user.id),
+        instructorIds: [],
+        rangeStart: appointment.startsAt,
+        rangeEnd: appointment.startsAt,
+      });
+      if (swapLocationCtx.enabled) {
+        eligibleStudents = eligibleStudents.filter((student) =>
+          studentCanTakeLocation(
+            swapLocationCtx.students.get(student.user.id)?.scope,
+            appointment.locationId,
+            swapLocationCtx.defaultLocationId,
+          ),
+        );
+      }
+    }
+
     if (!eligibleStudents.length) {
       return { success: true, data: offer };
     }
@@ -528,8 +553,23 @@ export async function getSwapOffers(
       select: { startsAt: true, endsAt: true },
     });
 
+    // REG-705d: solo gli scambi nei luoghi dell'allievo.
+    const viewerLocationCtx = await loadLocationAssignmentContext({
+      companyId: membership.companyId,
+      studentIds: [payload.studentId],
+      instructorIds: [],
+      rangeStart: now,
+      rangeEnd: now,
+    });
+    const viewerScope = viewerLocationCtx.students.get(payload.studentId)?.scope ?? null;
+
     const visible = offers
       .filter((offer) => !offer.responses.length)
+      .filter(
+        (offer) =>
+          !viewerLocationCtx.enabled ||
+          studentCanTakeLocation(viewerScope, offer.appointment.locationId, viewerLocationCtx.defaultLocationId),
+      )
       .filter(
         (offer) =>
           !hasAppointmentConflict(
@@ -619,6 +659,27 @@ export async function respondSwapOffer(
       ["group_lesson", "esame"].includes(offer.appointment.type)
     ) {
       return { success: false, message: "Questa guida non è scambiabile." };
+    }
+
+    // REG-705d: chi accetta deve avere il luogo della guida.
+    if (payload.response === "accept") {
+      const acceptLocationCtx = await loadLocationAssignmentContext({
+        companyId: membership.companyId,
+        studentIds: [payload.studentId],
+        instructorIds: [],
+        rangeStart: offer.appointment.startsAt,
+        rangeEnd: offer.appointment.startsAt,
+      });
+      if (
+        acceptLocationCtx.enabled &&
+        !studentCanTakeLocation(
+          acceptLocationCtx.students.get(payload.studentId)?.scope,
+          offer.appointment.locationId,
+          acceptLocationCtx.defaultLocationId,
+        )
+      ) {
+        return { success: false, message: "Questa guida è in un luogo che non è tra i tuoi." };
+      }
     }
 
     // Cluster validation: if accepting student is in a cluster, the offer must be from the same cluster

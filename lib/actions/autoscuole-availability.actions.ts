@@ -39,6 +39,13 @@ import {
 } from "@/lib/autoscuole/vehicle-resolution";
 import { vehicleServesLicense } from "@/lib/autoscuole/license";
 import { resolveStudentBookingLocationId } from "@/lib/autoscuole/locations";
+import {
+  loadInstructorLocatedBusy,
+  loadStudentLocationContext,
+  locationOfCoveringRange,
+  passesLocationChangeBuffer,
+  scopeResolver,
+} from "@/lib/autoscuole/location-booking";
 import { isWithinRestrictedWindow, pickRestrictedWindowSlots } from "@/lib/autoscuole/restricted-window";
 import { assignMotoForStudent, eligibleForMotoGroup, hasFreeExactMoto, groupMotoFollowCarRequired, type FleetVehicle } from "@/lib/autoscuole/group-moto";
 import { findFreeGroupFollowCar } from "@/lib/autoscuole/group-follow-assign";
@@ -155,6 +162,9 @@ const bookingRequestSchema = z.object({
   lessonType: z.string().optional(),
   maxDays: z.number().int().min(0).max(7).optional(),
   selectedStartsAt: z.string().optional(),
+  // REG-705d: luogo dello slot scelto (dalla lista slot). Assente = nessun
+  // vincolo (app vecchie); null = solo fasce senza luogo; uuid = solo quel luogo.
+  locationId: z.string().uuid().nullable().optional(),
   excludeStartsAt: z.string().optional(),
   requestId: z.string().uuid().optional(),
   instructorId: z.string().uuid().optional(),
@@ -361,7 +371,8 @@ const getSlotEnd = (start: Date, durationMinutes: number) => {
 
 // ── Override resolution helpers ─────────────────────────
 
-export type TimeRange = { startMinutes: number; endMinutes: number };
+/** `locationId` (REG-705): luogo della fascia; assente = tutti i luoghi. */
+export type TimeRange = { startMinutes: number; endMinutes: number; locationId?: string | null };
 
 type AvailabilityRecord = {
   daysOfWeek: number[];
@@ -1890,7 +1901,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       resolverRangeStart,
       resolverRangeEnd,
     );
-    const [instructorAvailabilityResolver, vehicleAvailabilityResolver] = await Promise.all([
+    const [baseInstructorAvailabilityResolver, vehicleAvailabilityResolver, bookingLocationCtx] = await Promise.all([
       activeInstructorIds.length
         ? buildAvailabilityResolver(
             membership.companyId,
@@ -1909,7 +1920,21 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             resolverRangeEnd,
           )
         : { resolve: () => null, defaultMap: new Map<string, AvailabilityRecord>() },
+      loadStudentLocationContext(membership.companyId, payload.studentId),
     ]);
+    // REG-705d: l'allievo vede solo le fasce dei suoi luoghi (o senza luogo);
+    // con la pausa tra luoghi servono anche le guide degli istruttori col luogo.
+    const instructorAvailabilityResolver = scopeResolver(
+      baseInstructorAvailabilityResolver,
+      bookingLocationCtx.scope,
+    );
+    const bookingLocatedBusy = await loadInstructorLocatedBusy({
+      companyId: membership.companyId,
+      instructorIds: activeInstructorIds,
+      rangeStart: resolverRangeStart,
+      rangeEnd: resolverRangeEnd,
+      bufferMinutes: bookingLocationCtx.bufferMinutes,
+    });
 
     const buildAppointmentMaps = (
       appointments: Array<
@@ -2151,6 +2176,8 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         score: number;
         compatibleRequiredTypes: string[];
         resolvedLessonType: string;
+        /** REG-705d: luogo della fascia che contiene la guida (null = senza luogo). */
+        locationId: string | null;
       } | null = null;
 
       for (const startDate of candidateStarts) {
@@ -2208,6 +2235,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           id: string;
           score: number;
         }> = [];
+        const rangeLocationByInstructor = new Map<string, string | null>();
         for (const ownerId of activeInstructorIds) {
           // Publication mode: skip instructors without published week
           if (!pubFilter(ownerId, startDate)) continue;
@@ -2217,6 +2245,26 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           }
           const intervals = appointmentMaps.intervals.get(ownerId);
           if (overlaps(intervals, startMs, endDate.getTime())) continue;
+          // REG-705d: luogo della fascia + pausa tra luoghi diversi.
+          const rangeLocationId = locationOfCoveringRange(
+            availability?.ranges,
+            candidateStartMinutes,
+            candidateEndMinutes,
+          );
+          if (
+            !passesLocationChangeBuffer(
+              bookingLocationCtx,
+              bookingLocatedBusy,
+              ownerId,
+              startDate,
+              endDate,
+              rangeLocationId,
+            )
+          ) {
+            continue;
+          }
+          if (payload.locationId !== undefined && rangeLocationId !== payload.locationId) continue;
+          rangeLocationByInstructor.set(ownerId, rangeLocationId);
           const score =
             (appointmentMaps.ends.get(ownerId)?.has(startMs) ? 1 : 0) +
             (appointmentMaps.starts.get(ownerId)?.has(endDate.getTime()) ? 1 : 0);
@@ -2284,6 +2332,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
               (enforceRequiredTypes && compatibleRequiredTypes.length === 1
                 ? compatibleRequiredTypes[0]
                 : "guida"),
+            locationId: rangeLocationByInstructor.get(pair.instructorId) ?? null,
           };
         }
       }
@@ -2584,7 +2633,8 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             status: "scheduled",
             instructorId: candidate.instructorId,
             vehicleId: candidate.vehicleId,
-            locationId: studentBookingLocationId,
+            // REG-705d: il luogo della fascia vince; senza, la precedenza di sempre.
+            locationId: candidate.locationId ?? studentBookingLocationId,
             slotId: studentSlot.id,
             paymentRequired: paymentSnapshot.paymentRequired,
             paymentStatus: paymentSnapshot.paymentStatus,
@@ -3172,7 +3222,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     // availability resolvers, appointments, and instructor blocks).
     const [
       lessonCoverage,
-      instructorResolver,
+      baseInstructorResolver,
       vehicleResolver,
       appointments,
       instructorBlocks,
@@ -3217,6 +3267,29 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       }),
       fetchGroupLessonBusyRows(membership.companyId, rangeStart, rangeEnd),
     ]);
+
+    // REG-705d: fasce dei soli luoghi dell'allievo, pausa tra luoghi diversi e
+    // luogo dello slot (uno slot per luogo quando alla stessa ora gli
+    // istruttori liberi stanno in luoghi diversi).
+    const slotLocationCtx = await loadStudentLocationContext(membership.companyId, payload.studentId);
+    const instructorResolver = scopeResolver(baseInstructorResolver, slotLocationCtx.scope);
+    const slotLocatedBusy = await loadInstructorLocatedBusy({
+      companyId: membership.companyId,
+      instructorIds: activeInstructorIds,
+      rangeStart,
+      rangeEnd,
+      bufferMinutes: slotLocationCtx.bufferMinutes,
+    });
+    const slotLocationNames = slotLocationCtx.enabled
+      ? new Map(
+          (
+            await prisma.autoscuolaLocation.findMany({
+              where: { companyId: membership.companyId, archivedAt: null },
+              select: { id: true, name: true },
+            })
+          ).map((l) => [l.id, l.name]),
+        )
+      : null;
     const missingRequiredTypes = lessonCoverage?.missingRequiredTypes ?? [];
 
     const starts = new Map<string, Set<number>>();
@@ -3333,7 +3406,12 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     // Marchiamo ogni slot come dentro/fuori la fascia oraria prioritaria: dopo il
     // ciclo teniamo solo quelli dentro fascia, e ripieghiamo su TUTTI se dentro non
     // ce n'è nessuno (fascia prioritaria "morbida", non un muro).
-    const result: Array<{ startsAt: string; endsAt: string; inRestrictedWindow: boolean }> = [];
+    const result: Array<{
+      startsAt: string;
+      endsAt: string;
+      inRestrictedWindow: boolean;
+      locationId?: string | null;
+    }> = [];
     const studentIntervals = intervals.get(payload.studentId);
 
     {
@@ -3378,57 +3456,91 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         const candidateStartMinutes = minutes;
         const candidateEndMinutes = minutes + payload.durationMinutes;
 
-        const availableInstructors: Array<{ id: string; score: number }> = [];
+        // Istruttori liberi raggruppati per luogo della fascia (REG-705d): a
+        // funzione spenta c'è un gruppo solo e il comportamento è quello di prima.
+        const instructorsByLocation = new Map<string | null, Array<{ id: string; score: number }>>();
         for (const ownerId of activeInstructorIds) {
           const availability = instructorResolver.resolve(ownerId, startDate);
           if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) continue;
           if (overlaps(intervals.get(ownerId), startMs, endDate.getTime())) continue;
-          availableInstructors.push({ id: ownerId, score: 0 });
+          const rangeLocationId = slotLocationCtx.enabled
+            ? locationOfCoveringRange(availability?.ranges, candidateStartMinutes, candidateEndMinutes)
+            : null;
+          if (
+            !passesLocationChangeBuffer(
+              slotLocationCtx,
+              slotLocatedBusy,
+              ownerId,
+              startDate,
+              endDate,
+              rangeLocationId,
+            )
+          ) {
+            continue;
+          }
+          const group = instructorsByLocation.get(rangeLocationId);
+          if (group) group.push({ id: ownerId, score: 0 });
+          else instructorsByLocation.set(rangeLocationId, [{ id: ownerId, score: 0 }]);
         }
-        if (!availableInstructors.length) continue;
+        if (!instructorsByLocation.size) continue;
 
-        // A slot exists only if some instructor can be paired with a vehicle
-        // (an exclusive one, or a pool/open vehicle) — plus a follow car when
-        // the school requires one for the student's category.
-        const endTime = endDate.getTime();
-        const pair = pickBestInstructorVehicleSet({
-          availableInstructors,
-          vehiclesEnabled: vehiclesEnabledForSlots,
-          resolveVehicles: (instructorId) =>
-            resolveVehiclesForInstructor({
-              instructorId,
-              studentCategory: student?.licenseCategory ?? null,
-              activeVehicleIds,
-              maps: vehicleResolutionMaps,
-              isVehicleAvailable: (vehicleId) =>
-                isOwnerAvailable(
-                  vehicleResolver.resolve(vehicleId, startDate),
-                  dayOfWeek,
-                  candidateStartMinutes,
-                  candidateEndMinutes,
-                ),
-              hasOverlap: (vehicleId) =>
-                overlaps(intervals.get(vehicleId), startMs, endTime),
-              scoreVehicle: () => 0,
-              matchesLicenseCategory,
-              requireFollowCar,
-              matchesFollowCar,
-              followCarCategory: FOLLOW_CAR_CATEGORY,
-            }),
-        });
-        if (!pair) continue;
+        for (const [slotLocationId, availableInstructors] of instructorsByLocation) {
+          // A slot exists only if some instructor can be paired with a vehicle
+          // (an exclusive one, or a pool/open vehicle) — plus a follow car when
+          // the school requires one for the student's category.
+          const endTime = endDate.getTime();
+          const pair = pickBestInstructorVehicleSet({
+            availableInstructors,
+            vehiclesEnabled: vehiclesEnabledForSlots,
+            resolveVehicles: (instructorId) =>
+              resolveVehiclesForInstructor({
+                instructorId,
+                studentCategory: student?.licenseCategory ?? null,
+                activeVehicleIds,
+                maps: vehicleResolutionMaps,
+                isVehicleAvailable: (vehicleId) =>
+                  isOwnerAvailable(
+                    vehicleResolver.resolve(vehicleId, startDate),
+                    dayOfWeek,
+                    candidateStartMinutes,
+                    candidateEndMinutes,
+                  ),
+                hasOverlap: (vehicleId) =>
+                  overlaps(intervals.get(vehicleId), startMs, endTime),
+                scoreVehicle: () => 0,
+                matchesLicenseCategory,
+                requireFollowCar,
+                matchesFollowCar,
+                followCarCategory: FOLLOW_CAR_CATEGORY,
+              }),
+          });
+          if (!pair) continue;
 
-        result.push({
-          startsAt: startDate.toISOString(),
-          endsAt: endDate.toISOString(),
-          inRestrictedWindow,
-        });
+          result.push({
+            startsAt: startDate.toISOString(),
+            endsAt: endDate.toISOString(),
+            inRestrictedWindow,
+            ...(slotLocationCtx.enabled ? { locationId: slotLocationId } : {}),
+          });
+        }
       }
     }
 
     // Fascia prioritaria "morbida": se il giorno ha slot DENTRO la fascia mostra
     // solo quelli; altrimenti (nessuno dentro) ripiega su tutti (dentro + fuori).
-    const data = pickRestrictedWindowSlots(result).map(({ startsAt, endsAt }) => ({ startsAt, endsAt }));
+    // REG-705d: con la disponibilità per luogo lo slot porta il suo luogo
+    // (`locationId` null = fascia senza luogo, si prenota come sempre) e il nome
+    // da mostrare; spenta, la forma della risposta è identica a prima.
+    const data = pickRestrictedWindowSlots(result).map(({ startsAt, endsAt, locationId }) =>
+      slotLocationNames
+        ? {
+            startsAt,
+            endsAt,
+            locationId: locationId ?? null,
+            locationName: locationId ? slotLocationNames.get(locationId) ?? null : null,
+          }
+        : { startsAt, endsAt },
+    );
 
     await writeAutoscuoleCache(slotsCacheKey, data, 30); // 30s TTL
     return { success: true, data };
@@ -3641,7 +3753,7 @@ export async function getDateAvailabilityMap(
     );
 
     // Build resolvers for the entire range (4 queries total) + publication mode filter
-    const [instructorResolver, vehicleResolver, pubFilter] = await Promise.all([
+    const [baseInstructorResolver, vehicleResolver, pubFilter, mapLocationCtx] = await Promise.all([
       buildAvailabilityResolver(
         membership.companyId,
         "instructor",
@@ -3662,7 +3774,18 @@ export async function getDateAvailabilityMap(
         rangeStart,
         rangeEnd,
       ),
+      loadStudentLocationContext(membership.companyId, payload.studentId),
     ]);
+    // REG-705d: stessi filtri della lista slot (luoghi dell'allievo + pausa),
+    // così la mappa non segna giorni i cui slot la lista non mostra.
+    const instructorResolver = scopeResolver(baseInstructorResolver, mapLocationCtx.scope);
+    const mapLocatedBusy = await loadInstructorLocatedBusy({
+      companyId: membership.companyId,
+      instructorIds: activeInstructorIds,
+      rangeStart,
+      rangeEnd,
+      bufferMinutes: mapLocationCtx.bufferMinutes,
+    });
 
     // Fetch appointments + instructor blocks in parallel (independent queries)
     const appointmentScanStart = new Date(
@@ -3883,6 +4006,18 @@ export async function getDateAvailabilityMap(
               continue;
             if (overlaps(intervals.get(ownerId), startMs, endDate.getTime()))
               continue;
+            if (
+              !passesLocationChangeBuffer(
+                mapLocationCtx,
+                mapLocatedBusy,
+                ownerId,
+                startDate,
+                endDate,
+                locationOfCoveringRange(avail?.ranges, minutes, candidateEnd),
+              )
+            ) {
+              continue;
+            }
             slotInstructors.push(ownerId);
           }
           if (!slotInstructors.length) continue;
@@ -4038,6 +4173,8 @@ export async function suggestInstructorBooking(
         vehicleId: match.vehicleId,
         suggestedLessonType: match.resolvedLessonType,
         durationMinutes,
+        // REG-705d: luogo della fascia suggerita (null = come sempre).
+        locationId: match.locationId,
       },
     };
   } catch (error) {
@@ -4189,12 +4326,14 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
       companyId: membership.companyId,
       rangeStart: dayBounds.start,
       rangeEnd: dayBounds.end,
+      studentIds: [payload.studentId],
     });
     const assignment = resolveSlotAssignmentForStudent(assignmentCtx, {
       licenseCategory: student.licenseCategory ?? null,
       transmission: student.transmission ?? null,
       startsAt: offer.slot.startsAt,
       endsAt: offer.slot.endsAt,
+      studentId: payload.studentId,
     });
     if (!assignment) {
       return { success: false, message: "Slot non disponibile." };
@@ -4323,7 +4462,8 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
           status: "scheduled",
           instructorId: assignment.instructorId,
           vehicleId: assignment.vehicleId,
-          locationId: waitlistLocationId,
+          // REG-705d: il luogo della fascia vince; senza, la precedenza di sempre.
+          locationId: assignment.locationId ?? waitlistLocationId,
           slotId: offer.slotId,
           // Reserve every vehicle this lesson uses (primary + follow car), like
           // the main booking flow — busy-builders read this join.
@@ -4477,6 +4617,7 @@ export async function getWaitlistOffers(input: z.infer<typeof getWaitlistOffersS
         companyId: membership.companyId,
         rangeStart: new Date(Math.min(...offerStartMs)),
         rangeEnd: new Date(Math.max(...offerEndMs)),
+        studentIds: [payload.studentId],
       });
       for (const offer of offers) {
         assignableByOfferId.set(
@@ -4486,6 +4627,7 @@ export async function getWaitlistOffers(input: z.infer<typeof getWaitlistOffersS
             transmission: student.transmission ?? null,
             startsAt: offer.slot.startsAt,
             endsAt: offer.slot.endsAt,
+            studentId: payload.studentId,
           }) !== null,
         );
       }
@@ -4641,6 +4783,8 @@ export async function broadcastWaitlistOffer({
     companyId,
     rangeStart: dayBounds.start,
     rangeEnd: dayBounds.end,
+    // REG-705d: l'offerta va solo a chi ha il luogo della fascia liberata.
+    studentIds: students.map((s) => s.user.id),
   });
 
   const availableStudents = students.filter((student) => {
@@ -4656,6 +4800,7 @@ export async function broadcastWaitlistOffer({
         transmission: student.transmission ?? null,
         startsAt: slot.startsAt,
         endsAt: slot.endsAt,
+        studentId: student.user.id,
       }) !== null
     );
   });

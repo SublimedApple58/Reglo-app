@@ -65,7 +65,7 @@ describe("resolveSlotAssignmentForStudent", () => {
       startsAt: START,
       endsAt: END,
     });
-    expect(res).toEqual({ instructorId: "instr-1", vehicleId: "car-1", followVehicleId: null });
+    expect(res).toEqual({ instructorId: "instr-1", vehicleId: "car-1", followVehicleId: null, locationId: null });
   });
 
   it("rejects a vehicle whose TRANSMISSION does not match the student's path", () => {
@@ -129,7 +129,7 @@ describe("resolveSlotAssignmentForStudent", () => {
       startsAt: START,
       endsAt: END,
     });
-    expect(res).toEqual({ instructorId: "instr-1", vehicleId: "moto-1", followVehicleId: "car-1" });
+    expect(res).toEqual({ instructorId: "instr-1", vehicleId: "moto-1", followVehicleId: "car-1", locationId: null });
 
     const withoutCar = buildCtx({ vehicles: [motoA2("moto-1")], followCarMotoEnabled: true });
     expect(
@@ -166,5 +166,39 @@ describe("resolveSlotAssignmentForStudent", () => {
         endsAt: END,
       }),
     ).toBeNull();
+  });
+
+  // REG-705d — disponibilità per luogo.
+  describe("per luogo", () => {
+    const located = {
+      daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+      ranges: [{ startMinutes: 0, endMinutes: 1440, locationId: "lingotto" }],
+    };
+    const withLocation = (args: { scope: string[] | null; busy?: Array<{ startsAt: Date; endsAt: Date; locationId: string | null }>; buffer?: number }): SlotAssignmentContext => ({
+      ...buildCtx({ vehicles: [carB("car-1")] }),
+      instructorResolver: { resolve: () => located },
+      location: {
+        enabled: true,
+        bufferMinutes: args.buffer ?? 0,
+        defaultLocationId: "sede",
+        locatedBusy: new Map(args.busy ? [["instr-1", args.busy]] : []),
+        students: new Map([["s1", { scope: args.scope ? new Set(args.scope) : null, fallbackLocationId: "sede" }]]),
+      },
+    });
+    const base = { licenseCategory: "B", transmission: "manual", startsAt: START, endsAt: END, studentId: "s1" };
+
+    it("restituisce il luogo della fascia", () => {
+      expect(resolveSlotAssignmentForStudent(withLocation({ scope: null }), base)?.locationId).toBe("lingotto");
+    });
+
+    it("niente assegnazione se il luogo non è tra quelli dell'allievo", () => {
+      expect(resolveSlotAssignmentForStudent(withLocation({ scope: ["sede"] }), base)).toBeNull();
+    });
+
+    it("rispetta la pausa tra luoghi diversi", () => {
+      const busy = [{ startsAt: new Date(START.getTime() - 60 * 60_000), endsAt: new Date(START.getTime() - 10 * 60_000), locationId: "sede" }];
+      expect(resolveSlotAssignmentForStudent(withLocation({ scope: null, busy, buffer: 30 }), base)).toBeNull();
+      expect(resolveSlotAssignmentForStudent(withLocation({ scope: null, busy, buffer: 5 }), base)?.locationId).toBe("lingotto");
+    });
   });
 });

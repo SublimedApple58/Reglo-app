@@ -1,7 +1,9 @@
 # Piano — REG-705 Disponibilità per luogo + REG-706 Codici di invito per luogo
 
 > **Stato (2026-11-03)**: piano APPROVATO da Tiziano con le decisioni sotto.
-> In corso: **705-a** (backend: tabella luoghi allievo + backfill, interruttore e
+> Fatti (commit locali, niente push): **705-a**, **705-b** (UI approvata), **705-c**
+> (UI approvata), **705-d** (motore). Restano 705-e e REG-706.
+> In origine: **705-a** (backend: tabella luoghi allievo + backfill, interruttore e
 > pausa nei setting, API di assegnazione) — branch `feat/reg-705-luoghi-disponibilita`,
 > worktree `reglo-worktrees/reg-705`. Nessun rilascio: si arriva al massimo a
 > staging, mai produzione senza il via esplicito di Tiziano.
