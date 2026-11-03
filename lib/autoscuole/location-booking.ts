@@ -313,3 +313,17 @@ export function studentCanTakeLocation(
   const loc = appointmentLocationId ?? defaultLocationId;
   return loc ? scope.has(loc) : true;
 }
+
+/**
+ * REG-705e: aggiunge `locationId` + `locationName` a un elemento mostrato
+ * all'allievo (offerta della lista d'attesa). `null` = fascia senza luogo;
+ * luogo sparito (archiviato) = nome `null`.
+ */
+export function withLocationName<T extends object>(
+  item: T,
+  locationId: string | null | undefined,
+  names: ReadonlyMap<string, string>,
+): T & { locationId: string | null; locationName: string | null } {
+  const id = locationId ?? null;
+  return { ...item, locationId: id, locationName: id ? names.get(id) ?? null : null };
+}

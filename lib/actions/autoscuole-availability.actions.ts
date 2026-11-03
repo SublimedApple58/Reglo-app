@@ -45,6 +45,7 @@ import {
   locationOfCoveringRange,
   passesLocationChangeBuffer,
   scopeResolver,
+  withLocationName,
 } from "@/lib/autoscuole/location-booking";
 import { isWithinRestrictedWindow, pickRestrictedWindowSlots } from "@/lib/autoscuole/restricted-window";
 import { assignMotoForStudent, eligibleForMotoGroup, hasFreeExactMoto, groupMotoFollowCarRequired, type FleetVehicle } from "@/lib/autoscuole/group-moto";
@@ -4610,6 +4611,9 @@ export async function getWaitlistOffers(input: z.infer<typeof getWaitlistOffersS
     // student (license+transmission, pool/exclusive, follow car, real busy
     // intervals) — mirrors the accept path so a visible offer is bookable.
     const assignableByOfferId = new Map<string, boolean>();
+    // REG-705e: luogo dell'offerta = luogo della fascia (come sugli slot).
+    const offerLocationById = new Map<string, string | null>();
+    let offerLocationsEnabled = false;
     if (offers.length) {
       const offerStartMs = offers.map((o) => o.slot.startsAt.getTime());
       const offerEndMs = offers.map((o) => o.slot.endsAt.getTime());
@@ -4619,17 +4623,17 @@ export async function getWaitlistOffers(input: z.infer<typeof getWaitlistOffersS
         rangeEnd: new Date(Math.max(...offerEndMs)),
         studentIds: [payload.studentId],
       });
+      offerLocationsEnabled = assignmentCtx.location?.enabled === true;
       for (const offer of offers) {
-        assignableByOfferId.set(
-          offer.id,
-          resolveSlotAssignmentForStudent(assignmentCtx, {
-            licenseCategory: student.licenseCategory ?? null,
-            transmission: student.transmission ?? null,
-            startsAt: offer.slot.startsAt,
-            endsAt: offer.slot.endsAt,
-            studentId: payload.studentId,
-          }) !== null,
-        );
+        const assignment = resolveSlotAssignmentForStudent(assignmentCtx, {
+          licenseCategory: student.licenseCategory ?? null,
+          transmission: student.transmission ?? null,
+          startsAt: offer.slot.startsAt,
+          endsAt: offer.slot.endsAt,
+          studentId: payload.studentId,
+        });
+        assignableByOfferId.set(offer.id, assignment !== null);
+        offerLocationById.set(offer.id, assignment?.locationId ?? null);
       }
     }
 
@@ -4664,7 +4668,28 @@ export async function getWaitlistOffers(input: z.infer<typeof getWaitlistOffersS
       .slice(0, limit)
       .map(({ responses: _responses, ...offer }) => offer);
 
-    return { success: true, data: visible };
+    // REG-705e: con «Disponibilità per luogo» accesa l'offerta porta il luogo
+    // della fascia (null = fascia senza luogo); spenta, risposta identica a prima.
+    if (!offerLocationsEnabled) return { success: true, data: visible };
+    const offerLocationIds = Array.from(
+      new Set(visible.map((o) => offerLocationById.get(o.id)).filter((id): id is string => !!id)),
+    );
+    const offerLocationNames = new Map(
+      offerLocationIds.length
+        ? (
+            await prisma.autoscuolaLocation.findMany({
+              where: { companyId: membership.companyId, id: { in: offerLocationIds } },
+              select: { id: true, name: true },
+            })
+          ).map((l) => [l.id, l.name])
+        : [],
+    );
+    return {
+      success: true,
+      data: visible.map((offer) =>
+        withLocationName(offer, offerLocationById.get(offer.id), offerLocationNames),
+      ),
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }

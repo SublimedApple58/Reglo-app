@@ -522,6 +522,7 @@ export async function getSwapOffers(
           include: {
             instructor: { select: { name: true } },
             vehicle: { select: { name: true, licenseCategory: true, transmission: true } },
+            location: { select: { name: true } },
           },
         },
         requestingStudent: { select: { name: true } },
@@ -600,6 +601,10 @@ export async function getSwapOffers(
           type: offer.appointment.type,
           instructorName: offer.appointment.instructor?.name ?? null,
           vehicleName: offer.appointment.vehicle?.name ?? null,
+          // REG-705e: luogo della guida ceduta (l'app lo mostra con la
+          // disponibilità per luogo accesa).
+          locationId: offer.appointment.locationId ?? null,
+          locationName: offer.appointment.location?.name ?? null,
         },
       }));
 

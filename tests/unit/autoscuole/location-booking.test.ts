@@ -4,6 +4,7 @@ import {
   scopeResolver,
   studentCanTakeLocation,
   violatesLocationChangeBuffer,
+  withLocationName,
 } from "@/lib/autoscuole/location-booking";
 
 const record = {
@@ -52,7 +53,7 @@ describe("scopeAvailabilityRecord", () => {
 
 describe("scopeResolver", () => {
   it("avvolge resolve e lascia il resto", () => {
-    const base = { resolve: () => record, extra: 1 };
+    const base = { resolve: (_id: string, _at: Date) => record, extra: 1 };
     const wrapped = scopeResolver(base, new Set(["sede"]));
     expect(wrapped.extra).toBe(1);
     expect(wrapped.resolve("i", new Date())?.ranges).toHaveLength(2);
@@ -120,5 +121,25 @@ describe("studentCanTakeLocation", () => {
     expect(studentCanTakeLocation(null, "lingotto", "sede")).toBe(true);
     expect(studentCanTakeLocation(new Set(["sede"]), null, "sede")).toBe(true);
     expect(studentCanTakeLocation(new Set(["sede"]), "lingotto", "sede")).toBe(false);
+  });
+});
+
+describe("withLocationName", () => {
+  const names = new Map([["lotto", "Piazzale Lotto"]]);
+
+  it("aggiunge id e nome del luogo", () => {
+    expect(withLocationName({ id: "o1" }, "lotto", names)).toEqual({
+      id: "o1",
+      locationId: "lotto",
+      locationName: "Piazzale Lotto",
+    });
+  });
+
+  it("fascia senza luogo: entrambi null", () => {
+    expect(withLocationName({ id: "o1" }, undefined, names)).toEqual({ id: "o1", locationId: null, locationName: null });
+  });
+
+  it("luogo archiviato: id resta, nome null", () => {
+    expect(withLocationName({ id: "o1" }, "sparito", names)).toEqual({ id: "o1", locationId: "sparito", locationName: null });
   });
 });

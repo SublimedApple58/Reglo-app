@@ -4,8 +4,9 @@ La disponibilità dell'istruttore si definisce per luogo e vale per gli allievi
 di quel luogo; ogni allievo può avere più luoghi. Piano completo e decisioni di
 Tiziano: `plans/availability/004-reg-705-706-disponibilita-per-luogo.md`.
 
-> **Stato**: 705-a, 705-b, 705-c e 705-d (motore) fatti. Restano 705-e
-> (luogo sugli slot nell'app allievo) e REG-706 (codici per luogo).
+> **Stato**: 705-a, 705-b, 705-c e 705-d (motore) fatti; 705-e fatto per la
+> parte dati (sotto), la UI allievo aspetta l'ok sulle anteprime. Resta REG-706
+> (codici per luogo).
 
 ## Regole
 - **Interruttore** `limits.availabilityByLocation` (default spento), effettivo
@@ -113,6 +114,19 @@ Tutto in `lib/autoscuole/location-booking.ts` (puro + loader), test in
 - **Non coperto (follow-up)**: precompilazione del Luogo dalla fascia nelle
   prenotazioni manuali dello staff (agenda web, `BookingForm` mobile) e selettore
   del luogo in Calendario/Pubblicazione del web. Lo staff non è mai bloccato.
+
+## Dati per l'app allievo (705-e)
+
+- **Lista d'attesa**: `getWaitlistOffers` (`GET /api/autoscuole/waitlist/offers`) a
+  funzione accesa aggiunge a ogni offerta `locationId` + `locationName` = luogo della
+  fascia che il motore assegnerebbe all'allievo (`resolveSlotAssignmentForStudent`,
+  `withLocationName`); `null` = fascia senza luogo. Spenta, risposta identica a prima.
+- **Scambi**: `getSwapOffers` aggiunge `appointment.locationId` + `locationName` (luogo
+  vero della guida ceduta), sempre.
+- **Guide dell'allievo**: `getAutoscuolaAppointmentsFiltered` porta già `location`
+  (nome, indirizzo, precisione) in entrambi i rami: nessuna modifica.
+- **Prenotazione**: l'app manda `locationId` dello slot scelto (vedi mobile
+  `src/utils/slotLocation.ts`); assente quando lo slot non lo porta.
 
 ## Connessioni
 - **Locations (REG-392/409)**: archiviare un luogo lo toglie dai luoghi degli
