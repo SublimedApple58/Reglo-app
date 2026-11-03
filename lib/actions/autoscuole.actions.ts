@@ -145,6 +145,7 @@ import {
 } from "@/lib/autoscuole/lesson-buffer";
 import { parseInstructorSettings } from "@/lib/autoscuole/instructor-clusters";
 import { generateInviteCode } from "@/lib/company/invite-code";
+import { isSignupCodeTaken } from "@/lib/autoscuole/invite-codes";
 import { notifyStudentPhaseChange } from "@/lib/autoscuole/student-phase-notifications";
 import {
   processAutoscuolaAppointmentSettlementNow,
@@ -8372,14 +8373,10 @@ export async function getCompanyInviteCode() {
     // violations with a fresh code (Prisma error P2002).
     for (let attempt = 0; attempt < 5; attempt++) {
       const candidate = generateInviteCode();
-      // Signup codes share one input field with instructor invite codes
-      // (company-first lookup): never mint a company code that would shadow
-      // an existing instructor code.
-      const instructorClash = await prisma.autoscuolaInstructor.findUnique({
-        where: { inviteCode: candidate },
-        select: { id: true },
-      });
-      if (instructorClash) continue;
+      // Signup codes share one input field with instructor and location
+      // (REG-706) invite codes: never mint a company code that would shadow
+      // an existing one.
+      if (await isSignupCodeTaken(candidate)) continue;
       try {
         // `updateMany` with `inviteCode: null` lets us write only if the row
         // is still without a code. If a concurrent request won the race the

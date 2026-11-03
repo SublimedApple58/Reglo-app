@@ -128,6 +128,25 @@ Tutto in `lib/autoscuole/location-booking.ts` (puro + loader), test in
 - **Prenotazione**: l'app manda `locationId` dello slot scelto (vedi mobile
   `src/utils/slotLocation.ts`); assente quando lo slot non lo porta.
 
+## Codici di invito per luogo (REG-706, backend)
+
+- **Schema**: `AutoscuolaLocation.inviteCode String? @unique` (migrazione
+  `20261109120000_location_invite_codes`, additiva, nessun backfill).
+- **Generazione**: `ensureLocationInviteCode` (`lib/autoscuole/invite-codes.ts`), pigra
+  e race-safe, stesso alfabeto dei codici istruttore. `isSignupCodeTaken` controlla
+  autoscuola + istruttore + luogo ed è usato anche da `ensureInstructorInviteCode` e
+  `getCompanyInviteCode`: il campo della registrazione è unico per i tre codici.
+- **Lettura web**: `getLocationInviteCodes` (`lib/actions/autoscuole-location-invites.actions.ts`)
+  → `{ enabled, locations[] }`; con la funzione spenta `enabled: false` e nessun codice
+  generato. Stessi permessi del codice autoscuola.
+- **Registrazione**: `resolveSignupInviteCode` (`lib/autoscuole/signup-invite.ts`, dipendenze
+  iniettabili) cerca autoscuola → istruttore → luogo. Il codice luogo vale solo con la
+  funzione effettiva e luogo non archiviato; `student-register` crea il membro con
+  `defaultLocationId` = quel luogo e la riga `CompanyMemberLocation`. Altrimenti stesso
+  errore generico «Codice di invito non valido» (mobile invariato).
+- **Fuori v1**: allievi già iscritti che si aggiungono un luogo col codice (solo staff).
+- Test: `signup-invite.test.ts`, `location-invite-codes.test.ts`.
+
 ## Connessioni
 - **Locations (REG-392/409)**: archiviare un luogo lo toglie dai luoghi degli
   allievi e riassegna il principale.

@@ -354,6 +354,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Consorzio**: la scheda autoscuola filtra gli allievi per fase (Tutti / In pratica / Patentati) e il drawer permette di marcarli `PATENTATO` riusando `ChangeStudentPhaseDialog`. Sul consorzio le fasi raggiungibili sono solo PRATICA e PATENTATO (`phasesEnabled` assente ⇒ fallback `["PRATICA"]`). Marcare `PATENTATO` azzera `examReady` e toglie l'allievo dal picker mobile dell'istruttore; l'agenda web resta libera. Vedi `docs/features/consorzio.md`.
 - → **Backoffice**: gestione licenze + fasi attive + dialog di risoluzione disattivazione TEORIA (`getQuizSeatsUsage`, `getTeoriaAffectedStudents`, `deactivateTeoriaWithResolution`).
 - → **Student Registration**: `POST /api/mobile/auth/student-register` decide fase + seat in transaction in base a `phasesEnabled` + `autoAssignQuizOnSignup` + seat disponibili.
+- → **Codici per luogo (REG-706)**: `student-register` risolve il codice con `resolveSignupInviteCode` (autoscuola → istruttore → luogo); un codice luogo assegna il luogo all'allievo (principale + `CompanyMemberLocation`). **Chi genera un nuovo tipo di codice per la registrazione deve passare da `isSignupCodeTaken`** (unicità tra tabelle). Vedi `features/availability-by-location.md`.
 
 ### Percorso patente — auto-selezione self-registered (REG-410)
 - **Nuovo campo** `CompanyMember.selfRegistered` (default false): `true` **solo** dal self sign-up mobile. Marca chi deve scegliersi il percorso patente al primo accesso.

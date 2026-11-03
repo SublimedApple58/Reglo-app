@@ -745,6 +745,12 @@ model AutoscuolaLocation {
   /// da Impostazioni → Sede e luoghi. Solo la sede (`isDefault`) ne ha una:
   /// l'app istruttore la mostra in testa a Disponibilità (null = segnaposto).
   coverPhotoKey     String?
+  /// Codice di invito del luogo (REG-706, 6 caratteri, stesso alfabeto dei
+  /// codici istruttore). Chi si registra con questo codice entra
+  /// nell'autoscuola e riceve il luogo (tra i suoi luoghi + principale).
+  /// Valido solo con «Disponibilità per luogo» accesa e luogo non archiviato.
+  /// Unicità tra tabelle (autoscuola, istruttore, luogo) alla generazione.
+  inviteCode        String?   @unique
   archivedAt        DateTime? @db.Timestamp(6)
   createdAt         DateTime  @default(now()) @db.Timestamp(6)
   updatedAt         DateTime  @updatedAt

@@ -9,6 +9,7 @@ import { issueMobileToken } from "@/lib/mobile-auth";
 import { formatError } from "@/lib/utils";
 import { getSignedAssetUrl } from "@/lib/storage/r2";
 import type { ServiceLimits } from "@/lib/services";
+import { resolveSignupInviteCode } from "@/lib/autoscuole/signup-invite";
 
 /**
  * Decide which student phase and quiz seat status a new sign-up should land in,
@@ -49,30 +50,17 @@ export async function POST(request: Request) {
     const payload = await request.json();
     const parsed = studentRegisterSchema.parse(payload);
 
-    // Normalize the invite code (shared field: company OR instructor code)
-    const schoolCode = parsed.schoolCode.trim().toUpperCase();
-
-    // Company-first lookup. If no company matches, try the per-instructor
-    // invite code: the student joins the instructor's school AND is assigned
-    // to them. Instructor codes are accepted only while the instructor is
-    // active + autonomousMode (otherwise: same generic "invalid code" error).
-    let company = await prisma.company.findUnique({
-      where: { inviteCode: schoolCode },
-    });
-    let assignedInstructorId: string | null = null;
-
-    if (!company) {
-      const instructor = await prisma.autoscuolaInstructor.findUnique({
-        where: { inviteCode: schoolCode },
-        select: { id: true, companyId: true, status: true, autonomousMode: true },
-      });
-      if (instructor && instructor.status === "active" && instructor.autonomousMode) {
-        company = await prisma.company.findUnique({
-          where: { id: instructor.companyId },
-        });
-        assignedInstructorId = company ? instructor.id : null;
-      }
-    }
+    // Shared field: company, instructor (REG-451) or location (REG-706) code.
+    // Lookup company → instructor → location: an instructor code assigns the
+    // student to that instructor (active + autonomousMode only), a location
+    // code gives the student that location (only with «Disponibilità per
+    // luogo» on). Anything else: same generic "invalid code" error.
+    const invite = await resolveSignupInviteCode(parsed.schoolCode);
+    const company = invite
+      ? await prisma.company.findUnique({ where: { id: invite.companyId } })
+      : null;
+    const assignedInstructorId = company ? invite?.assignedInstructorId ?? null : null;
+    const signupLocationId = company ? invite?.locationId ?? null : null;
 
     if (!company) {
       return NextResponse.json(
@@ -158,6 +146,9 @@ export async function POST(request: Request) {
           // Signup via instructor invite code → student lands directly in
           // that instructor's group.
           assignedInstructorId,
+          // Signup via location code (REG-706) → that location is the
+          // student's principal one…
+          ...(signupLocationId ? { defaultLocationId: signupLocationId } : {}),
           studentPhase: decision.studentPhase,
           quizSeatGrantedAt: decision.grantSeat ? new Date() : null,
           // We classify the phase explicitly here (auto-assigned by the
@@ -174,6 +165,13 @@ export async function POST(request: Request) {
           ...seededLicense,
         },
       });
+
+      // …and the only one in their list (invariant: principal ∈ locations).
+      if (signupLocationId) {
+        await tx.companyMemberLocation.create({
+          data: { companyId: company.id, userId: user.id, locationId: signupLocationId },
+        });
+      }
 
       await tx.autoscuolaCase.create({
         data: {
