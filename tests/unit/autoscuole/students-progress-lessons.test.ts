@@ -76,6 +76,7 @@ jest.mock("@/db/prisma", () => ({
     companyMember: {
       findMany: jest.fn(async () => [member("anna", 1), member("bruno", 2)]),
     },
+    companyMemberLocation: { findMany: jest.fn(async () => []) },
     mobileAccessToken: { findMany: jest.fn(async () => []) },
     mobilePushDevice: { findMany: jest.fn(async () => []) },
     autoscuolaCase: { findMany: jest.fn(async () => []) },

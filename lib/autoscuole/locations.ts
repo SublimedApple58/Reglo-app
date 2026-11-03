@@ -4,6 +4,7 @@ import { prisma } from "@/db/prisma";
 
 import { getCachedCompanyServiceLimits } from "./cached-service";
 import { isOwner } from "./roles";
+import { detachArchivedLocationFromMembers } from "./member-locations";
 import {
   locationsByLicenseEnabled,
   resolveGroupPrefilledLocationId,
@@ -397,9 +398,18 @@ export async function softDeleteLocation(id: string, actor: LocationActor) {
   // Le patenti assegnate si liberano con l'archiviazione: altrimenti un luogo
   // eliminato terrebbe in ostaggio la categoria e il precompile ricadrebbe in
   // silenzio sulla sede senza poterla riassegnare altrove (REG-409).
-  return prisma.autoscuolaLocation.update({
-    where: { id },
-    data: { archivedAt: new Date(), licenseCategories: [] },
+  // Stessa logica per i luoghi degli allievi (REG-705): un luogo archiviato
+  // esce dai loro luoghi, e chi lo aveva come principale passa al successivo.
+  return prisma.$transaction(async (tx) => {
+    const archived = await tx.autoscuolaLocation.update({
+      where: { id },
+      data: { archivedAt: new Date(), licenseCategories: [] },
+    });
+    await detachArchivedLocationFromMembers(tx, {
+      companyId: existing.companyId,
+      locationId: id,
+    });
+    return archived;
   });
 }
 

@@ -210,4 +210,5 @@ Create/update/default accettano `licenseCategories?: LicenseCategory[]`
 
 - **Appointments/booking**: il luogo è selezionabile su guide e prenotazioni (default = sede).
 - **Vehicles / License**: la patente della guida (e quindi il luogo precompilato) dipende dal veicolo scelto — chi tocca `licenseCategory` sui veicoli tocca anche questo.
-- **Mobile**: il dettaglio guida mostra il luogo; con `isPrecise` apre Google Maps. Il `BookingForm` precompila il Luogo con la stessa precedenza (`src/utils/locationForLicense.ts`, gemello del modulo puro qui).
+- **Mobile**: il dettaglio guida mostra il luogo; con `isPrecise` apre Google Maps. Il `BookingForm` precompila solo il luogo di default dell'allievo: la precedenza per patente non è implementata sul mobile (vedi sopra), a risolverla è il backend.
+- **Disponibilità per luogo (REG-705)**: archiviare un luogo lo toglie dai luoghi degli allievi (`detachArchivedLocationFromMembers`). Vedi [availability-by-location.md](availability-by-location.md).

@@ -1,6 +1,12 @@
 "use server";
 
 import {
+  LOCATION_CHANGE_BUFFER_MAX_MINUTES,
+  LOCATION_CHANGE_BUFFER_MIN_MINUTES,
+  normalizeLocationChangeBufferMinutes,
+  readLocationAvailabilitySettings,
+} from "@/lib/autoscuole/location-availability";
+import {
   ROAD_CUSTOM_MARKERS_MAX,
   ROAD_CUSTOM_MARKER_LABEL_MAX,
   parseRoadCustomMarkers,
@@ -428,6 +434,16 @@ const autoscuolaSettingsPatchSchema = z
     // fa tutte le patenti; le categorie assegnate restano in database e
     // tornano appena si riaccende.
     locationsByLicense: z.boolean().optional(),
+    // Disponibilità per luogo (REG-705): fasce istruttore e allievi per luogo,
+    // con pausa minima opzionale tra guide in luoghi diversi.
+    availabilityByLocation: z.boolean().optional(),
+    locationChangeBufferEnabled: z.boolean().optional(),
+    locationChangeBufferMinutes: z
+      .number()
+      .int()
+      .min(LOCATION_CHANGE_BUFFER_MIN_MINUTES)
+      .max(LOCATION_CHANGE_BUFFER_MAX_MINUTES)
+      .optional(),
     // "Auto al seguito": single global toggle for ALL moto categories. When on,
     // every moto guida additionally reserves a follow car.
     followCarMotoEnabled: z.boolean().optional(),
@@ -688,6 +704,11 @@ export type AutoscuolaSettingsData = {
   /** `null` = nessuno ha mai toccato l'interruttore: lo stato si deduce dai
    *  luoghi con `locationsByLicenseEnabled`. */
   locationsByLicense: boolean | null;
+  /** Valore salvato (REG-705); acceso davvero solo con almeno 2 luoghi
+   *  attivi (`availabilityByLocationEnabled`). */
+  availabilityByLocation: boolean;
+  locationChangeBufferEnabled: boolean;
+  locationChangeBufferMinutes: number;
   followCarMotoEnabled: boolean;
   followCarRules: FollowCarRules;
   groupLessonsEnabled: boolean;
@@ -1099,6 +1120,7 @@ const resolveAutoscuolaSettingsData = async (
     // server (`locationsByLicenseEnabled`).
     locationsByLicense:
       typeof limits.locationsByLicense === "boolean" ? limits.locationsByLicense : null,
+    ...readLocationAvailabilitySettings(limits),
     followCarMotoEnabled: readFollowCarMotoEnabled(limits),
     followCarRules: parseFollowCarRulesFromLimits(limits),
     groupLessonsEnabled: limits.groupLessonsEnabled === true,
@@ -1595,6 +1617,22 @@ export async function updateAutoscuolaSettings(
     const nextLocationsByLicense =
       payload.locationsByLicense ??
       (typeof limits.locationsByLicense === "boolean" ? limits.locationsByLicense : undefined);
+    // REG-705: si scrive solo quello che arriva, il resto resta com'è.
+    const nextLocationAvailability = {
+      ...(payload.availabilityByLocation !== undefined
+        ? { availabilityByLocation: payload.availabilityByLocation }
+        : {}),
+      ...(payload.locationChangeBufferEnabled !== undefined
+        ? { locationChangeBufferEnabled: payload.locationChangeBufferEnabled }
+        : {}),
+      ...(payload.locationChangeBufferMinutes !== undefined
+        ? {
+            locationChangeBufferMinutes: normalizeLocationChangeBufferMinutes(
+              payload.locationChangeBufferMinutes,
+            ),
+          }
+        : {}),
+    };
     const switchedToFixedDefault =
       previousLicensePathMode !== "fixed_default" && nextLicensePathMode === "fixed_default";
     // Single global follow-car flag. Prefer the new flag; else derive from the
@@ -1829,6 +1867,7 @@ export async function updateAutoscuolaSettings(
       ...(nextLocationsByLicense !== undefined
         ? { locationsByLicense: nextLocationsByLicense }
         : {}),
+      ...nextLocationAvailability,
       followCarMotoEnabled: nextFollowCarMotoEnabled,
       followCarRules: nextFollowCarRules,
       groupLessonsEnabled: nextGroupLessonsEnabled,
@@ -1985,6 +2024,7 @@ export async function updateAutoscuolaSettings(
         bookingCutoffTime: nextLimits.bookingCutoffTime,
         lessonBufferEnabled: nextLimits.lessonBufferEnabled,
         lessonBufferMinutes: nextLimits.lessonBufferMinutes,
+        ...readLocationAvailabilitySettings(nextLimits),
         emptySlotNotificationEnabled: nextLimits.emptySlotNotificationEnabled,
         emptySlotNotificationTarget: nextLimits.emptySlotNotificationTarget,
         emptySlotNotificationTimes: nextLimits.emptySlotNotificationTimes,

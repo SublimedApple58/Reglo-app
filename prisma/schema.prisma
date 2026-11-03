@@ -423,6 +423,7 @@ model CompanyMember {
   consorzioSchool          ConsorzioSchool?                @relation(fields: [consorzioSchoolId], references: [id], onDelete: SetNull)
   activeLicensePath        AutoscuolaLicensePath?          @relation("MemberActiveLicensePath", fields: [activeLicensePathId], references: [id], onDelete: SetNull)
   consorzioAccountingCodes ConsorzioMemberAccountingCode[]
+  locations                CompanyMemberLocation[]
 
   @@id([companyId, userId])
   @@index([userId])
@@ -705,6 +706,25 @@ model AutoscuolaAppointment {
   @@index([groupLessonId])
 }
 
+/// Luoghi assegnati a un allievo (REG-705). Con l'interruttore «Disponibilità
+/// per luogo» acceso, l'allievo vede solo le fasce degli istruttori senza
+/// luogo o con uno dei suoi luoghi. Nessuna riga = tutti i luoghi.
+/// Invariante: se l'allievo ha dei luoghi, `CompanyMember.defaultLocationId`
+/// (il luogo principale, REG-392) è uno di questi — la tiene
+/// `lib/autoscuole/member-locations.ts`, unico punto di scrittura.
+model CompanyMemberLocation {
+  companyId  String   @db.Uuid
+  userId     String   @db.Uuid
+  locationId String   @db.Uuid
+  createdAt  DateTime @default(now()) @db.Timestamp(6)
+
+  member   CompanyMember      @relation(fields: [companyId, userId], references: [companyId, userId], onDelete: Cascade)
+  location AutoscuolaLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, userId, locationId])
+  @@index([locationId])
+}
+
 model AutoscuolaLocation {
   id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId         String    @db.Uuid
@@ -734,6 +754,7 @@ model AutoscuolaLocation {
   appointments      AutoscuolaAppointment[]
   groupLessons      AutoscuolaGroupLesson[]
   defaultForMembers CompanyMember[]         @relation("MemberDefaultLocation")
+  assignedMembers   CompanyMemberLocation[]
 
   @@index([companyId])
   @@index([companyId, archivedAt])

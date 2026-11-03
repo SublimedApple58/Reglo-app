@@ -38,6 +38,10 @@ import { appointmentBusyInstructorIds } from "@/lib/autoscuole/appointment-busy"
 import { fetchGroupLessonBusyRows } from "@/lib/autoscuole/group-lesson-busy";
 import { resolveGroupLessonLocationId } from "@/lib/autoscuole/locations";
 import {
+  getMemberLocationIds,
+  setStudentDefaultLocationKeepingInvariant,
+} from "@/lib/autoscuole/member-locations";
+import {
   EMPTY_OCCUPANCY,
   buildDeclaredIntervals,
   computeAgendaOccupancy,
@@ -951,6 +955,12 @@ const listDirectoryStudents = async (companyId: string) => {
     historyByStudent.set(path.studentId, current);
   }
 
+  // Luoghi dell'allievo (REG-705): assenti = tutti i luoghi.
+  const memberLocations = await getMemberLocationIds(
+    companyId,
+    members.map((m) => m.userId),
+  );
+
   return members.map((member) => ({
     ...toStudentProfile(member.user, member.createdAt, neverAccessed),
     assignedInstructorId: member.assignedInstructorId ?? null,
@@ -969,6 +979,7 @@ const listDirectoryStudents = async (companyId: string) => {
     // inclusa) alla selezione dell'allievo nel form di prenotazione.
     defaultLocationId: member.defaultLocationId ?? null,
     defaultLocationName: member.defaultLocation?.name ?? null,
+    locationIds: memberLocations.get(member.userId) ?? [],
     consorzioSchoolId: member.consorzioSchoolId ?? null,
     consorzioSchoolName: member.consorzioSchool?.name ?? null,
     // Presente solo con piu' di un percorso alle spalle (vedi sopra).
@@ -2008,6 +2019,11 @@ export async function getAutoscuolaStudents(search?: string) {
         })),
       );
     }
+    // Luoghi dell'allievo (REG-705): assenti = tutti i luoghi.
+    const memberLocations = await getMemberLocationIds(
+      companyId,
+      members.map((m) => m.userId),
+    );
     return {
       success: true,
       data: members.map((m) => ({
@@ -2032,6 +2048,7 @@ export async function getAutoscuolaStudents(search?: string) {
         licenseNumber: m.licenseNumber ?? null,
         defaultLocationId: m.defaultLocationId ?? null,
         defaultLocationName: m.defaultLocation?.name ?? null,
+        locationIds: memberLocations.get(m.userId) ?? [],
       })),
     };
   } catch (error) {
@@ -2208,9 +2225,14 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
       orderBy: { createdAt: "desc" },
       take: 500,
     });
-    const neverAccessedSet = await buildNeverAccessedUserIds(
-      members.map((m) => m.user.id),
-    );
+    const [neverAccessedSet, memberLocations] = await Promise.all([
+      buildNeverAccessedUserIds(members.map((m) => m.user.id)),
+      // Luoghi dell'allievo (REG-705): assenti = tutti i luoghi.
+      getMemberLocationIds(
+        companyId,
+        members.map((m) => m.userId),
+      ),
+    ]);
     const students = members.map((m) => ({
       ...toStudentProfile(m.user, m.createdAt, neverAccessedSet),
       assignedInstructorId: m.assignedInstructorId ?? null,
@@ -2222,6 +2244,7 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
       examReadyAt: m.examReadyAt ? m.examReadyAt.toISOString() : null,
       defaultLocationId: m.defaultLocationId ?? null,
       defaultLocationName: m.defaultLocation?.name ?? null,
+      locationIds: memberLocations.get(m.userId) ?? [],
     }));
     if (!students.length) return { success: true, data: [] };
 
@@ -12612,19 +12635,26 @@ export async function setStudentDefaultLocation(
       }
     }
 
-    await prisma.companyMember.updateMany({
-      where: {
-        companyId: membership.companyId,
-        userId: payload.studentId,
-        autoscuolaRole: "STUDENT",
-      },
-      data: { defaultLocationId: payload.locationId },
+    // REG-705: il principale resta tra i luoghi dell'allievo (se ne ha).
+    const next = await setStudentDefaultLocationKeepingInvariant({
+      companyId: membership.companyId,
+      userId: payload.studentId,
+      locationId: payload.locationId,
     });
+    if (next.defaultLocationId !== payload.locationId) {
+      location = next.defaultLocationId
+        ? await prisma.autoscuolaLocation.findFirst({
+            where: { id: next.defaultLocationId, companyId: membership.companyId },
+            select: { id: true, name: true },
+          })
+        : null;
+    }
 
     return {
       success: true,
       data: {
         defaultLocation: location,
+        locationIds: next.locationIds,
       },
     };
   } catch (error) {
