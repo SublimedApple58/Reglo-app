@@ -160,7 +160,8 @@ import { isLessonUnpaid } from "@/lib/autoscuole/lesson-unpaid";
 import { useAtomValue as useAtomValueRoad } from "jotai";
 import { companyAtom as companyAtomRoad } from "@/atoms/company.store";
 import { isRoadEnabled } from "@/lib/services";
-import { StudentRoadPanel, StudentRoadStrip, useStudentRoad } from "./road/StudentRoad";
+import { StudentRoadLine, StudentRoadTab, useStudentRoad } from "./road/StudentRoad";
+import { usePathname as useRoadPathname, useRouter as useRoadRouter, useSearchParams as useRoadSearchParams } from "next/navigation";
 import {
   blockUntilDateToInstant,
   blockUntilInstantToDateLabel,
@@ -800,7 +801,12 @@ function TablePager({
 /** "ex" = ex allievi (REG-629): non è una fase, ma vive accanto alle fasi. */
 type PhaseTab = "attesa" | "teoria" | "pratica" | "patentati" | "ex";
 /** Tab del drawer allievo. "quiz" = REG-445. */
-type DrawerTab = "summary" | "quiz" | "lessons" | "notes";
+/** REG-716: link della tab «Note» in nero (accanto a Road niente blu). */
+const noteLinkClass =
+  "cursor-pointer text-[13px] font-semibold text-[#111111] underline decoration-[#c8c8c8] underline-offset-[3px] transition-colors hover:decoration-[#111111] disabled:opacity-60";
+
+type DrawerTab = "summary" | "quiz" | "lessons" | "notes" | "road";
+const DRAWER_TABS: DrawerTab[] = ["summary", "quiz", "lessons", "notes", "road"];
 type PraticaSubTab = "lista" | "cancellazioni";
 
 const PHASE_SUBTITLES: Record<PhaseTab, string> = {
@@ -992,14 +998,13 @@ export function AutoscuoleStudentsPage({
 
   // Panel tabs
   const [drawerTab, setDrawerTab] = React.useState<DrawerTab>("summary");
-  // REG-638: percorso Road di una guida aperto dentro il pannello «Guide».
+  // REG-638 / REG-720: Road nella scheda allievo (tab «Road» + riga in «Note»).
   const companyForRoad = useAtomValueRoad(companyAtomRoad);
   const roadEnabled = isRoadEnabled(companyForRoad?.services ?? null);
-  const [roadPanelSessionId, setRoadPanelSessionId] = React.useState<string | null>(null);
-  const studentRoad = useStudentRoad(selectedStudentId, roadEnabled && drawerTab === "notes");
-  React.useEffect(() => {
-    setRoadPanelSessionId(null);
-  }, [selectedStudentId, drawerTab]);
+  const studentRoad = useStudentRoad(
+    selectedStudentId,
+    roadEnabled && !affiliate && (drawerTab === "notes" || drawerTab === "road"),
+  );
   // Situazione quiz (REG-445): caricata pigramente all'apertura del tab "Quiz",
   // così il dettaglio di un allievo in PRATICA non paga una query che non guarda.
   const [quizDetail, setQuizDetail] = React.useState<StudentQuizDetail | null>(null);
@@ -1738,6 +1743,46 @@ export function AutoscuoleStudentsPage({
     setQuizDetailLoading(false);
   }, []);
 
+  // REG-720: la scheda aperta sta nell'URL (`?student=<id>&pane=road`), così
+  // Road (dettaglio guida, punti critici) può portare dritto qui e il ritorno
+  // del dettaglio riapre la stessa scheda sulla stessa tab.
+  const roadSearchParams = useRoadSearchParams();
+  const roadRouter = useRoadRouter();
+  const roadPathname = useRoadPathname();
+  const urlStudent = roadSearchParams.get("student");
+  const urlPane = roadSearchParams.get("pane");
+  React.useEffect(() => {
+    if (urlStudent && urlStudent !== selectedStudentId) {
+      openStudentDetail(urlStudent);
+      const pane = DRAWER_TABS.find((t) => t === urlPane);
+      if (pane) setDrawerTab(pane);
+    } else if (!urlStudent && selectedStudentId) {
+      closeStudentDetail();
+    }
+    // Solo quando cambia l'URL: i click aggiornano l'URL dall'effetto qui sotto.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlStudent]);
+  const lastSyncRef = React.useRef<{ sel: string | null; tab: DrawerTab } | null>(null);
+  React.useEffect(() => {
+    // Scrive l'URL solo quando scheda o tab cambiano davvero: al montaggio (e al
+    // doppio giro degli effetti in dev) comanda l'URL, non lo stato vuoto.
+    const prev = lastSyncRef.current;
+    lastSyncRef.current = { sel: selectedStudentId, tab: drawerTab };
+    if (!prev || (prev.sel === selectedStudentId && prev.tab === drawerTab)) return;
+    const q = new URLSearchParams(window.location.search);
+    if (selectedStudentId) {
+      q.set("student", selectedStudentId);
+      q.set("pane", drawerTab);
+    } else {
+      q.delete("student");
+      q.delete("pane");
+    }
+    const next = q.toString();
+    if (next !== window.location.search.replace(/^\?/, "")) {
+      roadRouter.replace(next ? `${roadPathname}?${next}` : roadPathname, { scroll: false });
+    }
+  }, [selectedStudentId, drawerTab, roadRouter, roadPathname]);
+
   // Fetch pigra della situazione quiz: solo all'apertura del tab, una volta per
   // allievo. Senza fase teoria attiva il pannello è un placeholder puro e non
   // serve interrogare il backend.
@@ -1825,9 +1870,10 @@ export function AutoscuoleStudentsPage({
         : 0;
       tabs.push({ key: "lessons", label: "Guide" });
       tabs.push({ key: "notes", label: notesCount ? `Note (${notesCount})` : "Note" });
+      if (roadEnabled) tabs.push({ key: "road", label: "Road" });
     }
     return tabs;
-  }, [affiliate, register]);
+  }, [affiliate, register, roadEnabled]);
 
   // La fase può cambiare col drawer aperto: se il tab attivo sparisce, torna al
   // riepilogo invece di mostrare un pannello vuoto.
@@ -3705,17 +3751,6 @@ export function AutoscuoleStudentsPage({
 
   const renderPanelNotes = () => {
     if (!register) return null;
-    // REG-638: il percorso Road sta nell'andamento della guida (tab «Note»),
-    // non nel tab «Guide», che resta contabile (stati, da pagare, pagata).
-    if (roadPanelSessionId) {
-      return (
-        <StudentRoadPanel
-          sessionId={roadPanelSessionId}
-          backLabel={`Note di ${[register.student?.firstName, register.student?.lastName].filter(Boolean).join(" ") || "allievo"}`}
-          onBack={() => setRoadPanelSessionId(null)}
-        />
-      );
-    }
     if (!register.lessons.length) {
       return (
         <div className="pt-8 text-center">
@@ -3761,12 +3796,7 @@ export function AutoscuoleStudentsPage({
                   </span>
                   {lesson.group ? (
                     <span
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 text-[12px] font-semibold",
-                        lesson.group.kind === "moto"
-                          ? "bg-[#FFF4EA] text-[#C2410C]"
-                          : "bg-[#ECFDF5] text-[#0f766e]",
-                      )}
+                      className="inline-flex items-center gap-1 text-[12.5px] font-medium text-[#6a6a6a]"
                     >
                       <Users className="size-3" strokeWidth={2.2} />
                       {lesson.group.kind === "moto" ? "Gruppo moto" : "Guida di gruppo"} ·{" "}
@@ -3776,10 +3806,8 @@ export function AutoscuoleStudentsPage({
                     (lesson.types?.length ? lesson.types : [lesson.type]).map((t: string, i: number) => (
                       <span
                         key={i}
-                        className={cn(
-                          "rounded-[4px] px-2 py-0.5 text-[12px] font-semibold",
-                          isExam ? "bg-[#f3e8ff] text-[#7c3aed]" : "bg-[#f0f4ff] text-[#428bff]",
-                        )}
+                        // REG-716: tipo guida come testo, niente tag colorati.
+                        className={cn("text-[12.5px]", isExam ? "font-semibold text-[#111111]" : "font-medium text-[#6a6a6a]")}
                       >
                         {formatLessonType(t)}
                       </span>
@@ -3796,7 +3824,7 @@ export function AutoscuoleStudentsPage({
                       <button
                         type="button"
                         onClick={() => setOutcomeLessonId(lesson.id)}
-                        className="cursor-pointer text-[12px] font-medium text-[#428bff] hover:underline"
+                        className="cursor-pointer text-[12.5px] font-semibold text-[#111111] underline decoration-[#c8c8c8] underline-offset-[3px] hover:decoration-[#111111]"
                       >
                         Registra esito
                       </button>
@@ -3899,7 +3927,7 @@ export function AutoscuoleStudentsPage({
                       className="w-full resize-none rounded-lg border border-[#e2e2e6] bg-white px-3 py-2 text-[13px] leading-relaxed text-foreground outline-none focus:border-foreground/40 disabled:opacity-60"
                     />
                     <div className="mt-2 flex items-center gap-3">
-                      <button type="button" className={blueLinkClass} disabled={noteSaving === lesson.id} onClick={() => void saveNote(lesson)}>
+                      <button type="button" className={noteLinkClass} disabled={noteSaving === lesson.id} onClick={() => void saveNote(lesson)}>
                         {noteSaving === lesson.id ? "Salvo…" : "Salva"}
                       </button>
                       <button
@@ -3924,18 +3952,16 @@ export function AutoscuoleStudentsPage({
                     </p>
                     <button
                       type="button"
-                      className={cn(blueLinkClass, "shrink-0")}
+                      className={cn(noteLinkClass, "shrink-0")}
                       onClick={() => startEditNote(lesson)}
                     >
                       {hasNote ? "Modifica" : "Aggiungi"}
                     </button>
                   </div>
                 )}
-                {studentRoad.get(lesson.id) ? (
-                  <StudentRoadStrip
-                    item={studentRoad.get(lesson.id)!}
-                    onOpen={() => setRoadPanelSessionId(studentRoad.get(lesson.id)!.id)}
-                  />
+                {/* REG-720: il percorso Road della guida, una riga che apre il dettaglio in Road. */}
+                {studentRoad.byLesson.get(lesson.id) ? (
+                  <StudentRoadLine item={studentRoad.byLesson.get(lesson.id)!} all={studentRoad.data?.items ?? []} />
                 ) : null}
               </div>
             </div>
@@ -4685,7 +4711,7 @@ export function AutoscuoleStudentsPage({
                 type="button"
                 onClick={() => setDrawerTab(tab.key)}
                 className={cn(
-                  "flex-1 cursor-pointer select-none border-b-2 px-2 py-3 text-center text-sm transition-colors",
+                  "flex-1 cursor-pointer select-none whitespace-nowrap border-b-2 px-1 py-3 text-center text-sm transition-colors sm:px-2",
                   drawerTab === tab.key
                     ? "border-[#222222] font-semibold text-foreground"
                     : "border-transparent font-medium text-[#6a6a6a] hover:text-foreground",
@@ -4716,6 +4742,13 @@ export function AutoscuoleStudentsPage({
               )}
               {drawerTab === "lessons" && renderPanelLessons()}
               {drawerTab === "notes" && renderPanelNotes()}
+              {drawerTab === "road" && selectedStudentId ? (
+                <StudentRoadTab
+                  studentId={selectedStudentId}
+                  studentName={[register.student?.firstName, register.student?.lastName].filter(Boolean).join(" ")}
+                  data={studentRoad.data}
+                />
+              ) : null}
             </>
           ) : (
             <p className="text-sm text-muted-foreground">

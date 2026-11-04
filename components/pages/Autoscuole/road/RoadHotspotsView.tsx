@@ -1,6 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useLocale } from "next-intl";
 import { useAtomValue } from "jotai";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { GeoJSONSource, Marker as MlMarker } from "maplibre-gl";
@@ -18,6 +21,7 @@ import {
 } from "@/lib/autoscuole/road/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { studentHref } from "./road-nav";
 import { addHtmlMarker, escapeHtml, htmlElement, lineBounds, toLngLat, useRoadMap, type RoadMapHandle } from "./road-map";
 import {
   hhmm,
@@ -51,7 +55,7 @@ type Option = { value: string; label: string };
  * Le animazioni (pannello, puntine, mappa) restano anche con «Riduci
  * movimento»: per MapLibre serve `essential: true`.
  */
-export function RoadHotspotsView({ onOpen }: { onOpen: (sessionId: string) => void }) {
+export function RoadHotspotsView({ onOpen }: { onOpen: (sessionId: string, list: string[]) => void }) {
   const company = useAtomValue(companyAtom);
   // Le voci personalizzate stanno nei limits grezzi (`roadCustomMarkers`), non tipizzati in ServiceLimits.
   const rawCustom = (getServiceLimits(company?.services ?? null, "AUTOSCUOLE") as Record<string, unknown>).roadCustomMarkers;
@@ -67,7 +71,22 @@ export function RoadHotspotsView({ onOpen }: { onOpen: (sessionId: string) => vo
   const [data, setData] = React.useState<RoadHotspots | null>(null);
   const [routes, setRoutes] = React.useState<RoadExamRoute[]>([]);
   const [error, setError] = React.useState<string | null>(null);
-  const [selected, setSelected] = React.useState<string | null>(null);
+  // REG-716: il punto aperto sta nell'URL (`?point=`): il ritorno dal dettaglio
+  // guida e i link dagli altri punti di Road riaprono proprio quello.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const selected = searchParams.get("point");
+  const setSelected = React.useCallback(
+    (next: string | null | ((cur: string | null) => string | null)) => {
+      const cur = new URLSearchParams(window.location.search);
+      const value = typeof next === "function" ? next(cur.get("point")) : next;
+      if (value) cur.set("point", value);
+      else cur.delete("point");
+      router.replace(`${pathname}?${cur}`, { scroll: false });
+    },
+    [router, pathname],
+  );
   const [detail, setDetail] = React.useState<RoadHotspotDetail | null>(null);
   const [detailError, setDetailError] = React.useState<string | null>(null);
 
@@ -107,10 +126,20 @@ export function RoadHotspotsView({ onOpen }: { onOpen: (sessionId: string) => vo
     [period, instructorId, license, kind],
   );
 
+  // Cambiando i filtri il punto aperto si chiude (al primo giro no: viene dall'URL).
+  const paramsKey = JSON.stringify(params);
+  const firstParamsRef = React.useRef(paramsKey);
+  React.useEffect(() => {
+    if (firstParamsRef.current !== paramsKey) {
+      firstParamsRef.current = "";
+      setSelected(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paramsKey]);
+
   React.useEffect(() => {
     const ctrl = new AbortController();
     setError(null);
-    setSelected(null);
     roadApi
       .hotspots(params, ctrl.signal)
       .then(setData)
@@ -173,7 +202,7 @@ export function RoadHotspotsView({ onOpen }: { onOpen: (sessionId: string) => vo
       if (b) handle.map.fitBounds(b, { padding: 80, maxZoom: 16, duration: MAP_EASE_MS, essential: true });
       else if (pts.length === 1) handle.map.easeTo({ center: pts[0], zoom: 15, duration: MAP_EASE_MS, essential: true });
     }
-  }, [handle, hotspots, params, routes]);
+  }, [handle, hotspots, params, routes, setSelected]);
 
   React.useEffect(() => {
     pinsRef.current.forEach(({ el }, key) => el.querySelector("button")?.classList.toggle("sel", key === selected));
@@ -196,11 +225,8 @@ export function RoadHotspotsView({ onOpen }: { onOpen: (sessionId: string) => vo
   return (
     <div className="rounded-[24px] border border-[#ebebeb] leading-[1.25]" data-testid="road-hotspots">
       <HotspotStyles />
-      <div className="flex flex-wrap items-end justify-between gap-3 px-5 pb-4 pt-5">
-        <div className="min-w-0">
-          <b className="block text-lg font-semibold tracking-[-0.3px] text-[#111111]">Punti critici</b>
-          <p className="mt-0.5 text-[13.5px] text-[#6a6a6a]">Dove gli allievi sbagliano più spesso, dalle segnalazioni «da migliorare»</p>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-5">
+        <p className="text-[13.5px] text-[#6a6a6a]">Dalle segnalazioni «da migliorare» delle guide</p>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
           <FilterSelect value={period} onChange={setPeriod} options={[...PERIODS]} />
           <FilterSelect value={instructorId} onChange={setInstructorId} allLabel="Tutti gli istruttori" options={instructors} />
@@ -420,8 +446,10 @@ function HotspotDetailPanel({
   detail: RoadHotspotDetail | null;
   error: string | null;
   onBack: () => void;
-  onOpen: (sessionId: string) => void;
+  onOpen: (sessionId: string, list: string[]) => void;
 }) {
+  const locale = useLocale();
+  const ids = detail?.sessions.map((s) => s.id) ?? [];
   return (
     <div className="px-5 pb-5 pt-3.5">
       <button
@@ -458,8 +486,18 @@ function HotspotDetailPanel({
           </svg>
           <span>
             Sta sul percorso d&apos;esame{" "}
-            <b className="font-semibold text-[#111111]">{h.examRoutes.map((r) => `«${r.name}»`).join(", ")}</b>: vale la pena
-            ripassarlo prima dell&apos;esame.
+            {h.examRoutes.map((r, i) => (
+              <React.Fragment key={r.id}>
+                {i > 0 ? ", " : null}
+                <Link
+                  href={`/${locale}/user/autoscuole/road/percorsi/${r.id}`}
+                  className="font-semibold text-[#111111] underline decoration-[#c8c8c8] underline-offset-[3px] transition-colors duration-200 hover:decoration-[#111111]"
+                >
+                  «{r.name}»
+                </Link>
+              </React.Fragment>
+            ))}
+            : vale la pena ripassarlo prima dell&apos;esame.
           </span>
         </p>
       ) : null}
@@ -478,10 +516,21 @@ function HotspotDetailPanel({
           <h4 className="mt-5 text-[14.5px] font-semibold text-[#111111]">Allievi che ci sbagliano</h4>
           <div className="mt-1">
             {detail.students.map((s, i) => (
-              <div key={s.id} className={cn("flex items-center justify-between py-2 text-[14px]", i > 0 && "border-t border-[#f2f2f2]")}>
-                <span className="truncate text-[#222222]">{s.name ?? "Allievo"}</span>
-                <span className="shrink-0 tabular-nums text-[#6a6a6a]">{s.errors === 1 ? "1 volta" : `${s.errors} volte`}</span>
-              </div>
+              <Link
+                key={s.id}
+                href={studentHref(locale, s.id)}
+                data-testid="road-hotspot-student"
+                className={cn(
+                  "hs-row -mx-2 flex items-center justify-between gap-3 rounded-[12px] px-2 py-2.5 text-[14px] hover:bg-[#fafafa]",
+                  i > 0 && "border-t border-[#f2f2f2]",
+                )}
+              >
+                <span className="truncate font-medium text-[#222222]">{s.name ?? "Allievo"}</span>
+                <span className="flex shrink-0 items-center gap-2 tabular-nums text-[#6a6a6a]">
+                  {s.errors === 1 ? "1 volta" : `${s.errors} volte`}
+                  <ChevronRight className="size-4 text-[#b0b0b0]" strokeWidth={2} />
+                </span>
+              </Link>
             ))}
           </div>
 
@@ -491,7 +540,7 @@ function HotspotDetailPanel({
               <button
                 key={s.id}
                 type="button"
-                onClick={() => onOpen(s.id)}
+                onClick={() => onOpen(s.id, ids)}
                 data-testid="road-hotspot-session"
                 className="hs-row -mx-2 grid cursor-pointer grid-cols-[86px_minmax(0,1fr)_auto_16px] items-center gap-3 rounded-[14px] px-2 py-2.5 text-left hover:bg-[#fafafa]"
               >

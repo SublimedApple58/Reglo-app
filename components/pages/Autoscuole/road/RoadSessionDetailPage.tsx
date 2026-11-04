@@ -1,10 +1,11 @@
 "use client";
 
-import { normalizeRoadView, useRoadGuard } from "./AutoscuoleRoadPage";
+import { useRoadGuard } from "./AutoscuoleRoadPage";
+import { normalizeRoadFrom } from "./road-nav";
 import { RoadSessionDetail } from "./RoadSessionDetail";
 
 export function RoadSessionDetailPage({ sessionId, from }: { sessionId: string; from: string | null }) {
   const enabled = useRoadGuard();
   if (!enabled) return <div className="h-40 w-full animate-pulse rounded-3xl bg-white/40" />;
-  return <RoadSessionDetail sessionId={sessionId} from={normalizeRoadView(from)} />;
+  return <RoadSessionDetail sessionId={sessionId} from={normalizeRoadFrom(from)} />;
 }

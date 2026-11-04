@@ -54,6 +54,35 @@ Se in futuro cambia la chiave (costante `AGENDA_PAUSE_NEWS_KEY` in
 `components/Layout/AutoscuoleShell.tsx`) o si aggiunge un'altra novità, aggiorna
 questo snippet.
 
+### Il titolare è in due autoscuole: forzala con l'header, mai cambiandola
+
+`titolare@reglo.it` è membro di **«Autoscuola Reglo»** (`655e408a-72f4-4595-839b-9b92b1170d9e`,
+Road acceso, la demo) e di **«Reglo E2E»** (`2a8fb04d-aeab-4c5c-98b4-5d831eba9c56`, Road
+spento). L'autoscuola attiva è `User.activeCompanyId`, **condivisa** da tutti quelli che
+usano l'account: se qualcuno (un e2e, l'app, il selettore) la sposta su «Reglo E2E», Road
+sparisce dalla barra e `/road` rimanda all'agenda (`ROAD_DISABLED` nelle API). Successo
+il 04/11/2026 durante lo scan di REG-716.
+
+**Non cambiarla** (né dal selettore né con `/api/mobile/auth/select-company`): scegli
+l'autoscuola per richiesta con l'header `x-reglo-company-id` (`lib/company-context.ts`,
+ha la precedenza e non viene mai salvato su `activeCompanyId`).
+
+- **e2e**: `E2E_COMPANY_ID=655e408a-72f4-4595-839b-9b92b1170d9e` (lo mette in
+  `extraHTTPHeaders` di `playwright.config.ts`).
+- **Script Playwright / catture**: aggiungi l'header **solo** alle richieste verso
+  staging, non a tutte (con un header custom le tile delle mappe e gli altri domini
+  fanno un preflight CORS e non si caricano):
+
+  ```js
+  await context.route((u) => u.hostname === "staging.reglo.it", (route) =>
+    route.continue({ headers: { ...route.request().headers(), "x-reglo-company-id": "655e408a-72f4-4595-839b-9b92b1170d9e" } }));
+  ```
+  `page.request.*` non passa da `context.route`: lì l'header va passato a mano
+  (`{ headers: { "x-reglo-company-id": … } }`).
+- **curl**: `-H "x-reglo-company-id: 655e408a-72f4-4595-839b-9b92b1170d9e"`.
+- Per sapere qual è l'attiva oggi:
+  `pnpm db:staging:query "SELECT \"activeCompanyId\" FROM \"User\" WHERE email='titolare@reglo.it'"`.
+
 ---
 
 ## 🛠️ Comandi (web, dalla root `reglo/`)

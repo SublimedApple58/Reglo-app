@@ -2,248 +2,277 @@
 
 import React from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useLocale } from "next-intl";
+import { ChevronRight } from "lucide-react";
 import type { Marker as MlMarker } from "maplibre-gl";
 
 import { cn } from "@/lib/utils";
-import { roadApi, type RoadDetail, type RoadStudentItem } from "@/lib/autoscuole/road/client";
-import { roadMarkerSymbol } from "@/lib/autoscuole/road/symbols";
-import {
-  addHtmlMarker,
-  escapeHtml,
-  htmlElement,
-  lineBounds,
-  toLngLat,
-  upsertRoute,
-  useRoadMap,
-} from "./road-map";
-import { RoadMapFallback, RoadMarkerStyles, SentimentCounts, SymbolTile } from "./road-ui";
+import { roadApi, type RoadStudentHotspot, type RoadStudentItem, type RoadStudentRoad } from "@/lib/autoscuole/road/client";
+import { addHtmlMarker, htmlElement, lineBounds, toLngLat, useRoadMap } from "./road-map";
+import { RoadMapFallback, SymbolTile } from "./road-ui";
+import { RouteThumb } from "./RoadExamRoutesSection";
+import { useCompanyHotspots } from "./road-hotspot-match";
+import { currentUrl, hotspotHref, rememberList, rememberPrev, roadViewHref, sessionHref } from "./road-nav";
 
 /**
- * REG-638 Reglo Road nel dettaglio allievo (web): striscia «Percorso Road» sotto
- * la guida e percorso aperto nello stesso pannello, senza passare dalla sezione
- * Road. Dati da `GET /road/students/[id]` (titolare: tutte; istruttore: le sue).
+ * Reglo Road nella scheda allievo (web). REG-716/REG-720: una tab «Road» con
+ * numeri, andamento, i suoi punti critici e le ultime guide; nella tab «Note»
+ * resta solo una riga di testo sotto la guida, che apre il dettaglio in Road
+ * (il ritorno riporta qui). Dati da `GET /road/students/[id]` (titolare:
+ * tutte; istruttore: le sue).
  */
 
 const km = (m: number) => (m / 1000).toLocaleString("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const mins = (sec: number) => (sec > 0 && sec < 60 ? "<1" : String(Math.floor(sec / 60)));
 const hhmm = (iso: string) =>
   new Date(iso).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
+const longDay = (iso: string) => {
+  const s = new Date(iso).toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Rome" });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
+const RECENT = 5;
 
-/** Percorsi Road dell'allievo per guida (`appointmentId` → riassunto). */
+/** Le guide Road dell'allievo e i suoi punti critici, più l'indice per guida (`appointmentId`). */
 export function useStudentRoad(studentId: string | null, enabled: boolean) {
-  const [byLesson, setByLesson] = React.useState<Map<string, RoadStudentItem>>(new Map());
+  const [data, setData] = React.useState<RoadStudentRoad | null>(null);
   React.useEffect(() => {
-    setByLesson(new Map());
+    setData(null);
     if (!enabled || !studentId) return;
     const ctrl = new AbortController();
     roadApi
       .student(studentId, ctrl.signal)
-      .then((res) => setByLesson(new Map(res.items.map((it) => [it.appointmentId, it]))))
+      .then(setData)
       .catch(() => {
-        // Road è un di più nel dettaglio allievo: se non risponde, la lista resta com'è.
+        // Road è un di più nella scheda allievo: se non risponde, il resto resta com'è.
+        if (!ctrl.signal.aborted) setData({ items: [], hotspots: [] });
       });
     return () => ctrl.abort();
   }, [studentId, enabled]);
-  return byLesson;
-}
-
-/** Miniatura del percorso: la mappa si monta solo quando la riga è a schermo. */
-function RouteThumb({ track }: { track: Array<[number, number]> }) {
-  const boxRef = React.useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = React.useState(false);
-  React.useEffect(() => {
-    const el = boxRef.current;
-    if (!el) return;
-    const io = new IntersectionObserver(([e]) => setVisible(e.isIntersecting), { rootMargin: "120px" });
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-  return (
-    <div ref={boxRef} className="relative h-[76px] w-[112px] shrink-0 overflow-hidden rounded-[11px] bg-[#f4f1ea]">
-      {visible ? <ThumbMap track={track} /> : null}
-    </div>
+  const byLesson = React.useMemo(
+    () => new Map((data?.items ?? []).map((it) => [it.appointmentId, it])),
+    [data],
   );
+  return { data, byLesson };
 }
 
-function ThumbMap({ track }: { track: Array<[number, number]> }) {
-  const ref = React.useRef<HTMLDivElement>(null);
-  const { handle } = useRoadMap(ref, { center: track[0] ?? [45.07, 7.68], zoom: 13 });
-  React.useEffect(() => {
-    if (!handle || track.length < 2) return;
-    const coords = track.map((p) => toLngLat(p));
-    upsertRoute(handle.map, "thumb", coords, { width: 3, color: "#111111", opacity: 1 });
-    const b = lineBounds(handle.lib, coords);
-    if (b) handle.map.fitBounds(b, { padding: 8, duration: 0 });
-  }, [handle, track]);
-  return (
-    <div className="absolute inset-0 [&_.maplibregl-ctrl-attrib]:hidden [&_.maplibregl-ctrl-bottom-right]:hidden">
-      <div ref={ref} className="pointer-events-none h-full w-full" />
-    </div>
-  );
+/** Apre il dettaglio in Road ricordando la scheda (il ritorno dice «‹ <allievo>»). */
+function useOpenSessionHref() {
+  const locale = useLocale();
+  return (item: RoadStudentItem, all: RoadStudentItem[]) => ({
+    href: sessionHref(locale, item.id, "student", currentUrl()),
+    onClick: () => {
+      rememberList(all.map((x) => x.id));
+      rememberPrev();
+    },
+  });
 }
 
-export function StudentRoadStrip({ item, onOpen }: { item: RoadStudentItem; onOpen: () => void }) {
+/** Tab «Note»: sotto la guida, una riga di testo che porta al percorso in Road. */
+export function StudentRoadLine({ item, all }: { item: RoadStudentItem; all: RoadStudentItem[] }) {
+  const open = useOpenSessionHref();
+  const { href, onClick } = open(item, all);
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      data-testid="student-road-strip"
-      className="mt-3 flex w-full cursor-pointer items-center gap-3.5 rounded-[16px] border border-[#ececec] bg-white py-2 pl-2 pr-3.5 text-left transition-colors hover:bg-[#fafafa]"
+    <Link
+      href={href}
+      onClick={onClick}
+      data-testid="student-road-line"
+      className="mt-2.5 inline-flex max-w-full items-center gap-1 text-[13px] text-[#6a6a6a] transition-colors duration-200 hover:text-[#111111]"
     >
-      <RouteThumb track={item.thumb} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 text-[14.5px] font-semibold text-[#111111]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/images/nav/road-3d.png" alt="" className="size-5 object-contain" />
-          Percorso Road
-        </div>
-        <div className="mt-0.5 text-[13px] text-[#6a6a6a]">
-          {km(item.distanceMeters)} km · {mins(item.durationSec)} min · {item.markerCount}{" "}
-          {item.markerCount === 1 ? "segnalazione" : "segnalazioni"}
-        </div>
-        <SentimentCounts good={item.markerGood} bad={item.markerBad} className="mt-1 text-[12.5px]" />
-      </div>
-      <span className="flex items-center gap-1 whitespace-nowrap text-[13.5px] font-semibold text-[#111111]">
-        Vedi percorso
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth="2.2" strokeLinecap="round">
-          <path d="M9 6l6 6-6 6" />
-        </svg>
+      <span className="truncate">
+        <b className="font-semibold text-[#111111]">Percorso Road</b> · {km(item.distanceMeters)} km
+        {item.markerBad ? ` · ${item.markerBad} da migliorare` : item.markerCount ? "" : " · nessuna segnalazione"}
       </span>
-    </button>
+      <ChevronRight className="size-3.5 shrink-0" strokeWidth={2.2} />
+    </Link>
   );
 }
 
-/** Percorso di una guida dentro il pannello allievo. */
-export function StudentRoadPanel({
-  sessionId,
-  backLabel,
-  onBack,
+/** Tab «Road» della scheda allievo (REG-720). */
+export function StudentRoadTab({
+  studentId,
+  studentName,
+  data,
 }: {
-  sessionId: string;
-  backLabel: string;
-  onBack: () => void;
+  studentId: string;
+  studentName: string;
+  data: RoadStudentRoad | null;
 }) {
-  const params = useParams<{ locale?: string }>();
-  const locale = params?.locale ?? "it";
-  const [detail, setDetail] = React.useState<RoadDetail | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-  React.useEffect(() => {
-    const ctrl = new AbortController();
-    roadApi
-      .session(sessionId, ctrl.signal)
-      .then(setDetail)
-      .catch((e) => {
-        if (!ctrl.signal.aborted) setError(e instanceof Error ? e.message : "Percorso non disponibile.");
-      });
-    return () => ctrl.abort();
-  }, [sessionId]);
+  const locale = useLocale();
+  const open = useOpenSessionHref();
+  const company = useCompanyHotspots(Boolean(data?.hotspots?.length));
+  const first = studentName.trim().split(/\s+/)[0] || "l'allievo";
 
+  if (!data) {
+    return (
+      <div className="space-y-3" data-testid="student-road-tab">
+        <div className="h-20 animate-pulse rounded-2xl bg-[#f7f7f7]" />
+        <div className="h-48 animate-pulse rounded-2xl bg-[#f7f7f7]" />
+      </div>
+    );
+  }
+
+  const items = data.items;
+  const hotspots = (data.hotspots ?? []).slice(0, 6);
+  if (!items.length) {
+    return (
+      <div className="pt-6" data-testid="student-road-tab">
+        <b className="block text-[15px] font-semibold text-[#111111]">Ancora nessuna guida con Road</b>
+        <p className="mt-1 text-[13.5px] leading-[1.5] text-[#6a6a6a]">
+          Quando l&apos;istruttore registra una guida di {first} con Road, qui trovi percorsi, errori e dove sbaglia più spesso.
+        </p>
+      </div>
+    );
+  }
+
+  const meters = items.reduce((a, s) => a + s.distanceMeters, 0);
+  const bad = items.reduce((a, s) => a + (s.markerBad ?? 0), 0);
+  // Andamento: dalla più vecchia alla più recente delle ultime tre.
+  const last3 = items.slice(0, 3);
+  const trend =
+    last3.length >= 2
+      ? { from: last3[last3.length - 1].markerBad ?? 0, to: last3[0].markerBad ?? 0, n: last3.length }
+      : null;
+
+  return (
+    <div className="leading-[1.25]" data-testid="student-road-tab">
+      <div className="grid grid-cols-3">
+        <Stat value={String(items.length)} label={items.length === 1 ? "guida in Road" : "guide in Road"} />
+        <Stat value={km(meters)} unit="km" label="percorsi" divided />
+        <Stat value={String(bad)} label="da migliorare" divided />
+      </div>
+      {trend ? (
+        <p className="mt-3.5 text-[13.5px] text-[#6a6a6a]" data-testid="student-road-trend">
+          Ultime {trend.n} guide:{" "}
+          <b className="font-semibold text-[#111111]">
+            {trend.from === trend.to
+              ? `${trend.to} ${trend.to === 1 ? "errore" : "errori"} a guida`
+              : `da ${trend.from} a ${trend.to} ${trend.to === 1 ? "errore" : "errori"}`}
+          </b>
+        </p>
+      ) : null}
+
+      {hotspots.length ? (
+        <>
+          <div className="mt-7 flex items-baseline justify-between gap-3">
+            <h3 className="text-[16px] font-semibold text-[#111111]">Dove sbaglia</h3>
+            <Link
+              href={roadViewHref(locale, "hotspots")}
+              onClick={rememberPrev}
+              className="text-[13.5px] font-semibold text-[#111111] underline decoration-[#c8c8c8] underline-offset-[3px] transition-colors duration-200 hover:decoration-[#111111]"
+            >
+              Punti critici
+            </Link>
+          </div>
+          <HotspotsMiniMap hotspots={hotspots} />
+          <div className="mt-1">
+            {hotspots.map((h, i) => {
+              const match = company.find(h);
+              const body = (
+                <>
+                  <span className="grid size-6 place-items-center rounded-full bg-[#111111] text-[12px] font-semibold text-white">{i + 1}</span>
+                  <SymbolTile kind={h.kind} size={34} sentiment="bad" />
+                  <span className="min-w-0">
+                    <b className="block truncate text-[14.5px] font-semibold text-[#111111]">{h.street ?? h.label}</b>
+                    <span className="block truncate text-[13px] text-[#6a6a6a]">
+                      {h.label}
+                      {match && match.students > 1 ? ` · ci sbagliano anche altri ${match.students - 1}` : ""}
+                      {match?.examRoutes.length ? " · sul percorso d'esame" : ""}
+                    </span>
+                  </span>
+                  <span className="text-right text-[13px] tabular-nums text-[#6a6a6a]">
+                    <b className="block text-[15px] font-semibold text-[#111111]">{h.errors}</b>
+                    {h.errors === 1 ? "volta" : "volte"}
+                  </span>
+                </>
+              );
+              const cls = "grid grid-cols-[24px_34px_minmax(0,1fr)_auto_14px] items-center gap-3 border-b border-[#f0f0f0] py-3";
+              return match ? (
+                <Link
+                  key={h.key}
+                  href={hotspotHref(locale, match.key)}
+                  onClick={rememberPrev}
+                  data-testid="student-road-hotspot"
+                  className={cn(cls, "transition-colors duration-200 hover:bg-[#fafafa]")}
+                >
+                  {body}
+                  <ChevronRight className="size-3.5 text-[#b0b0b0]" strokeWidth={2.2} />
+                </Link>
+              ) : (
+                <div key={h.key} className={cls} data-testid="student-road-hotspot">
+                  {body}
+                  <span />
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : null}
+
+      <h3 className="mt-7 text-[16px] font-semibold text-[#111111]">Ultime guide</h3>
+      <div className="mt-1">
+        {items.slice(0, RECENT).map((it) => {
+          const { href, onClick } = open(it, items);
+          return (
+            <Link
+              key={it.id}
+              href={href}
+              onClick={onClick}
+              data-testid="student-road-session"
+              className="grid grid-cols-[64px_minmax(0,1fr)_auto_14px] items-center gap-3.5 border-b border-[#f0f0f0] py-3 transition-colors duration-200 hover:bg-[#fafafa]"
+            >
+              <RouteThumb path={it.thumb} width={64} height={48} />
+              <span className="min-w-0">
+                <b className="block truncate text-[14.5px] font-semibold text-[#111111]">{longDay(it.startedAt)}</b>
+                <span className="block truncate text-[13px] tabular-nums text-[#6a6a6a]">
+                  {hhmm(it.startedAt)}
+                  {it.plan ? " · col giro" : ""}
+                </span>
+              </span>
+              <span className="text-right text-[13px] tabular-nums text-[#6a6a6a]">
+                <b className="block text-[14.5px] font-semibold text-[#111111]">{km(it.distanceMeters)} km</b>
+                {it.markerBad ? `${it.markerBad} da migliorare` : "nessun errore"}
+              </span>
+              <ChevronRight className="size-3.5 text-[#b0b0b0]" strokeWidth={2.2} />
+            </Link>
+          );
+        })}
+      </div>
+      <Link
+        href={roadViewHref(locale, "history", { student: studentId, days: "all" })}
+        onClick={rememberPrev}
+        data-testid="student-road-all"
+        className="flex items-center justify-between py-4 text-[14.5px] font-semibold text-[#111111]"
+      >
+        Tutte le guide di {first} in Road
+        <ChevronRight className="size-4" strokeWidth={2.2} />
+      </Link>
+    </div>
+  );
+}
+
+/** Mini-mappa dei punti dell'allievo: aloni rossi e numeri, niente interazione. */
+function HotspotsMiniMap({ hotspots }: { hotspots: RoadStudentHotspot[] }) {
   const ref = React.useRef<HTMLDivElement>(null);
-  const { handle, failed } = useRoadMap(ref, { center: [45.07, 7.68], zoom: 13 });
+  const { handle, failed } = useRoadMap(ref, { center: [hotspots[0].lat, hotspots[0].lng], zoom: 14 });
   const markersRef = React.useRef<MlMarker[]>([]);
   React.useEffect(() => {
-    if (!handle || !detail) return;
-    const coords = detail.track.map((p) => toLngLat([p[0], p[1]]));
-    if (coords.length >= 2) upsertRoute(handle.map, "student-road", coords, { width: 6, color: "#111111", opacity: 1 });
+    if (!handle) return;
     markersRef.current.forEach((m) => m.remove());
-    markersRef.current = [];
-    if (coords[0]) markersRef.current.push(addHtmlMarker(handle, coords[0], htmlElement(`<div class="road-start"></div>`)));
-    detail.markers.forEach((m) => {
-      const el = htmlElement(
-        `<div><div class="road-sg ${m.sentiment ?? ""}" title="${escapeHtml(m.label)}"><img src="${roadMarkerSymbol(m.kind)}" alt=""></div></div>`,
-      );
-      markersRef.current.push(addHtmlMarker(handle, toLngLat(m), el));
-    });
-    const b = lineBounds(handle.lib, [...coords, ...detail.markers.map((m) => toLngLat(m))]);
-    if (b) handle.map.fitBounds(b, { padding: 40, duration: 0 });
-  }, [handle, detail]);
+    markersRef.current = hotspots.map((h, i) =>
+      addHtmlMarker(handle, toLngLat(h), htmlElement(`<div><div class="srh"><i></i><b>${i + 1}</b></div></div>`)),
+    );
+    const pts = hotspots.map((h) => toLngLat(h));
+    const b = pts.length > 1 ? lineBounds(handle.lib, pts) : null;
+    if (b) handle.map.fitBounds(b, { padding: 44, duration: 0, maxZoom: 16 });
+    else handle.map.jumpTo({ center: pts[0], zoom: 15 });
+  }, [handle, hotspots]);
   React.useEffect(() => () => markersRef.current.forEach((m) => m.remove()), []);
-
-  const lesson = detail?.lesson;
-  const day = detail
-    ? new Date(detail.startedAt).toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Rome" })
-    : "";
-  const good = detail?.markers.filter((m) => m.sentiment === "good").length ?? 0;
-  const bad = detail?.markers.filter((m) => m.sentiment === "bad").length ?? 0;
-
   return (
-    <div data-testid="student-road-panel">
-      <RoadMarkerStyles />
-      <button
-        type="button"
-        onClick={onBack}
-        className="flex cursor-pointer items-center gap-1.5 text-[14px] text-[#6a6a6a] hover:text-[#111111]"
-      >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-          <path d="M15 6l-6 6 6 6" />
-        </svg>
-        {backLabel}
-      </button>
-
-      <div className="mt-3 flex items-center gap-2 text-[12px] uppercase tracking-[0.6px] text-[#6a6a6a]">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/nav/road-3d.png" alt="" className="size-[18px] object-contain" />
-        Percorso Road
+    <div className="relative mt-3 h-[200px] overflow-hidden rounded-[18px] border border-[#ebebeb] bg-[#f4f1ea]" data-testid="student-road-map">
+      <style>{`.srh{position:relative;width:0;height:0}.srh i{position:absolute;left:-44px;top:-44px;width:88px;height:88px;border-radius:50%;background:radial-gradient(rgba(220,38,38,.42),rgba(220,38,38,0) 70%)}.srh b{position:absolute;left:-12px;top:-12px;width:24px;height:24px;border-radius:50%;background:#111;color:#fff;border:2px solid #fff;font:600 12px/20px inherit;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.25)}`}</style>
+      <div className="pointer-events-none absolute inset-0 [&_.maplibregl-ctrl-bottom-right]:origin-bottom-right [&_.maplibregl-ctrl-bottom-right]:scale-90">
+        <div ref={ref} className="h-full w-full" />
       </div>
-      {error ? (
-        <p className="py-6 text-[14px] text-[#6a6a6a]">{error}</p>
-      ) : (
-        <>
-          <h3 className="mt-1.5 text-[22px] font-semibold leading-tight tracking-[-0.4px] text-[#111111]">
-            {detail ? (
-              <>
-                <span className="capitalize">{day}</span> · {hhmm(detail.startedAt)} –{" "}
-                {detail.endedAt ? hhmm(detail.endedAt) : "in corso"}
-              </>
-            ) : (
-              <span className="inline-block h-7 w-72 animate-pulse rounded-lg bg-[#f2f2f2] align-middle" />
-            )}
-          </h3>
-          <p className="mt-0.5 text-[14px] text-[#6a6a6a]">
-            {lesson ? [lesson.instructor?.name ? `con ${lesson.instructor.name}` : null, lesson.vehicle?.name].filter(Boolean).join(" · ") : " "}
-          </p>
-
-          <div className="relative mt-4 h-[280px] overflow-hidden rounded-[18px] bg-[#f4f1ea]">
-            <div ref={ref} className="h-full w-full" />
-            {!handle ? <RoadMapFallback failed={failed} /> : null}
-          </div>
-
-          <div className="mt-4 grid grid-cols-3">
-            <Stat value={detail ? km(detail.distanceMeters) : "–"} unit="km" label="Percorsi" />
-            <Stat value={detail ? mins(detail.durationSec) : "–"} unit="min" label="Di guida" divided />
-            <Stat value={detail ? String(detail.markers.length) : "–"} label="Segnalazioni" divided />
-          </div>
-          <SentimentCounts good={good} bad={bad} className="mt-3" />
-
-          <div className="mt-1.5">
-            {detail?.markers.map((m, i) => (
-              <div
-                key={m.id}
-                className={cn("flex items-center gap-3 py-2.5", i > 0 && "border-t border-[#f2f2f2]")}
-              >
-                <SymbolTile kind={m.kind} size={40} sentiment={m.sentiment} />
-                <div className="min-w-0 flex-1">
-                  <b className="block text-[14.5px] font-medium text-[#111111]">{m.label}</b>
-                  <span className="text-[13px] text-[#6a6a6a]">
-                    {[m.street, m.note ? `«${m.note}»` : null].filter(Boolean).join(" · ")}
-                  </span>
-                </div>
-                <time className="text-[13.5px] tabular-nums text-[#6a6a6a]">{hhmm(m.recordedAt)}</time>
-              </div>
-            ))}
-          </div>
-
-          {detail ? (
-            <Link
-              href={`/${locale}/user/autoscuole/road/${detail.id}`}
-              className="mt-4 inline-grid h-[42px] place-items-center rounded-[21px] bg-[#111111] px-[18px] text-[14px] font-semibold text-white transition-colors hover:bg-black"
-            >
-              Apri in Road
-            </Link>
-          ) : null}
-        </>
-      )}
+      {!handle ? <RoadMapFallback failed={failed} /> : null}
     </div>
   );
 }
@@ -251,7 +280,7 @@ export function StudentRoadPanel({
 function Stat({ value, unit, label, divided }: { value: string; unit?: string; label: string; divided?: boolean }) {
   return (
     <div className={cn(divided && "border-l border-[#ececec] pl-4")}>
-      <b className="text-[24px] font-semibold tracking-[-0.6px] text-[#111111]">
+      <b className="text-[24px] font-semibold tabular-nums tracking-[-0.6px] text-[#111111]">
         {value}
         {unit ? <small className="ml-[3px] text-[13px] font-medium text-[#6a6a6a]">{unit}</small> : null}
       </b>

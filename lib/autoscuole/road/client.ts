@@ -83,6 +83,24 @@ export type RoadLive = {
 export type RoadStudentItem = RoadSession &
   RoadMarkerSummary & { thumb: Array<[number, number]> };
 
+/** Punto dove l'allievo sbaglia più volte (REG-660, `loadStudentHotspots`). */
+export type RoadStudentHotspot = {
+  key: string;
+  kind: string;
+  label: string;
+  lat: number;
+  lng: number;
+  street: string | null;
+  errors: number;
+  sessions: number;
+  lastAt: string;
+  note: string | null;
+  checks: { better: number; worse: number };
+  status: string;
+};
+
+export type RoadStudentRoad = { items: RoadStudentItem[]; hotspots?: RoadStudentHotspot[] };
+
 export type RoadTodayItem = RoadLesson & { road: (RoadSession & RoadMarkerSummary) | null };
 
 export type RoadHistoryItem = RoadSession & RoadMarkerSummary & { lesson: RoadLesson };
@@ -281,7 +299,7 @@ export const roadApi = {
   examRouteFromSession: (body: { sessionId: string; fromMs?: number | null; toMs?: number | null }, signal?: AbortSignal) =>
     call<RoadExamRouteDraft>("/exam-routes/from-session", signal, { method: "POST", body }),
   student: (studentId: string, signal?: AbortSignal) =>
-    call<{ items: RoadStudentItem[] }>(`/students/${encodeURIComponent(studentId)}`, signal),
+    call<RoadStudentRoad>(`/students/${encodeURIComponent(studentId)}`, signal),
   session: (id: string, signal?: AbortSignal) =>
     call<RoadDetail>(`/sessions/${encodeURIComponent(id)}`, signal),
   track: (id: string, afterSeq: number, signal?: AbortSignal) =>

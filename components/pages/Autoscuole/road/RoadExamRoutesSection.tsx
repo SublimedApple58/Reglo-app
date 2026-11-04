@@ -15,7 +15,8 @@ import { km } from "./road-ui";
 const EASE = "cubic-bezier(0.2, 0, 0, 1)";
 
 /**
- * Impostazioni › Reglo Road › «I tuoi percorsi d'esame» (REG-645): lista dei
+ * Road › «Percorsi d'esame» (REG-645; dal REG-716 è una tab di Road, prima
+ * stava in Impostazioni › Reglo Road): lista dei
  * percorsi dell'autoscuola (nome, sede, patenti, km), apertura dell'editor a
  * pagina intera, archivio e ripristino. Archiviare non cancella: il percorso
  * esce dalla mappa dei punti critici e dal giro.
@@ -67,18 +68,16 @@ export function RoadExamRoutesSection() {
   };
 
   return (
-    <section className="mt-[42px]" data-testid="road-exam-routes">
+    <section className="max-w-[880px]" data-testid="road-exam-routes">
       <style>{`.er-list-row{animation:er-list-in 220ms ${EASE} backwards}@keyframes er-list-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}`}</style>
-      <div className="flex items-baseline justify-between text-base font-semibold text-[#222222]">
-        I tuoi percorsi d&apos;esame
-        <span className="text-[13px] font-medium text-[#6a6a6a]">
+      <div className="flex items-baseline justify-between gap-3 text-base font-semibold text-[#222222]">
+        <span className="text-[13.5px] font-normal leading-[1.5] text-[#6a6a6a]">
+          Sulla mappa dei punti critici vedi quali errori cadono proprio lì; il giro li propone agli allievi.
+        </span>
+        <span className="shrink-0 text-[13px] font-medium text-[#6a6a6a]">
           {routes ? (active.length === 1 ? "1 percorso" : `${active.length} percorsi`) : ""}
         </span>
       </div>
-      <p className="mt-1.5 max-w-[680px] text-[13.5px] leading-[1.5] text-[#6a6a6a]">
-        I giri che la Motorizzazione fa fare all&apos;esame. Sulla mappa dei punti critici vedi quali errori cadono
-        proprio lì.
-      </p>
 
       <div className="mt-3.5 rounded-[18px] border border-[#ebebeb]">
         {!routes ? (
@@ -92,8 +91,8 @@ export function RoadExamRoutesSection() {
             <RouteThumb path={[]} />
             <div className="min-w-0 text-[14px] leading-[1.45] text-[#6a6a6a]">
               <b className="block font-medium text-[#222222]">Ancora nessun percorso d&apos;esame</b>
-              Disegnalo sulla mappa, oppure ricavalo da una guida: Road › Storico › apri la guida › «Usa come
-              percorso d&apos;esame».
+              Disegnalo sulla mappa, oppure ricavalo da una guida: apri una guida dello Storico e scegli «Usa come
+              percorso d&apos;esame» dal menu.
             </div>
           </div>
         ) : null}
@@ -202,10 +201,18 @@ function Row({
   );
 }
 
-/** Miniatura della forma del percorso (proiezione locale, senza mappa). */
-function RouteThumb({ path, muted }: { path: Array<[number, number]>; muted?: boolean }) {
-  const W = 56;
-  const H = 42;
+/** Miniatura della forma del percorso (proiezione locale, senza mappa). Usata anche dalla tab Road dell'allievo. */
+export function RouteThumb({
+  path,
+  muted,
+  width: W = 56,
+  height: H = 42,
+}: {
+  path: Array<[number, number]>;
+  muted?: boolean;
+  width?: number;
+  height?: number;
+}) {
   const pad = 6;
   let d = "";
   if (path.length >= 2) {
