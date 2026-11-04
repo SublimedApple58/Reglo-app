@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { aptGet } from "@trigger.dev/build/extensions/core";
 import { defineConfig } from "@trigger.dev/sdk/v3";
 
 const prismaGenerateExtension = {
@@ -46,7 +47,8 @@ export default defineConfig({
   build: {
     // Keep Prisma external so the engine binary is shipped alongside node_modules.
     external: ["@prisma/client", "prisma"],
-    extensions: [prismaGenerateExtension],
+    // REG-722: osmium per le celle OSM della calamita (job autoscuole-road-osm-cells)
+    extensions: [prismaGenerateExtension, aptGet({ packages: ["osmium-tool"] })],
   },
   additionalFiles: [
     "node_modules/.prisma/client/**",
