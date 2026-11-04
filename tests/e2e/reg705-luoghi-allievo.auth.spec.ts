@@ -20,6 +20,9 @@ test.beforeEach(async ({ page }) => {
 
 const SETTINGS_URL = "/it/user/autoscuole?tab=settings&pane=locations";
 const STUDENTS_URL = "/it/user/autoscuole/students";
+// Allievo su cui lavorare (es. su staging uno di un istruttore senza pubblicazione).
+// Senza, si usa il primo della lista.
+const STUDENT_EMAIL = process.env.E2E_STUDENT_EMAIL;
 
 type Settings = {
   availabilityByLocation: boolean;
@@ -94,9 +97,30 @@ test("luoghi dell'allievo e principale nella scheda", async ({ page, request }) 
   const original = await readSettings(request);
   await patchSettings(request, { availabilityByLocation: true });
 
-  // L'allievo è il primo della lista a schermo (la lista filtra per fase).
+  // L'allievo è il primo della lista a schermo (la lista filtra per fase), o
+  // quello di E2E_STUDENT_EMAIL cercato per cognome.
+  let search: string | null = null;
+  if (STUDENT_EMAIL) {
+    const all = (await (await request.get("/api/autoscuole/students")).json()).data as {
+      email: string | null;
+      lastName: string;
+    }[];
+    const chosen = all.find((s) => s.email === STUDENT_EMAIL);
+    test.skip(!chosen, `Allievo ${STUDENT_EMAIL} non trovato.`);
+    search = chosen!.lastName;
+  }
+  const filterList = async () => {
+    if (!search) return;
+    const input = page.getByPlaceholder("Cerca allievi");
+    if (!(await input.isVisible())) await page.getByTitle("Cerca", { exact: true }).click();
+    await input.fill(search);
+    // La ricerca filtra dopo un attimo: si aspetta la riga sola, sennò
+    // «Dettaglio» apre il primo allievo della lista intera.
+    await expect(page.getByRole("checkbox", { name: /^Seleziona (?!tutti)/ })).toHaveCount(1, { timeout: 30_000 });
+  };
   await page.goto(STUDENTS_URL);
-  await expect(page.getByTestId("autoscuole-students-page")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("autoscuole-students-page").first()).toBeVisible({ timeout: 60_000 });
+  await filterList();
   const firstBox = page.getByRole("checkbox", { name: /^Seleziona (?!tutti)/ }).first();
   await expect(firstBox).toBeVisible({ timeout: 30_000 });
   const label = (await firstBox.getAttribute("aria-label")) ?? "";
@@ -123,7 +147,8 @@ test("luoghi dell'allievo e principale nella scheda", async ({ page, request }) 
       data: { locationIds: [] },
     });
     await page.reload();
-    await expect(page.getByTestId("autoscuole-students-page")).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("autoscuole-students-page").first()).toBeVisible({ timeout: 60_000 });
+    await filterList();
     // Stesso ordine di prima: l'allievo è ancora la prima riga.
     await expect(page.getByRole("checkbox", { name: `Seleziona ${shownName}` })).toBeVisible({
       timeout: 30_000,

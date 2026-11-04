@@ -181,12 +181,23 @@ Tutto in `lib/autoscuole/location-booking.ts` (puro + loader), test in
 
 ## E2E contro staging
 
-Gli spec girano anche con `E2E_BASE_URL=https://staging.reglo.it` (`--workers=1`).
-Eccezione: `reg705-motore-luoghi` usa `allievo@reglo.it`, che su staging è
-assegnato a Chiara Marino in modalità «pubblicazione» senza settimane
-pubblicate: 0 slot a prescindere dai luoghi (filtro di pubblicazione già
-esistente, non REG-705). Su staging lo si prova con un allievo di un istruttore
-non in pubblicazione (es. `allievo26@reglo.it`, Marco Bianchi): verde il 04/11.
+La variabile è `E2E_BASE_URL` (con `BASE_URL` Playwright accende il server
+locale e gira sul DB dev). Su staging il titolare è anche in «Reglo E2E» (un
+istruttore, un luogo): si punta «Autoscuola Reglo» con `E2E_COMPANY_ID` e un
+allievo di Marco Bianchi o Giulia Conti con `E2E_STUDENT_EMAIL`, perché
+`allievo@reglo.it` è di Chiara Marino, in pubblicazione senza settimane
+pubblicate (0 slot a prescindere dai luoghi).
+
+```bash
+E2E_BASE_URL=https://staging.reglo.it \
+E2E_COMPANY_ID=655e408a-72f4-4595-839b-9b92b1170d9e \
+E2E_STUDENT_EMAIL=allievo26@reglo.it \
+npx playwright test tests/e2e/reg705-*.auth.spec.ts tests/e2e/reg706-codici-luogo.auth.spec.ts \
+  tests/e2e/invite-code.auth.spec.ts --project=setup --project=chromium-auth --workers=1
+```
+
+Nessuno prenota né notifica; ognuno rimette setting, fasce e luoghi
+dell'allievo com'erano. Verdi davvero su staging il 04/11 (7 su 7).
 
 ## Connessioni
 - **Locations (REG-392/409)**: archiviare un luogo lo toglie dai luoghi degli

@@ -23,12 +23,17 @@ export default defineConfig({
     screenshot: "only-on-failure",
     // Pass Vercel "Protection Bypass for Automation" so e2e can reach a protected
     // staging/preview deployment. Secret comes from env (never committed).
-    extraHTTPHeaders: process.env.VERCEL_AUTOMATION_BYPASS_SECRET
-      ? {
-          "x-vercel-protection-bypass": process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
-          "x-vercel-set-bypass-cookie": "true",
-        }
-      : {},
+    // E2E_COMPANY_ID: autoscuola su cui girare quando il titolare ne ha più di
+    // una (su staging «Autoscuola Reglo» invece di «Reglo E2E»).
+    extraHTTPHeaders: {
+      ...(process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+        ? {
+            "x-vercel-protection-bypass": process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+            "x-vercel-set-bypass-cookie": "true",
+          }
+        : {}),
+      ...(process.env.E2E_COMPANY_ID ? { "x-reglo-company-id": process.env.E2E_COMPANY_ID } : {}),
+    },
   },
   projects: [
     // Logs in once and persists storageState for the authenticated specs.

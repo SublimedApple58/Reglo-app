@@ -5,7 +5,7 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
  *
  * Su un giorno lontano mette all'istruttore un override con due fasce in due
  * luoghi diversi, accende «Disponibilità per luogo» e controlla gli slot
- * dell'allievo del seed (allievo@reglo.it):
+ * dell'allievo del seed (allievo@reglo.it, o `E2E_STUDENT_EMAIL`):
  * - allievo senza luoghi → slot da entrambe le fasce, ognuno col suo luogo;
  * - allievo con un luogo solo → solo gli slot di quella fascia.
  * Alla fine rimette override, luoghi dell'allievo e setting com'erano.
@@ -40,8 +40,11 @@ test("gli slot seguono i luoghi delle fasce e dell'allievo", async ({ request })
     defaultLocationId?: string | null;
     assignedInstructorId?: string | null;
   }[];
-  const student = students.find((s) => s.email === "allievo@reglo.it");
-  test.skip(!student, "Serve allievo@reglo.it nel seed.");
+  // Su staging allievo@reglo.it è di Chiara Marino, in pubblicazione senza
+  // settimane pubblicate (0 slot): lì si passa un allievo di Marco o Giulia.
+  const email = process.env.E2E_STUDENT_EMAIL || "allievo@reglo.it";
+  const student = students.find((s) => s.email === email);
+  test.skip(!student, `Serve ${email} nel seed.`);
   if (!student) return;
 
   const instructors = (await json(await request.get("/api/autoscuole/instructors"))).data as {
