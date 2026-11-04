@@ -1,4 +1,4 @@
-import { drivingSeconds, haversineMeters, sanitizePoints, trackDistanceMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
+import { drivingSeconds, haversineMeters, resolveEndedAt, sanitizePoints, trackDistanceMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
 import { parseRoadCustomMarkers, resolveMarkerLabel } from "@/lib/autoscuole/road/catalog";
 
 describe("Reglo Road geo", () => {
@@ -80,5 +80,22 @@ describe("Reglo Road minuti di guida", () => {
   });
   it("in Road prima dell'inizio: conta dall'ingresso", () => {
     expect(drivingSeconds(new Date("2026-10-27T15:05:00Z"), new Date("2026-10-27T15:15:00Z"), new Date("2026-10-27T15:10:00Z"))).toBe(600);
+  });
+});
+
+describe("REG-714 resolveEndedAt", () => {
+  const start = new Date("2026-11-04T10:00:00Z");
+  const now = new Date("2026-11-04T12:00:00Z");
+  it("usa l'ora del telefono fra l'inizio e adesso", () => {
+    expect(resolveEndedAt("2026-11-04T10:50:00Z", start, now).toISOString()).toBe("2026-11-04T10:50:00.000Z");
+  });
+  it("mai prima dell'inizio né dopo adesso", () => {
+    expect(resolveEndedAt("2026-11-04T09:00:00Z", start, now)).toEqual(start);
+    expect(resolveEndedAt("2026-11-04T13:00:00Z", start, now)).toEqual(now);
+  });
+  it("senza un'ora valida vale adesso", () => {
+    expect(resolveEndedAt(undefined, start, now)).toEqual(now);
+    expect(resolveEndedAt("boh", start, now)).toEqual(now);
+    expect(resolveEndedAt(123, start, now)).toEqual(now);
   });
 });
