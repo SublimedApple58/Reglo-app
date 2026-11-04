@@ -158,6 +158,15 @@ Tutto in `lib/autoscuole/location-booking.ts` (puro + loader), test in
   diversi, sezione assente a funzione spenta; `--workers=1`). Registrazione con
   codice luogo verificata sul DB dev il 04/11 (utente di prova cancellato).
 
+## E2E contro staging
+
+Gli spec girano anche con `E2E_BASE_URL=https://staging.reglo.it` (`--workers=1`).
+Eccezione: `reg705-motore-luoghi` usa `allievo@reglo.it`, che su staging è
+assegnato a Chiara Marino in modalità «pubblicazione» senza settimane
+pubblicate: 0 slot a prescindere dai luoghi (filtro di pubblicazione già
+esistente, non REG-705). Su staging lo si prova con un allievo di un istruttore
+non in pubblicazione (es. `allievo26@reglo.it`, Marco Bianchi): verde il 04/11.
+
 ## Connessioni
 - **Locations (REG-392/409)**: archiviare un luogo lo toglie dai luoghi degli
   allievi e riassegna il principale.

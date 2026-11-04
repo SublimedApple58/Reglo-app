@@ -194,6 +194,7 @@ Totale **18–20 punti** → spacchettato:
 - **Stima**: 3 punti. Dipende da 705-a. Branch/worktree propri.
 - **Stato 03/11**: backend fatto (branch `feat/reg-706-codici-luogo`, worktree `reglo-worktrees/reg-706`, commit 441794b, migrazione applicata sul DB dev). Anteprime del modale in `/tmp/hiro-anteprime/reg-706/706-anteprima-*`, approvate il 04/11.
 - **Stato 04/11**: UI del modale fatta (`InviteCodeDialog` + pagina Allievi), e2e `reg706-codici-luogo` verde insieme a `invite-code`; registrazione con codice luogo verificata sul DB dev (allievo con luogo principale e unico; a funzione spenta 404 generico). Screenshot `706-real-*`. Commit locali, staging da decidere.
+- **Stato 04/11 (staging)**: REG-705 + REG-706 su staging (`fea4dcd`, deploy Vercel READY). Migrazioni `20261108120000` (backfill: 2 righe su 2 attese) e `20261109120000` applicate sul DB di staging PRIMA del push. Smoke Playwright su staging.reglo.it verde (interruttore, luoghi nella scheda allievo, luogo sulle fasce, modale chiave, smoke staging). Nessun job Trigger.dev toccato. Mobile non su staging (OTA 2.4.0 solo col via di Tiziano). Prod: no.
 
 ---
 
