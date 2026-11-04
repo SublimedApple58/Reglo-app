@@ -103,6 +103,14 @@ import { resolvePrefilledLocationId } from "@/lib/autoscuole/location-for-licens
 import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, motoLessonTypeLabel, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
 import { instructorTintStyles } from "@/lib/autoscuole/instructor-colors";
 import { bandLabelStartMinutes, bandLocationLabel } from "@/lib/autoscuole/agenda-band-label";
+import {
+  BandLocationMenu,
+  type BandLocationChange,
+  type BandMenuLocation,
+} from "@/components/pages/Autoscuole/locations/BandLocationMenu";
+import { undoAgendaBandLocation } from "@/lib/actions/autoscuole-band-location.actions";
+import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
 import {
   agendaInstructorComparator,
@@ -1092,6 +1100,7 @@ export function AutoscuoleAgendaPage({
 } = {}) {
   const studentNameOrder = useStudentNameOrder();
   const toast = useFeedbackToast();
+  const { toast: rawToast } = useToast();
   const [appointments, setAppointments] = React.useState<AppointmentRow[]>([]);
   const [manageGroupLessonId, setManageGroupLessonId] = React.useState<string | null>(null);
   const [createGroupLessonOpen, setCreateGroupLessonOpen] = React.useState(false);
@@ -1334,6 +1343,9 @@ export function AutoscuoleAgendaPage({
     [agendaLocations],
   );
   const [instructorAvailability, setInstructorAvailability] = React.useState<InstructorAvailabilityWeek[]>([]);
+  // REG-717: ricarica delle fasce dopo un cambio di luogo e lampo sulla fascia cambiata.
+  const [availabilityReload, setAvailabilityReload] = React.useState(0);
+  const [bandFlash, setBandFlash] = React.useState<BandFlash | null>(null);
   const [outOfAvailAppointments, setOutOfAvailAppointments] = React.useState<OutOfAvailabilityAppointment[]>([]);
   const [outOfAvailSheetOpen, setOutOfAvailSheetOpen] = React.useState(false);
   const [holidays, setHolidays] = React.useState<Array<{ date: string; label: string | null }>>([]);
@@ -2792,7 +2804,69 @@ export function AutoscuoleAgendaPage({
       setInstructorAvailability(res.success && res.data ? res.data : []);
     });
     return () => { cancelled = true; };
-  }, [viewMode, dayFocus, weekStart]);
+  }, [viewMode, dayFocus, weekStart, availabilityReload]);
+
+  // REG-717: cambio rapido del luogo di una fascia (solo agenda propria, colonne
+  // per istruttore, «Disponibilità per luogo» accesa: le fasce hanno locationName).
+  const canEditBandLocation = !source && !columnsByVehicle && agendaLocations.length >= 2;
+  const bandMenuLocations = React.useMemo<BandMenuLocation[]>(
+    () => agendaLocations.map((l) => ({ id: l.id, name: l.name, address: l.address, isPrecise: l.isPrecise })),
+    [agendaLocations],
+  );
+  const describeBandAppointment = React.useCallback(
+    (a: AppointmentRow) =>
+      `${formatStudentName(a.student, studentNameOrder)} · ${formatTimeRange(toDate(a.startsAt), getAppointmentEnd(a))}`,
+    [studentNameOrder],
+  );
+  const handleBandLocationChanged = React.useCallback(
+    (change: BandLocationChange, flash: Omit<BandFlash, "at">) => {
+      setAvailabilityReload((n) => n + 1);
+      setBandFlash({ ...flash, at: Date.now() });
+      const dayLabel = toDate(`${flash.dateKey}T12:00:00`).toLocaleDateString("it-IT", { weekday: "long", day: "numeric" });
+      const weekday = toDate(`${flash.dateKey}T12:00:00`).toLocaleDateString("it-IT", { weekday: "long" });
+      const scope = change.everyWeekday ? `ogni ${weekday}` : `solo ${dayLabel}`;
+      const kept = change.everyWeekday && change.keptOverrides > 0
+        ? change.keptOverrides === 1
+          ? `1 ${weekday} con orari propri resta com'era.`
+          : `${change.keptOverrides} giorni con orari propri restano com'erano.`
+        : undefined;
+      rawToast({
+        title: `${change.fromName} → ${change.toName}, ${scope}`,
+        description: kept,
+        action: (
+          <ToastAction
+            altText="Annulla il cambio di luogo"
+            className="border-0 font-semibold text-white hover:bg-white/10"
+            onClick={() => {
+              void undoAgendaBandLocation(change.snapshot).then((res) => {
+                if (!res.success) {
+                  toast.error({ description: res.message });
+                  return;
+                }
+                setAvailabilityReload((n) => n + 1);
+                setBandFlash({ ...flash, at: Date.now() });
+              });
+            }}
+          >
+            Annulla
+          </ToastAction>
+        ),
+      });
+    },
+    [rawToast, toast],
+  );
+  const bandEditFor = (instructorId: string, instructorName: string): BandEdit | undefined =>
+    canEditBandLocation
+      ? {
+          instructorId,
+          instructorName,
+          locations: bandMenuLocations,
+          defaultLocationId: defaultLocationId || null,
+          describe: describeBandAppointment,
+          onChanged: handleBandLocationChanged,
+          onError: (message) => toast.error({ description: message }),
+        }
+      : undefined;
 
   // Build instructor columns for day view
   const dayViewInstructors = React.useMemo(() => {
@@ -5154,7 +5228,7 @@ export function AutoscuoleAgendaPage({
                             <div key={ri} className={cn("absolute left-0 right-0", tint.bandClass)} style={{ ...tint.bandStyle, top: (s - DAY_START_HOUR * 60) * PIXELS_PER_MINUTE, height: (e - s) * PIXELS_PER_MINUTE }} />
                           );
                         })}
-                        <AvailabilityBandLabels ranges={ranges} appointments={instrAppts} day={day} pixelsPerMinute={PIXELS_PER_MINUTE} startHour={DAY_START_HOUR} endHour={DAY_END_HOUR} size="week" />
+                        <AvailabilityBandLabels ranges={ranges} appointments={instrAppts} day={day} pixelsPerMinute={PIXELS_PER_MINUTE} startHour={DAY_START_HOUR} endHour={DAY_END_HOUR} size="week" edit={bandEditFor(instr.instructorId, instr.instructorName)} flash={bandFlash} />
                         {/* Hour grid lines */}
                         {hourMarks.map((hour) => (
                           <div key={hour} className="absolute left-0 right-0 h-px bg-border/30" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }} />
@@ -5739,7 +5813,7 @@ export function AutoscuoleAgendaPage({
                         />
                       );
                     })}
-                    <AvailabilityBandLabels ranges={instr.ranges} appointments={instrAppointments} day={day} pixelsPerMinute={PIXELS_PER_MINUTE} startHour={DAY_START_HOUR} endHour={DAY_END_HOUR} size="day" />
+                    <AvailabilityBandLabels ranges={instr.ranges} appointments={instrAppointments} day={day} pixelsPerMinute={PIXELS_PER_MINUTE} startHour={DAY_START_HOUR} endHour={DAY_END_HOUR} size="day" edit={bandEditFor(instr.id, instr.name)} flash={bandFlash} />
                     {/* Hour grid lines */}
                     {hourMarks.map((hour) => (
                       <div
@@ -8051,6 +8125,19 @@ function diffMinutes(a: Date, b: Date) {
  * tratto libero. Tra due fasce attaccate una linea sottile segna il confine.
  * Sta sopra fascia e righe orarie (z-[1]) e sotto le guide (z-10).
  */
+type BandFlash = { instructorId: string; dateKey: string; startMinutes: number; endMinutes: number; at: number };
+
+/** REG-717: cosa serve alla scritta per aprire il menu del cambio di luogo. */
+type BandEdit = {
+  instructorId: string;
+  instructorName: string;
+  locations: BandMenuLocation[];
+  defaultLocationId: string | null;
+  describe: (appointment: AppointmentRow) => string;
+  onChanged: (change: BandLocationChange, flash: Omit<BandFlash, "at">) => void;
+  onError: (message: string) => void;
+};
+
 function AvailabilityBandLabels({
   ranges,
   appointments,
@@ -8059,6 +8146,8 @@ function AvailabilityBandLabels({
   startHour,
   endHour,
   size,
+  edit,
+  flash,
 }: {
   ranges: AgendaAvailabilityRange[];
   appointments: AppointmentRow[];
@@ -8068,6 +8157,9 @@ function AvailabilityBandLabels({
   startHour: number;
   endHour: number;
   size: "day" | "week";
+  /** REG-717: con `edit` la scritta apre il menu per cambiare il luogo. */
+  edit?: BandEdit;
+  flash?: BandFlash | null;
 }) {
   if (!ranges.some((r) => r.locationName !== undefined)) return null;
   const midnight = new Date(day);
@@ -8078,6 +8170,16 @@ function AvailabilityBandLabels({
   }));
   const visibleStart = startHour * 60;
   const visibleEnd = endHour * 60;
+  const dateKey = formatYmd(day);
+  const menuAppointments = edit
+    ? appointments.map((a) => ({
+        id: a.id,
+        startMinutes: diffMinutes(toDate(a.startsAt), midnight),
+        endMinutes: diffMinutes(getAppointmentEnd(a), midnight),
+        locationId: a.location?.id ?? null,
+        label: edit.describe(a),
+      }))
+    : [];
   return (
     <>
       {ranges.map((range, ri) => {
@@ -8095,7 +8197,45 @@ function AvailabilityBandLabels({
                 style={{ top: (s - visibleStart) * pixelsPerMinute }}
               />
             )}
-            {at !== null && (
+            {edit && flash && flash.instructorId === edit.instructorId && flash.dateKey === dateKey &&
+              flash.startMinutes === range.startMinutes && flash.endMinutes === range.endMinutes && (
+                <motion.div
+                  key={flash.at}
+                  className="pointer-events-none absolute left-0 right-0 z-[1] bg-[#111111]/10"
+                  style={{ top: (s - visibleStart) * pixelsPerMinute, height: (e - s) * pixelsPerMinute }}
+                  initial={{ opacity: 1 }}
+                  animate={{ opacity: 0 }}
+                  transition={{ duration: 0.9, ease: "easeOut" }}
+                />
+              )}
+            {at !== null && edit ? (
+              <BandLocationMenu
+                label={label}
+                size={size}
+                top={(at - visibleStart) * pixelsPerMinute + 4}
+                instructorId={edit.instructorId}
+                instructorName={edit.instructorName}
+                day={day}
+                band={{
+                  startMinutes: range.startMinutes,
+                  endMinutes: range.endMinutes,
+                  locationId: range.locationId ?? null,
+                  inWeekly: range.inWeekly === true,
+                }}
+                locations={edit.locations}
+                defaultLocationId={edit.defaultLocationId}
+                appointments={menuAppointments}
+                onChanged={(change) =>
+                  edit.onChanged(change, {
+                    instructorId: edit.instructorId,
+                    dateKey,
+                    startMinutes: range.startMinutes,
+                    endMinutes: range.endMinutes,
+                  })
+                }
+                onError={edit.onError}
+              />
+            ) : at !== null && (
               <div
                 className={cn(
                   "pointer-events-none absolute z-[1] truncate font-medium leading-[14px] animate-in fade-in-0 duration-200",

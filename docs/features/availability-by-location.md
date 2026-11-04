@@ -143,6 +143,39 @@ Tutto in `lib/autoscuole/location-booking.ts` (puro + loader), test in
   sotto le guide (z-10). Dissolvenza 200 ms. La finestra oraria arriva dalle
   preferenze di vista (`startHour`/`endHour`), non dalle costanti di modulo.
 
+## Cambio rapido del luogo dall'agenda web (REG-717, 04/11)
+
+Anteprime e analisi approvate da Tiziano: `/tmp/hiro-anteprime/reg-705/agenda-cambio-luogo/`.
+
+- **Dove**: la scritta della fascia (`AvailabilityBandLabels`) diventa il bottone
+  `BandLocationMenu` (`components/pages/Autoscuole/locations/`) solo nell'agenda
+  propria (no `source`), colonne per istruttore (no vista Veicoli) e con ≥ 2 luoghi.
+  Il clic non apre la creazione della guida (`stopPropagation`).
+- **Menu**: titolo «Luogo della fascia 08:00–13:00», istruttore e giorno; «Tutti i
+  luoghi» + luoghi con indirizzo, spunta sull'attuale; in fondo «Solo lunedì 9» e
+  l'interruttore «Ogni lunedì» (spento), mostrato solo se la stessa fascia (stessi
+  orari) c'è nella settimana tipo di quel giorno (`inWeekly`).
+- **Conferma**: se nella fascia ci sono guide in un altro luogo (senza luogo = sede)
+  compare dentro il menu («N guide restano a …», elenco, «Cambia comunque»). Verso
+  «Tutti i luoghi» mai. Calcolo sul client: `bandLocationConflicts`.
+- **Azione**: `setAgendaBandLocation` (`lib/actions/autoscuole-band-location.actions.ts`),
+  solo titolare/istruttore titolare/admin e funzione accesa. Default: override della
+  data con le fasce di oggi e solo quel luogo diverso. `everyWeekday`: settimana
+  tipo di quel giorno della settimana (passa al modello per giorno, `rangesByDay`)
+  + override del giorno se c'è; gli altri giorni uguali con orari propri restano
+  (conteggio nel messaggio). **Non azzera `availabilityOverrideApproved`** (gli
+  orari non cambiano), a differenza di `setDailyAvailabilityOverride`.
+- **Annulla**: il messaggio (toast standard) ha «Annulla» →
+  `undoAgendaBandLocation(snapshot)`: rimette override (o lo cancella se non
+  c'era) e la riga della settimana tipo identica, `null` compresi.
+- **Record vecchi**: senza `ranges` la seconda fascia sta in
+  `startMinutes2`/`endMinutes2`; `weeklyLikeFromRecord` la legge come il motore
+  (bug trovato dall'e2e: prima il pomeriggio spariva).
+- **Dati agenda**: a funzione accesa `getInstructorAvailabilityForAgenda` aggiunge
+  `locationId` e `inWeekly` a ogni fascia.
+- Pausa tra luoghi: il cambio non sposta guide prenotate, quindi non può violarla;
+  il motore la applica ai nuovi slot.
+
 ## Codici di invito per luogo (REG-706)
 
 - **Schema**: `AutoscuolaLocation.inviteCode String? @unique` (migrazione
@@ -178,6 +211,8 @@ Tutto in `lib/autoscuole/location-booking.ts` (puro + loader), test in
   archivia e categorie. Bug trovato il 05/11: `/api/autoscuole/locations` (lo
   chiamano anche allievi e istruttori) restituiva i codici di tutti i luoghi.
   L'e2e `reg706` ora controlla che l'elenco non abbia `inviteCode`.
+  Stessa cosa per i codici degli istruttori (REG-717): `getAutoscuolaInstructors`
+  li dà solo al titolare; `reg717` controlla che l'allievo non li riceva.
 
 ## E2E contro staging
 
@@ -197,7 +232,7 @@ npx playwright test tests/e2e/reg705-*.auth.spec.ts tests/e2e/reg706-codici-luog
 ```
 
 Nessuno prenota né notifica; ognuno rimette setting, fasce e luoghi
-dell'allievo com'erano. Verdi davvero su staging il 04/11 (7 su 7).
+dell'allievo com'erano. Verdi davvero su staging il 04/11 (7 su 7). `reg717-cambio-luogo` per ora solo su dev.
 
 ## Connessioni
 - **Locations (REG-392/409)**: archiviare un luogo lo toglie dai luoghi degli
