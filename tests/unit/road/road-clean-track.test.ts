@@ -103,7 +103,7 @@ describe("buildCleanTrack", () => {
   it("Google che non risponde = traccia solo pulita, da riprovare dopo un giorno", async () => {
     const t = await buildCleanTrack(drive(42.6, 13.7, T0, 60), {
       now: T0,
-      fetchSnap: async () => {
+      osmGraph: null, googleFallback: true, fetchSnap: async () => {
         throw new Error("down");
       },
     });
@@ -116,7 +116,7 @@ describe("buildCleanTrack", () => {
   });
 
   it("agganciata: non va ricalcolata", async () => {
-    const t = await buildCleanTrack(drive(42.6, 13.7, T0, 60), { fetchSnap: async (p) => p.map(([lat, lng], i) => ({ lat, lng, originalIndex: i })) });
+    const t = await buildCleanTrack(drive(42.6, 13.7, T0, 60), { osmGraph: null, googleFallback: true, fetchSnap: async (p) => p.map(([lat, lng], i) => ({ lat, lng, originalIndex: i })) });
     expect(t.snapped).toBe(true);
     expect(needsRebuild(t)).toBe(false);
     expect(needsRebuild(null)).toBe(true);
@@ -146,7 +146,7 @@ describe("snapPath: deviazioni di Google", () => {
 
 describe("REG-713: lettura senza ricalcolo", () => {
   it("storedCleanTrack: la traccia salvata si mostra anche se l'aggancio è da riprovare", async () => {
-    const t = await buildCleanTrack(drive(42.6, 13.7, T0, 60), { now: T0, fetchSnap: async () => { throw new Error("giù"); } });
+    const t = await buildCleanTrack(drive(42.6, 13.7, T0, 60), { now: T0, osmGraph: null, googleFallback: true, fetchSnap: async () => { throw new Error("giù"); } });
     expect(needsRebuild(t, T0 + 25 * 3600_000)).toBe(true);
     expect(storedCleanTrack(t)).toBe(t);
     expect(storedCleanTrack(null)).toBeNull();

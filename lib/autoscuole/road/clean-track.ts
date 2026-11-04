@@ -1,4 +1,5 @@
 import { haversineMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
+import { matchTrack, type RoadGraph } from "@/lib/autoscuole/road/osm-match";
 
 /**
  * REG-665 Reglo Road — traccia pulita e agganciata alla strada.
@@ -14,9 +15,17 @@ import { haversineMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
  *    (interpolate), sulla traccia diradata a circa un punto ogni 30 m: per
  *    un'ora di guida 6–8 richieste.
  * Se Google non risponde resta la traccia pulita (punto 2), senza aggancio.
+ *
+ * REG-722: il punto 3 lo fa la «calamita» sulle strade OpenStreetMap
+ * (`osm-match.ts`, celle lette da R2), la stessa della linea dal vivo, senza
+ * costi a chiamata. Google Roads resta come ripiego dietro
+ * `ROAD_SNAP_GOOGLE_FALLBACK` (spento): si toglie dopo le prove con guide vere.
+ * Senza celle per la zona (o R2 giù) = traccia solo pulita, da riprovare.
  */
 
 export const CLEAN_TRACK_VERSION = 1;
+/** REG-722: Google Roads dove la calamita OSM non può (zona senza celle, R2 giù). Spento. */
+export const ROAD_SNAP_GOOGLE_FALLBACK = false;
 /** Oltre questa incertezza il fix non entra nella traccia pulita. */
 const MAX_ACCURACY_M = 25;
 /** Salto impossibile (≈ 180 km/h). */
@@ -43,8 +52,10 @@ export type TrackPoint = [number, number, number];
 export type TrackStop = { lat: number; lng: number; startMs: number; endMs: number; minutes: number };
 export type CleanTrack = {
   v: number;
-  /** true = linea sulle strade (Google), false = solo pulita. */
+  /** true = linea sulle strade, false = solo pulita. */
   snapped: boolean;
+  /** REG-722: chi l'ha agganciata (assente = Google, le tracce di prima). */
+  source?: "osm" | "google";
   path: TrackPoint[];
   stops: TrackStop[];
   distanceMeters: number;
@@ -249,9 +260,22 @@ function fillTimes(known: Array<number | undefined>): number[] {
 }
 
 /** Traccia pulita completa. Google che non risponde = traccia solo pulita, da riprovare. */
+/** Il grafo OSM sotto una traccia, o null se la zona non ha celle. */
+export type LoadOsmGraph = (path: TrackPoint[]) => Promise<RoadGraph | null>;
+
+const defaultOsmGraph: LoadOsmGraph = async (path) =>
+  (await import("@/lib/autoscuole/road/osm-store")).osmGraphForTrack(path);
+
 export async function buildCleanTrack(
   points: RoadPoint[],
-  opts: { snap?: boolean; fetchSnap?: FetchSnap; now?: number } = {},
+  opts: {
+    snap?: boolean;
+    fetchSnap?: FetchSnap;
+    now?: number;
+    /** null = niente calamita OSM (solo Google, se il ripiego è acceso). */
+    osmGraph?: LoadOsmGraph | null;
+    googleFallback?: boolean;
+  } = {},
 ): Promise<CleanTrack> {
   const { path, stops } = cleanTrackPoints(points);
   const base: CleanTrack = {
@@ -263,12 +287,28 @@ export async function buildCleanTrack(
     thumb: thumbPath(path),
   };
   if (opts.snap === false || path.length < 2) return base;
+  const retry = { ...base, retryAfter: (opts.now ?? Date.now()) + 24 * 3600_000 };
+  const loadGraph = opts.osmGraph === undefined ? defaultOsmGraph : opts.osmGraph;
+  if (loadGraph) {
+    try {
+      const graph = await loadGraph(path);
+      if (graph && graph.edgeCount) {
+        const matched = matchTrack(graph, path);
+        if (matched.length >= 2) {
+          return { ...base, snapped: true, source: "osm", path: matched, distanceMeters: Math.round(pathLength(matched)), thumb: thumbPath(matched) };
+        }
+      }
+    } catch (e) {
+      console.warn("[road] calamita OSM", e instanceof Error ? e.message : e);
+    }
+  }
+  if (!(opts.googleFallback ?? ROAD_SNAP_GOOGLE_FALLBACK)) return retry;
   try {
     const snapped = await snapPath(thinForSnap(path), opts.fetchSnap, path);
-    return { ...base, snapped: true, path: snapped, distanceMeters: Math.round(pathLength(snapped)), thumb: thumbPath(snapped) };
+    return { ...base, snapped: true, source: "google", path: snapped, distanceMeters: Math.round(pathLength(snapped)), thumb: thumbPath(snapped) };
   } catch (e) {
     console.warn("[road] snapToRoads", e instanceof Error ? e.message : e);
-    return { ...base, retryAfter: (opts.now ?? Date.now()) + 24 * 3600_000 };
+    return retry;
   }
 }
 

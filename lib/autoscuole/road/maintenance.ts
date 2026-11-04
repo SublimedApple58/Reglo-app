@@ -12,7 +12,7 @@ export const ROAD_ORPHAN_AFTER_MIN = 30;
 export const ROAD_RETENTION_MONTHS = 12;
 /** REG-713: per quanti giorni dopo la fine il job prova ancora ad agganciare la traccia. */
 export const ROAD_CLEAN_TRACK_DAYS = 7;
-/** REG-713: tracce agganciate per giro del job (6–8 richieste Google l'una). */
+/** REG-713: tracce agganciate per giro del job (REG-722: calamita OSM, niente Google). */
 const CLEAN_TRACKS_PER_RUN = 25;
 
 type Db = Pick<PrismaClient, "roadSession" | "roadPointBatch">;
@@ -60,15 +60,15 @@ export async function finalizeRoadSession(
  * i suoi km (gli unici che app, web, storico e riepilogo mostrano). È l'unico
  * punto che scrive `cleanTrack`: a «Termina guida», dal job e dopo i punti
  * arrivati in ritardo; la lettura del dettaglio non scrive mai.
- * `snap: false` = solo pulita, senza Google: il job la aggancia al giro dopo.
+ * `snap: false` = solo pulita, senza aggancio: il job la aggancia al giro dopo.
  */
 export async function saveRoadCleanTrack(
   db: Db,
   sessionId: string,
-  opts: { snap?: boolean; now?: number } = {},
+  opts: { snap?: boolean; now?: number } & Pick<Parameters<typeof buildCleanTrack>[1] & object, "osmGraph" | "googleFallback" | "fetchSnap"> = {},
 ): Promise<CleanTrack> {
   const now = opts.now ?? Date.now();
-  const track = await buildCleanTrack(await loadRoadTrack(db, sessionId), { snap: opts.snap, now });
+  const track = await buildCleanTrack(await loadRoadTrack(db, sessionId), { ...opts, now });
   const stored: CleanTrack = opts.snap === false && track.path.length >= 2 ? { ...track, retryAfter: now } : track;
   await db.roadSession.update({
     where: { id: sessionId },
@@ -79,7 +79,7 @@ export async function saveRoadCleanTrack(
 
 /**
  * REG-713: guide finite negli ultimi 7 giorni senza traccia agganciata
- * (abbandonate, punti arrivati in ritardo, Google giù alla chiusura e ora di
+ * (abbandonate, punti arrivati in ritardo, aggancio fallito alla chiusura e ora di
  * riprovare, versione cambiata). Una volta agganciata non si tocca più.
  */
 export async function runRoadCleanTracks(db: Db & Pick<PrismaClient, "$queryRaw">, now = new Date()) {

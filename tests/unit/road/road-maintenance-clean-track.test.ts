@@ -35,11 +35,20 @@ describe("REG-713 saveRoadCleanTrack", () => {
     expect(t.distanceMeters).toBeGreaterThan(500);
   });
 
-  it("Google giù: salva la traccia pulita da riprovare fra 24 h, con gli stessi km", async () => {
+  it("REG-722: zona senza celle OSM: traccia pulita da riprovare fra 24 h, niente Google", async () => {
+    const { db, updates } = fakeDb(drive(60));
+    const t = await saveRoadCleanTrack(db, "s1", { now: T0, osmGraph: async () => null });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(t.snapped).toBe(false);
+    expect(t.retryAfter).toBe(T0 + 24 * 3600_000);
+    expect(updates[0].data.distanceMeters).toBe(t.distanceMeters);
+  });
+
+  it("ripiego Google acceso e Google giù: pulita da riprovare fra 24 h, con gli stessi km", async () => {
     process.env.GOOGLE_MAPS_API_KEY = "k";
     fetchMock.mockResolvedValue({ ok: false, status: 503 });
     const { db, updates } = fakeDb(drive(60));
-    const t = await saveRoadCleanTrack(db, "s1", { now: T0 });
+    const t = await saveRoadCleanTrack(db, "s1", { now: T0, osmGraph: async () => null, googleFallback: true });
     expect(fetchMock).toHaveBeenCalled();
     expect(t.retryAfter).toBe(T0 + 24 * 3600_000);
     expect(updates[0].data.distanceMeters).toBe(t.distanceMeters);
