@@ -333,7 +333,7 @@ const CONFIG_PANE_GROUPS: Array<
     { key: "policy", label: "Policy tipi guida", icon: NotepadProtoIcon },
     { key: "evaluation", label: "Pagellino", icon: StarProtoIcon },
     // REG-638: solo con il modulo Road acceso (filtrata in `paneGroups`).
-    { key: "road", label: "Reglo Road", icon: Route, badge: "Nuovo" },
+    { key: "road", label: "Reglo Road", icon: Route },
     { key: "reminders", label: "Promemoria e notifiche", icon: BellProtoIcon },
   ],
   [

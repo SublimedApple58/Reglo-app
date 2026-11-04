@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { useLocale } from "next-intl";
 import { ChevronRight } from "lucide-react";
 
 import { roadApi, type RoadTodayItem } from "@/lib/autoscuole/road/client";
@@ -13,6 +15,7 @@ import {
   km,
   MarkerPill,
   RoadStatusChip,
+  romeYmd,
   type RoadStatusKind,
 } from "./road-ui";
 
@@ -29,7 +32,8 @@ export function todayStatus(item: RoadTodayItem, now: number): RoadStatusKind {
  * «Guide di oggi»: le guide singole in auto di oggi con lo stato Road di
  * ciascuna. Stesso linguaggio visivo delle righe «In giro adesso».
  */
-export function RoadTodayView({ onOpen }: { onOpen: (sessionId: string) => void }) {
+export function RoadTodayView({ onOpen }: { onOpen: (sessionId: string, list: string[]) => void }) {
+  const locale = useLocale();
   const [items, setItems] = React.useState<RoadTodayItem[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [now, setNow] = React.useState(() => Date.now());
@@ -57,17 +61,17 @@ export function RoadTodayView({ onOpen }: { onOpen: (sessionId: string) => void 
   }, []);
 
   const done = items?.filter((i) => i.road).length ?? 0;
+  const ids = (items ?? []).flatMap((i) => (i.road ? [i.road.id] : []));
+  const agendaHref = `/${locale}/user/autoscuole?tab=agenda&date=${romeYmd(new Date())}`;
 
   return (
-    <div className="rounded-[24px] border border-[#ebebeb] px-4 pb-3 pt-5 leading-[1.25]" data-testid="road-today">
-      <div className="flex items-baseline justify-between px-1.5 pb-3">
-        <b className="text-lg font-semibold tracking-[-0.3px] text-[#111111]">Guide di oggi</b>
-        {items ? (
-          <span className="text-[13px] text-[#6a6a6a]">
-            {items.length === 1 ? "1 guida" : `${items.length} guide`} · {done} con Road
-          </span>
-        ) : null}
-      </div>
+    <div className="leading-[1.25]" data-testid="road-today">
+      {items && items.length ? (
+        <p className="pb-3 text-[13.5px] tabular-nums text-[#6a6a6a]">
+          {items.length === 1 ? "1 guida singola in auto" : `${items.length} guide singole in auto`}
+          {done ? ` · ${done} registrate con Road` : ""}
+        </p>
+      ) : null}
 
       {!items && !error ? (
         <div className="grid gap-2">
@@ -78,11 +82,23 @@ export function RoadTodayView({ onOpen }: { onOpen: (sessionId: string) => void 
       ) : null}
       {error && !items ? <p className="px-1.5 pb-3 text-[13.5px] text-[#6a6a6a]">{error}</p> : null}
       {items && items.length === 0 ? (
-        <p className="px-1.5 pb-4 text-[14px] text-[#6a6a6a]">Oggi non ci sono guide singole in auto.</p>
+        <div className="max-w-[520px] py-6" data-testid="road-today-empty">
+          <b className="block text-[16px] font-semibold text-[#111111]">Oggi non ci sono guide singole in auto</b>
+          <p className="mt-1 text-[14px] leading-[1.5] text-[#6a6a6a]">
+            Qui compaiono le guide in auto di oggi, con lo stato di Road di ciascuna. Le guide di gruppo, in moto e gli
+            esami non passano da Road.
+          </p>
+          <Link
+            href={agendaHref}
+            className="mt-4 inline-flex h-10 items-center rounded-[20px] bg-[#f4f4f4] px-4 text-[14px] font-semibold text-[#111111] transition-colors duration-200 hover:bg-[#ebebeb]"
+          >
+            Apri l&apos;agenda di oggi
+          </Link>
+        </div>
       ) : null}
 
       {items && items.length ? (
-        <div className="grid">
+        <div className="grid border-t border-[#ebebeb]">
           {items.map((it) => {
             const status = todayStatus(it, now);
             const clickable = Boolean(it.road);
@@ -91,10 +107,10 @@ export function RoadTodayView({ onOpen }: { onOpen: (sessionId: string) => void 
             return (
               <Row
                 key={it.appointmentId}
-                {...(clickable ? { type: "button" as const, onClick: () => onOpen(it.road!.id) } : {})}
+                {...(clickable ? { type: "button" as const, onClick: () => onOpen(it.road!.id, ids) } : {})}
                 data-testid="road-today-row"
                 className={cn(
-                  "grid grid-cols-[80px_64px_minmax(0,1fr)_auto] items-center gap-4 rounded-[20px] py-3 pl-2.5 pr-3.5 text-left md:grid-cols-[80px_64px_minmax(0,1fr)_150px_140px_20px]",
+                  "grid grid-cols-[48px_64px_minmax(0,1fr)] items-center gap-3 border-b border-[#f0f0f0] py-3.5 pl-1 pr-1 text-left md:grid-cols-[80px_64px_minmax(0,1fr)_150px_140px_20px] md:gap-4 md:rounded-[16px] md:border-b-0 md:py-3 md:pl-2.5 md:pr-3.5",
                   clickable ? "cursor-pointer transition-colors hover:bg-[#fafafa]" : "",
                 )}
               >
@@ -114,7 +130,7 @@ export function RoadTodayView({ onOpen }: { onOpen: (sessionId: string) => void 
                 <div className="hidden md:block">
                   <RoadStatusChip kind={status} />
                 </div>
-                <div className="flex items-center justify-end gap-3">
+                <div className="col-start-3 -mt-1 flex min-w-0 items-center gap-3 md:col-start-auto md:mt-0 md:justify-end">
                   <span className="md:hidden">
                     <RoadStatusChip kind={status} />
                   </span>

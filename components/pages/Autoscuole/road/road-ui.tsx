@@ -241,7 +241,7 @@ export function MarkerPill({
   bad?: number;
 }) {
   if (!count) {
-    return <span className="text-[12.5px] text-[#6a6a6a]">Nessuna segnalazione</span>;
+    return <span className="whitespace-nowrap text-[12.5px] text-[#6a6a6a]">Nessuna segnalazione</span>;
   }
   const shown: string[] = [];
   for (const k of [...kinds].reverse()) {
@@ -250,7 +250,7 @@ export function MarkerPill({
     if (shown.length === 3) break;
   }
   return (
-    <span className="inline-flex items-center gap-[3px] text-[12.5px] font-medium tabular-nums text-[#222222]">
+    <span className="inline-flex items-center gap-[3px] whitespace-nowrap text-[12.5px] font-medium tabular-nums text-[#222222]">
       {shown.map((src) => (
         // eslint-disable-next-line @next/next/no-img-element
         <img key={src} src={src} alt="" className="size-[18px] object-contain" draggable={false} />
@@ -292,25 +292,23 @@ export function SymbolTile({
 
 export type RoadStatusKind = "todo" | "live" | "done" | "missed" | "auto";
 
+/**
+ * Stato della guida come testo (REG-716: niente pillole). «Completata» e «In
+ * corso» in nero, gli altri in grigio; «In corso» con il pallino rosso.
+ */
 export function RoadStatusChip({ kind }: { kind: RoadStatusKind }) {
-  const base = "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[14px] px-3 text-[13px] font-semibold";
+  const base = "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[13.5px]";
   if (kind === "live")
     return (
-      <span className={cn(base, "bg-[#f2f2f2] text-[#111111]")}>
+      <span className={cn(base, "font-semibold text-[#111111]")}>
         <LiveDot />
         In corso
       </span>
     );
-  if (kind === "done")
-    return (
-      <span className={cn(base, "bg-[#e6f6ec] text-[#067647]")}>
-        <span aria-hidden className="size-2 rounded-full bg-[#067647]" />
-        Completata
-      </span>
-    );
-  if (kind === "auto") return <span className={cn(base, "bg-[#f2f2f2] text-[#555]")}>Chiusa in automatico</span>;
-  if (kind === "missed") return <span className={cn(base, "bg-[#f2f2f2] text-[#6a6a6a]")}>Non registrata</span>;
-  return <span className={cn(base, "bg-[#f2f2f2] text-[#555]")}>Da iniziare</span>;
+  if (kind === "done") return <span className={cn(base, "font-semibold text-[#111111]")}>Completata</span>;
+  if (kind === "auto") return <span className={cn(base, "text-[#555555]")}>Chiusa in automatico</span>;
+  if (kind === "missed") return <span className={cn(base, "text-[#6a6a6a]")}>Non registrata</span>;
+  return <span className={cn(base, "text-[#6a6a6a]")}>Da iniziare</span>;
 }
 
 /** Zoom +/− in basso a destra, sopra l'attribuzione della mappa. */

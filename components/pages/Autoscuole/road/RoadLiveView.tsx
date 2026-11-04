@@ -429,9 +429,7 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
 
           {live && live.atBase.length ? (
             <>
-              <div className="mx-1.5 mb-1.5 mt-[18px] text-[11.5px] font-semibold uppercase tracking-[0.7px] text-[#6a6a6a]">
-                In sede
-              </div>
+              <div className="mx-1.5 mb-1 mt-[18px] text-[15px] font-semibold text-[#111111]">In sede</div>
               <div className="grid gap-2">
                 {live.atBase.map((v) => (
                   <div
@@ -523,9 +521,9 @@ function SelectedCard({
       className="absolute right-[18px] top-[18px] z-[5] w-[330px] rounded-[24px] leading-[1.25] bg-white p-[18px] shadow-[0_22px_50px_rgba(0,0,0,0.22),0_2px_6px_rgba(0,0,0,0.06)]"
       data-testid="road-live-card"
     >
-      <div className="flex items-center justify-between text-[11.5px] font-semibold uppercase tracking-[0.7px] text-[#6a6a6a]">
+      <div className="flex items-center justify-between text-[13.5px] font-semibold text-[#111111]">
         {lost ? (
-          <span className="normal-case tracking-normal text-[13px] font-semibold text-[#111111]" data-testid="road-live-card-signal">
+          <span className="text-[13px] font-semibold text-[#111111]" data-testid="road-live-card-signal">
             {lost}
           </span>
         ) : (

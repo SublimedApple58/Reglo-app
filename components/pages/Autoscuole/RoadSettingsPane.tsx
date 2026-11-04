@@ -1,7 +1,9 @@
 "use client";
 
 import React from "react";
-import { Pencil, X } from "lucide-react";
+import Link from "next/link";
+import { useLocale } from "next-intl";
+import { ChevronRight, Pencil, X } from "lucide-react";
 
 import {
   getAutoscuolaSettings,
@@ -18,7 +20,6 @@ import { InlineToggle } from "@/components/ui/inline-toggle";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { RoadExamRoutesSection } from "./road/RoadExamRoutesSection";
 import { RoadHeadquartersGate } from "./road/RoadHeadquartersGate";
 
 const newId = () =>
@@ -32,7 +33,7 @@ const newId = () =>
  * lettura) e quelle personalizzate dell'autoscuola, che compaiono agli
  * istruttori nella sezione «Della tua autoscuola». Ogni modifica si salva
  * subito (`updateAutoscuolaSettings({ roadCustomMarkers })`). Sotto, i percorsi
- * d'esame (REG-645, `RoadExamRoutesSection`).
+ * d'esame: dal REG-716 un link alla tab di Road.
  *
  * In cima (REG-651) i due interruttori del giro, accesi di default e salvati
  * al tocco: «Proponi il giro» (`roadPlanEnabled`) e «Avvisi delle tappe»
@@ -293,7 +294,7 @@ export function RoadSettingsPane() {
         toglierle non cambia le guide già fatte.
       </p>
 
-      <RoadExamRoutesSection />
+      <RoadExamRoutesLink />
     </div>
   );
 }
@@ -330,5 +331,26 @@ function PlanToggleRow({
         <InlineToggle checked={checked} onChange={onToggle} disabled={disabled || saving} size="lg" />
       </div>
     </div>
+  );
+}
+
+/**
+ * REG-716: i percorsi d'esame sono contenuti, non impostazioni: stanno nella
+ * tab «Percorsi d'esame» di Road. Qui resta solo la strada per arrivarci.
+ */
+function RoadExamRoutesLink() {
+  const locale = useLocale();
+  return (
+    <Link
+      href={`/${locale}/user/autoscuole/road?view=routes`}
+      data-testid="road-settings-exam-routes-link"
+      className="mt-[30px] flex items-center justify-between gap-4 rounded-[18px] border border-[#ebebeb] px-[18px] py-4 transition-colors duration-200 hover:bg-[#fafafa]"
+    >
+      <span className="min-w-0">
+        <b className="block text-[15px] font-medium text-[#222222]">Percorsi d&apos;esame</b>
+        <span className="text-[13px] text-[#6a6a6a]">Si disegnano e si modificano in Road › Percorsi d&apos;esame.</span>
+      </span>
+      <ChevronRight className="size-4 shrink-0 text-[#b0b0b0]" strokeWidth={2} />
+    </Link>
   );
 }

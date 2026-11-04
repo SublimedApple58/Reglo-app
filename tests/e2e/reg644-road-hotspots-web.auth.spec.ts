@@ -14,7 +14,7 @@ test("punti critici web: lista, dettaglio, guida e ritorno", async ({ page }) =>
   await page.addInitScript((keys) => keys.forEach((k) => localStorage.setItem(k, "1")), NEWS_SEEN_KEYS);
   await page.goto("/it/user/autoscuole/road?view=hotspots");
   await expect(page.getByTestId("road-hotspots")).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByRole("tab", { name: "Punti critici" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("road-tab-hotspots")).toHaveAttribute("aria-current", "page");
 
   const rows = page.getByTestId("road-hotspot-row");
   const empty = page.getByTestId("road-hotspots-empty");
@@ -35,7 +35,9 @@ test("punti critici web: lista, dettaglio, guida e ritorno", async ({ page }) =>
   await page.getByTestId("road-hotspot-session").first().click();
   await expect(page).toHaveURL(/from=hotspots/);
   await expect(page.getByTestId("road-detail")).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("navigation", { name: "Percorso" }).getByRole("link", { name: "Punti critici" }).click();
-  await expect(page).toHaveURL(/view=hotspots/);
-  await expect(page.getByTestId("road-hotspots")).toBeVisible();
+  // REG-716: niente breadcrumb, un solo ritorno; riapre il punto da cui si era partiti.
+  await expect(page.getByTestId("road-back")).toHaveText(/Punti critici/);
+  await page.getByTestId("road-back").click();
+  await expect(page).toHaveURL(/view=hotspots.*point=/);
+  await expect(page.getByTestId("road-hotspot-detail")).toBeVisible({ timeout: 60_000 });
 });

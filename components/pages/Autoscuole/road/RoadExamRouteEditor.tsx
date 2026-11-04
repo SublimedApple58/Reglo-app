@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale } from "next-intl";
 import { useAtomValue } from "jotai";
 import { Check, X } from "lucide-react";
@@ -32,6 +32,8 @@ import { LoadingDots } from "@/components/ui/loading-dots";
 import { cn } from "@/lib/utils";
 import { addHtmlMarker, htmlElement, lineBounds, placeMarkerElement, toLngLat, useRoadMap } from "./road-map";
 import { km, ROAD_MAP_BOX_CLASS, RoadMapFallback, RoadMarkerStyles, ZoomControls } from "./road-ui";
+import { roadBase, roadViewHref, safeBack } from "./road-nav";
+import { RoadBackLink } from "./road-nav-ui";
 
 /** Attesa dopo l'ultima modifica prima di chiedere l'aggancio: più punti messi di fila = una richiesta. */
 const SNAP_DEBOUNCE_MS = 350;
@@ -68,7 +70,12 @@ export function RoadExamRouteEditor({ source }: { source: ExamRouteEditorSource 
   const toast = useFeedbackToast();
   const company = useAtomValue(companyAtom);
   const isOwner = company?.role === "admin";
-  const settingsHref = `/${locale}/user/autoscuole?tab=settings&pane=road`;
+  // REG-716: l'editor è una pagina figlia della tab «Percorsi d'esame» di Road.
+  const routesHref = roadViewHref(locale, "routes");
+  const searchParams = useSearchParams();
+  const back = safeBack(searchParams.get("back"));
+  const backHref = back ?? (source.kind === "session" ? `${roadBase(locale)}/${source.sessionId}` : routesHref);
+  const backLabel = source.kind === "session" ? "Guida" : "Percorsi d'esame";
 
   const [loaded, setLoaded] = React.useState(source.kind === "new");
   const [loadError, setLoadError] = React.useState<string | null>(null);
@@ -529,7 +536,7 @@ export function RoadExamRouteEditor({ source }: { source: ExamRouteEditorSource 
       else await roadApi.createExamRoute(body);
       setDirty(false);
       toast.success({ description: existing ? "Percorso aggiornato." : "Percorso d'esame salvato." });
-      router.push(settingsHref);
+      router.push(routesHref);
     } catch (e) {
       toast.error({ description: e instanceof Error ? e.message : "Impossibile salvare il percorso." });
     } finally {
@@ -544,7 +551,7 @@ export function RoadExamRouteEditor({ source }: { source: ExamRouteEditorSource 
       await roadApi.archiveExamRoute(existing.id);
       setDirty(false);
       toast.success({ description: "Percorso archiviato." });
-      router.push(settingsHref);
+      router.push(routesHref);
     } catch (e) {
       toast.error({ description: e instanceof Error ? e.message : "Impossibile archiviare il percorso." });
       setArchiving(false);
@@ -552,9 +559,9 @@ export function RoadExamRouteEditor({ source }: { source: ExamRouteEditorSource 
   };
 
   if (company && !isOwner) {
-    return <Message text="Solo il titolare può modificare i percorsi d'esame." href={settingsHref} />;
+    return <Message text="Solo il titolare può modificare i percorsi d'esame." href={routesHref} />;
   }
-  if (loadError) return <Message text={loadError} href={settingsHref} />;
+  if (loadError) return <Message text={loadError} href={routesHref} />;
 
   const title =
     source.kind === "edit" ? existing?.name ?? "Percorso d'esame" : "Nuovo percorso d'esame";
@@ -570,17 +577,7 @@ export function RoadExamRouteEditor({ source }: { source: ExamRouteEditorSource 
     <div className="w-full lg:-mt-2.5" data-testid="road-exam-editor">
       <RoadMarkerStyles />
       <EditorStyles />
-      <nav className="flex min-w-0 items-center gap-2 text-[13.5px] text-[#6a6a6a]" aria-label="Percorso">
-        <Link href={`/${locale}/user/autoscuole?tab=settings`} className="shrink-0 hover:text-[#111111]">
-          Impostazioni
-        </Link>
-        <span>›</span>
-        <Link href={settingsHref} className="shrink-0 hover:text-[#111111]">
-          Reglo Road
-        </Link>
-        <span>›</span>
-        <b className="truncate font-medium text-[#111111]">{source.kind === "edit" ? "Modifica percorso" : "Nuovo percorso"}</b>
-      </nav>
+      <RoadBackLink href={backHref} label={backLabel} />
 
       <div className="flex flex-wrap items-end justify-between gap-4 pb-5 pt-2.5">
         <div className="min-w-0">
@@ -593,7 +590,7 @@ export function RoadExamRouteEditor({ source }: { source: ExamRouteEditorSource 
         </div>
         <div className="flex items-center gap-2.5">
           <Link
-            href={settingsHref}
+            href={backHref}
             className="grid h-11 place-items-center rounded-[22px] bg-[#f2f2f2] px-[18px] text-[14.5px] font-semibold text-[#111111] transition-colors duration-200 hover:bg-[#e8e8e8]"
           >
             Annulla

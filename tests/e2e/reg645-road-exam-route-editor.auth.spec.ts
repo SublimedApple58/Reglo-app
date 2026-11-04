@@ -19,7 +19,8 @@ async function waitSnapped(page: Page) {
 
 test("percorsi d'esame: disegna, salva, riapri e archivia", async ({ page }) => {
   await page.addInitScript((keys) => keys.forEach((k) => localStorage.setItem(k, "1")), NEWS_SEEN_KEYS);
-  await page.goto("/it/user/autoscuole?tab=settings&pane=road");
+  // REG-716: i percorsi d'esame sono una tab di Road.
+  await page.goto("/it/user/autoscuole/road?view=routes");
   const section = page.getByTestId("road-exam-routes");
   await expect(section).toBeVisible({ timeout: 60_000 });
   await section.getByTestId("road-exam-new").click();
@@ -49,7 +50,7 @@ test("percorsi d'esame: disegna, salva, riapri e archivia", async ({ page }) => 
   const name = `E2E percorso ${Date.now()}`;
   await page.getByLabel("Nome").fill(name);
   await page.getByTestId("road-exam-save").click();
-  await expect(page).toHaveURL(/pane=road/, { timeout: 60_000 });
+  await expect(page).toHaveURL(/view=routes/, { timeout: 60_000 });
   const row = page.getByTestId("road-exam-route-row").filter({ hasText: name });
   await expect(row).toBeVisible({ timeout: 60_000 });
 
@@ -58,7 +59,7 @@ test("percorsi d'esame: disegna, salva, riapri e archivia", async ({ page }) => 
   await expect(page.getByTestId("road-exam-row")).toHaveCount(2, { timeout: 60_000 });
   await expect(page.getByLabel("Nome")).toHaveValue(name);
   await page.getByRole("button", { name: "Archivia percorso" }).click();
-  await expect(page).toHaveURL(/pane=road/, { timeout: 60_000 });
+  await expect(page).toHaveURL(/view=routes/, { timeout: 60_000 });
   await expect(page.getByTestId("road-exam-routes")).toBeVisible({ timeout: 60_000 });
   // Gli archiviati restano nascosti finché non si apre «Archiviati».
   await expect(page.getByTestId("road-exam-route-row").filter({ hasText: name })).toHaveCount(0);
@@ -72,6 +73,8 @@ test("scorciatoia: «Usa come percorso d'esame» dallo Storico", async ({ page }
   test.skip(!visible, "Nessuna guida nello Storico");
   await first.click();
   await expect(page.getByTestId("road-detail")).toBeVisible({ timeout: 60_000 });
+  // REG-716: l'azione sta nel menu «…» del dettaglio.
+  await page.getByTestId("road-detail-more").click();
   const use = page.getByTestId("road-use-as-exam");
   test.skip(!(await use.waitFor({ timeout: 20_000 }).then(() => true, () => false)), "Guida senza tracciato");
   await use.click();

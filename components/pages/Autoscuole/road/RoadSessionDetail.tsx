@@ -2,15 +2,21 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale } from "next-intl";
 import { useAtomValue } from "jotai";
-import { Star } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronRight, ChevronUp, MoreHorizontal, Star } from "lucide-react";
 import type { Marker as MlMarker } from "maplibre-gl";
 
 import { companyAtom } from "@/atoms/company.store";
 import { getServiceLimits } from "@/lib/services";
-import { roadApi, type RoadDetail } from "@/lib/autoscuole/road/client";
+import { roadApi, type RoadDetail, type RoadHotspot } from "@/lib/autoscuole/road/client";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { nearestIndex } from "@/lib/autoscuole/road/exam-route-editor";
 import { pathLengthMeters, type LatLng } from "@/lib/autoscuole/road/exam-routes";
 import { roadCarImages, roadMarkerSymbol } from "@/lib/autoscuole/road/symbols";
@@ -42,25 +48,31 @@ import {
   SymbolTile,
   ZoomControls,
 } from "./road-ui";
+import {
+  hotspotHref,
+  readList,
+  rememberPrev,
+  ROAD_VIEW_LABEL,
+  roadViewHref,
+  safeBack,
+  sessionHref,
+  studentHref,
+  type RoadFrom,
+} from "./road-nav";
+import { RoadBackLink } from "./road-nav-ui";
+import { useCompanyHotspots } from "./road-hotspot-match";
 
 const POLL_MS = 5000;
 const EASE = "cubic-bezier(0.2, 0, 0, 1)";
 /** Tratto scelto per «Usa come percorso d'esame»: indici nel tracciato. */
 type Trim = { a: number; b: number };
-type RoadView = "live" | "today" | "history" | "hotspots";
-const VIEW_LABEL: Record<RoadView, string> = {
-  live: "Dal vivo",
-  today: "Guide di oggi",
-  history: "Storico",
-  hotspots: "Punti critici",
-};
 
 /**
  * Dettaglio di una guida registrata con Road (W2): percorso, segnalazioni in
  * ordine di tempo, pagellino. Se la guida è ancora in corso si aggiorna da
  * sola ogni 5 s (a scheda visibile).
  */
-export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from: RoadView }) {
+export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from: RoadFrom }) {
   const locale = useLocale();
   const router = useRouter();
   const company = useAtomValue(companyAtom);
@@ -70,7 +82,33 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
   const [detail, setDetail] = React.useState<RoadDetail | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const base = `/${locale}/user/autoscuole/road`;
-  const backHref = from === "live" ? base : `${base}?view=${from}`;
+  const searchParams = useSearchParams();
+  const back = safeBack(searchParams.get("back"));
+  const hotspots = useCompanyHotspots(isOwner);
+
+  // Su/giù tra le guide della lista da cui si è aperto il dettaglio (REG-719).
+  const [list, setList] = React.useState<string[]>([]);
+  React.useEffect(() => setList(readList()), []);
+  const pos = list.indexOf(sessionId);
+  const goTo = React.useCallback(
+    (id: string | undefined) => {
+      if (!id) return;
+      router.replace(sessionHref(locale, id, from, back), { scroll: false });
+    },
+    [router, locale, from, back],
+  );
+  const prevId = pos > 0 ? list[pos - 1] : undefined;
+  const nextId = pos >= 0 && pos < list.length - 1 ? list[pos + 1] : undefined;
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (e.metaKey || e.ctrlKey || e.altKey || (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) || t?.isContentEditable) return;
+      if (e.key === "k") goTo(prevId);
+      if (e.key === "j") goTo(nextId);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [goTo, prevId, nextId]);
 
   const active = detail?.status === "active";
   React.useEffect(() => {
@@ -106,6 +144,16 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
   const { handle, failed } = useRoadMap(containerRef, { center: [45.07, 7.68], zoom: 13 });
   const markersRef = React.useRef<MlMarker[]>([]);
   const fittedRef = React.useRef(false);
+  // Su/giù cambia guida senza smontare la pagina: si riparte da zero.
+  const shownRef = React.useRef(sessionId);
+  React.useEffect(() => {
+    if (shownRef.current === sessionId) return;
+    shownRef.current = sessionId;
+    fittedRef.current = false;
+    setDetail(null);
+    setError(null);
+    setTrim(null);
+  }, [sessionId]);
 
   React.useEffect(() => {
     if (!handle || !detail) return;
@@ -245,12 +293,18 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
     router.push(`${base}/percorsi/nuovo?${q}`);
   };
 
+  const studentId = detail?.lesson.student?.id ?? null;
+  const backLabel =
+    from === "student" ? detail?.lesson.student?.name ?? "Allievo" : ROAD_VIEW_LABEL[from];
+  const backHref =
+    back ?? (from === "student" && studentId ? studentHref(locale, studentId) : roadViewHref(locale, from === "student" ? "history" : from));
+
   if (error && !detail) {
     return (
       <div className="py-16 text-center">
         <p className="text-[15px] text-[#222222]">{error}</p>
         <Link href={backHref} className="mt-3 inline-block text-[14px] font-semibold text-[#111111] underline">
-          Torna a Road
+          Torna indietro
         </Link>
       </div>
     );
@@ -279,67 +333,129 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
 .road-trim-card{animation:road-trim-in 240ms ${EASE} backwards}
 @keyframes road-trim-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 `}</style>
-      <nav className="flex items-center gap-2 text-[13.5px] text-[#6a6a6a]" aria-label="Percorso">
-        <Link href={base} className="hover:text-[#111111]">
-          Road
-        </Link>
-        <span>›</span>
-        <Link href={backHref} className="hover:text-[#111111]">
-          {VIEW_LABEL[from]}
-        </Link>
-        <span>›</span>
-        <b className="font-medium text-[#111111]">{detail ? student : "…"}</b>
-      </nav>
+      {/* REG-716: niente breadcrumb. Un solo ritorno e, se si arriva da una lista, su/giù. */}
+      <div className="sticky top-0 z-[6] -mx-4 flex items-center justify-between gap-3 border-b border-[#ebebeb] bg-white/95 px-4 py-2 backdrop-blur-md sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-none">
+        <RoadBackLink href={backHref} label={backLabel} />
+        {pos >= 0 && list.length > 1 ? (
+          <div className="flex items-center gap-1.5" data-testid="road-detail-stepper">
+            <span className="mr-1 hidden text-[13.5px] tabular-nums text-[#6a6a6a] sm:inline">
+              {pos + 1} di {list.length}
+            </span>
+            <StepButton label="Guida prima nella lista (K)" disabled={!prevId} onClick={() => goTo(prevId)}>
+              <ChevronUp className="size-4" strokeWidth={2.2} />
+            </StepButton>
+            <StepButton label="Guida dopo nella lista (J)" disabled={!nextId} onClick={() => goTo(nextId)}>
+              <ChevronDown className="size-4" strokeWidth={2.2} />
+            </StepButton>
+          </div>
+        ) : null}
+      </div>
 
-      <div className="flex flex-wrap items-end justify-between gap-4 pb-5 pt-2.5">
+      <div className="flex flex-col gap-4 pb-5 pt-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.6px] text-[#111111]">
+          <h1 className="text-[25px] font-semibold leading-tight tracking-[-0.6px] text-[#111111] sm:text-[28px]">
             {detail ? (
               <>
-                {student} <span className="font-medium text-[#6a6a6a]">con {instructor}</span>
+                {studentId ? (
+                  <Link
+                    href={studentHref(locale, studentId)}
+                    onClick={rememberPrev}
+                    data-testid="road-detail-student"
+                    className="underline decoration-transparent decoration-[1.5px] underline-offset-4 transition-colors duration-200 hover:decoration-[#111111]"
+                  >
+                    {student}
+                  </Link>
+                ) : (
+                  student
+                )}{" "}
+                <span className="block text-[18px] font-medium text-[#6a6a6a] sm:inline sm:text-[28px]">
+                  con{" "}
+                  {lesson?.instructor ? (
+                    <Link
+                      href={roadViewHref(locale, "history", { instructor: lesson.instructor.id })}
+                      onClick={rememberPrev}
+                      className="underline decoration-transparent decoration-[1.5px] underline-offset-4 transition-colors duration-200 hover:decoration-[#6a6a6a]"
+                    >
+                      {instructor}
+                    </Link>
+                  ) : (
+                    instructor
+                  )}
+                </span>
               </>
             ) : (
-              <span className="inline-block h-8 w-80 animate-pulse rounded-lg bg-[#f2f2f2] align-middle" />
+              <span className="inline-block h-8 w-72 max-w-full animate-pulse rounded-lg bg-[#f2f2f2] align-middle" />
             )}
           </h1>
-          <p className="mt-[3px] text-[14.5px] text-[#6a6a6a]">
-            {detail
-              ? [
+          <p className="mt-1 text-[14.5px] text-[#6a6a6a]">
+            {detail ? (
+              <>
+                <RoadStatusChip kind={active ? "live" : detail.status === "abandoned" ? "auto" : "done"} />
+                {" · "}
+                {[
                   longDay(detail.startedAt),
                   `${hhmm(detail.startedAt)} – ${endIso ? hhmm(endIso) : "in corso"}`,
                   vehicle,
                 ]
                   .filter(Boolean)
-                  .join(" · ")
-              : " "}
+                  .join(" · ")}
+              </>
+            ) : (
+              " "
+            )}
           </p>
         </div>
         {detail ? (
-          <div className="flex flex-wrap items-center gap-2.5">
-            <RoadStatusChip kind={active ? "live" : detail.status === "abandoned" ? "auto" : "done"} />
-            {isOwner && !active && detail.track.length >= 2 ? (
-              <button
-                type="button"
-                data-testid="road-use-as-exam"
-                disabled={trimming}
-                onClick={() => setTrim({ a: 0, b: detail.track.length - 1 })}
-                className="grid h-11 cursor-pointer place-items-center rounded-[22px] bg-[#f2f2f2] px-[18px] text-[14.5px] font-semibold text-[#111111] transition-colors duration-200 hover:bg-[#e8e8e8] disabled:cursor-default disabled:opacity-40"
-              >
-                Usa come percorso d&apos;esame
-              </button>
-            ) : null}
+          <div className="flex items-center gap-2">
             <Link
               href={`/${locale}/user/autoscuole?tab=agenda&date=${romeYmd(detail.lesson.startsAt)}`}
-              className="grid h-11 place-items-center rounded-[22px] bg-[#f2f2f2] px-[18px] text-[14.5px] font-semibold text-[#111111] transition-colors hover:bg-[#e8e8e8]"
+              className="flex h-11 flex-1 items-center justify-center gap-2 rounded-[22px] bg-[#f2f2f2] px-[18px] text-[14.5px] font-semibold text-[#111111] transition-colors duration-200 hover:bg-[#e8e8e8] sm:flex-none"
             >
+              <CalendarDays className="size-4" strokeWidth={1.9} />
               Apri in agenda
             </Link>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="Altre azioni"
+                data-testid="road-detail-more"
+                className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-full bg-[#f2f2f2] text-[#111111] outline-none transition-colors duration-200 hover:bg-[#e8e8e8]"
+              >
+                <MoreHorizontal className="size-5" strokeWidth={1.9} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64 rounded-[14px] p-1.5 shadow-dropdown">
+                {isOwner && !active && detail.track.length >= 2 ? (
+                  <DropdownMenuItem
+                    data-testid="road-use-as-exam"
+                    disabled={trimming}
+                    onSelect={() => setTrim({ a: 0, b: detail.track.length - 1 })}
+                    className="flex-col items-start gap-0.5 rounded-[10px] px-3 py-2.5"
+                  >
+                    <span className="text-[14.5px] font-medium text-[#111111]">Usa come percorso d&apos;esame</span>
+                    <span className="text-[12.5px] text-[#6a6a6a]">Scegli il tratto sulla mappa</span>
+                  </DropdownMenuItem>
+                ) : null}
+                {studentId ? (
+                  <DropdownMenuItem asChild className="rounded-[10px] px-3 py-2.5 text-[14.5px] font-medium">
+                    <Link href={roadViewHref(locale, "history", { student: studentId, days: "all" })} onClick={rememberPrev}>
+                      Tutte le guide di {firstName(student)}
+                    </Link>
+                  </DropdownMenuItem>
+                ) : null}
+                {studentId ? (
+                  <DropdownMenuItem asChild className="rounded-[10px] px-3 py-2.5 text-[14.5px] font-medium">
+                    <Link href={studentHref(locale, studentId)} onClick={rememberPrev}>
+                      Scheda di {firstName(student)}
+                    </Link>
+                  </DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         ) : null}
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
-        <div className={cn(ROAD_MAP_BOX_CLASS, "h-[480px] lg:h-[calc(100vh-260px)] lg:min-h-[520px]")}>
+        <div className={cn(ROAD_MAP_BOX_CLASS, "h-[340px] sm:h-[480px] lg:h-[calc(100vh-260px)] lg:min-h-[520px]")}>
           <div className="absolute inset-0">
           {/* MapLibre mette position:relative sul contenitore: niente absolute qui */}
           <div ref={containerRef} className="h-full w-full" />
@@ -405,7 +521,14 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
             ) : null}
           </div>
 
-          {detail?.plan?.stops.length ? <RoadPlanBlock plan={detail.plan} reached={detail.planReached ?? null} /> : null}
+          {detail?.plan?.stops.length ? (
+            <RoadPlanBlock
+              plan={detail.plan}
+              reached={detail.planReached ?? null}
+              hotspotFor={(stop) => (stop.source === "exam" ? null : hotspots.find(stop))}
+              locale={locale}
+            />
+          ) : null}
 
           <div className="rounded-[22px] border border-[#ebebeb] px-5 py-[18px]" data-testid="road-detail-markers">
             <h4 className="flex items-baseline justify-between text-[15.5px] font-semibold text-[#111111]">
@@ -431,6 +554,11 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
                     <b className="block text-[14.5px] font-medium text-[#111111]">{m.label}</b>
                     <span className="text-[13px] text-[#6a6a6a]">
                       {[m.street, m.note ? `«${m.note}»` : null].filter(Boolean).join(" · ")}
+                      <MarkerPlaceLinks
+                        hotspot={m.sentiment === "good" ? null : hotspots.find(m)}
+                        number={hotspots.number}
+                        locale={locale}
+                      />
                     </span>
                   </div>
                   <time className="text-[13.5px] tabular-nums text-[#6a6a6a]">{hhmm(m.recordedAt)}</time>
@@ -478,6 +606,18 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
             ) : null}
           </div>
 
+          {studentId ? (
+            <Link
+              href={roadViewHref(locale, "history", { student: studentId, days: "all" })}
+              onClick={rememberPrev}
+              data-testid="road-detail-student-history"
+              className="flex items-center justify-between gap-3 rounded-[22px] border border-[#ebebeb] px-5 py-4 transition-colors duration-200 hover:bg-[#fafafa]"
+            >
+              <b className="text-[15px] font-semibold text-[#111111]">Le guide di {firstName(student)} in Road</b>
+              <ChevronRight className="size-4 shrink-0 text-[#b0b0b0]" strokeWidth={2} />
+            </Link>
+          ) : null}
+
           {detail ? (
             <div className="flex items-center gap-2.5 px-1 py-0.5 text-[13px] text-[#6a6a6a]">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6a6a6a" strokeWidth="2" className="shrink-0" aria-hidden>
@@ -492,6 +632,63 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
         </div>
       </div>
     </div>
+  );
+}
+
+function StepButton({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="grid size-9 cursor-pointer place-items-center rounded-full border border-[#e4e4e4] bg-white text-[#111111] transition-colors duration-200 hover:bg-[#f4f4f4] disabled:cursor-default disabled:opacity-35 disabled:hover:bg-white"
+    >
+      {children}
+    </button>
+  );
+}
+
+const placeLinkClass =
+  "font-medium text-[#111111] underline decoration-[#c8c8c8] underline-offset-[3px] transition-colors duration-200 hover:decoration-[#111111]";
+
+/** REG-719: dove cade una segnalazione — il punto critico e i percorsi d'esame che ci passano. */
+function MarkerPlaceLinks({
+  hotspot,
+  number,
+  locale,
+}: {
+  hotspot: RoadHotspot | null;
+  number: (key: string) => number;
+  locale: string;
+}) {
+  if (!hotspot) return null;
+  return (
+    <>
+      {" · "}
+      <Link href={hotspotHref(locale, hotspot.key)} onClick={rememberPrev} className={placeLinkClass} data-testid="road-marker-hotspot">
+        punto critico {number(hotspot.key)}
+      </Link>
+      {hotspot.examRoutes.map((r) => (
+        <React.Fragment key={r.id}>
+          {" · "}
+          <Link href={`/${locale}/user/autoscuole/road/percorsi/${r.id}`} onClick={rememberPrev} className={placeLinkClass}>
+            sul percorso d&apos;esame {r.name}
+          </Link>
+        </React.Fragment>
+      ))}
+    </>
   );
 }
 
@@ -547,12 +744,18 @@ function RoadHotspotChecksBlock({ checks }: { checks: NonNullable<RoadDetail["ho
  * calcola il server a «Termina guida» (tracciato entro 40 m, percorso d'esame
  * coperto al 60%): finché la guida è in corso le tappe non hanno ancora esito.
  */
+type PlanStopItem = NonNullable<RoadDetail["plan"]>["stops"][number];
+
 function RoadPlanBlock({
   plan,
   reached,
+  hotspotFor,
+  locale,
 }: {
   plan: NonNullable<RoadDetail["plan"]>;
   reached: NonNullable<RoadDetail["planReached"]> | null;
+  hotspotFor: (stop: PlanStopItem) => RoadHotspot | null;
+  locale: string;
 }) {
   const done = reached ? reached.reached.length : null;
   return (
@@ -586,7 +789,7 @@ function RoadPlanBlock({
                 {i + 1}
               </div>
               <div className="min-w-0">
-                <b className="block truncate text-[14.5px] font-medium text-[#111111]">{stop.title}</b>
+                <StopTitle stop={stop} hotspot={hotspotFor(stop)} locale={locale} />
                 <span className="text-[13px] text-[#6a6a6a]">{stop.reason}</span>
               </div>
               {ok == null ? null : (
@@ -599,5 +802,23 @@ function RoadPlanBlock({
         })}
       </div>
     </div>
+  );
+}
+
+/** Titolo della tappa del giro: porta al punto critico o al percorso d'esame (REG-719). */
+function StopTitle({ stop, hotspot, locale }: { stop: PlanStopItem; hotspot: RoadHotspot | null; locale: string }) {
+  const examId = stop.source === "exam" && stop.key.startsWith("exam:") ? stop.key.slice(5) : null;
+  const href = examId ? `/${locale}/user/autoscuole/road/percorsi/${examId}` : hotspot ? hotspotHref(locale, hotspot.key) : null;
+  const cls = "block truncate text-[14.5px] font-medium text-[#111111]";
+  if (!href) return <b className={cls}>{stop.title}</b>;
+  return (
+    <Link
+      href={href}
+      onClick={rememberPrev}
+      data-testid="road-plan-stop-link"
+      className={cn(cls, "underline decoration-[#c8c8c8] underline-offset-[3px] transition-colors duration-200 hover:decoration-[#111111]")}
+    >
+      {stop.title}
+    </Link>
   );
 }
