@@ -4,9 +4,9 @@ La disponibilità dell'istruttore si definisce per luogo e vale per gli allievi
 di quel luogo; ogni allievo può avere più luoghi. Piano completo e decisioni di
 Tiziano: `plans/availability/004-reg-705-706-disponibilita-per-luogo.md`.
 
-> **Stato**: 705-a, 705-b, 705-c e 705-d (motore) fatti; 705-e fatto per la
-> parte dati (sotto), la UI allievo aspetta l'ok sulle anteprime. Resta REG-706
-> (codici per luogo).
+> **Stato**: 705-a, 705-b, 705-c, 705-d (motore) e 705-e (dati + UI allievo,
+> verificata sul simulatore il 04/11) fatti. REG-706 (codici per luogo) sta sul
+> suo branch.
 
 ## Regole
 - **Interruttore** `limits.availabilityByLocation` (default spento), effettivo
@@ -164,3 +164,11 @@ Tutto in `lib/autoscuole/location-booking.ts` (puro + loader), test in
 - **Availability / Booking Engine** (705-c/d): fasce con luogo, filtro slot,
   luogo della guida, pausa tra luoghi, waitlist, scambi.
 - **Mobile**: `locationIds` sugli allievi; route `PUT …/locations`.
+
+## Note dalla verifica sul simulatore (705-e, 04/11)
+- Lista d'attesa: il luogo dell'offerta è `null` quando l'ora cade in due fasce
+  con luoghi diversi, o quando il motore assegna un istruttore con una fascia
+  senza luogo. In quel caso l'app non mostra la riga e la prenotazione passa
+  senza vincolo. È voluto, non è un difetto.
+- Scambi: con un istruttore in modalità autonoma l'allievo vede solo gli scambi
+  del suo gruppo (regola preesistente, non di REG-705).
