@@ -38,6 +38,7 @@ import { appointmentBusyInstructorIds } from "@/lib/autoscuole/appointment-busy"
 import { fetchGroupLessonBusyRows } from "@/lib/autoscuole/group-lesson-busy";
 import { resolveGroupLessonLocationId } from "@/lib/autoscuole/locations";
 import { getLocationAvailabilityState } from "@/lib/autoscuole/member-locations";
+import { assertCanWriteAvailability, isAvailabilityManager } from "@/lib/autoscuole/availability-access";
 import {
   getMemberLocationIds,
   setStudentDefaultLocationKeepingInvariant,
@@ -1016,8 +1017,18 @@ const buildStudentSearchWhere = (companyId: string, search?: string) => {
   };
 };
 
-const listAutoscuolaInstructorsReadOnly = async (companyId: string) =>
+/**
+ * REG-717: `inviteCode` (codice di invito personale dell'istruttore, REG-451)
+ * esce solo quando lo chiede il titolare: la lista la leggono anche allievi e
+ * istruttori dall'app (Home allievo, gestione guide), che non devono avere i
+ * codici di tutti. L'istruttore legge il proprio da `instructor-settings`.
+ */
+const listAutoscuolaInstructorsReadOnly = async (
+  companyId: string,
+  { withInviteCode = false }: { withInviteCode?: boolean } = {},
+) =>
   prisma.autoscuolaInstructor.findMany({
+    omit: { inviteCode: !withInviteCode },
     where: {
       companyId,
       userId: { not: null },
@@ -1777,6 +1788,10 @@ export type AgendaAvailabilityRange = {
   startMinutes: number;
   endMinutes: number;
   locationName?: string | null;
+  /** REG-717, come `locationName`: luogo della fascia (`null` = tutti). */
+  locationId?: string | null;
+  /** REG-717: la stessa fascia (stessi orari) c'è nella settimana tipo di quel giorno. */
+  inWeekly?: boolean;
 };
 
 export async function getInstructorAvailabilityForAgenda(input: {
@@ -1874,13 +1889,34 @@ export async function getInstructorAvailabilityForAgenda(input: {
 
         if (record.ranges.length > 0) {
           const ymd = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-          days[ymd] = record.ranges.map((r) => ({
-            startMinutes: r.startMinutes,
-            endMinutes: r.endMinutes,
-            ...(locationNames
-              ? { locationName: (r.locationId && locationNames.get(r.locationId)) || null }
-              : {}),
-          }));
+          // REG-717: fasce della settimana tipo per quel giorno (per «Ogni lunedì»).
+          const fromOverride = locationNames ? resolver.hasOverride(instructor.id, date) : false;
+          const weekly = fromOverride ? resolver.defaultMap.get(instructor.id) : undefined;
+          const weeklyRanges = weekly
+            ? weekly.rangesByDay
+              ? (weekly.rangesByDay[dayOfWeek] ?? [])
+              : weekly.daysOfWeek.includes(dayOfWeek)
+                ? weekly.ranges
+                : []
+            : [];
+          days[ymd] = record.ranges.map((r) => {
+            const locationId = (r.locationId && locationNames?.get(r.locationId) && r.locationId) || null;
+            return {
+              startMinutes: r.startMinutes,
+              endMinutes: r.endMinutes,
+              ...(locationNames
+                ? {
+                    locationName: locationId ? locationNames.get(locationId)! : null,
+                    locationId,
+                    inWeekly:
+                      !fromOverride ||
+                      weeklyRanges.some(
+                        (w) => w.startMinutes === r.startMinutes && w.endMinutes === r.endMinutes,
+                      ),
+                  }
+                : {}),
+            };
+          });
         }
       }
 
@@ -7104,7 +7140,9 @@ export async function checkStudentSlotCancellation(
 export async function getAutoscuolaInstructors() {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    const instructors = await listAutoscuolaInstructorsReadOnly(membership.companyId);
+    const instructors = await listAutoscuolaInstructorsReadOnly(membership.companyId, {
+      withInviteCode: isAvailabilityManager(membership),
+    });
 
     return { success: true, data: instructors };
   } catch (error) {
@@ -7954,6 +7992,9 @@ export async function setAutoscuolaInstructorWeeklyAvailability(
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = setInstructorWeeklyAvailabilitySchema.parse(input);
+    // REG-717: oltre al servizio, il ruolo (vedi availability-access).
+    const denied = await assertCanWriteAvailability(membership, "instructor", payload.instructorId);
+    if (denied) return { success: false as const, message: denied };
     const companyId = membership.companyId;
 
     const instructor = await prisma.autoscuolaInstructor.findFirst({
@@ -8078,6 +8119,9 @@ export async function setAutoscuolaInstructorWeeklyAvailability(
 export async function deleteAutoscuolaInstructorWeeklyAvailability(instructorId: string) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    // REG-717: oltre al servizio, il ruolo (vedi availability-access).
+    const denied = await assertCanWriteAvailability(membership, "instructor", instructorId);
+    if (denied) return { success: false as const, message: denied };
     const companyId = membership.companyId;
 
     const instructor = await prisma.autoscuolaInstructor.findFirst({
@@ -8162,6 +8206,9 @@ export async function setAutoscuolaVehicleWeeklyAvailability(
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = setVehicleWeeklyAvailabilitySchema.parse(input);
+    // REG-717: oltre al servizio, il ruolo (vedi availability-access).
+    const denied = await assertCanWriteAvailability(membership, "vehicle", payload.vehicleId);
+    if (denied) return { success: false as const, message: denied };
     const companyId = membership.companyId;
 
     const vehicle = await prisma.autoscuolaVehicle.findFirst({
@@ -8240,6 +8287,9 @@ export async function setAutoscuolaVehicleWeeklyAvailability(
 export async function deleteAutoscuolaVehicleWeeklyAvailability(vehicleId: string) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    // REG-717: oltre al servizio, il ruolo (vedi availability-access).
+    const denied = await assertCanWriteAvailability(membership, "vehicle", vehicleId);
+    if (denied) return { success: false as const, message: denied };
     const companyId = membership.companyId;
 
     const vehicle = await prisma.autoscuolaVehicle.findFirst({
