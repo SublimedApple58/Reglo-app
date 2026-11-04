@@ -6,6 +6,7 @@ import { MapPin } from "lucide-react";
 
 import { roadApi, type RoadLive, type RoadLiveSession } from "@/lib/autoscuole/road/client";
 import { RoadLiveReturn } from "./RoadLiveReturn";
+import { LiveSnap } from "./live-snap";
 import { roadCarImages, roadMarkerSymbol, ROAD_IMAGES } from "@/lib/autoscuole/road/symbols";
 import { cn } from "@/lib/utils";
 import {
@@ -62,10 +63,20 @@ function bearing(a: LngLat, b: LngLat) {
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
-function carPosition(s: RoadLiveSession, track: Track | undefined): { pos: LngLat; heading: number } | null {
+/** La linea da disegnare: agganciata alle strade (REG-722) se possibile, altrimenti il GPS. */
+function displayCoords(snap: LiveSnap, id: string, track: Track | undefined): LngLat[] {
+  return snap.line(id) ?? track?.coords ?? [];
+}
+
+function carPosition(
+  s: RoadLiveSession,
+  track: Track | undefined,
+  snapped?: LngLat[] | null,
+): { pos: LngLat; heading: number } | null {
   const coords = track?.coords ?? [];
   const tail = coords.at(-1);
-  const pos: LngLat | null = s.last ? toLngLat(s.last) : (tail ?? null);
+  // con la linea agganciata l'auto sta in fondo alla linea, sulla strada
+  const pos: LngLat | null = snapped?.length ? snapped[snapped.length - 1] : s.last ? toLngLat(s.last) : (tail ?? null);
   if (!pos) return null;
   let heading = s.last?.heading ?? null;
   if (heading == null && coords.length > 1) heading = bearing(coords[Math.max(0, coords.length - 4)], coords[coords.length - 1]);
@@ -86,6 +97,7 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [trackVersion, setTrackVersion] = React.useState(0);
   const tracksRef = React.useRef(new Map<string, Track>());
+  const snapRef = React.useRef(new LiveSnap());
   const inFlight = React.useRef(false);
   const trackLoadedOnce = React.useRef(false);
 
@@ -107,6 +119,7 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
           const res = await roadApi.track(s.id, t ? t.lastSeq : -1);
           const cur = tracks.get(s.id) ?? { lastSeq: -1, coords: [] };
           for (const p of res.points) cur.coords.push([p[1], p[0]]);
+          await snapRef.current.feed(s.id, res.points);
           cur.lastSeq = Math.max(cur.lastSeq, res.lastSeq);
           tracks.set(s.id, cur);
           changed = true;
@@ -116,6 +129,7 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
       for (const id of [...tracks.keys()]) {
         if (!ids.has(id)) {
           tracks.delete(id);
+          snapRef.current.drop(id);
           changed = true;
         }
       }
@@ -172,10 +186,11 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
 
     // percorsi
     for (const s of sessions) {
-      const coords = tracks.get(s.id)?.coords ?? [];
-      const pos = carPosition(s, tracks.get(s.id));
+      const snapped = snapRef.current.line(s.id);
+      const coords = displayCoords(snapRef.current, s.id, tracks.get(s.id));
+      const pos = carPosition(s, tracks.get(s.id), snapped);
       // la linea arriva fino all'auto (anche se l'ultimo lotto non è ancora arrivato)
-      const line = pos && coords.length ? [...coords, pos.pos] : coords;
+      const line = pos && coords.length && !snapped ? [...coords, pos.pos] : coords;
       if (line.length < 2) continue;
       const selected = s.id === selectedId;
       upsertRoute(
@@ -235,7 +250,7 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
 
     // auto (dopo i simboli: stanno sopra)
     for (const s of sessions) {
-      const at = carPosition(s, tracks.get(s.id));
+      const at = carPosition(s, tracks.get(s.id), snapRef.current.line(s.id));
       if (!at) continue;
       const tint = instructorTint(s.lesson.instructor);
       const label = carLabel(s.lesson.instructor?.name, s.lesson.student?.name);
@@ -284,7 +299,7 @@ export function RoadLiveView({ onOpen }: { onOpen: (sessionId: string) => void }
       const pts: LngLat[] = [];
       for (const s of sessions) {
         pts.push(...(tracks.get(s.id)?.coords ?? []));
-        const at = carPosition(s, tracks.get(s.id));
+        const at = carPosition(s, tracks.get(s.id), snapRef.current.line(s.id));
         if (at) pts.push(at.pos);
       }
       if (live.base) pts.push(toLngLat(live.base));
