@@ -2,7 +2,7 @@
 
 > **Stato (2026-11-03)**: piano APPROVATO da Tiziano con le decisioni sotto.
 > Fatti (commit locali, niente push): **705-a**, **705-b** (UI approvata), **705-c**
-> (UI approvata), **705-d** (motore). Restano 705-e e REG-706. 03/11: screenshot reali mobile fatti su simulatore dedicato (Metro 8705); trovato e corretto un buco di 705-c sul mobile (mobile a307102: «Disponibilità di X» del titolare senza luogo, `select-options` mancante negli stack role/ e more/). 705-e: anteprime pronte (/tmp/hiro-anteprime/reg-705/705e-anteprima-*), in attesa dell'ok.
+> (UI approvata), **705-d** (motore). Restano 705-e e REG-706. 03/11: screenshot reali mobile fatti su simulatore dedicato (Metro 8705); trovato e corretto un buco di 705-c sul mobile (mobile a307102: «Disponibilità di X» del titolare senza luogo, `select-options` mancante negli stack role/ e more/). 705-e: dati (web 6204d4a, mobile d5a0a0e) e UI (mobile e2c904c, anteprime approvate il 04/11) fatti; prenotazioni con luogo verificate sul simulatore (lista orari, «Orari disponibili», slot liberato) con invii esterni spenti; screenshot 705e-real-mobile-*.
 > In origine: **705-a** (backend: tabella luoghi allievo + backfill, interruttore e
 > pausa nei setting, API di assegnazione) — branch `feat/reg-705-luoghi-disponibilita`,
 > worktree `reglo-worktrees/reg-705`. Nessun rilascio: si arriva al massimo a
