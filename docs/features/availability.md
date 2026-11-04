@@ -77,6 +77,34 @@ booking could land inside a "blocca slot" — Robatto incident #2): now it fetch
 blocks in the same Promise.all wave and pushes them into `appointmentMaps.intervals`
 keyed by `instructorId`.
 
+## Chi può scrivere la disponibilità (REG-717)
+
+Prima c'era solo `requireServiceAccess` (servizio attivo): qualsiasi membro, anche
+un allievo via API, poteva scrivere fasce e override di chiunque nella sua
+autoscuola. Ora ogni scrittura passa da `assertCanWriteAvailability`
+(`lib/autoscuole/availability-access.ts`, regola pura `canWriteAvailability`):
+
+- titolare, istruttore titolare, admin: tutto;
+- istruttore: le proprie fasce e i veicoli (l'app li gestisce da «Gestione»);
+- allievo: solo le proprie preferenze (`ownerType: "student"`, id = suo utente);
+- nessun altro. Errore: «Non puoi modificare questa disponibilità.»
+
+Azioni coperte: `createAvailabilitySlots`, `deleteAvailabilitySlots`,
+`setWeeklyAvailabilityOverride`, `deleteWeeklyAvailabilityOverride`,
+`setRecurringAvailabilityOverride`, `setDailyAvailabilityOverride`,
+`deleteDailyAvailabilityOverride`, `set/deleteAutoscuolaInstructorWeeklyAvailability`,
+`set/deleteAutoscuolaVehicleWeeklyAvailability`; `approveAvailabilityOverride` è
+dello staff (`canApproveAvailabilityOverride`). **Una nuova scrittura della
+disponibilità deve chiamare `assertCanWriteAvailability`.** E2E:
+`tests/e2e/reg717-cambio-luogo.auth.spec.ts`.
+
+> Nota (04/11, non corretto): la tab Disponibilità web legge
+> `getAutoscuolaInstructorWeeklyAvailabilities`, che non passa
+> `startMinutes2`/`endMinutes2`: per i record vecchi senza `ranges` l'editor mostra
+> solo la prima fascia e salvando cancellerebbe la seconda. In prod 0 righe così su
+> 444 (solo seed dev: Giulia, Luca, Chiara). L'app legge `getDefaultAvailability`,
+> che le ricostruisce.
+
 ## Connected features
 - **Booking Engine** — slot-matcher reads all availability data; publication filter gates booking
 - **Group Lessons** — containers (even empty) are busy intervals for instructor+vehicle (see above)

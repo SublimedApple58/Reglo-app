@@ -7,6 +7,7 @@ import {
   sanitizeRangeLocations,
   sanitizeScheduleByDayLocations,
 } from "@/lib/autoscuole/range-locations";
+import { assertCanWriteAvailability, canApproveAvailabilityOverride, AVAILABILITY_WRITE_FORBIDDEN } from "@/lib/autoscuole/availability-access";
 import { OFFER_CHANNELS } from "@/lib/autoscuole/channel-cascade";
 import { randomUUID } from "crypto";
 import { after } from "next/server";
@@ -784,6 +785,9 @@ export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>)
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = slotSchema.parse(input);
+    // REG-717: oltre al servizio, il ruolo (vedi availability-access).
+    const denied = await assertCanWriteAvailability(membership, payload.ownerType, payload.ownerId);
+    if (denied) return { success: false, message: denied };
     const start = new Date(payload.startsAt);
     const end = new Date(payload.endsAt);
     const daysOfWeek = normalizeDays(payload.daysOfWeek);
@@ -937,6 +941,9 @@ export async function deleteAvailabilitySlots(input: z.infer<typeof deleteSlotsS
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = deleteSlotsSchema.parse(input);
+    // REG-717: oltre al servizio, il ruolo (vedi availability-access).
+    const denied = await assertCanWriteAvailability(membership, payload.ownerType, payload.ownerId);
+    if (denied) return { success: false, message: denied };
     const deleted = await prisma.autoscuolaWeeklyAvailability.deleteMany({
       where: {
         companyId: membership.companyId,
@@ -1185,6 +1192,9 @@ export async function setWeeklyAvailabilityOverride(
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = setOverrideSchema.parse(input);
+    // REG-717: oltre al servizio, il ruolo (vedi availability-access).
+    const denied = await assertCanWriteAvailability(membership, payload.ownerType, payload.ownerId);
+    if (denied) return { success: false as const, message: denied };
     const companyId = membership.companyId;
 
     // Validate each entry
@@ -1295,6 +1305,9 @@ export async function deleteWeeklyAvailabilityOverride(
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = deleteOverrideSchema.parse(input);
+    // REG-717: oltre al servizio, il ruolo (vedi availability-access).
+    const denied = await assertCanWriteAvailability(membership, payload.ownerType, payload.ownerId);
+    if (denied) return { success: false as const, message: denied };
     const companyId = membership.companyId;
 
     const weekStart = new Date(payload.weekStart + "T00:00:00Z");
@@ -1358,6 +1371,9 @@ export async function setRecurringAvailabilityOverride(
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = recurringOverrideSchema.parse(input);
+    // REG-717: oltre al servizio, il ruolo (vedi availability-access).
+    const denied = await assertCanWriteAvailability(membership, payload.ownerType, payload.ownerId);
+    if (denied) return { success: false as const, message: denied };
     const companyId = membership.companyId;
 
     for (const r of payload.ranges) {
@@ -1513,6 +1529,9 @@ export async function setDailyAvailabilityOverride(
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = setDailyOverrideSchema.parse(input);
+    // REG-717: oltre al servizio, il ruolo (vedi availability-access).
+    const denied = await assertCanWriteAvailability(membership, payload.ownerType, payload.ownerId);
+    if (denied) return { success: false as const, message: denied };
     const companyId = membership.companyId;
 
     // Validate ranges
@@ -1595,6 +1614,9 @@ export async function deleteDailyAvailabilityOverride(
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = deleteDailyOverrideSchema.parse(input);
+    // REG-717: oltre al servizio, il ruolo (vedi availability-access).
+    const denied = await assertCanWriteAvailability(membership, payload.ownerType, payload.ownerId);
+    if (denied) return { success: false as const, message: denied };
     const companyId = membership.companyId;
 
     const date = new Date(payload.date + "T00:00:00Z");
@@ -5986,6 +6008,10 @@ export async function approveAvailabilityOverride(
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const { appointmentId } = approveOverrideSchema.parse(input);
+    // REG-717: solo lo staff approva le guide fuori disponibilità.
+    if (!canApproveAvailabilityOverride(membership)) {
+      return { success: false as const, message: AVAILABILITY_WRITE_FORBIDDEN };
+    }
 
     await prisma.autoscuolaAppointment.update({
       where: { id: appointmentId, companyId: membership.companyId },
