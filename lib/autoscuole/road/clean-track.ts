@@ -279,6 +279,15 @@ export function needsRebuild(stored: unknown, now = Date.now()): boolean {
   return !t.snapped && t.retryAfter != null && now >= t.retryAfter;
 }
 
+/**
+ * REG-713: la traccia salvata, se si può mostrare così com'è (versione giusta),
+ * anche se l'aggancio è ancora da riprovare: in lettura non si ricalcola mai.
+ */
+export function storedCleanTrack(stored: unknown): CleanTrack | null {
+  const t = stored as CleanTrack | null | undefined;
+  return t && typeof t === "object" && t.v === CLEAN_TRACK_VERSION && Array.isArray(t.path) ? t : null;
+}
+
 /** Al massimo N punti, a passo regolare: basta per una miniatura. */
 export function thumbPath(path: TrackPoint[], max = 60): Array<[number, number]> {
   if (path.length <= max) return path.map((p) => [p[0], p[1]]);

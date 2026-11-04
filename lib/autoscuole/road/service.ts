@@ -19,11 +19,11 @@ import {
   buildCleanTrack,
   CLEAN_TRACK_VERSION,
   cleanTrackPoints,
-  needsRebuild,
+  storedCleanTrack,
   thumbPath,
   type CleanTrack,
 } from "@/lib/autoscuole/road/clean-track";
-import { finalizeRoadSession, loadRoadTrack } from "@/lib/autoscuole/road/maintenance";
+import { finalizeRoadSession, loadRoadTrack, saveRoadCleanTrack } from "@/lib/autoscuole/road/maintenance";
 import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
 import { isBookingBlockActive } from "@/lib/autoscuole/booking-block";
 import { LESSON_BUFFER_BLOCK_REASON } from "@/lib/autoscuole/lesson-buffer";
@@ -503,8 +503,9 @@ const LATE_POINTS_MS = 2 * 60 * 60 * 1000;
 /**
  * Lotto arrivato dopo la chiusura: si salva (idempotente su `seq`) e si
  * ricalcolano km, punti e tappe raggiunte su tutto il percorso. La traccia
- * pulita si rifà alla prossima lettura. Per una guida abbandonata la fine
- * segue l'ultimo punto arrivato.
+ * pulita si rifà subito senza Google (REG-713: i km restano quelli puliti) e il
+ * job la aggancia al giro dopo. Per una guida abbandonata la fine segue
+ * l'ultimo punto arrivato.
  */
 async function appendLatePoints(
   session: { id: string; status: string; startedAt: Date; endedAt: Date | null; lastPointAt: Date | null },
@@ -536,15 +537,14 @@ async function appendLatePoints(
   await prisma.roadSession.update({
     where: { id: session.id },
     data: {
-      distanceMeters: Math.round(trackDistanceMeters(track)),
       pointCount: track.length,
-      cleanTrack: Prisma.DbNull,
       ...(last && lastAt && (!session.lastPointAt || lastAt > session.lastPointAt)
         ? { lastLat: last[1], lastLng: last[2], lastPointAt: lastAt }
         : {}),
       ...(extend ? { endedAt: lastAt, durationSec: drivingSeconds(session.startedAt, lastAt, lessonStartsAt) } : {}),
     },
   });
+  await saveRoadCleanTrack(prisma, session.id, { snap: false });
   if (session.status === "completed") {
     await savePlanReached(session.id, companyId).catch((e) => console.warn("[road] planReached (late)", e));
   }
@@ -807,8 +807,9 @@ export async function endRoadSession(sessionId: string) {
       });
       await trimFreeLessonEnd(session.appointmentId, endedAt);
       await savePlanReached(sessionId, ctx.companyId).catch((e) => console.warn("[road] planReached", e));
-      // REG-665: traccia pulita e sulle strade, una volta sola (la legge il riepilogo qui sotto).
-      await sessionCleanTrack(sessionId, "completed").catch((e) => console.warn("[road] cleanTrack", e));
+      // REG-665 / REG-713: traccia pulita e sulle strade, una volta sola, con i
+      // suoi km (li legge il riepilogo qui sotto). Google giù = la riprova il job.
+      await saveRoadCleanTrack(prisma, sessionId).catch((e) => console.warn("[road] cleanTrack", e));
     }
     return getRoadSessionDetail(sessionId);
   } catch (error) {
@@ -900,40 +901,33 @@ async function buildDetail(sessionId: string, companyId: string) {
     },
   });
   if (!s) return null;
-  const clean = await sessionCleanTrack(sessionId, s.status);
+  const clean = await readCleanTrack(sessionId, s.status);
   return {
+    // REG-713: i km sono quelli salvati sulla sessione (gli stessi di storico e liste).
     ...sessionDTO(s, s.appointment.startsAt),
-    // REG-665: i km della traccia pulita (il GPS da fermo gonfiava i km).
-    ...(clean.saved ? { distanceMeters: clean.track.distanceMeters } : {}),
     lesson: lessonDTO(s.appointment),
     markers: s.markers.map(markerDTO),
     // REG-677: i ripassi «Meglio / No» sui punti critici dell'allievo in questa guida.
     hotspotChecks: s.hotspotChecks.map(hotspotCheckDTO),
     // Per la mappa bastano [lat, lng]; il tempo serve a disegnare il "fatto fin qui".
     // REG-665: traccia pulita (e sulle strade a guida finita) + soste ≥ 5 min.
-    track: clean.track.path,
-    stops: clean.track.stops,
+    track: clean.path,
+    stops: clean.stops,
   };
 }
 
 /**
- * REG-665: la traccia pulita di una sessione. Guida in corso: solo pulita, mai
- * salvata (cresce). Guida finita: calcolata una volta (con Google Roads) e
- * salvata sulla sessione, insieme ai km ricalcolati; si ricalcola solo se
- * cambia la versione o se l'aggancio era fallito ed è ora di riprovare.
+ * REG-665 / REG-713: la traccia pulita da mostrare. Solo lettura: niente
+ * scritture né Google. Guida finita = quella salvata (a «Termina guida» o dal
+ * job); se non c'è ancora, o la guida è in corso, pulita al volo e basta.
  */
-async function sessionCleanTrack(sessionId: string, status: string): Promise<{ track: CleanTrack; saved: boolean }> {
-  if (status === "active") {
-    return { track: await buildCleanTrack(await loadTrack(sessionId), { snap: false }), saved: false };
+async function readCleanTrack(sessionId: string, status: string): Promise<CleanTrack> {
+  if (status !== "active") {
+    const row = await prisma.roadSession.findUnique({ where: { id: sessionId }, select: { cleanTrack: true } });
+    const stored = storedCleanTrack(row?.cleanTrack);
+    if (stored) return stored;
   }
-  const row = await prisma.roadSession.findUnique({ where: { id: sessionId }, select: { cleanTrack: true } });
-  if (row && !needsRebuild(row.cleanTrack)) return { track: row.cleanTrack as unknown as CleanTrack, saved: true };
-  const track = await buildCleanTrack(await loadTrack(sessionId));
-  await prisma.roadSession.update({
-    where: { id: sessionId },
-    data: { cleanTrack: track as unknown as Prisma.InputJsonValue, distanceMeters: track.distanceMeters },
-  });
-  return { track, saved: true };
+  return buildCleanTrack(await loadTrack(sessionId), { snap: false });
 }
 
 /**

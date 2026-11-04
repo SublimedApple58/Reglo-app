@@ -4,6 +4,7 @@ import {
   cleanTrackPoints,
   needsRebuild,
   snapPath,
+  storedCleanTrack,
   thinForSnap,
   type FetchSnap,
   type TrackPoint,
@@ -140,5 +141,15 @@ describe("snapPath: deviazioni di Google", () => {
     );
     expect(out.every((q) => Math.abs(q[1] - 13.7) < 1e-9)).toBe(true);
     expect(out.map((q) => q[2])).toEqual([T0, T0 + 3000, T0 + 6000, T0 + 7000, T0 + 8000, T0 + 9000, T0 + 12000, T0 + 15000]);
+  });
+});
+
+describe("REG-713: lettura senza ricalcolo", () => {
+  it("storedCleanTrack: la traccia salvata si mostra anche se l'aggancio è da riprovare", async () => {
+    const t = await buildCleanTrack(drive(42.6, 13.7, T0, 60), { now: T0, fetchSnap: async () => { throw new Error("giù"); } });
+    expect(needsRebuild(t, T0 + 25 * 3600_000)).toBe(true);
+    expect(storedCleanTrack(t)).toBe(t);
+    expect(storedCleanTrack(null)).toBeNull();
+    expect(storedCleanTrack({ ...t, v: 0 })).toBeNull();
   });
 });
