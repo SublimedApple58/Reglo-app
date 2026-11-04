@@ -46,6 +46,7 @@ import {
   hardCleanupAutoscuolaAppointment,
   updateAutoscuolaAppointmentStatus,
   getInstructorAvailabilityForAgenda,
+  type AgendaAvailabilityRange,
   createInstructorBlock,
   updateInstructorBlock,
   deleteInstructorBlock,
@@ -101,6 +102,7 @@ import { pathForDate } from "@/lib/autoscuole/license-paths";
 import { resolvePrefilledLocationId } from "@/lib/autoscuole/location-for-license";
 import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, motoLessonTypeLabel, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
 import { instructorTintStyles } from "@/lib/autoscuole/instructor-colors";
+import { bandLabelStartMinutes, bandLocationLabel } from "@/lib/autoscuole/agenda-band-label";
 import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
 import {
   agendaInstructorComparator,
@@ -732,7 +734,7 @@ const TIME_OPTIONS = Array.from({ length: (DAY_END_HOUR - DAY_START_HOUR) * 4 },
 type InstructorAvailabilityWeek = {
   instructorId: string;
   instructorName: string;
-  days: Record<string, Array<{ startMinutes: number; endMinutes: number }>>;
+  days: Record<string, AgendaAvailabilityRange[]>;
 };
 
 /** Resolved instructor tint: custom hex → inline styles; legacy → classes. */
@@ -2796,7 +2798,7 @@ export function AutoscuoleAgendaPage({
   const dayViewInstructors = React.useMemo(() => {
     if (viewMode !== "day") return [];
     const dateKey = formatYmd(dayFocus);
-    const instrMap = new Map<string, { id: string; name: string; ranges: Array<{ startMinutes: number; endMinutes: number }> }>();
+    const instrMap = new Map<string, { id: string; name: string; ranges: AgendaAvailabilityRange[] }>();
     for (const instr of instructors) {
       instrMap.set(instr.id, { id: instr.id, name: instr.name, ranges: [] });
     }
@@ -5152,6 +5154,7 @@ export function AutoscuoleAgendaPage({
                             <div key={ri} className={cn("absolute left-0 right-0", tint.bandClass)} style={{ ...tint.bandStyle, top: (s - DAY_START_HOUR * 60) * PIXELS_PER_MINUTE, height: (e - s) * PIXELS_PER_MINUTE }} />
                           );
                         })}
+                        <AvailabilityBandLabels ranges={ranges} appointments={instrAppts} day={day} pixelsPerMinute={PIXELS_PER_MINUTE} startHour={DAY_START_HOUR} endHour={DAY_END_HOUR} size="week" />
                         {/* Hour grid lines */}
                         {hourMarks.map((hour) => (
                           <div key={hour} className="absolute left-0 right-0 h-px bg-border/30" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }} />
@@ -5736,6 +5739,7 @@ export function AutoscuoleAgendaPage({
                         />
                       );
                     })}
+                    <AvailabilityBandLabels ranges={instr.ranges} appointments={instrAppointments} day={day} pixelsPerMinute={PIXELS_PER_MINUTE} startHour={DAY_START_HOUR} endHour={DAY_END_HOUR} size="day" />
                     {/* Hour grid lines */}
                     {hourMarks.map((hour) => (
                       <div
@@ -8037,6 +8041,79 @@ function toDate(value: string | Date | null | undefined) {
 
 function diffMinutes(a: Date, b: Date) {
   return (a.getTime() - b.getTime()) / 60000;
+}
+
+/**
+ * REG-705 — nome del luogo dentro le fasce di disponibilità, solo con
+ * «Disponibilità per luogo» attiva (il server manda `locationName` solo allora:
+ * a funzione spenta non si disegna niente). Testo grigio in testa alla fascia,
+ * «Tutti i luoghi» più chiaro; se una guida copre l'inizio scende nel primo
+ * tratto libero. Tra due fasce attaccate una linea sottile segna il confine.
+ * Sta sopra fascia e righe orarie (z-[1]) e sotto le guide (z-10).
+ */
+function AvailabilityBandLabels({
+  ranges,
+  appointments,
+  day,
+  pixelsPerMinute,
+  startHour,
+  endHour,
+  size,
+}: {
+  ranges: AgendaAvailabilityRange[];
+  appointments: AppointmentRow[];
+  day: Date;
+  pixelsPerMinute: number;
+  /** Finestra oraria visibile (preferenze di vista), come le fasce. */
+  startHour: number;
+  endHour: number;
+  size: "day" | "week";
+}) {
+  if (!ranges.some((r) => r.locationName !== undefined)) return null;
+  const midnight = new Date(day);
+  midnight.setHours(0, 0, 0, 0);
+  const occupied = appointments.map((a) => ({
+    startMinutes: diffMinutes(toDate(a.startsAt), midnight),
+    endMinutes: diffMinutes(getAppointmentEnd(a), midnight),
+  }));
+  const visibleStart = startHour * 60;
+  const visibleEnd = endHour * 60;
+  return (
+    <>
+      {ranges.map((range, ri) => {
+        const s = Math.max(range.startMinutes, visibleStart);
+        const e = Math.min(range.endMinutes, visibleEnd);
+        if (e <= s || range.locationName === undefined) return null;
+        const label = bandLocationLabel(range.locationName);
+        const touchesPrevious = ranges.some((o, oi) => oi !== ri && o.endMinutes === range.startMinutes);
+        const at = bandLabelStartMinutes({ startMinutes: s, endMinutes: e }, occupied, pixelsPerMinute);
+        return (
+          <React.Fragment key={`loc-${ri}`}>
+            {touchesPrevious && (
+              <div
+                className="pointer-events-none absolute left-0 right-0 z-[1] h-px bg-black/10"
+                style={{ top: (s - visibleStart) * pixelsPerMinute }}
+              />
+            )}
+            {at !== null && (
+              <div
+                className={cn(
+                  "pointer-events-none absolute z-[1] truncate font-medium leading-[14px] animate-in fade-in-0 duration-200",
+                  size === "day" ? "left-2 right-1.5 text-[10.5px]" : "left-1.5 right-1 text-[10px]",
+                  range.locationName ? "text-[#111111]/[0.58]" : "text-[#111111]/[0.38]",
+                )}
+                style={{ top: (at - visibleStart) * pixelsPerMinute + 4 }}
+                title={label}
+                data-agenda-band-location
+              >
+                {label}
+              </div>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </>
+  );
 }
 
 function getAppointmentEnd(appointment: AppointmentRow) {

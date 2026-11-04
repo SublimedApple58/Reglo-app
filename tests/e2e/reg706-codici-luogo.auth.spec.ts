@@ -85,6 +85,12 @@ test("codici per luogo: nascosti, si mostrano e si copiano; spenti non ci sono",
     expect(new Set(codes).size).toBe(codes.length);
     expect(codes).not.toContain(companyCode);
 
+    // L'elenco generale dei luoghi (lo leggono anche istruttori e allievi)
+    // non porta mai i codici: escono solo dal modale.
+    const listed = ((await json(await request.get("/api/autoscuole/locations"))).data ?? []) as Record<string, unknown>[];
+    expect(listed.length).toBeGreaterThan(0);
+    for (const loc of listed) expect(loc).not.toHaveProperty("inviteCode");
+
     // Funzione spenta: la sezione sparisce.
     await page.keyboard.press("Escape");
     await request.patch("/api/autoscuole/settings", { data: { availabilityByLocation: false } });

@@ -12,6 +12,14 @@ import {
   withoutLicenseCategories,
 } from "./location-for-license";
 
+/**
+ * Campi dei luoghi che non escono mai dalle letture generali (elenco, crea,
+ * modifica: le vedono anche istruttori e allievi via `/api/autoscuole/locations`).
+ * `inviteCode` (REG-706) si legge solo da `getLocationInviteCodes`, con i
+ * permessi della «Chiave di accesso».
+ */
+const LOCATION_PRIVATE_FIELDS = { inviteCode: true } as const;
+
 export const DEFAULT_LOCATION_LABEL = "Sede dell'autoscuola";
 
 export type LocationActor = {
@@ -85,6 +93,7 @@ export async function setLocationLicenseCategories(
   }
 
   return tx.autoscuolaLocation.update({
+    omit: LOCATION_PRIVATE_FIELDS,
     where: { id: params.locationId },
     data: { licenseCategories: categories },
   });
@@ -103,6 +112,7 @@ export async function setLocationLicenseCategories(
 export async function listLocationsForCompany(companyId: string) {
   const [locations, limits] = await Promise.all([
     prisma.autoscuolaLocation.findMany({
+      omit: LOCATION_PRIVATE_FIELDS,
       where: { companyId, archivedAt: null },
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
     }),
@@ -239,6 +249,7 @@ export async function createLocation(input: CreateLocationInput) {
 
   return prisma.$transaction(async (tx) => {
     const created = await tx.autoscuolaLocation.create({
+      omit: LOCATION_PRIVATE_FIELDS,
       data: {
         companyId: input.companyId,
         createdByUserId: input.createdByUserId,
@@ -320,6 +331,7 @@ export async function updateLocation(input: UpdateLocationInput) {
 
   return prisma.$transaction(async (tx) => {
     const updated = await tx.autoscuolaLocation.update({
+      omit: LOCATION_PRIVATE_FIELDS,
       where: { id: input.id },
       data,
     });
@@ -370,8 +382,9 @@ export async function upsertDefaultLocation(input: UpdateDefaultLocationInput) {
 
   return prisma.$transaction(async (tx) => {
     const saved = existing
-      ? await tx.autoscuolaLocation.update({ where: { id: existing.id }, data })
+      ? await tx.autoscuolaLocation.update({ omit: LOCATION_PRIVATE_FIELDS, where: { id: existing.id }, data })
       : await tx.autoscuolaLocation.create({
+          omit: LOCATION_PRIVATE_FIELDS,
           data: { companyId: input.companyId, isDefault: true, ...data },
         });
     if (input.licenseCategories === undefined) return saved;
@@ -402,6 +415,7 @@ export async function softDeleteLocation(id: string, actor: LocationActor) {
   // esce dai loro luoghi, e chi lo aveva come principale passa al successivo.
   return prisma.$transaction(async (tx) => {
     const archived = await tx.autoscuolaLocation.update({
+      omit: LOCATION_PRIVATE_FIELDS,
       where: { id },
       data: { archivedAt: new Date(), licenseCategories: [] },
     });

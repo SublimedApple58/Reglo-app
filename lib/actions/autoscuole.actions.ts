@@ -37,6 +37,7 @@ import { firstNameFor } from "@/lib/autoscuole/whatsapp-delivery";
 import { appointmentBusyInstructorIds } from "@/lib/autoscuole/appointment-busy";
 import { fetchGroupLessonBusyRows } from "@/lib/autoscuole/group-lesson-busy";
 import { resolveGroupLessonLocationId } from "@/lib/autoscuole/locations";
+import { getLocationAvailabilityState } from "@/lib/autoscuole/member-locations";
 import {
   getMemberLocationIds,
   setStudentDefaultLocationKeepingInvariant,
@@ -1766,6 +1767,18 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
   }
 }
 
+/**
+ * Fascia di disponibilità per l'agenda. `locationName` (REG-705) c'è solo con
+ * «Disponibilità per luogo» effettiva: stringa = luogo della fascia, `null` =
+ * fascia senza luogo (vale per tutti i luoghi). A funzione spenta la chiave
+ * manca e la risposta è identica a prima.
+ */
+export type AgendaAvailabilityRange = {
+  startMinutes: number;
+  endMinutes: number;
+  locationName?: string | null;
+};
+
 export async function getInstructorAvailabilityForAgenda(input: {
   from: string;
   to: string;
@@ -1774,7 +1787,7 @@ export async function getInstructorAvailabilityForAgenda(input: {
   data?: Array<{
     instructorId: string;
     instructorName: string;
-    days: Record<string, Array<{ startMinutes: number; endMinutes: number }>>;
+    days: Record<string, AgendaAvailabilityRange[]>;
   }>;
   message?: string;
 }> {
@@ -1809,13 +1822,22 @@ export async function getInstructorAvailabilityForAgenda(input: {
 
     const instructorIds = instructors.map((i) => i.id);
 
-    const resolver = await buildAvailabilityResolver(
-      companyId,
-      "instructor",
-      instructorIds,
-      fromDate,
-      toDate,
-    );
+    const [resolver, locationState] = await Promise.all([
+      buildAvailabilityResolver(companyId, "instructor", instructorIds, fromDate, toDate),
+      getLocationAvailabilityState(companyId),
+    ]);
+    // Nomi dei luoghi attivi: un luogo archiviato su una fascia vecchia vale
+    // come «tutti i luoghi», come nel motore di prenotazione.
+    const locationNames = locationState.enabled
+      ? new Map(
+          (
+            await prisma.autoscuolaLocation.findMany({
+              where: { companyId, archivedAt: null },
+              select: { id: true, name: true },
+            })
+          ).map((l) => [l.id, l.name]),
+        )
+      : null;
 
     const DOW_MAP: Record<string, number> = {
       Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
@@ -1836,11 +1858,11 @@ export async function getInstructorAvailabilityForAgenda(input: {
     const data: Array<{
       instructorId: string;
       instructorName: string;
-      days: Record<string, Array<{ startMinutes: number; endMinutes: number }>>;
+      days: Record<string, AgendaAvailabilityRange[]>;
     }> = [];
 
     for (const instructor of instructors) {
-      const days: Record<string, Array<{ startMinutes: number; endMinutes: number }>> = {};
+      const days: Record<string, AgendaAvailabilityRange[]> = {};
 
       for (const date of dates) {
         const record = resolver.resolve(instructor.id, date);
@@ -1855,6 +1877,9 @@ export async function getInstructorAvailabilityForAgenda(input: {
           days[ymd] = record.ranges.map((r) => ({
             startMinutes: r.startMinutes,
             endMinutes: r.endMinutes,
+            ...(locationNames
+              ? { locationName: (r.locationId && locationNames.get(r.locationId)) || null }
+              : {}),
           }));
         }
       }
