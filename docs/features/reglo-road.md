@@ -35,7 +35,7 @@ Tutte rispondono `{ success: true, data } | { success: false, message, code? }` 
 | PATCH | `/road/sessions/[id]/markers/[markerId\|clientId]` `{ sentiment?, lat?, lng?, recordedAt?, note? }` | istruttore | segnalazione aggiornata (REG-696: «qui / 10 s fa» del toast e correzione dopo la guida; fino a 2 h dalla chiusura) |
 | POST | `/road/sessions/[id]/hotspot-checks` `{ clientId, hotspotKey, kind, label, lat, lng, outcome: "better"\|"worse", recordedAt }` | istruttore | `{ id, clientId }` ripasso «Meglio / No» su un punto critico dell'allievo (REG-677; idempotente su clientId, fino a 2 h dopo la chiusura) |
 | DELETE | `/road/sessions/[id]/hotspot-checks/[checkId\|clientId]` | istruttore | `{ removed: true }` («Annulla», REG-677) |
-| POST | `/road/sessions/[id]/end` | istruttore | chiude + guida `completed` → `Detail` |
+| POST | `/road/sessions/[id]/end` `{ endedAt? }` | istruttore | chiude + guida `completed` → `Detail`. REG-714: `endedAt` = ora del tocco sul telefono (anche arrivata dopo dalla coda offline), tenuta fra inizio e adesso (`resolveEndedAt`, `geo.ts`); senza vale adesso. Già completata = `Detail` (idempotente). Chiusa come `abandoned` dal job + `endedAt` = torna `completed` con quell'ora (guida completata, Road libero accorciato, giro raggiunto, traccia pulita) |
 | GET | `/road/sessions/[id]/track?afterSeq=n` | titolare | `{ lastSeq, points: [[lat,lng,tMs]] }` (solo lotti nuovi) |
 | GET | `/road/appointments/[appointmentId]` | allievo (con setting), istruttore, titolare | `Detail \| null` |
 | GET | `/road/live` | titolare | `{ now, base: {name,lat,lng}\|null, sessions: [Session+{lesson, markerCount, markerKinds, recentMarkers}], atBase: [{id,name,plate,carColor,freeUntil}] }` |

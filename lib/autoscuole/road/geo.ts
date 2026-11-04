@@ -92,6 +92,17 @@ export function drivingSeconds(startedAt: Date, end: Date, lessonStartsAt?: Date
 }
 
 /**
+ * REG-714: fine della guida presa dal telefono (anche arrivata ore dopo, se
+ * «Termina» è stato toccato senza rete). Sempre fra l'inizio e adesso; senza
+ * un'ora valida vale adesso.
+ */
+export function resolveEndedAt(input: unknown, startedAt: Date, now = new Date()): Date {
+  const t = typeof input === "string" ? Date.parse(input) : NaN;
+  if (!Number.isFinite(t)) return now;
+  return new Date(Math.min(now.getTime(), Math.max(startedAt.getTime(), t)));
+}
+
+/**
  * Road libero: fine reale di una guida nata da Road. Arrotondata per eccesso ai
  * 5 minuti, almeno 5 minuti dopo l'inizio, mai oltre la fine prenotata.
  */
