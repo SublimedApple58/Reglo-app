@@ -114,7 +114,8 @@ import {
   ALL_LESSON_PATHS,
 } from "@/lib/autoscuole/license-paths";
 import type { StudentLicensePathDto } from "@/lib/actions/autoscuole-license-paths.actions";
-import { InviteCodeDialog } from "@/components/pages/Autoscuole/dialogs/InviteCodeDialog";
+import { InviteCodeDialog, type LocationInviteCodes } from "@/components/pages/Autoscuole/dialogs/InviteCodeDialog";
+import { getLocationInviteCodes } from "@/lib/actions/autoscuole-location-invites.actions";
 import {
   FormerStudentPanel,
   FormerStudentsRows,
@@ -923,6 +924,8 @@ export function AutoscuoleStudentsPage({
   const [inviteCode, setInviteCode] = React.useState<string | null>(null);
   const [inviteCodeOpen, setInviteCodeOpen] = React.useState(false);
   const [copiedCode, setCopiedCode] = React.useState<string | null>(null);
+  // REG-706: codici per luogo del modale «Chiave di accesso».
+  const [locationCodes, setLocationCodes] = React.useState<LocationInviteCodes>(null);
 
   // Crea account allievo
   const company = useAtomValue(companyAtom);
@@ -2233,6 +2236,9 @@ export function AutoscuoleStudentsPage({
     getCompanyInviteCode().then((res) => {
       if (res.success && res.data) setInviteCode(res.data);
     });
+    getLocationInviteCodes().then((res) => {
+      if (res.success && res.data) setLocationCodes(res.data);
+    });
     getAutoscuolaLocations().then((res) => {
       if (res.success && Array.isArray(res.data)) {
         setLocations(
@@ -2307,6 +2313,15 @@ export function AutoscuoleStudentsPage({
       setPhaseTab("pratica");
     }
   }, [phaseTab, phaseTabOptions]);
+
+  // I luoghi o l'interruttore possono cambiare in Impostazioni: alla riapertura
+  // del modale si ricaricano (intanto resta il dato precedente).
+  React.useEffect(() => {
+    if (!inviteCodeOpen || affiliate || !company) return;
+    getLocationInviteCodes().then((res) => {
+      if (res.success && res.data) setLocationCodes(res.data);
+    });
+  }, [inviteCodeOpen, affiliate, company]);
 
   const copyCode = React.useCallback((code: string) => {
     navigator.clipboard.writeText(code);
@@ -4502,6 +4517,7 @@ export function AutoscuoleStudentsPage({
         autonomousInstructors={autonomousInstructors}
         copiedCode={copiedCode}
         onCopy={copyCode}
+        locationCodes={locationCodes}
       />
 
       {/* Modalina "Registra esito": stesso componente dell'agenda, affiancato al

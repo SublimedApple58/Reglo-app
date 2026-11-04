@@ -192,7 +192,8 @@ Totale **18–20 punti** → spacchettato:
   (`CompanyMemberLocation` + principale) via `member-locations.ts`.
 - **Fuori v1**: allievi già iscritti che si aggiungono un luogo col codice.
 - **Stima**: 3 punti. Dipende da 705-a. Branch/worktree propri.
-- **Stato 03/11**: backend fatto (branch `feat/reg-706-codici-luogo`, worktree `reglo-worktrees/reg-706`, commit 441794b, migrazione applicata sul DB dev). Anteprime del modale in `/tmp/hiro-anteprime/reg-706/706-anteprima-*`, in attesa dell'ok.
+- **Stato 03/11**: backend fatto (branch `feat/reg-706-codici-luogo`, worktree `reglo-worktrees/reg-706`, commit 441794b, migrazione applicata sul DB dev). Anteprime del modale in `/tmp/hiro-anteprime/reg-706/706-anteprima-*`, approvate il 04/11.
+- **Stato 04/11**: UI del modale fatta (`InviteCodeDialog` + pagina Allievi), e2e `reg706-codici-luogo` verde insieme a `invite-code`; registrazione con codice luogo verificata sul DB dev (allievo con luogo principale e unico; a funzione spenta 404 generico). Screenshot `706-real-*`. Commit locali, staging da decidere.
 
 ---
 

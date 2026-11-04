@@ -128,7 +128,7 @@ Tutto in `lib/autoscuole/location-booking.ts` (puro + loader), test in
 - **Prenotazione**: l'app manda `locationId` dello slot scelto (vedi mobile
   `src/utils/slotLocation.ts`); assente quando lo slot non lo porta.
 
-## Codici di invito per luogo (REG-706, backend)
+## Codici di invito per luogo (REG-706)
 
 - **Schema**: `AutoscuolaLocation.inviteCode String? @unique` (migrazione
   `20261109120000_location_invite_codes`, additiva, nessun backfill).
@@ -145,7 +145,18 @@ Tutto in `lib/autoscuole/location-booking.ts` (puro + loader), test in
   `defaultLocationId` = quel luogo e la riga `CompanyMemberLocation`. Altrimenti stesso
   errore generico «Codice di invito non valido» (mobile invariato).
 - **Fuori v1**: allievi già iscritti che si aggiungono un luogo col codice (solo staff).
-- Test: `signup-invite.test.ts`, `location-invite-codes.test.ts`.
+- **Modale «Chiave di accesso»** (anteprime approvate da Tiziano il 04/11):
+  `InviteCodeDialog` riceve `locationCodes` (caricati dalla pagina Allievi con il
+  codice autoscuola e ricaricati a ogni apertura). Con la funzione accesa, sotto
+  il codice dell'autoscuola c'è «Codici per luogo» (numero dei luoghi, una riga
+  di spiegazione, una riga per luogo con nome e indirizzo). Il codice è nascosto
+  da sei punti e non sta nel DOM finché non si preme «Mostra»; poi lo stesso
+  bottone copia e per 1,6 s dice «Copiato». Gli stati si incrociano in 200 ms
+  (opacità + sfocatura per il codice, opacità + 4px per l'etichetta).
+- Test: `signup-invite.test.ts`, `location-invite-codes.test.ts`; e2e
+  `tests/e2e/reg706-codici-luogo.auth.spec.ts` (mostra, copia, codici tutti
+  diversi, sezione assente a funzione spenta; `--workers=1`). Registrazione con
+  codice luogo verificata sul DB dev il 04/11 (utente di prova cancellato).
 
 ## Connessioni
 - **Locations (REG-392/409)**: archiviare un luogo lo toglie dai luoghi degli
