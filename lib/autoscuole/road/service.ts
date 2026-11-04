@@ -14,7 +14,7 @@ import {
   resolveMarkerLabel,
   type RoadCustomMarker,
 } from "@/lib/autoscuole/road/catalog";
-import { drivingSeconds, freeLessonEnd, sanitizePoints, trackDistanceMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
+import { drivingSeconds, freeLessonEnd, resolveEndedAt, sanitizePoints, trackDistanceMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
 import {
   buildCleanTrack,
   CLEAN_TRACK_VERSION,
@@ -790,15 +790,22 @@ export async function removeRoadHotspotCheck(sessionId: string, checkIdOrClientI
 
 const loadTrack = (sessionId: string) => loadRoadTrack(prisma, sessionId);
 
-export async function endRoadSession(sessionId: string) {
+/**
+ * «Termina guida». REG-714: `endedAt` = l'ora del tocco sul telefono, anche
+ * quando la chiusura arriva dopo dalla coda offline (la guida intanto può
+ * essere stata chiusa come abbandonata dal job: torna completata con l'ora del
+ * telefono). Già completata = si restituisce il dettaglio (idempotente).
+ */
+export async function endRoadSession(sessionId: string, input: { endedAt?: unknown } = {}) {
   try {
     const ctx = await roadContext();
     const loaded = await loadOwnSession(ctx, sessionId);
     if ("error" in loaded) return loaded.error!;
     const { session } = loaded;
 
-    if (session.status === "active") {
-      const endedAt = new Date();
+    const queuedClose = session.status === "abandoned" && input.endedAt != null;
+    if (session.status === "active" || queuedClose) {
+      const endedAt = resolveEndedAt(input.endedAt, session.startedAt);
       await finalizeRoadSession(prisma, sessionId, "completed", endedAt);
       // Decisione di prodotto: «Termina guida» = guida completata subito.
       await prisma.autoscuolaAppointment.updateMany({
