@@ -236,7 +236,7 @@ export function LocationFormDialog({
         <div
           ref={bodyRef}
           onScroll={measureEdges}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-7 pb-2 pt-1 max-sm:px-5"
+          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-7 pb-2 pt-1 max-sm:px-5"
           data-testid="location-dialog-body"
         >
           <div>

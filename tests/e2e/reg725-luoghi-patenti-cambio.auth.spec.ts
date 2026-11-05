@@ -146,6 +146,7 @@ test("modale: patente su un secondo luogo con cambio automatico, card aggiornata
 
 for (const viewport of [
   { width: 390, height: 700, label: "telefono" },
+  { width: 360, height: 700, label: "telefono stretto" },
   { width: 1280, height: 560, label: "finestra bassa" },
 ]) {
   test(`modale scorrevole con intestazione e Salva sempre visibili (${viewport.label})`, async ({
@@ -178,6 +179,20 @@ for (const viewport of [
       const save = dialog.getByRole("button", { name: "Salva luogo" });
       await expect(title).toBeInViewport();
       await expect(save).toBeInViewport();
+      // Niente scorrimento orizzontale e la scelta del cambio dentro la card.
+      const overflow = await dialog.evaluate((el) => {
+        const body = el.querySelector('[data-testid="location-dialog-body"]') as HTMLElement;
+        const card = body.querySelector('[data-testid^="location-gear-row-"]')?.closest(".overflow-hidden.rounded-\\[14px\\]") as HTMLElement | null;
+        const right = card ? card.getBoundingClientRect().right : el.getBoundingClientRect().right;
+        const segs = Array.from(body.querySelectorAll('[role="radiogroup"]')) as HTMLElement[];
+        return {
+          bodyX: body.scrollWidth - body.clientWidth,
+          dialogX: el.scrollWidth - el.clientWidth,
+          segOut: segs.filter((g) => g.offsetParent && g.getBoundingClientRect().right > right + 0.5).length,
+          clipped: segs.flatMap((g) => Array.from(g.querySelectorAll("button"))).filter((b) => b.scrollWidth > b.clientWidth + 0.5).length,
+        };
+      });
+      expect(overflow).toEqual({ bodyX: 0, dialogX: 0, segOut: 0, clipped: 0 });
       // In fondo si vede la fine della sezione patenti, sopra il piede.
       await expect(dialog.getByText("Una patente può stare in più luoghi")).toBeInViewport();
       // Nessuna tendina dei suggerimenti aperta da sola sull'indirizzo salvato.
