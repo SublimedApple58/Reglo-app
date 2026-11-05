@@ -202,7 +202,10 @@ Hotfix: il luogo si sceglieva solo nella settimana tipo e dall'agenda (REG-717).
   esistente perché copiano l'oggetto fascia. Follow-up mobile.
 - Test: `tests/unit/autoscuole/override-range-locations.test.ts`; e2e
   `tests/e2e/reg724-luogo-eccezioni.auth.spec.ts` (Calendario + Pubblicazione su
-  Marco Bianchi, rimette override, modalità e setting; `--workers=1`).
+  Marco Bianchi, rimette override, modalità e setting; `--workers=1`). Verde su
+  dev e su staging (`E2E_BASE_URL` + `E2E_COMPANY_ID`) il 05/11. Il test semina
+  l'override del giorno via API e aspetta le due righe: prima che le eccezioni
+  arrivino il pannello mostra la settimana tipo.
 
 ## Codici di invito per luogo (REG-706)
 

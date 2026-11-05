@@ -88,8 +88,10 @@ async function openAvailability(page: Page, name: string) {
 async function pickLocation(page: Page, scope: ReturnType<Page["locator"]>, target: string) {
   const select = scope.getByTestId("range-location-select").first();
   await expect(select).toBeVisible({ timeout: 30_000 });
-  await select.click();
-  await page.getByRole("menuitem").filter({ hasText: target }).first().click();
+  // Timeout per azione: se qualcosa si blocca il test fallisce prima del suo
+  // timeout e il `finally` rimette tutto com'era.
+  await select.click({ timeout: 20_000 });
+  await page.getByRole("menuitem").filter({ hasText: target }).first().click({ timeout: 20_000 });
   await expect(select).toHaveText(target);
 }
 
@@ -111,16 +113,33 @@ test("eccezione del giorno dal Calendario: il luogo si sceglie e si salva", asyn
 
   await patchSettings(request, { availabilityByLocation: true });
   try {
+    // Giorno di partenza noto: due fasce senza luogo. Vedere le due righe a
+    // schermo prova che le eccezioni sono caricate (prima il pannello mostra la
+    // settimana tipo e un clic finirebbe sui dati sbagliati).
+    const seeded = await json(
+      await request.post("/api/autoscuole/availability/overrides", {
+        data: {
+          ownerType: "instructor",
+          ownerId: instructor.id,
+          date,
+          ranges: [
+            { startMinutes: 8 * 60, endMinutes: 12 * 60 },
+            { startMinutes: 14 * 60, endMinutes: 17 * 60 },
+          ],
+        },
+      }),
+    );
+    expect(seeded.success, seeded.message).toBe(true);
+
     await openAvailability(page, instructor.name);
     await page.getByRole("button", { name: "Calendario", exact: true }).click();
     for (let i = 0; i < monthOffset; i++) await page.getByRole("button", { name: "Mese successivo" }).click();
-    await page.locator(`[data-date="${date}"]`).click();
-
     const list = page.getByTestId("located-range-list");
-    if (!(await list.isVisible().catch(() => false))) {
-      await page.getByText("Disponibile", { exact: true }).locator("xpath=..").getByRole("switch").click();
-    }
-    await expect(list).toBeVisible({ timeout: 30_000 });
+    await expect(async () => {
+      const cell = page.locator(`[data-date="${date}"]`);
+      if ((await cell.getAttribute("class"))?.includes("bg-navy-900") !== true) await cell.click();
+      await expect(list.getByTestId("located-range-row")).toHaveCount(2, { timeout: 3_000 });
+    }).toPass({ timeout: 60_000 });
     await pickLocation(page, list, target.name);
 
     // Salvato davvero: l'override del giorno porta il luogo sulla prima fascia.
