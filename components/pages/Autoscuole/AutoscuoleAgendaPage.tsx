@@ -2981,6 +2981,13 @@ export function AutoscuoleAgendaPage({
     () => resolveCreateLocation({ studentId: form.studentId, vehicleId: form.vehicleId }),
     [resolveCreateLocation, form.studentId, form.vehicleId],
   );
+  // REG-725: luogo ambiguo e non ancora scelto → la guida non si salva finché
+  // non lo si sceglie (il server applica la stessa regola). Gli esami no.
+  const createLocationMissing =
+    createLocationContext.ambiguous &&
+    !form.locationId &&
+    !!form.studentId &&
+    (form.types[0] || form.type) !== "esame";
 
   // Pre-populate form.locationId with the default sede whenever the dialog opens
   // (nessun allievo ancora scelto → la sede è il fallback del resolver REG-409).
@@ -6323,6 +6330,7 @@ export function AutoscuoleAgendaPage({
                 !form.studentId ||
                 !form.instructorId ||
                 (vehiclesEnabled && !form.vehicleId) ||
+                createLocationMissing ||
                 (multiMode
                   ? !entries.length || entries.some((e) => !e.day || !e.time) || overlappingEntryIds.size > 0
                   : !form.day || !form.time)
@@ -6867,6 +6875,18 @@ export function AutoscuoleAgendaPage({
                   })()}
                 </SelectContent>
               </Select>
+              {createLocationMissing ? (
+                <p className="mt-1.5 text-xs font-medium text-[#6a6a6a]" data-testid="create-location-required">
+                  Scegli il luogo: più luoghi fanno{" "}
+                  {createLocationContext.license?.category ?? "questa patente"}
+                  {createLocationContext.license?.transmission === "automatic"
+                    ? " automatico"
+                    : createLocationContext.license?.transmission === "manual"
+                      ? " manuale"
+                      : ""}
+                  .
+                </p>
+              ) : null}
             </div>
           )}
           <div>

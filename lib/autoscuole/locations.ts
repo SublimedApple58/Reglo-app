@@ -8,7 +8,8 @@ import { detachArchivedLocationFromMembers } from "./member-locations";
 import {
   locationsByLicenseEnabled,
   parseLicenseTransmissions,
-  resolveGroupPrefilledLocationId,
+  resolveGroupPrefilledLocation,
+  resolvePrefilledLocation,
   resolvePrefilledLocationId,
   TRANSMISSIONLESS_CATEGORIES,
   withoutLicenseCategories,
@@ -217,7 +218,7 @@ export async function resolveStudentBookingLocationId(
  * `licenseCategories` sono le categorie dei veicoli della guida — il veicolo
  * condiviso o la flotta di moto, MAI l'auto al seguito (categoria B).
  */
-export async function resolveGroupLessonLocationId(
+export async function resolveGroupLessonLocation(
   tx: Prisma.TransactionClient,
   params: {
     companyId: string;
@@ -229,7 +230,7 @@ export async function resolveGroupLessonLocationId(
       | undefined
     )[];
   },
-): Promise<string | null> {
+): Promise<{ locationId: string | null; ambiguous: boolean }> {
   const [locations, members, limits] = await Promise.all([
     tx.autoscuolaLocation.findMany({
       where: { companyId: params.companyId, archivedAt: null },
@@ -246,13 +247,67 @@ export async function resolveGroupLessonLocationId(
   ]);
   const byLicense = locationsByLicenseEnabled(limits.locationsByLicense, locations);
 
-  return (
-    resolveGroupPrefilledLocationId({
-      locations: byLicense ? locations : withoutLicenseCategories(locations),
-      studentDefaultLocationIds: members.map((m) => m.defaultLocationId),
-      licenseCategories: params.licenseCategories,
-    }) ?? locations.find((l) => l.isDefault)?.id ?? null
-  );
+  const resolved = resolveGroupPrefilledLocation({
+    locations: byLicense ? locations : withoutLicenseCategories(locations),
+    studentDefaultLocationIds: members.map((m) => m.defaultLocationId),
+    licenseCategories: params.licenseCategories,
+  });
+  // REG-725: con la scelta ambigua lo staff deve scegliere — chi crea il
+  // gruppo senza luogo riceve l'errore (`LOCATION_REQUIRED_MESSAGE`).
+  if (resolved.ambiguous) return { locationId: null, ambiguous: true } as const;
+  return {
+    locationId: resolved.locationId ?? locations.find((l) => l.isDefault)?.id ?? null,
+    ambiguous: false,
+  } as const;
+}
+
+/** REG-725: messaggio di chi salva una guida senza luogo quando la scelta è ambigua. */
+export const LOCATION_REQUIRED_MESSAGE =
+  "Scegli il luogo: più luoghi fanno questa patente con questo cambio.";
+
+/**
+ * REG-725: la guida singola dello staff senza luogo va rifiutata? Sì solo con
+ * «Luoghi diversi per tipo di patente» acceso e la stessa ambiguità che la UI
+ * mostra col campo vuoto (più luoghi compatibili, sede esclusa, nessun luogo
+ * dell'allievo che scioglie il pareggio). Stessi dati della UI: luogo principale
+ * e luoghi dell'allievo, patente e cambio di veicolo o allievo.
+ */
+export async function isStaffLessonLocationAmbiguous(params: {
+  companyId: string;
+  studentId: string;
+  vehicleId?: string | null;
+}): Promise<boolean> {
+  const [locations, member, vehicle, limits] = await Promise.all([
+    prisma.autoscuolaLocation.findMany({
+      where: { companyId: params.companyId, archivedAt: null },
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+      select: { id: true, isDefault: true, licenseCategories: true, licenseTransmissions: true },
+    }),
+    prisma.companyMember.findFirst({
+      where: { companyId: params.companyId, userId: params.studentId },
+      select: {
+        defaultLocationId: true,
+        licenseCategory: true,
+        transmission: true,
+        locations: { select: { locationId: true } },
+      },
+    }),
+    params.vehicleId
+      ? prisma.autoscuolaVehicle.findFirst({
+          where: { id: params.vehicleId, companyId: params.companyId },
+          select: { licenseCategory: true, transmission: true },
+        })
+      : Promise.resolve(null),
+    getCachedCompanyServiceLimits(params.companyId),
+  ]);
+  if (!locationsByLicenseEnabled(limits.locationsByLicense, locations)) return false;
+  return resolvePrefilledLocation({
+    locations,
+    studentDefaultLocationId: member?.defaultLocationId ?? null,
+    studentLocationIds: member?.locations.map((l) => l.locationId) ?? [],
+    student: member,
+    vehicle,
+  }).ambiguous;
 }
 
 export type CreateLocationInput = {

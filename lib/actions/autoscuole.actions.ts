@@ -36,7 +36,11 @@ import {
 import { firstNameFor } from "@/lib/autoscuole/whatsapp-delivery";
 import { appointmentBusyInstructorIds } from "@/lib/autoscuole/appointment-busy";
 import { fetchGroupLessonBusyRows } from "@/lib/autoscuole/group-lesson-busy";
-import { resolveGroupLessonLocationId } from "@/lib/autoscuole/locations";
+import {
+  isStaffLessonLocationAmbiguous,
+  LOCATION_REQUIRED_MESSAGE,
+  resolveGroupLessonLocation,
+} from "@/lib/autoscuole/locations";
 import { getLocationAvailabilityState } from "@/lib/autoscuole/member-locations";
 import { assertCanWriteAvailability, isAvailabilityManager } from "@/lib/autoscuole/availability-access";
 import {
@@ -235,6 +239,8 @@ const createAppointmentSchema = z.object({
   // Opzionale, solo per le guide moto (ignorato per le altre).
   motoLessonType: z.enum(MOTO_LESSON_TYPES).nullable().optional(),
   locationId: z.string().uuid().optional().nullable(),
+  /** REG-725: flussi senza campo Luogo (Road «Avvia guida»): niente obbligo di scelta. */
+  locationOptional: z.boolean().optional(),
   notes: z.string().optional(),
   skipWeeklyLimitCheck: z.boolean().optional(),
   skipConflictCheck: z.boolean().optional(),
@@ -4018,6 +4024,19 @@ export async function createAutoscuolaAppointment(
         return { success: false, message: "Luogo non valido per questa autoscuola." };
       }
     } else {
+      // REG-725: senza luogo e con la scelta ambigua (più luoghi fanno patente
+      // e cambio della guida, sede esclusa) si rifiuta, come fa la UI.
+      if (
+        requestedType !== "esame" &&
+        payload.locationOptional !== true &&
+        (await isStaffLessonLocationAmbiguous({
+          companyId,
+          studentId: payload.studentId,
+          vehicleId: payload.vehicleId ?? null,
+        }))
+      ) {
+        return { success: false, message: LOCATION_REQUIRED_MESSAGE, code: "LOCATION_REQUIRED" };
+      }
       const defaultLoc = await prisma.autoscuolaLocation.findFirst({
         where: { companyId, isDefault: true, archivedAt: null },
         select: { id: true },
@@ -4662,6 +4681,16 @@ export async function createAutoscuolaAppointmentBatch(
         return { success: false, message: "Luogo non valido per questa autoscuola." };
       }
     } else {
+      // REG-725: stessa regola della guida singola.
+      if (
+        await isStaffLessonLocationAmbiguous({
+          companyId,
+          studentId: payload.studentId,
+          vehicleId: payload.vehicleId ?? null,
+        })
+      ) {
+        return { success: false, message: LOCATION_REQUIRED_MESSAGE, code: "LOCATION_REQUIRED" };
+      }
       const defaultLoc = await prisma.autoscuolaLocation.findFirst({
         where: { companyId, isDefault: true, archivedAt: null },
         select: { id: true },
@@ -11021,14 +11050,14 @@ export async function createGroupLesson(
         }
         return { ok: true, locationId: loc.id };
       }
-      return {
-        ok: true,
-        locationId: await resolveGroupLessonLocationId(prisma, {
-          companyId,
-          studentIds,
-          licenseCategories,
-        }),
-      };
+      const resolved = await resolveGroupLessonLocation(prisma, {
+        companyId,
+        studentIds,
+        licenseCategories,
+      });
+      // REG-725: scelta ambigua → il luogo lo deve scegliere lo staff.
+      if (resolved.ambiguous) return { ok: false, message: LOCATION_REQUIRED_MESSAGE };
+      return { ok: true, locationId: resolved.locationId };
     };
 
     const price = await getGroupLessonPrice({ companyId });

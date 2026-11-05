@@ -347,6 +347,8 @@ export function GroupLessonCreateDialog({
     [locations, selectedIds, students, isMoto, fleet, selectedVehicle],
   );
   const prefilledLocationId = locations.length ? locationContext.locationId ?? "" : "";
+  // REG-725: scelta ambigua e luogo non ancora scelto → la guida non si salva.
+  const locationMissing = locations.length > 0 && locationContext.ambiguous && !locationId;
 
   // Il ricalcolo segue allievi e veicoli finché il Luogo non è stato scelto a
   // mano.
@@ -865,6 +867,11 @@ export function GroupLessonCreateDialog({
                     })()}
                   </SelectContent>
                 </Select>
+                {locationMissing ? (
+                  <p className="text-[11px] font-medium text-[#6a6a6a]" data-testid="group-location-required">
+                    Scegli il luogo: più luoghi fanno le patenti di questa guida.
+                  </p>
+                ) : null}
               </div>
             ) : null}
 
@@ -954,7 +961,7 @@ export function GroupLessonCreateDialog({
             <Button
               type="button"
               className="w-full cursor-pointer bg-[#222222] text-white hover:bg-black"
-              disabled={saving}
+              disabled={saving || locationMissing}
               onClick={() => handleCreate()}
             >
               {saving ? (

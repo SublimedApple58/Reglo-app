@@ -1579,6 +1579,8 @@ export async function startFreeRoadSession(input: {
       allowPast: true,
       skipWeeklyLimitCheck: input.confirmWeeklyLimit === true,
       confirmNoBuffer: input.confirmNoBuffer === true,
+      // REG-725: Road non ha il campo Luogo — resta la sede di sempre.
+      locationOptional: true,
     });
     if (!created.success || !("data" in created) || !created.data) {
       const res = created as { message?: string; code?: string; weeklyLimitData?: unknown };

@@ -202,3 +202,155 @@ for (const viewport of [
     }
   });
 }
+
+// ─── Luogo obbligatorio quando la scelta è ambigua ───────────────────────────
+// Scenario: sede B solo manuale, due altri luoghi B solo automatico, allievo B
+// automatico senza luoghi → due compatibili, sede esclusa → ambiguo.
+
+type StudentRow = {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  licenseCategory?: string | null;
+  transmission?: string | null;
+  defaultLocationId?: string | null;
+  locationIds?: string[];
+};
+
+const testDay = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 52);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + ((3 - d.getDay() + 7) % 7)); // mercoledì
+  return d;
+};
+
+test("guida senza luogo rifiutata solo se ambigua; agenda blocca finché non si sceglie", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(240_000);
+  const storedByLicense = await readByLicense(request);
+  const before = await listLocations(request);
+  const sede = before.find((l) => l.isDefault)!;
+  const other = before.find((l) => !l.isDefault);
+  test.skip(!other, "serve un luogo oltre alla sede");
+
+  const day = testDay();
+  const startsAt = new Date(day);
+  startsAt.setHours(7, 0, 0, 0);
+  const endsAt = new Date(startsAt.getTime() + 60 * 60_000);
+  const boot = await (
+    await request.get("/api/autoscuole/agenda/bootstrap", {
+      params: { from: day.toISOString(), to: new Date(day.getTime() + 86_400_000).toISOString() },
+    })
+  ).json();
+  const instructor = boot.data.instructors[0];
+  const student = (boot.data.students as StudentRow[]).find(
+    (s) =>
+      s.licenseCategory === "B" &&
+      s.transmission === "automatic" &&
+      !s.defaultLocationId &&
+      !(s.locationIds ?? []).length,
+  );
+  test.skip(!student || !instructor, "serve un allievo B automatico senza luoghi");
+
+  let tempId: string | null = null;
+  const created: string[] = [];
+  const post = async (extra: Record<string, unknown>) =>
+    (await (
+      await request.post("/api/autoscuole/appointments", {
+        data: {
+          studentId: student!.id,
+          instructorId: instructor.id,
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          type: "guida",
+          ...extra,
+        },
+      })
+    ).json()) as { success: boolean; message?: string; code?: string; data?: { id: string } };
+
+  try {
+    await setByLicense(request, true);
+    await patchLocation(request, sede.id, { licenseCategories: ["B"], licenseTransmissions: { B: "manual" } });
+    await patchLocation(request, other!.id, {
+      licenseCategories: Array.from(new Set([...other!.licenseCategories, "B"])),
+      licenseTransmissions: { ...(other!.licenseTransmissions ?? {}), B: "automatic" },
+    });
+    const temp = await (
+      await request.post("/api/autoscuole/locations", {
+        data: { name: "REG-725 e2e", isPrecise: false, licenseCategories: ["B"], licenseTransmissions: { B: "automatic" } },
+      })
+    ).json();
+    expect(temp.success, temp.message).toBe(true);
+    tempId = temp.data.id;
+
+    // 1. Ambiguo e senza luogo → rifiutata, con il messaggio.
+    const refused = await post({});
+    expect(refused.success).toBe(false);
+    expect(refused.code).toBe("LOCATION_REQUIRED");
+    expect(refused.message).toContain("Scegli il luogo");
+
+    // 2. Con il luogo scelto → passa (il blocco riguarda solo l'assenza).
+    const ok = await post({ locationId: tempId });
+    expect(ok.code).not.toBe("LOCATION_REQUIRED");
+    if (ok.success && ok.data) created.push(ok.data.id);
+
+    // 3. A funzione spenta lo stesso salvataggio senza luogo non è bloccato.
+    for (const id of created.splice(0)) {
+      await request.post(`/api/autoscuole/appointments/${id}/permanent-cancel`);
+    }
+    await setByLicense(request, false);
+    const off = await post({});
+    expect(off.code).not.toBe("LOCATION_REQUIRED");
+    if (off.success && off.data) created.push(off.data.id);
+    await setByLicense(request, true);
+
+    // 4. Agenda: messaggio sotto il campo e «Crea guida» disabilitato finché non
+    //    si sceglie il luogo; i dati inseriti restano.
+    await page.goto("/it/user/autoscuole?tab=agenda");
+    await expect(page.getByTestId("autoscuole-agenda-page").first()).toBeVisible({ timeout: 60_000 });
+    const newAppointment = page.getByRole("button", { name: "Appuntamento" }).first();
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await page.getByTitle("Inserisci a mano").click();
+      try {
+        await newAppointment.waitFor({ state: "visible", timeout: 4_000 });
+        break;
+      } catch {
+        await page.waitForTimeout(500);
+      }
+    }
+    await newAppointment.click();
+    const card = page.getByRole("dialog", { name: /Nuovo appuntamento/ });
+    await expect(card).toBeVisible();
+    await card.getByPlaceholder("Cerca allievo...").fill(student!.firstName ?? "");
+    await page.getByText(new RegExp(`${student!.firstName} ${student!.lastName}`)).last().click();
+    const required = card.getByTestId("create-location-required");
+    await expect(required).toBeVisible({ timeout: 15_000 });
+    await expect(required).toContainText("B automatico");
+    const createButton = card.getByRole("button", { name: "Crea guida" });
+    await expect(createButton).toBeDisabled();
+
+    const trigger = card.getByTestId("create-location-trigger");
+    await trigger.evaluate((el) => el.scrollIntoView({ block: "center" }));
+    await trigger.click({ force: true });
+    await page.getByRole("option", { name: /REG-725 e2e/ }).click();
+    await expect(required).toBeHidden();
+    await expect(card.getByText(`${student!.firstName} ${student!.lastName}`).first()).toBeVisible();
+  } finally {
+    for (const id of created) {
+      await request.post(`/api/autoscuole/appointments/${id}/permanent-cancel`);
+    }
+    if (tempId) await request.delete(`/api/autoscuole/locations/${tempId}`);
+    await patchLocation(request, sede.id, {
+      licenseCategories: sede.licenseCategories,
+      licenseTransmissions: sede.licenseTransmissions ?? {},
+    });
+    await patchLocation(request, other!.id, {
+      licenseCategories: other!.licenseCategories,
+      licenseTransmissions: other!.licenseTransmissions ?? {},
+    });
+    if (typeof storedByLicense === "boolean") await setByLicense(request, storedByLicense);
+  }
+});
