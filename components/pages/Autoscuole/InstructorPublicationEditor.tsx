@@ -14,8 +14,13 @@ import {
   setDailyAvailabilityOverride,
   unpublishInstructorWeek,
 } from "@/lib/actions/autoscuole-availability.actions";
+import {
+  RangeLocationSelect,
+  type RangeLocationOption,
+} from "@/components/pages/Autoscuole/locations/RangeLocationSelect";
 
-type TimeRange = { startMinutes: number; endMinutes: number };
+/** REG-724: `locationId` = luogo della fascia (REG-705), assente/null = tutti i luoghi. */
+type TimeRange = { startMinutes: number; endMinutes: number; locationId?: string | null };
 type BaseAvailability = {
   daysOfWeek: number[];
   startMinutes: number;
@@ -67,11 +72,14 @@ export function InstructorPublicationEditor({
   instructorId,
   base,
   onChanged,
+  locations = null,
 }: {
   instructorId: string;
   base: BaseAvailability;
   /** Called after publish/unpublish/day-save so the parent can refresh the agenda. */
   onChanged?: () => void;
+  /** REG-724: luoghi delle fasce, solo con «Disponibilità per luogo» effettiva (null = spenta). */
+  locations?: RangeLocationOption[] | null;
 }) {
   const toast = useFeedbackToast();
   const mondays = React.useMemo(() => {
@@ -100,8 +108,13 @@ export function InstructorPublicationEditor({
     }
   }, [instructorId, mondays]);
 
+  // REG-724: vince solo l'ultimo caricamento. Cambiando settimana mentre la
+  // precedente si caricava, la risposta vecchia arrivava dopo e mostrava (e
+  // salvava) i giorni della settimana sbagliata.
+  const loadSeq = React.useRef(0);
   const loadWeek = React.useCallback(
     async (weekYmd: string) => {
+      const seq = ++loadSeq.current;
       setLoading(true);
       setEditIdx(null);
       try {
@@ -153,6 +166,7 @@ export function InstructorPublicationEditor({
           }
         }
 
+        if (seq !== loadSeq.current) return;
         const start = new Date(weekYmd + "T00:00:00Z");
         setDays(
           Array.from({ length: 7 }, (_, i) => {
@@ -164,7 +178,7 @@ export function InstructorPublicationEditor({
           }),
         );
       } finally {
-        setLoading(false);
+        if (seq === loadSeq.current) setLoading(false);
       }
     },
     [instructorId, base, published],
@@ -179,6 +193,8 @@ export function InstructorPublicationEditor({
   }, [selWeek, published, instructorId]);
 
   const isPublished = published.has(selWeek);
+  const locationName = (id: string | null | undefined) =>
+    locations ? (id ? locations.find((l) => l.id === id)?.name ?? null : "Tutti i luoghi") : null;
 
   const handlePublishToggle = async () => {
     setActionPending(true);
@@ -325,6 +341,9 @@ export function InstructorPublicationEditor({
                       {d.ranges.map((r, ri) => (
                         <span key={ri} className="rounded-full border border-border bg-white px-2 py-0.5 text-[10.5px] font-semibold tabular-nums">
                           {fmtMin(r.startMinutes)}–{fmtMin(r.endMinutes)}
+                          {locationName(r.locationId) ? (
+                            <span className="ml-1 font-medium text-muted-foreground">{locationName(r.locationId)}</span>
+                          ) : null}
                         </span>
                       ))}
                     </span>
@@ -342,7 +361,7 @@ export function InstructorPublicationEditor({
                     {draftOn && (
                       <div className="space-y-1.5">
                         {draftRanges.map((r, ri) => (
-                          <div key={ri} className="flex items-center gap-2">
+                          <div key={ri} className="flex flex-wrap items-center gap-2">
                             <TimePickerInput
                               value={fmtMin(r.startMinutes)}
                               onChange={(v) => setDraftRanges((prev) => prev.map((x, xi) => (xi === ri ? { ...x, startMinutes: labelToMin(v) } : x)))}
@@ -360,6 +379,16 @@ export function InstructorPublicationEditor({
                               minuteStep={15}
                               className="h-8 w-[96px] justify-between px-2.5 py-1 text-xs"
                             />
+                            {locations ? (
+                              <RangeLocationSelect
+                                value={r.locationId ?? null}
+                                locations={locations}
+                                onChange={(id) =>
+                                  setDraftRanges((prev) => prev.map((x, xi) => (xi === ri ? { ...x, locationId: id } : x)))
+                                }
+                                label={`Luogo della fascia ${fmtMin(r.startMinutes)}–${fmtMin(r.endMinutes)}`}
+                              />
+                            ) : null}
                             {draftRanges.length > 1 && (
                               <button type="button" aria-label="Rimuovi fascia" onClick={() => setDraftRanges((prev) => prev.filter((_, xi) => xi !== ri))} className="flex size-6 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-500">
                                 ×

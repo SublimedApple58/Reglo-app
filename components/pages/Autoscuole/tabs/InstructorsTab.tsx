@@ -941,6 +941,7 @@ function DisponibilitaTab({
           instructorId={instructor.id}
           base={weekly ?? null}
           onChanged={refreshAgenda}
+          locations={locationMode ? rangeLocations : null}
         />
       ) : (
         <>
@@ -1155,6 +1156,7 @@ function DisponibilitaTab({
           weekly={weekly}
           refreshAgenda={refreshAgenda}
           toast={toast}
+          locations={locationMode ? rangeLocations : null}
         />
       )}
         </>
@@ -1169,11 +1171,14 @@ function CalendarOverrides({
   weekly,
   refreshAgenda,
   toast,
+  locations,
 }: {
   instructor: InstructorDetail;
   weekly: WeeklyAvailability | null;
   refreshAgenda: () => void;
   toast: ToastApi;
+  /** REG-724: luoghi delle fasce, solo con «Disponibilità per luogo» effettiva (null = spenta). */
+  locations: RangeLocationOption[] | null;
 }) {
   const todayIso = ymd(new Date());
   const [monthOffset, setMonthOffset] = React.useState(0);
@@ -1303,6 +1308,25 @@ function CalendarOverrides({
     void persistDays(selectedDays, next);
   };
 
+  // REG-724: luogo della fascia (null = tutti i luoghi) e rimozione di una
+  // fascia precisa, come nella settimana tipo.
+  const applySelRanges = (next: Range[]) => {
+    setOverrides((prev) => {
+      const nx = { ...prev };
+      for (const iso of selectedDays) nx[iso] = next;
+      return nx;
+    });
+    void persistDays(selectedDays, next);
+  };
+  const setSelRangeLocation = (i: number, locationId: string | null) => {
+    if (!sel) return;
+    applySelRanges(sel.ranges.map((r, k) => (k === i ? { ...r, locationId } : { ...r })));
+  };
+  const removeSelRangeAt = (i: number) => {
+    if (!sel || sel.ranges.length <= 1) return;
+    applySelRanges(sel.ranges.filter((_, k) => k !== i));
+  };
+
   const applyRecurring = async () => {
     if (!sel || !selectedDays.length) return;
     setApplyingRec(true);
@@ -1358,6 +1382,7 @@ function CalendarOverrides({
           type="button"
           disabled={monthOffset <= 0}
           onClick={() => setMonthOffset((m) => m - 1)}
+          aria-label="Mese precedente"
           className={cn("flex cursor-pointer p-1", monthOffset <= 0 && "cursor-default opacity-25")}
         >
           <ChevronLeft className="size-4 text-[#222222]" strokeWidth={1.8} />
@@ -1365,7 +1390,7 @@ function CalendarOverrides({
         <div className="text-base font-bold text-[#222222]">
           {MONTHS[view.getMonth()]} {view.getFullYear()}
         </div>
-        <button type="button" onClick={() => setMonthOffset((m) => m + 1)} className="flex cursor-pointer p-1">
+        <button type="button" onClick={() => setMonthOffset((m) => m + 1)} aria-label="Mese successivo" className="flex cursor-pointer p-1">
           <ChevronLeft className="size-4 rotate-180 text-[#222222]" strokeWidth={1.8} />
         </button>
       </div>
@@ -1388,6 +1413,7 @@ function CalendarOverrides({
               <button
                 type="button"
                 disabled={past}
+                data-date={iso}
                 onClick={() =>
                   setSelectedDays((prev) => (prev.includes(iso) ? prev.filter((x) => x !== iso) : [...prev, iso]))
                 }
@@ -1419,7 +1445,30 @@ function CalendarOverrides({
               <span className="text-sm font-semibold text-[#222222]">Disponibile</span>
               <InlineToggle checked={Boolean(sel?.available)} onChange={() => setAvailable(!sel?.available)} size="lg" />
             </div>
-            {sel?.available && (
+            {sel?.available && locations ? (
+              <>
+                <div className="mt-2.5">
+                  <LocatedRangeList
+                    ranges={sel.ranges}
+                    locations={locations}
+                    onSide={(i, side, v) => setSelRange(i, side, v)}
+                    onLocation={setSelRangeLocation}
+                    onRemove={sel.ranges.length > 1 ? removeSelRangeAt : undefined}
+                    onAdd={addSelRange}
+                    dayLabel={selectedDays.length === 1 ? selTitle ?? undefined : undefined}
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setAvailable(false)}
+                    className="cursor-pointer text-[13px] font-semibold text-[#c13515]"
+                  >
+                    Rimuovi disponibilità
+                  </button>
+                </div>
+              </>
+            ) : sel?.available ? (
               <>
                 <div className="mt-2.5 flex flex-col gap-2.5">
                   {!sel.ranges.length && (
@@ -1451,7 +1500,7 @@ function CalendarOverrides({
                   </button>
                 </div>
               </>
-            )}
+            ) : null}
           </div>
           <div className="flex items-center justify-between gap-3.5 border-t border-[#f0f0f0] py-4">
             <div className="min-w-0">

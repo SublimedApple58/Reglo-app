@@ -79,8 +79,8 @@ Tiziano: `plans/availability/004-reg-705-706-disponibilita-per-luogo.md`.
   con indirizzo) e `LocatedRangeList` in `tabs/InstructorsTab.tsx`, usati dal
   Predefinito (orari condivisi e giorno aperto di «Orari diversi per giorno»);
   `DayTimeline` mostra il nome del luogo sotto ogni tratto (grigio = tutti).
-  **Calendario e Pubblicazione** conservano il luogo quando cambiano gli orari
-  ma non hanno ancora il selettore (follow-up).
+  **Calendario e Pubblicazione** hanno lo stesso selettore dal 05/11 (REG-724,
+  sotto).
 - **E2E**: `tests/e2e/reg705-luogo-fasce.auth.spec.ts` (`--workers=1` insieme a
   `reg705-luoghi-allievo`: toccano lo stesso setting).
 
@@ -112,8 +112,8 @@ Tutto in `lib/autoscuole/location-booking.ts` (puro + loader), test in
   `getSwapOffers` mostra solo quelli, `respondSwapOffer` rifiuta chi non ce l'ha
   (`studentCanTakeLocation`).
 - **Non coperto (follow-up)**: precompilazione del Luogo dalla fascia nelle
-  prenotazioni manuali dello staff (agenda web, `BookingForm` mobile) e selettore
-  del luogo in Calendario/Pubblicazione del web. Lo staff non è mai bloccato.
+  prenotazioni manuali dello staff (agenda web, `BookingForm` mobile). Lo staff
+  non è mai bloccato.
 
 ## Dati per l'app allievo (705-e)
 
@@ -175,6 +175,34 @@ Anteprime e analisi approvate da Tiziano: `/tmp/hiro-anteprime/reg-705/agenda-ca
   `locationId` e `inWeekly` a ogni fascia.
 - Pausa tra luoghi: il cambio non sposta guide prenotate, quindi non può violarla;
   il motore la applica ai nuovi slot.
+
+## Luogo nelle eccezioni e nelle settimane pubblicate (REG-724, 05/11)
+
+Hotfix: il luogo si sceglieva solo nella settimana tipo e dall'agenda (REG-717).
+- **Calendario** (eccezioni della modalità predefinita, `CalendarOverrides` in
+  `tabs/InstructorsTab.tsx`): a funzione effettiva le fasce del giorno usano
+  `LocatedRangeList` (orario + `RangeLocationSelect` + rimozione della singola
+  fascia), come la settimana tipo. Vale per l'override del giorno e per
+  «Disponibilità ricorrente» (manda le stesse fasce col luogo).
+- **A pubblicazione** (`InstructorPublicationEditor`, prop `locations`): selettore
+  per fascia nell'editor della giornata, nome del luogo accanto all'orario nella
+  riga chiusa. Corretto anche un difetto preesistente: cambiando settimana
+  mentre la precedente si caricava, la risposta vecchia mostrava (e «Salva
+  giorno» salvava) i giorni della settimana sbagliata; ora vince solo l'ultimo
+  caricamento (`loadSeq`).
+- Spenta la funzione (o < 2 luoghi) `locations` è `null`: UI identica a prima.
+- **Backend invariato**: `setDailyAvailabilityOverride`,
+  `setRecurringAvailabilityOverride`, `setWeeklyAvailabilityOverride` già
+  sanificano con `sanitizeRangeLocations`/`applyRangeLocations` e controllano i
+  ruoli (REG-717); `publishInstructorWeek` copia le fasce intere (luogo
+  compreso); il motore legge il luogo dagli override (`parseRanges` tiene
+  l'oggetto, `scopeResolver`, `locationOfCoveringRange`).
+- **Mobile**: le stesse schermate (`InstructorManageScreen` eccezioni,
+  `PublicationModeEditor`) non hanno ancora il selettore; conservano il luogo
+  esistente perché copiano l'oggetto fascia. Follow-up mobile.
+- Test: `tests/unit/autoscuole/override-range-locations.test.ts`; e2e
+  `tests/e2e/reg724-luogo-eccezioni.auth.spec.ts` (Calendario + Pubblicazione su
+  Marco Bianchi, rimette override, modalità e setting; `--workers=1`).
 
 ## Codici di invito per luogo (REG-706)
 
