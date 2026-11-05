@@ -1,11 +1,26 @@
 # REG-725 — Stessa patente in più luoghi + cambio per luogo
 
-> **Stato**: piano in attesa di approvazione (05/11/2026). Nessun codice scritto.
+> **Stato (05/11/2026)**: fasi 1–4 fatte, **su STAGING** (web `ecf029f`,
+> migrazione `20261110120000_location_license_transmissions` applicata su staging).
+> Prod e OTA **non** fatti: aspettano il via di Tiziano.
 > Branch `feat/reg-725-luoghi-patenti-cambio` su entrambi i repo
-> (web da `origin/staging` → `reglo-worktrees/reg-725`, mobile da `origin/master`
-> → `reglo-mobile-worktrees/reg-725`).
-> Anteprime: `/tmp/hiro-anteprime/reg-725/anteprima.html` (+ `p1-modale*.png`,
-> `p2-card*.png`, `p3-agenda-luogo.png`).
+> (web `reglo-worktrees/reg-725`, mobile `reglo-mobile-worktrees/reg-725`, commit
+> locali `49eab77` + `5e48d34`, non pushati).
+>
+> **Cosa è stato fatto**
+> - Backend: colonna `licenseTransmissions`, via l'esclusività, regola nuova nel
+>   resolver puro (31 test) e nei tre punti server (prenotazione allievo, waitlist,
+>   gruppi; ambiguo → sede).
+> - Web: modale con «Patenti e cambio» e corpo scorrevole (intestazione e piede
+>   fissi; aggiunta su richiesta di Tiziano dopo l'ok al design), card con riga di
+>   testo, agenda e guide di gruppo con campo vuoto se ambiguo e compatibili in cima.
+>   Fix collaterale: la tendina dei suggerimenti indirizzo non si apre più da sola.
+> - Mobile: copia 1:1 del resolver, BookingForm e foglio «Cambia luogo».
+> - E2E su staging: `reg725-luoghi-patenti-cambio` (4) + `reg705-luoghi-allievo` (3)
+>   verdi; `group-lesson-location` rosso per «Una moto della flotta non è disponibile
+>   per questo istruttore» (controllo veicoli, prima del luogo: dati di staging).
+> - Anteprime approvate: `/tmp/hiro-anteprime/reg-725/anteprima.html`; catture
+>   della UI vera in `/tmp/hiro-anteprime/reg-725/staging/` e `.../maestro/`.
 
 ## Obiettivo
 1. Lo stesso tipo di patente può stare in **più luoghi** (cade l'esclusività di REG-409).
