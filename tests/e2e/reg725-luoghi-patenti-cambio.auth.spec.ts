@@ -337,7 +337,10 @@ test("guida senza luogo rifiutata solo se ambigua; agenda blocca finché non si 
     await trigger.click({ force: true });
     await page.getByRole("option", { name: /REG-725 e2e/ }).click();
     await expect(required).toBeHidden();
-    await expect(card.getByText(`${student!.firstName} ${student!.lastName}`).first()).toBeVisible();
+    // I dati inseriti restano: l'allievo è ancora nel campo.
+    await expect(card.getByPlaceholder("Cerca allievo...")).toHaveValue(
+      new RegExp(`${student!.firstName}`),
+    );
   } finally {
     for (const id of created) {
       await request.post(`/api/autoscuole/appointments/${id}/permanent-cancel`);
