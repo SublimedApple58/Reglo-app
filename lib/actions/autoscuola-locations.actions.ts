@@ -17,7 +17,7 @@ import {
   upsertDefaultLocation,
   LocationAuthzError,
 } from "@/lib/autoscuole/locations";
-import { LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
+import { LICENSE_CATEGORIES, TRANSMISSIONS } from "@/lib/autoscuole/license";
 import { coverPhotoUrl } from "@/lib/autoscuole/location-cover";
 
 /**
@@ -30,6 +30,15 @@ const licenseCategoriesSchema = z
   .max(LICENSE_CATEGORIES.length)
   .optional();
 
+/**
+ * Cambio per patente (REG-725): `{ "B": "automatic" }`. Patente assente =
+ * entrambi. Le chiavi fuori da `licenseCategories` vengono scartate dal
+ * servizio, che è l'unico punto di scrittura.
+ */
+const licenseTransmissionsSchema = z
+  .record(z.enum(LICENSE_CATEGORIES), z.enum(TRANSMISSIONS))
+  .optional();
+
 const locationCoreSchema = z.object({
   name: z.string().min(2).max(80),
   isPrecise: z.boolean(),
@@ -38,6 +47,7 @@ const locationCoreSchema = z.object({
   longitude: z.number().min(-180).max(180).nullable().optional(),
   placeId: z.string().max(255).nullable().optional(),
   licenseCategories: licenseCategoriesSchema,
+  licenseTransmissions: licenseTransmissionsSchema,
 });
 
 const createSchema = locationCoreSchema;
@@ -54,6 +64,7 @@ const updateDefaultSchema = z.object({
   longitude: z.number().min(-180).max(180).nullable().optional(),
   placeId: z.string().max(255).nullable().optional(),
   licenseCategories: licenseCategoriesSchema,
+  licenseTransmissions: licenseTransmissionsSchema,
 });
 
 async function invalidate(companyId: string) {
@@ -94,6 +105,7 @@ export async function createAutoscuolaLocation(input: z.infer<typeof createSchem
       longitude: parsed.longitude ?? null,
       placeId: parsed.placeId ?? null,
       licenseCategories: parsed.licenseCategories,
+      licenseTransmissions: parsed.licenseTransmissions,
     });
     await invalidate(membership.companyId);
     return { success: true, data: location };
@@ -119,6 +131,7 @@ export async function updateAutoscuolaLocation(input: z.infer<typeof updateSchem
       longitude: parsed.longitude,
       placeId: parsed.placeId,
       licenseCategories: parsed.licenseCategories,
+      licenseTransmissions: parsed.licenseTransmissions,
     });
     await invalidate(membership.companyId);
     return { success: true, data: location };
@@ -162,6 +175,7 @@ export async function updateDefaultAutoscuolaLocation(
       longitude: parsed.longitude ?? null,
       placeId: parsed.placeId ?? null,
       licenseCategories: parsed.licenseCategories,
+      licenseTransmissions: parsed.licenseTransmissions,
     });
     await invalidate(membership.companyId);
     return { success: true, data: location };

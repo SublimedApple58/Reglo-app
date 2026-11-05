@@ -7,8 +7,10 @@ import { isOwner } from "./roles";
 import { detachArchivedLocationFromMembers } from "./member-locations";
 import {
   locationsByLicenseEnabled,
+  parseLicenseTransmissions,
   resolveGroupPrefilledLocationId,
   resolvePrefilledLocationId,
+  TRANSMISSIONLESS_CATEGORIES,
   withoutLicenseCategories,
 } from "./location-for-license";
 
@@ -52,14 +54,23 @@ export function assertCanManageLocation(
 }
 
 /**
- * Assegna a un luogo i tipi di patente (REG-409) TOGLIENDOLI agli altri luoghi
- * della stessa company: una categoria appartiene a un solo luogo, altrimenti il
- * precompile del campo "Luogo" in creazione guida sarebbe ambiguo.
- * Le categorie sono normalizzate (trim + maiuscolo) e deduplicate.
+ * Assegna a un luogo i tipi di patente (REG-409) e, per ognuno, il cambio
+ * (REG-725). Dal REG-725 la stessa patente può stare in più luoghi: non si
+ * toglie più niente agli altri.
+ *
+ * - `categories` normalizzate (trim + maiuscolo) e deduplicate.
+ * - `transmissions`: `undefined` = lascia i cambi delle patenti che restano;
+ *   altrimenti la mappa nuova. In ogni caso i cambi delle patenti tolte si
+ *   ripuliscono e restano solo valori validi.
  */
 export async function setLocationLicenseCategories(
   tx: Prisma.TransactionClient,
-  params: { companyId: string; locationId: string; categories: string[] },
+  params: {
+    companyId: string;
+    locationId: string;
+    categories: string[];
+    transmissions?: Record<string, string | null | undefined>;
+  },
 ) {
   const categories = Array.from(
     new Set(
@@ -69,33 +80,26 @@ export async function setLocationLicenseCategories(
     ),
   );
 
-  if (categories.length) {
-    // Le categorie rubate agli altri luoghi: Postgres non ha un "array remove
-    // many", quindi si rilegge e riscrive solo chi è davvero toccato.
-    const siblings = await tx.autoscuolaLocation.findMany({
-      where: {
-        companyId: params.companyId,
-        id: { not: params.locationId },
-        licenseCategories: { hasSome: categories },
-      },
-      select: { id: true, licenseCategories: true },
+  let source: Record<string, unknown> = params.transmissions ?? {};
+  if (params.transmissions === undefined) {
+    const current = await tx.autoscuolaLocation.findUnique({
+      where: { id: params.locationId },
+      select: { licenseTransmissions: true },
     });
-    for (const sibling of siblings) {
-      await tx.autoscuolaLocation.update({
-        where: { id: sibling.id },
-        data: {
-          licenseCategories: sibling.licenseCategories.filter(
-            (c) => !categories.includes(c),
-          ),
-        },
-      });
+    source = parseLicenseTransmissions(current?.licenseTransmissions);
+  }
+  const parsed = parseLicenseTransmissions(source);
+  const licenseTransmissions: Record<string, string> = {};
+  for (const category of categories) {
+    if (parsed[category] && !TRANSMISSIONLESS_CATEGORIES.includes(category)) {
+      licenseTransmissions[category] = parsed[category];
     }
   }
 
   return tx.autoscuolaLocation.update({
     omit: LOCATION_PRIVATE_FIELDS,
     where: { id: params.locationId },
-    data: { licenseCategories: categories },
+    data: { licenseCategories: categories, licenseTransmissions },
   });
 }
 
@@ -156,17 +160,24 @@ export async function resolveStudentBookingLocationId(
     companyId: string;
     studentId: string;
     vehicleLicenseCategory?: string | null;
+    /** REG-725: cambio del veicolo assegnato (`null` = si usa quello dell'allievo). */
+    vehicleTransmission?: string | null;
   },
 ): Promise<string | null> {
   const [locations, member, limits] = await Promise.all([
     tx.autoscuolaLocation.findMany({
       where: { companyId: params.companyId, archivedAt: null },
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
-      select: { id: true, isDefault: true, licenseCategories: true },
+      select: { id: true, isDefault: true, licenseCategories: true, licenseTransmissions: true },
     }),
     tx.companyMember.findFirst({
       where: { companyId: params.companyId, userId: params.studentId },
-      select: { defaultLocationId: true, licenseCategory: true },
+      select: {
+        defaultLocationId: true,
+        licenseCategory: true,
+        transmission: true,
+        locations: { select: { locationId: true } },
+      },
     }),
     // Lettura dalla cache Redis dei settings, non dal DB: non allunga la
     // transazione.
@@ -174,12 +185,23 @@ export async function resolveStudentBookingLocationId(
   ]);
   const byLicense = locationsByLicenseEnabled(limits.locationsByLicense, locations);
 
-  return resolvePrefilledLocationId({
-    locations: byLicense ? locations : withoutLicenseCategories(locations),
-    studentDefaultLocationId: member?.defaultLocationId ?? null,
-    student: { licenseCategory: member?.licenseCategory ?? null },
-    vehicle: { licenseCategory: params.vehicleLicenseCategory ?? null },
-  });
+  // Il backend un luogo lo deve sempre avere: quando la scelta è ambigua
+  // (più luoghi compatibili, sede esclusa) si ricade sulla sede.
+  return (
+    resolvePrefilledLocationId({
+      locations: byLicense ? locations : withoutLicenseCategories(locations),
+      studentDefaultLocationId: member?.defaultLocationId ?? null,
+      studentLocationIds: member?.locations.map((l) => l.locationId) ?? [],
+      student: {
+        licenseCategory: member?.licenseCategory ?? null,
+        transmission: member?.transmission ?? null,
+      },
+      vehicle: {
+        licenseCategory: params.vehicleLicenseCategory ?? null,
+        transmission: params.vehicleTransmission ?? null,
+      },
+    }) ?? locations.find((l) => l.isDefault)?.id ?? null
+  );
 }
 
 /**
@@ -200,14 +222,19 @@ export async function resolveGroupLessonLocationId(
   params: {
     companyId: string;
     studentIds: readonly string[];
-    licenseCategories: readonly (string | null | undefined)[];
+    licenseCategories: readonly (
+      | string
+      | { licenseCategory?: string | null; transmission?: string | null }
+      | null
+      | undefined
+    )[];
   },
 ): Promise<string | null> {
   const [locations, members, limits] = await Promise.all([
     tx.autoscuolaLocation.findMany({
       where: { companyId: params.companyId, archivedAt: null },
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
-      select: { id: true, isDefault: true, licenseCategories: true },
+      select: { id: true, isDefault: true, licenseCategories: true, licenseTransmissions: true },
     }),
     params.studentIds.length
       ? tx.companyMember.findMany({
@@ -219,11 +246,13 @@ export async function resolveGroupLessonLocationId(
   ]);
   const byLicense = locationsByLicenseEnabled(limits.locationsByLicense, locations);
 
-  return resolveGroupPrefilledLocationId({
-    locations: byLicense ? locations : withoutLicenseCategories(locations),
-    studentDefaultLocationIds: members.map((m) => m.defaultLocationId),
-    licenseCategories: params.licenseCategories,
-  });
+  return (
+    resolveGroupPrefilledLocationId({
+      locations: byLicense ? locations : withoutLicenseCategories(locations),
+      studentDefaultLocationIds: members.map((m) => m.defaultLocationId),
+      licenseCategories: params.licenseCategories,
+    }) ?? locations.find((l) => l.isDefault)?.id ?? null
+  );
 }
 
 export type CreateLocationInput = {
@@ -236,6 +265,8 @@ export type CreateLocationInput = {
   longitude?: number | null;
   placeId?: string | null;
   licenseCategories?: string[];
+  /** REG-725: cambio per patente; vale solo insieme a `licenseCategories`. */
+  licenseTransmissions?: Record<string, string | null | undefined>;
 };
 
 export async function createLocation(input: CreateLocationInput) {
@@ -267,6 +298,7 @@ export async function createLocation(input: CreateLocationInput) {
       companyId: input.companyId,
       locationId: created.id,
       categories: input.licenseCategories,
+      transmissions: input.licenseTransmissions,
     });
   });
 }
@@ -281,6 +313,8 @@ export type UpdateLocationInput = {
   longitude?: number | null;
   placeId?: string | null;
   licenseCategories?: string[];
+  /** REG-725: cambio per patente; vale solo insieme a `licenseCategories`. */
+  licenseTransmissions?: Record<string, string | null | undefined>;
 };
 
 export async function updateLocation(input: UpdateLocationInput) {
@@ -340,6 +374,7 @@ export async function updateLocation(input: UpdateLocationInput) {
       companyId: existing.companyId,
       locationId: input.id,
       categories: input.licenseCategories,
+      transmissions: input.licenseTransmissions,
     });
   });
 }
@@ -353,6 +388,8 @@ export type UpdateDefaultLocationInput = {
   longitude?: number | null;
   placeId?: string | null;
   licenseCategories?: string[];
+  /** REG-725: cambio per patente; vale solo insieme a `licenseCategories`. */
+  licenseTransmissions?: Record<string, string | null | undefined>;
 };
 
 export async function upsertDefaultLocation(input: UpdateDefaultLocationInput) {
@@ -392,6 +429,7 @@ export async function upsertDefaultLocation(input: UpdateDefaultLocationInput) {
       companyId: input.companyId,
       locationId: saved.id,
       categories: input.licenseCategories,
+      transmissions: input.licenseTransmissions,
     });
   });
 }
@@ -408,16 +446,15 @@ export async function softDeleteLocation(id: string, actor: LocationActor) {
   }
   assertCanManageLocation(actor, existing);
 
-  // Le patenti assegnate si liberano con l'archiviazione: altrimenti un luogo
-  // eliminato terrebbe in ostaggio la categoria e il precompile ricadrebbe in
-  // silenzio sulla sede senza poterla riassegnare altrove (REG-409).
+  // Le patenti (e i cambi, REG-725) si azzerano con l'archiviazione: un luogo
+  // eliminato non deve più contare tra i compatibili (REG-409).
   // Stessa logica per i luoghi degli allievi (REG-705): un luogo archiviato
   // esce dai loro luoghi, e chi lo aveva come principale passa al successivo.
   return prisma.$transaction(async (tx) => {
     const archived = await tx.autoscuolaLocation.update({
       omit: LOCATION_PRIVATE_FIELDS,
       where: { id },
-      data: { archivedAt: new Date(), licenseCategories: [] },
+      data: { archivedAt: new Date(), licenseCategories: [], licenseTransmissions: {} },
     });
     await detachArchivedLocationFromMembers(tx, {
       companyId: existing.companyId,

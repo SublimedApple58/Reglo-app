@@ -11002,12 +11002,14 @@ export async function createGroupLesson(
     const coInstructorIds = coResolved.ids;
 
     // Luogo di ritrovo (REG-409): quello scelto a mano se valido, altrimenti
-    // risolto dalla patente della guida e dai default degli allievi. Le
-    // categorie arrivano dal ramo (veicolo condiviso o flotta moto): l'auto al
+    // risolto da patente e cambio della guida (REG-725) e dai default degli
+    // allievi. Le categorie arrivano dal ramo (veicolo condiviso o flotta moto): l'auto al
     // seguito non entra mai nel calcolo, manderebbe ogni gruppo moto al luogo
     // della B.
     const resolveLessonLocation = async (
-      licenseCategories: Array<string | null | undefined>,
+      licenseCategories: Array<
+        { licenseCategory?: string | null; transmission?: string | null } | null | undefined
+      >,
     ): Promise<{ ok: true; locationId: string | null } | { ok: false; message: string }> => {
       if (payload.locationId) {
         const loc = await prisma.autoscuolaLocation.findFirst({
@@ -11124,9 +11126,7 @@ export async function createGroupLesson(
       if (overlapErr) return { success: false as const, message: overlapErr };
 
       // La patente della guida viene dalla FLOTTA, non dall'auto al seguito.
-      const motoLocation = await resolveLessonLocation(
-        setup.fleet.map((v) => v.licenseCategory),
-      );
+      const motoLocation = await resolveLessonLocation(setup.fleet);
       if (!motoLocation.ok) return { success: false as const, message: motoLocation.message };
       const locationId = motoLocation.locationId;
 
@@ -11253,7 +11253,7 @@ export async function createGroupLesson(
     });
     if (overlapErr) return { success: false as const, message: overlapErr };
 
-    const standardLocation = await resolveLessonLocation([vehicle?.licenseCategory ?? null]);
+    const standardLocation = await resolveLessonLocation([vehicle]);
     if (!standardLocation.ok) {
       return { success: false as const, message: standardLocation.message };
     }

@@ -737,10 +737,13 @@ model AutoscuolaLocation {
   isDefault         Boolean   @default(false)
   isPrecise         Boolean   @default(false)
   /// Tipi di patente serviti da questo luogo (REG-409): creando una guida, il
-  /// campo "Luogo" si precompila con il luogo assegnato alla patente della
-  /// guida. Una categoria appartiene a UN solo luogo per company (esclusività
-  /// applicata in transazione da `setLocationLicenseCategories`).
+  /// campo "Luogo" si precompila con un luogo compatibile con la patente della
+  /// guida. Dal REG-725 la stessa categoria può stare in più luoghi.
   licenseCategories String[]  @default([])
+  /// REG-725: cambio per patente, `{ "B": "automatic" }` — "manual" |
+  /// "automatic". Patente assente = entrambi i cambi. Scritta solo da
+  /// `setLocationLicenseCategories`, che tiene le chiavi dentro `licenseCategories`.
+  licenseTransmissions Json @default("{}")
   /// Foto di copertina della SEDE (REG-639): chiave R2 caricata dal titolare
   /// da Impostazioni → Sede e luoghi. Solo la sede (`isDefault`) ne ha una:
   /// l'app istruttore la mostra in testa a Disponibilità (null = segnaposto).

@@ -2643,6 +2643,9 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           vehicleLicenseCategory: candidate.vehicleId
             ? (activeVehicles.find((v) => v.id === candidate.vehicleId)?.licenseCategory ?? null)
             : null,
+          vehicleTransmission: candidate.vehicleId
+            ? (activeVehicles.find((v) => v.id === candidate.vehicleId)?.transmission ?? null)
+            : null,
         });
         return tx.autoscuolaAppointment.create({
           data: {
@@ -4462,13 +4465,14 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
       const waitlistVehicle = assignment.vehicleId
         ? await tx.autoscuolaVehicle.findFirst({
             where: { id: assignment.vehicleId, companyId: membership.companyId },
-            select: { licenseCategory: true },
+            select: { licenseCategory: true, transmission: true },
           })
         : null;
       const waitlistLocationId = await resolveStudentBookingLocationId(tx, {
         companyId: membership.companyId,
         studentId: payload.studentId,
         vehicleLicenseCategory: waitlistVehicle?.licenseCategory ?? null,
+        vehicleTransmission: waitlistVehicle?.transmission ?? null,
       });
       const appointment = await tx.autoscuolaAppointment.create({
         data: {
