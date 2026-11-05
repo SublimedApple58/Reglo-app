@@ -30,9 +30,14 @@ export function usePlacesAutocomplete(query: string, enabled = true) {
   const [searching, setSearching] = useState(false);
   const sessionTokenRef = useRef<string>("");
   const skipNextSearchRef = useRef(false);
+  // La ricerca parte solo dopo che l'utente ha scritto: l'indirizzo già salvato
+  // con cui si apre la modale non deve aprire la tendina da solo (REG-725: nel
+  // corpo scorrevole copriva le patenti appena aperta la modale).
+  const userTypedRef = useRef(false);
 
   const resetSession = useCallback(() => {
     sessionTokenRef.current = crypto.randomUUID();
+    userTypedRef.current = false;
     setSuggestions([]);
   }, []);
 
@@ -47,7 +52,7 @@ export function usePlacesAutocomplete(query: string, enabled = true) {
       setSuggestions([]);
       return;
     }
-    if (!query || query.length < 3) {
+    if (!userTypedRef.current || !query || query.length < 3) {
       setSuggestions([]);
       return;
     }
@@ -119,6 +124,7 @@ export function usePlacesAutocomplete(query: string, enabled = true) {
   /** Il testo cambia per mano dell'utente: la ricerca riparte. */
   const typed = useCallback(() => {
     skipNextSearchRef.current = false;
+    userTypedRef.current = true;
   }, []);
 
   return { suggestions, searching, select, typed, resetSession };

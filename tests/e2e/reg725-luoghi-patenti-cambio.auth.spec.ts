@@ -178,7 +178,10 @@ for (const viewport of [
       const save = dialog.getByRole("button", { name: "Salva luogo" });
       await expect(title).toBeInViewport();
       await expect(save).toBeInViewport();
-      await expect(dialog.getByText("Patenti e cambio")).toBeInViewport();
+      // In fondo si vede la fine della sezione patenti, sopra il piede.
+      await expect(dialog.getByText("Una patente può stare in più luoghi")).toBeInViewport();
+      // Nessuna tendina dei suggerimenti aperta da sola sull'indirizzo salvato.
+      await expect(dialog.getByRole("button", { name: /Milano, MI, Italia/ })).toHaveCount(0);
     } finally {
       if (typeof storedByLicense === "boolean") await setByLicense(request, storedByLicense);
     }
