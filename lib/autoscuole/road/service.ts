@@ -14,7 +14,8 @@ import {
   resolveMarkerLabel,
   type RoadCustomMarker,
 } from "@/lib/autoscuole/road/catalog";
-import { drivingSeconds, freeLessonEnd, resolveEndedAt, sanitizePoints, trackDistanceMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
+import { alignLessonEndToRoad } from "@/lib/autoscuole/road/lesson-end";
+import { drivingSeconds, resolveEndedAt, sanitizePoints, trackDistanceMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
 import {
   buildCleanTrack,
   CLEAN_TRACK_VERSION,
@@ -26,7 +27,6 @@ import {
 import { finalizeRoadSession, loadRoadTrack, saveRoadCleanTrack } from "@/lib/autoscuole/road/maintenance";
 import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
 import { isBookingBlockActive } from "@/lib/autoscuole/booking-block";
-import { LESSON_BUFFER_BLOCK_REASON } from "@/lib/autoscuole/lesson-buffer";
 import { AUTOSCUOLE_CACHE_SEGMENTS, invalidateAutoscuoleCache } from "@/lib/autoscuole/cache";
 import { buildBriefing, rankSuggestions, type Briefing, type SuggestionCandidate } from "@/lib/autoscuole/road/suggestions";
 import {
@@ -812,7 +812,8 @@ export async function endRoadSession(sessionId: string, input: { endedAt?: unkno
         where: { id: session.appointmentId, status: { in: ROAD_ELIGIBLE_STATUSES } },
         data: { status: "completed" },
       });
-      await trimFreeLessonEnd(session.appointmentId, endedAt);
+      // REG-723: l'agenda segue l'orario reale (libere e prenotate), pausa compresa.
+      if (await alignLessonEndToRoad(prisma, session.appointmentId, endedAt)) await invalidateLessonAgenda(ctx.companyId);
       await savePlanReached(sessionId, ctx.companyId).catch((e) => console.warn("[road] planReached", e));
       // REG-665 / REG-713: traccia pulita e sulle strade, una volta sola, con i
       // suoi km (li legge il riepilogo qui sotto). Google giù = la riprova il job.
@@ -844,41 +845,7 @@ async function savePlanReached(sessionId: string, companyId: string) {
   });
 }
 
-/**
- * Road libero: la guida nata da Road finisce quando la si termina. La fine si
- * arrotonda ai 5 minuti e non va mai oltre quella prenotata (dopo può esserci
- * un'altra guida); minimo 5 minuti. Prezzo e crediti restano quelli fissati
- * alla creazione, come per ogni guida dell'agenda.
- */
-async function trimFreeLessonEnd(appointmentId: string, endedAt: Date) {
-  const a = await prisma.autoscuolaAppointment.findUnique({
-    where: { id: appointmentId },
-    select: { companyId: true, instructorId: true, bookingSource: true, startsAt: true, endsAt: true },
-  });
-  if (!a || a.bookingSource !== BOOKING_SOURCE.road || !a.endsAt) return;
-  const end = freeLessonEnd(a.startsAt, a.endsAt, endedAt).getTime();
-  if (end !== a.endsAt.getTime()) {
-    await prisma.autoscuolaAppointment.update({ where: { id: appointmentId }, data: { endsAt: new Date(end) } });
-    // La pausa dopo la guida (REG-484) era nata sulla fine prenotata: la segue,
-    // altrimenti resterebbe un blocco fantasma che ferma la guida successiva.
-    if (a.instructorId) {
-      const pause = await prisma.autoscuolaInstructorBlock.findFirst({
-        where: { companyId: a.companyId, instructorId: a.instructorId, reason: LESSON_BUFFER_BLOCK_REASON, startsAt: a.endsAt },
-        select: { id: true, startsAt: true, endsAt: true },
-      });
-      if (pause) {
-        const length = pause.endsAt.getTime() - pause.startsAt.getTime();
-        await prisma.autoscuolaInstructorBlock.update({
-          where: { id: pause.id },
-          data: { startsAt: new Date(end), endsAt: new Date(end + length) },
-        });
-      }
-    }
-    await invalidateFreeLessonAgenda(a.companyId);
-  }
-}
-
-const invalidateFreeLessonAgenda = (companyId: string) =>
+const invalidateLessonAgenda = (companyId: string) =>
   invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA] });
 
 // ─── lettura: dettaglio, traccia, allievo ───────────────────────────────────
@@ -1623,7 +1590,7 @@ export async function startFreeRoadSession(input: {
       where: { id: appointmentId },
       data: { bookingSource: BOOKING_SOURCE.road },
     });
-    await invalidateFreeLessonAgenda(ctx.companyId);
+    await invalidateLessonAgenda(ctx.companyId);
 
     const session = await startRoadSession({ appointmentId, plan: input.plan });
     if (!session.success) return session;
