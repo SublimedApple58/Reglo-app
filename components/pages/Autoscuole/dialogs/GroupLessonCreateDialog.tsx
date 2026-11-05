@@ -9,7 +9,10 @@ import { TimePickerInput } from "@/components/ui/time-picker";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -40,7 +43,7 @@ import {
 import { inviteToGroupLesson } from "@/lib/actions/autoscuole-availability.actions";
 import { matchesPersonSearch } from "@/lib/autoscuole/people-search";
 import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
-import { resolveGroupPrefilledLocationId } from "@/lib/autoscuole/location-for-license";
+import { resolveGroupPrefilledLocation } from "@/lib/autoscuole/location-for-license";
 import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
 import { vehicleServesLicense, MOTO_LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
 import { CoInstructorPicker } from "@/components/pages/Autoscuole/CoInstructorPicker";
@@ -73,6 +76,8 @@ type LocationOption = {
   isPrecise?: boolean;
   /** Tipi di patente serviti dal luogo (REG-409). */
   licenseCategories?: string[] | null;
+  /** REG-725: cambio per patente (assente = entrambi). */
+  licenseTransmissions?: unknown;
 };
 
 type Props = {
@@ -324,25 +329,24 @@ export function GroupLessonCreateDialog({
     );
   }, [eligibleStudents]);
 
-  // Luogo precompilato (REG-409), stessa precedenza della guida singola letta
-  // al plurale: default degli allievi se concordi → luogo della patente se i
-  // veicoli concordano → sede. Le categorie vengono dal veicolo condiviso o
-  // dalla flotta di moto; l'auto al seguito resta fuori (è di categoria B e
-  // manderebbe ogni gruppo moto al luogo della B).
-  const prefilledLocationId = React.useMemo(() => {
-    if (!locations.length) return "";
-    return (
-      resolveGroupPrefilledLocationId({
+  // Luogo precompilato (REG-409/725), stessa regola della guida singola letta
+  // al plurale: default degli allievi se concordi e compatibile → luogo che fa
+  // patente e cambio di TUTTI i veicoli → sede, o nessuno se l'ambiguità è
+  // reale. Le patenti vengono dal veicolo condiviso o dalla flotta di moto;
+  // l'auto al seguito resta fuori (è di categoria B e manderebbe ogni gruppo
+  // moto al luogo della B).
+  const locationContext = React.useMemo(
+    () =>
+      resolveGroupPrefilledLocation({
         locations,
         studentDefaultLocationIds: selectedIds.map(
           (id) => students.find((st) => st.id === id)?.defaultLocationId ?? null,
         ),
-        licenseCategories: isMoto
-          ? fleet.map((v) => v.licenseCategory)
-          : [selectedVehicle?.licenseCategory ?? null],
-      }) ?? ""
-    );
-  }, [locations, selectedIds, students, isMoto, fleet, selectedVehicle]);
+        licenseCategories: isMoto ? fleet : [selectedVehicle],
+      }),
+    [locations, selectedIds, students, isMoto, fleet, selectedVehicle],
+  );
+  const prefilledLocationId = locations.length ? locationContext.locationId ?? "" : "";
 
   // Il ricalcolo segue allievi e veicoli finché il Luogo non è stato scelto a
   // mano.
@@ -822,15 +826,43 @@ export function GroupLessonCreateDialog({
                   }}
                 >
                   <SelectTrigger className="cursor-pointer">
-                    <SelectValue placeholder="Sede dell'autoscuola" />
+                    <SelectValue
+                      placeholder={locationContext.ambiguous ? "Scegli il luogo" : "Sede dell'autoscuola"}
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    {locations.map((loc) => (
-                      <SelectItem key={loc.id} value={loc.id} className="cursor-pointer">
-                        {loc.name}
-                        {loc.isDefault ? " · Sede" : loc.isPrecise ? " · Preciso" : " · Generico"}
-                      </SelectItem>
-                    ))}
+                    {(() => {
+                      const item = (loc: LocationOption) => (
+                        <SelectItem key={loc.id} value={loc.id} className="cursor-pointer">
+                          {loc.name}
+                          {loc.isDefault ? " · Sede" : loc.isPrecise ? " · Preciso" : " · Generico"}
+                        </SelectItem>
+                      );
+                      // REG-725: i luoghi che fanno le patenti della guida in cima.
+                      const compatible = new Set(locationContext.compatibleIds);
+                      const top = locations.filter((l) => compatible.has(l.id));
+                      const rest = locations.filter((l) => !compatible.has(l.id));
+                      if (!locationContext.filtered || !top.length || !rest.length) {
+                        return locations.map(item);
+                      }
+                      return (
+                        <>
+                          <SelectGroup>
+                            <SelectLabel className="text-[11.5px] font-medium text-[#a3a3a3]">
+                              Fanno le patenti della guida
+                            </SelectLabel>
+                            {top.map(item)}
+                          </SelectGroup>
+                          <SelectSeparator />
+                          <SelectGroup>
+                            <SelectLabel className="text-[11.5px] font-medium text-[#a3a3a3]">
+                              Altri luoghi
+                            </SelectLabel>
+                            {rest.map(item)}
+                          </SelectGroup>
+                        </>
+                      );
+                    })()}
                   </SelectContent>
                 </Select>
               </div>

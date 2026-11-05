@@ -7,7 +7,10 @@ import { ExternalLink, MapPin, Pencil, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { getAutoscuolaSettings, updateAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
-import { locationsByLicenseEnabled } from "@/lib/autoscuole/location-for-license";
+import {
+  locationsByLicenseEnabled,
+  parseLicenseTransmissions,
+} from "@/lib/autoscuole/location-for-license";
 import { FadeIn } from "@/components/ui/fade-in";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LocationFormDialog, type LocationFormValues } from "./LocationFormDialog";
@@ -30,6 +33,8 @@ type Location = {
   isDefault: boolean;
   isPrecise: boolean;
   licenseCategories: string[];
+  /** REG-725: cambio per patente, `{ B: "automatic" }` (assente = entrambi). */
+  licenseTransmissions?: unknown;
   /** REG-639: copertina della sede (solo `isDefault`), URL pubblico R2. */
   coverPhotoUrl?: string | null;
   createdAt: string;
@@ -97,14 +102,15 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
   const sede = locations.find((l) => l.isDefault) ?? null;
   const customs = locations.filter((l) => !l.isDefault);
 
-  // Categoria patente → nome del luogo che se l'è presa, escluso quello in
-  // modifica: il picker della modale marca i chip già assegnati altrove
-  // (cliccabili comunque — selezionarli sposta la patente qui).
-  const takenCategories = useMemo(() => {
-    const map: Record<string, string> = {};
+  // Patente → nomi degli ALTRI luoghi che la fanno (REG-725), escluso quello in
+  // modifica: la modale li nomina nella riga del cambio («Anche su …»).
+  const otherPlaces = useMemo(() => {
+    const map: Record<string, string[]> = {};
     for (const loc of locations) {
       if (editing?.initial?.id && loc.id === editing.initial.id) continue;
-      for (const category of loc.licenseCategories ?? []) map[category] = loc.name;
+      for (const category of loc.licenseCategories ?? []) {
+        (map[category] ??= []).push(loc.name);
+      }
     }
     return map;
   }, [locations, editing]);
@@ -193,6 +199,7 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
         longitude: values.longitude,
         placeId: values.placeId,
         licenseCategories: values.licenseCategories,
+        licenseTransmissions: values.licenseTransmissions,
       }),
     });
     const json = await res.json();
@@ -226,6 +233,7 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
             longitude: toNumber(sede.longitude),
             placeId: sede.placeId,
             licenseCategories: sede.licenseCategories ?? [],
+            licenseTransmissions: parseLicenseTransmissions(sede.licenseTransmissions),
           }
         : undefined,
     });
@@ -235,33 +243,33 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
     loc.isPrecise && loc.address ? loc.address : "Posizione generica";
 
   /**
-   * Riepilogo dei tipi di patente serviti dal luogo (REG-409). Il segnaposto
-   * "Nessuna patente assegnata" compare solo se l'autoscuola usa la funzione
-   * (almeno un luogo assegnato): chi non la usa non si ritrova la lista
-   * puntellata di placeholder vuoti.
+   * Riepilogo delle patenti del luogo (REG-409, riga di testo dal REG-725:
+   * niente etichette). «B solo automatico · A1 · A2». Il segnaposto «Nessuna»
+   * compare solo se l'autoscuola usa la funzione (almeno un luogo assegnato).
    */
-  const licenseTags = (loc: Location) => {
+  const licenseSummary = (loc: Location) => {
     const categories = loc.licenseCategories ?? [];
-    if (categories.length === 0) {
-      if (!anyLicenseAssigned) return null;
-      return (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          <span className="rounded-[6px] border border-dashed border-[#dcdcdc] px-2 py-[3px] text-[11px] font-semibold text-[#b4b4b4]">
-            Nessuna patente assegnata
-          </span>
-        </div>
-      );
-    }
+    if (categories.length === 0 && !anyLicenseAssigned) return null;
+    const transmissions = parseLicenseTransmissions(loc.licenseTransmissions);
     return (
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {categories.map((category) => (
-          <span
-            key={category}
-            className="rounded-[6px] bg-[#eef0f6] px-2 py-[3px] text-[11px] font-bold tracking-[0.2px] text-[#3c4257]"
-          >
-            {category}
-          </span>
-        ))}
+      <div className="mt-2 text-xs font-medium leading-[1.5] text-[#4a4a4a]" data-testid="location-licenses">
+        <span className="text-[#a3a3a3]">Patenti</span>
+        {"\u2002"}
+        {categories.length === 0 ? (
+          <span className="text-[#a3a3a3]">Nessuna</span>
+        ) : (
+          categories.map((category, i) => (
+            <span key={category}>
+              {i > 0 ? " · " : null}
+              {category}
+              {transmissions[category] ? (
+                <span className="text-[#6a6a6a]">
+                  {transmissions[category] === "automatic" ? " solo automatico" : " solo manuale"}
+                </span>
+              ) : null}
+            </span>
+          ))
+        )}
       </div>
     );
   };
@@ -316,7 +324,7 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
             mode={editing.mode}
             initialValue={editing.initial}
             consortium={consortium}
-            takenCategories={takenCategories}
+            otherPlaces={otherPlaces}
             showLicenseCategories={byLicense}
             onClose={() => setEditing(null)}
             onSubmit={async (values) => {
@@ -353,7 +361,7 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
           </div>
           <div className="mt-2.5 text-[13px] font-medium text-foreground">{sede.name}</div>
           <div className="mt-0.5 text-xs font-medium text-[#929292]">{addressLabel(sede)}</div>
-          {licenseTags(sede)}
+          {licenseSummary(sede)}
         </div>
         <button
           type="button"
@@ -400,7 +408,7 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
                     <div className="mt-0.5 truncate text-xs font-medium text-[#929292]">
                       {addressLabel(loc)}
                     </div>
-                    {licenseTags(loc)}
+                    {licenseSummary(loc)}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
@@ -429,6 +437,7 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
                           longitude: toNumber(loc.longitude),
                           placeId: loc.placeId,
                           licenseCategories: loc.licenseCategories ?? [],
+                          licenseTransmissions: parseLicenseTransmissions(loc.licenseTransmissions),
                         },
                       })
                     }
@@ -482,7 +491,7 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
           </div>
           <div className="mt-0.5 max-w-[460px] text-xs font-medium text-[#929292]">
             {byLicense
-              ? "Ogni tipo di patente è assegnato a un luogo solo, e le guide di quella patente si precompilano lì. Assegni le patenti dalla scheda di ogni luogo."
+              ? "Assegni a ogni luogo le patenti e il cambio che fa; una patente può stare in più luoghi. Le guide si precompilano nel luogo giusto."
               : "Ogni luogo vale per tutte le patenti. Le guide si precompilano con il luogo dell'allievo, se ne ha uno, altrimenti con la sede."}
           </div>
         </div>
@@ -505,7 +514,7 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
           mode={editing.mode}
           initialValue={editing.initial}
           consortium={consortium}
-          takenCategories={takenCategories}
+          otherPlaces={otherPlaces}
           showLicenseCategories={byLicense}
           onClose={() => setEditing(null)}
           onSubmit={async (values) => {

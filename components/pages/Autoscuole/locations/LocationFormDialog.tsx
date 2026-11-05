@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { MapPin, Search, X } from "lucide-react";
 
@@ -13,6 +13,8 @@ import { InlineToggle } from "@/components/ui/inline-toggle";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { licenseCategoryGroupsForMode } from "@/lib/autoscuole/license";
+import { type LessonTransmission } from "@/lib/autoscuole/location-for-license";
+import { LicenseTransmissionPicker } from "./LicenseTransmissionPicker";
 import { cn } from "@/lib/utils";
 import { usePlacesAutocomplete, type PlaceSuggestion } from "./use-places-autocomplete";
 
@@ -27,6 +29,8 @@ export type LocationFormValues = {
    *  l'interruttore è spento: il backend lascia invariato ciò che è salvato,
    *  invece di azzerarlo con una lista vuota che l'utente non ha mai visto. */
   licenseCategories?: string[];
+  /** REG-725: cambio per patente (assente = entrambi). Segue `licenseCategories`. */
+  licenseTransmissions?: Record<string, LessonTransmission>;
 };
 
 export type LocationFormDialogProps = {
@@ -38,10 +42,10 @@ export type LocationFormDialogProps = {
   /** Picker patenti: lista consorzio (C1/D1/CQC/ADR) invece di quella storica. */
   consortium?: boolean;
   /**
-   * Categoria → nome del luogo che se l'è già presa (esclusi quelli di questo
-   * luogo). Il chip resta cliccabile: selezionandolo la si sposta qui.
+   * Patente → nomi degli ALTRI luoghi che la fanno (REG-725: la stessa patente
+   * può stare in più luoghi). Solo informativo: «Anche su …» nella riga del cambio.
    */
-  takenCategories?: Record<string, string>;
+  otherPlaces?: Record<string, string[]>;
   /** Interruttore «Luoghi diversi per tipo di patente» (pane Sede e luoghi).
    *  Spento, la sezione in fondo non si mostra: ogni luogo fa tutte le patenti.
    *  Le categorie già salvate restano in database e non vengono toccate. */
@@ -68,7 +72,7 @@ export function LocationFormDialog({
   initialValue,
   onSubmit,
   consortium = false,
-  takenCategories = {},
+  otherPlaces = {},
   showLicenseCategories = true,
 }: LocationFormDialogProps) {
   const [name, setName] = useState("");
@@ -78,6 +82,9 @@ export function LocationFormDialog({
   const [longitude, setLongitude] = useState<number | null>(null);
   const [placeId, setPlaceId] = useState<string | null>(null);
   const [licenseCategories, setLicenseCategories] = useState<string[]>([]);
+  const [licenseTransmissions, setLicenseTransmissions] = useState<
+    Record<string, LessonTransmission>
+  >({});
   const [saving, setSaving] = useState(false);
   const toast = useFeedbackToast();
   // Autocompletamento Places (REG-396), estratto in un hook in REG-656.
@@ -94,6 +101,7 @@ export function LocationFormDialog({
       setLongitude(initialValue?.longitude ?? null);
       setPlaceId(initialValue?.placeId ?? null);
       setLicenseCategories(initialValue?.licenseCategories ?? []);
+      setLicenseTransmissions(initialValue?.licenseTransmissions ?? {});
     }
   }, [open, mode, initialValue, resetSession]);
 
@@ -136,6 +144,7 @@ export function LocationFormDialog({
         // altrimenti si cancellerebbero le patenti salvate senza che nessuno
         // abbia chiesto di cancellarle.
         licenseCategories: showLicenseCategories ? licenseCategories : undefined,
+        licenseTransmissions: showLicenseCategories ? licenseTransmissions : undefined,
       });
       onClose();
     } catch (error) {
@@ -152,25 +161,29 @@ export function LocationFormDialog({
     () => licenseCategoryGroupsForMode(consortium),
     [consortium],
   );
-  // Prima patente che un ALTRO luogo si è preso: l'hint la nomina invece di
-  // ripetere la regola in astratto.
-  const firstTaken = useMemo(() => {
-    for (const group of licenseGroups) {
-      for (const category of group.categories) {
-        const location = takenCategories[category];
-        if (location && !licenseCategories.includes(category)) {
-          return { category, location };
-        }
-      }
-    }
-    return null;
-  }, [licenseGroups, takenCategories, licenseCategories]);
-  const toggleLicenseCategory = (category: string) =>
-    setLicenseCategories((prev) =>
-      prev.includes(category)
-        ? prev.filter((c) => c !== category)
-        : [...prev, category],
-    );
+  // Bordi di intestazione e piede: compaiono solo quando c'è contenuto
+  // nascosto sopra o sotto, così da fermi la modale resta pulita.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ top: false, bottom: false });
+  const measureEdges = useCallback(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const top = el.scrollTop > 1;
+    const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+    setEdges((prev) => (prev.top === top && prev.bottom === bottom ? prev : { top, bottom }));
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    const el = bodyRef.current;
+    if (!el) return;
+    measureEdges();
+    // Il contenuto cambia altezza (righe del cambio, indirizzo, suggerimenti):
+    // si rimisura sia sul contenitore sia sul suo contenuto.
+    const ro = new ResizeObserver(measureEdges);
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => ro.disconnect();
+  }, [open, measureEdges]);
 
   const isEditSede = mode === "default";
   const title = isEditSede
@@ -185,15 +198,21 @@ export function LocationFormDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       {/* X di default del DialogContent nascosta: il proto usa la sua tonda #f7f7f7 */}
-      <DialogContent className="max-w-[480px] gap-0 rounded-[20px] p-7 pb-6 [&>button:last-child]:hidden">
-        {/* ── Header centrato con illustrazione dal proto ── */}
-        <div className="mb-[22px] flex flex-col items-center px-2 text-center">
+      <DialogContent className="flex max-h-[calc(100dvh-32px)] max-w-[480px] flex-col gap-0 overflow-hidden rounded-[20px] p-0 [&>button:last-child]:hidden">
+        {/* ── Intestazione: resta in alto, il contenuto scorre sotto (REG-725) ── */}
+        <div
+          className={cn(
+            "shrink-0 border-b px-7 pb-[18px] pt-7 transition-colors duration-200 max-sm:px-5",
+            edges.top ? "border-[#ededed]" : "border-transparent",
+          )}
+        >
+        <div className="flex flex-col items-center px-2 text-center">
           <Image
             src={isEditSede ? "/images/settings/sede-autoscuola.png" : "/images/settings/luogo-guida.png"}
             alt=""
             width={118}
             height={118}
-            className="mb-1.5 block size-[118px] select-none object-contain"
+            className="mb-1.5 block size-[118px] select-none object-contain [@media(max-height:760px)]:size-[76px] [@media(max-height:600px)]:hidden"
           />
           <DialogTitle className="text-[19px] font-bold tracking-[-0.2px] text-foreground">
             {title}
@@ -211,6 +230,16 @@ export function LocationFormDialog({
           <X className="size-3 text-foreground" strokeWidth={2} />
         </button>
 
+        </div>
+
+        {/* ── Corpo scorrevole ── */}
+        <div
+          ref={bodyRef}
+          onScroll={measureEdges}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-7 pb-2 pt-1 max-sm:px-5"
+          data-testid="location-dialog-body"
+        >
+          <div>
         {/* ── Nome ── */}
         <div className="mb-2 text-[13px] font-semibold text-foreground">Nome del luogo</div>
         <input
@@ -295,84 +324,25 @@ export function LocationFormDialog({
         )}
 
         {showLicenseCategories && (
-        <>
-        {/* ── Tipi di patente serviti dal luogo (REG-409) ──
-            I gruppi si impacchettano in orizzontale (flex-wrap) invece di
-            impilarsi: 10 patenti stanno in due righe. Palette neutra: le
-            patenti non scelte sono TASTI su fondo tenue (#f7f8fa, la stessa
-            superficie dei campi della modale) invece che pillole bordate — a
-            questa dimensione i bordi fanno più rumore del contenuto. La
-            selezione è l'accento nero (--primary) con l'ombra in tinta: la
-            separazione la fa la profondità, non un colore. Già presa da un
-            altro luogo = tratteggio grigio. */}
-        <div className="mt-5 flex items-baseline justify-between gap-2.5">
-          <div className="text-[13px] font-semibold text-foreground">Tipi di patente</div>
-          {licenseCategories.length > 0 && (
-            <div className="text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#9a9a9a]">
-              <span className="text-foreground">{licenseCategories.length}</span> assegnate
-            </div>
-          )}
-        </div>
-        <div className="mt-2 flex flex-wrap gap-x-5 gap-y-[13px] rounded-[12px] border-[1.5px] border-[#ededed] px-[13px] py-[11px]">
-          {licenseGroups.map((group) => (
-            <div key={group.label} className="min-w-0">
-              <div className="mb-1.5 text-[9.5px] font-bold uppercase tracking-[0.6px] text-[#b6b6b6]">
-                {group.label}
-              </div>
-              <div className="flex flex-wrap gap-[5px]">
-                {group.categories.map((category) => {
-                  const active = licenseCategories.includes(category);
-                  const takenBy = !active ? takenCategories[category] : undefined;
-                  return (
-                    <button
-                      key={category}
-                      type="button"
-                      onClick={() => toggleLicenseCategory(category)}
-                      aria-pressed={active}
-                      title={takenBy ? `Ora assegnata a ${takenBy}` : undefined}
-                      style={
-                        active
-                          ? { boxShadow: "0 2px 6px rgba(17,17,17,0.22)" }
-                          : takenBy
-                            ? {
-                                backgroundImage:
-                                  "repeating-linear-gradient(135deg,#fafafa,#fafafa 4px,#f0f0f0 4px,#f0f0f0 8px)",
-                              }
-                            : undefined
-                      }
-                      className={cn(
-                        "flex h-7 min-w-[38px] cursor-pointer select-none items-center justify-center rounded-[50px] px-[13px] text-[12.5px] font-bold transition-colors",
-                        active
-                          ? "bg-[#111111] text-white hover:bg-[#2b2b2b]"
-                          : takenBy
-                            ? "text-[#c4c4c4]"
-                            : "bg-[#f4f5f7] text-[#6a6a6a] hover:bg-[#e9eaee] hover:text-[#333333]",
-                      )}
-                    >
-                      {category}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="mt-[9px] text-[11.5px] font-medium leading-[1.45] text-[#a3a3a3]">
-          Le guide di queste patenti partono da qui.{" "}
-          {firstTaken ? (
-            <>
-              <span className="font-semibold text-[#7a7a7a]">{firstTaken.category}</span> è su{" "}
-              {firstTaken.location}: selezionala per spostarla.
-            </>
-          ) : (
-            "Il luogo di default dell\u2019allievo, se impostato, ha la precedenza."
-          )}
-        </div>
-        </>
+          <LicenseTransmissionPicker
+            groups={licenseGroups}
+            categories={licenseCategories}
+            transmissions={licenseTransmissions}
+            onCategoriesChange={setLicenseCategories}
+            onTransmissionsChange={setLicenseTransmissions}
+            otherPlaces={otherPlaces}
+          />
         )}
+          </div>
+        </div>
 
-        {/* ── Footer dal proto: Annulla testo + CTA pill navy ── */}
-        <div className="mt-[26px] flex items-center justify-end gap-3.5">
+        {/* ── Piede: Annulla + Salva, sempre raggiungibili ── */}
+        <div
+          className={cn(
+            "flex shrink-0 items-center justify-end gap-3.5 border-t px-7 pb-6 pt-4 transition-colors duration-200 max-sm:px-5",
+            edges.bottom ? "border-[#ededed]" : "border-transparent",
+          )}
+        >
           <button
             type="button"
             onClick={onClose}

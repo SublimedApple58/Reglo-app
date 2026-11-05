@@ -33,7 +33,10 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -99,7 +102,7 @@ import {
 import { FieldGroup } from "@/components/ui/field-group";
 import { TRANSMISSION_LABELS, isMotoLicenseCategory, vehicleServesLicense, type Transmission } from "@/lib/autoscuole/license";
 import { pathForDate } from "@/lib/autoscuole/license-paths";
-import { resolvePrefilledLocationId } from "@/lib/autoscuole/location-for-license";
+import { lessonLicense, resolvePrefilledLocation } from "@/lib/autoscuole/location-for-license";
 import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, motoLessonTypeLabel, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
 import { instructorTintStyles } from "@/lib/autoscuole/instructor-colors";
 import { bandLabelStartMinutes, bandLocationLabel } from "@/lib/autoscuole/agenda-band-label";
@@ -170,7 +173,7 @@ import { buildExamPrintDays } from "@/lib/autoscuole/exam-print";
 import { NeverAccessedNudge } from "@/components/pages/Autoscuole/NeverAccessedNudge";
 import { UserPhotoCircle } from "@/components/ui/user-photo";
 
-type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; lastVehicleId?: string | null; neverAccessed?: boolean; studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO"; examReady?: boolean; examReadyAt?: string | null; licenseNumber?: string | null; defaultLocationId?: string | null; consorzioSchoolId?: string | null; consorzioSchoolName?: string | null; /** REG-458 — presente solo con piu' di un percorso alle spalle. */ licenseHistory?: { licenseCategory: string | null; transmission: string | null; startedAt: string }[] };
+type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; lastVehicleId?: string | null; neverAccessed?: boolean; studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO"; examReady?: boolean; examReadyAt?: string | null; licenseNumber?: string | null; defaultLocationId?: string | null; /** REG-705: luoghi dell'allievo (vuoto = tutti). */ locationIds?: string[]; consorzioSchoolId?: string | null; consorzioSchoolName?: string | null; /** REG-458 — presente solo con piu' di un percorso alle spalle. */ licenseHistory?: { licenseCategory: string | null; transmission: string | null; startedAt: string }[] };
 type ResourceOption = {
   id: string;
   name: string;
@@ -1336,6 +1339,8 @@ export function AutoscuoleAgendaPage({
     isPrecise: boolean;
     /** Tipi di patente serviti dal luogo (REG-409). */
     licenseCategories: string[];
+    /** REG-725: cambio per patente (assente = entrambi). */
+    licenseTransmissions: unknown;
   };
   const [agendaLocations, setAgendaLocations] = React.useState<AgendaLocationOption[]>([]);
   const defaultLocationId = React.useMemo(
@@ -2078,6 +2083,7 @@ export function AutoscuoleAgendaPage({
           isDefault: l.isDefault,
           isPrecise: l.isPrecise,
           licenseCategories: l.licenseCategories ?? [],
+          licenseTransmissions: l.licenseTransmissions ?? {},
         })),
       );
     })();
@@ -2085,14 +2091,6 @@ export function AutoscuoleAgendaPage({
       cancelled = true;
     };
   }, [source]);
-
-  // Pre-populate form.locationId with the default sede whenever the dialog opens
-  // (nessun allievo ancora scelto → la sede è il fallback del resolver REG-409).
-  React.useEffect(() => {
-    if (createOpen && !form.locationId && defaultLocationId) {
-      setForm((prev) => ({ ...prev, locationId: defaultLocationId }));
-    }
-  }, [createOpen, defaultLocationId, form.locationId]);
 
   // Ogni apertura del form riparte da un luogo "non toccato a mano".
   React.useEffect(() => {
@@ -2954,21 +2952,44 @@ export function AutoscuoleAgendaPage({
    */
   const createVehicleTouchedRef = React.useRef(false);
 
-  const prefillLocationId = React.useCallback(
-    (next: { studentId: string; vehicleId: string }): string => {
+  // REG-725: luogo compatibile con patente e cambio della guida. "" = nessuna
+  // precompilazione (più luoghi compatibili, sede esclusa): si sceglie a mano,
+  // con i compatibili in cima al menu.
+  const resolveCreateLocation = React.useCallback(
+    (next: { studentId: string; vehicleId: string }) => {
       const student = students.find((s) => s.id === next.studentId) ?? null;
       const vehicle = vehicles.find((v) => v.id === next.vehicleId) ?? null;
-      return (
-        resolvePrefilledLocationId({
+      return {
+        ...resolvePrefilledLocation({
           locations: agendaLocations,
           studentDefaultLocationId: student?.defaultLocationId ?? null,
+          studentLocationIds: student?.locationIds ?? [],
           student,
           vehicle,
-        }) ?? ""
-      );
+        }),
+        license: lessonLicense(student, vehicle),
+      };
     },
     [agendaLocations, students, vehicles],
   );
+  const prefillLocationId = React.useCallback(
+    (next: { studentId: string; vehicleId: string }): string =>
+      resolveCreateLocation(next).locationId ?? "",
+    [resolveCreateLocation],
+  );
+  const createLocationContext = React.useMemo(
+    () => resolveCreateLocation({ studentId: form.studentId, vehicleId: form.vehicleId }),
+    [resolveCreateLocation, form.studentId, form.vehicleId],
+  );
+
+  // Pre-populate form.locationId with the default sede whenever the dialog opens
+  // (nessun allievo ancora scelto → la sede è il fallback del resolver REG-409).
+  // Con la scelta ambigua (REG-725) il campo resta vuoto apposta.
+  React.useEffect(() => {
+    if (createOpen && !form.locationId && defaultLocationId && !createLocationContext.ambiguous) {
+      setForm((prev) => ({ ...prev, locationId: defaultLocationId }));
+    }
+  }, [createOpen, defaultLocationId, form.locationId, createLocationContext.ambiguous]);
   // REG-586: precompila il Veicolo quando il campo è vuoto o quando la scelta
   // corrente non è più tra quelle offerte (cambio allievo, istruttore o
   // modalità auto/moto). Non tocca mai una scelta ancora valida. Vive qui, e
@@ -6797,14 +6818,53 @@ export function AutoscuoleAgendaPage({
                   setForm((prev) => ({ ...prev, locationId: value }));
                 }}
               >
-                <SelectTrigger><SelectValue placeholder="Sede dell'autoscuola" /></SelectTrigger>
+                <SelectTrigger data-testid="create-location-trigger">
+                  <SelectValue
+                    placeholder={createLocationContext.ambiguous ? "Scegli il luogo" : "Sede dell'autoscuola"}
+                  />
+                </SelectTrigger>
                 <SelectContent>
-                  {agendaLocations.map((loc) => (
-                    <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name}
-                      {loc.isDefault ? " · Sede" : loc.isPrecise ? " · Preciso" : " · Generico"}
-                    </SelectItem>
-                  ))}
+                  {(() => {
+                    const item = (loc: AgendaLocationOption) => (
+                      <SelectItem key={loc.id} value={loc.id}>
+                        {loc.name}
+                        {loc.isDefault ? " · Sede" : loc.isPrecise ? " · Preciso" : " · Generico"}
+                      </SelectItem>
+                    );
+                    // REG-725: quando patente e cambio restringono la scelta, i
+                    // luoghi che li fanno vanno in cima, gli altri sotto.
+                    const ctx = createLocationContext;
+                    const compatible = new Set(ctx.compatibleIds);
+                    const top = agendaLocations.filter((l) => compatible.has(l.id));
+                    const rest = agendaLocations.filter((l) => !compatible.has(l.id));
+                    if (!ctx.filtered || !ctx.license || !top.length || !rest.length) {
+                      return agendaLocations.map(item);
+                    }
+                    const gear =
+                      ctx.license.transmission === "automatic"
+                        ? " automatico"
+                        : ctx.license.transmission === "manual"
+                          ? " manuale"
+                          : "";
+                    return (
+                      <>
+                        <SelectGroup>
+                          <SelectLabel className="text-[11.5px] font-medium text-[#a3a3a3]">
+                            Fanno {ctx.license.category}
+                            {gear}
+                          </SelectLabel>
+                          {top.map(item)}
+                        </SelectGroup>
+                        <SelectSeparator />
+                        <SelectGroup>
+                          <SelectLabel className="text-[11.5px] font-medium text-[#a3a3a3]">
+                            Altri luoghi
+                          </SelectLabel>
+                          {rest.map(item)}
+                        </SelectGroup>
+                      </>
+                    );
+                  })()}
                 </SelectContent>
               </Select>
             </div>
