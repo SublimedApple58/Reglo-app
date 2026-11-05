@@ -399,6 +399,7 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
             {customs.map((loc) => (
               <div
                 key={loc.id}
+                data-testid={`location-row-${loc.id}`}
                 className="flex items-start justify-between gap-3 rounded-[10px] border border-[#eeeeee] bg-[#fafafa] px-4 py-3.5"
               >
                 <div className="flex min-w-0 items-start gap-2.5">

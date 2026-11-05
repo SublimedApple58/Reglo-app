@@ -4,7 +4,40 @@ Sede dell'autoscuola (luogo di default di ogni guida) + luoghi extra da cui le g
 
 ## Modello dati (Prisma)
 
-`AutoscuolaLocation`: `companyId`, `name`, `isDefault` (la sede, una per company), `isPrecise`, `address`, `latitude`/`longitude` (Decimal), `placeId` (Google), `createdByUserId` SetNull, **`licenseCategories String[]`** (REG-409: tipi di patente serviti dal luogo).
+`AutoscuolaLocation`: `companyId`, `name`, `isDefault` (la sede, una per company), `isPrecise`, `address`, `latitude`/`longitude` (Decimal), `placeId` (Google), `createdByUserId` SetNull, **`licenseCategories String[]`** (REG-409: tipi di patente serviti dal luogo), **`licenseTransmissions Json`** (REG-725: cambio per patente, `{ "B": "automatic" }`, assente = entrambi; migrazione additiva `20261110120000_location_license_transmissions`).
+
+## REG-725 (05/11/2026) — stessa patente in più luoghi + cambio per patente
+
+**Supera l'esclusività descritta più sotto** (le righe «Esclusività» e
+«Acceso, l'esclusività resta» sono storia). Piano: `plans/autoscuole/reg-725-luoghi-patenti-cambio.md`.
+
+- **Dato**: `licenseTransmissions` accanto a `licenseCategories`. Unico punto di
+  scrittura `setLocationLicenseCategories`: non toglie più niente agli altri
+  luoghi, tiene solo i cambi delle patenti presenti (CQC/ADR mai) e, se il
+  client non manda i cambi, conserva quelli salvati. Archiviare azzera entrambi.
+- **Regola** (`location-for-license.ts`, decisioni di Tiziano): «compatibile» =
+  il luogo fa patente E cambio della guida (veicolo scelto, altrimenti percorso
+  dell'allievo; cambio ignoto = qualsiasi). Una patente che non è assegnata a
+  nessun luogo vale ovunque → chi non usa la funzione ha la regola di prima.
+  1. principale dell'allievo se compatibile; 2. l'unico compatibile tra i suoi
+  luoghi (REG-705); 3. l'unico compatibile dell'autoscuola; 4. più compatibili:
+  sede se è tra questi, altrimenti **nessuna precompilazione**; 5. nessun
+  compatibile: sede. Gruppi: compatibile con TUTTI i veicoli; default degli
+  allievi solo se concordi e compatibile.
+- **Backend** (prenotazione allievo, lista d'attesa, gruppo senza luogo): stessa
+  regola, al passo 4 ambiguo → sede (serve sempre un valore). Il luogo della
+  fascia (REG-705) resta prima di tutto.
+- **UI web**: modale con «Patenti e cambio» (`LicenseTransmissionPicker.tsx`:
+  tasti squadrati, riga del cambio Entrambi · Manuale · Automatico, «Anche su …»
+  / «Solo qui»); la modale ha intestazione e piede fissi e il corpo scorre (anche
+  a 390px e in finestre basse: sotto 760px di altezza l'illustrazione si
+  rimpicciolisce, sotto 600 sparisce). Card: riga di testo «Patenti  B solo
+  automatico · A1» al posto delle etichette. Agenda e guide di gruppo: se la
+  scelta è ambigua il campo resta vuoto («Scegli il luogo») e il menu mostra
+  prima «Fanno B manuale», poi «Altri luoghi».
+- **Mobile**: `reglo-mobile/src/utils/locationForLicense.ts` è la copia 1:1 del
+  resolver; il `BookingForm` la applica (vedi doc mobile).
+- **E2E**: `tests/e2e/reg725-luoghi-patenti-cambio.auth.spec.ts`.
 
 ## Luogo per tipo di patente (REG-409) — OPZIONALE da ottobre 2026
 
@@ -103,7 +136,7 @@ in un luogo solo) era una gabbia: chi fa la B in due posti non poteva dirlo.
   - **Non ancora modificabile dopo la creazione**: `updateGroupLesson` non tocca
     il luogo (e il dialog di gestione non lo mostra). Per cambiarlo si passa
     dalla singola seat.
-- **Granularità**: solo la categoria patente, nessuna distinzione manuale/
+- **Granularità** (superata da REG-725, ora c'è il cambio): solo la categoria patente, nessuna distinzione manuale/
   automatico ("B" copre entrambi). Anche in agenda la B automatica ha il colore
   della B: la distingue il bordo (REG-622).
 - **Agenda web** (`AutoscuoleAgendaPage`): ricalcolo al cambio **allievo**
@@ -118,7 +151,7 @@ in un luogo solo) era una gabbia: chi fa la B in due posti non poteva dirlo.
   resolver puro. La patente della guida viene dal **veicolo assegnato dal
   matcher**; senza veicolo (o col modulo Veicoli spento) si ricade sul percorso
   dell'allievo.
-- **Mobile**: NON implementato, al contrario di quanto diceva questa pagina
+- **Mobile** (superato da REG-725, ora implementato): NON implementato, al contrario di quanto diceva questa pagina
   fino a ottobre 2026. In `reglo-mobile/src` non esiste `utils/locationForLicense.ts`
   e non c'è **nessuna** occorrenza di `licenseCategories`: il `BookingForm`
   mobile non applica la precedenza per patente. Quando la guida la crea il
