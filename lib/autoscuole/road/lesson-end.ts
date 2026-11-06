@@ -22,6 +22,20 @@ import { LESSON_BUFFER_BLOCK_REASON } from "@/lib/autoscuole/agenda-occupancy";
 const STEP_MS = 5 * 60 * 1000;
 
 /**
+ * Segnalazione Ricca (06/11): guida 9:00–10:00 avviata in Road alle 8:45 → in
+ * agenda 8:45–9:45, la durata prenotata resta quella. L'inizio diventa l'avvio
+ * in Road arrotondato per difetto ai 5 minuti (8:47 → 8:45), solo se è PRIMA
+ * dell'inizio prenotato: in ritardo l'inizio non si tocca (la guida si
+ * accorcia, va bene così). Gemello mobile: `effectiveLessonEnd` in
+ * `reglo-mobile/src/road/returnEta.ts` (residuo e avvisi durante la guida).
+ */
+export function roadLessonStart(startsAt: Date, startedAt: Date | null): Date {
+  if (!startedAt) return startsAt;
+  const started = Math.floor(startedAt.getTime() / STEP_MS) * STEP_MS;
+  return started < startsAt.getTime() ? new Date(started) : startsAt;
+}
+
+/**
  * La nuova fine della guida. `next` = inizio del prossimo impegno
  * dell'istruttore (null = nessuno): ferma solo l'allungamento, mai oltre la
  * fine prenotata all'indietro.
@@ -52,7 +66,12 @@ type Db = Pick<PrismaClient, "autoscuolaAppointment" | "autoscuolaInstructorBloc
  * Allinea guida e pausa all'orario reale. Torna `true` se l'agenda è cambiata
  * (da invalidare).
  */
-export async function alignLessonEndToRoad(db: Db, appointmentId: string, endedAt: Date): Promise<boolean> {
+export async function alignLessonEndToRoad(
+  db: Db,
+  appointmentId: string,
+  endedAt: Date,
+  startedAt: Date | null = null,
+): Promise<boolean> {
   const a = await db.autoscuolaAppointment.findUnique({
     where: { id: appointmentId },
     select: { id: true, companyId: true, instructorId: true, startsAt: true, endsAt: true },
@@ -100,9 +119,16 @@ export async function alignLessonEndToRoad(db: Db, appointmentId: string, endedA
     }
   }
 
-  const end = roadLessonEnd(a.startsAt, bookedEnd, endedAt, next);
-  if (end.getTime() === bookedEnd.getTime() && a.endsAt) return false;
-  await db.autoscuolaAppointment.update({ where: { id: a.id }, data: { endsAt: end } });
+  // Partita in anticipo: inizio e fine prenotata scalano insieme (durata
+  // invariata), poi la fine segue l'orario reale come sempre.
+  const start = roadLessonStart(a.startsAt, startedAt);
+  const early = a.startsAt.getTime() - start.getTime();
+  const end = roadLessonEnd(start, new Date(bookedEnd.getTime() - early), endedAt, next);
+  if (!early && end.getTime() === bookedEnd.getTime() && a.endsAt) return false;
+  await db.autoscuolaAppointment.update({
+    where: { id: a.id },
+    data: early ? { startsAt: start, endsAt: end } : { endsAt: end },
+  });
 
   if (pause) {
     const slid = slidLessonPause(pause, end, next);

@@ -813,7 +813,10 @@ export async function endRoadSession(sessionId: string, input: { endedAt?: unkno
         data: { status: "completed" },
       });
       // REG-723: l'agenda segue l'orario reale (libere e prenotate), pausa compresa.
-      if (await alignLessonEndToRoad(prisma, session.appointmentId, endedAt)) await invalidateLessonAgenda(ctx.companyId);
+      // Segnalazione Ricca: partita in anticipo = anche l'inizio si sposta.
+      if (await alignLessonEndToRoad(prisma, session.appointmentId, endedAt, session.startedAt)) {
+        await invalidateLessonAgenda(ctx.companyId);
+      }
       await savePlanReached(sessionId, ctx.companyId).catch((e) => console.warn("[road] planReached", e));
       // REG-665 / REG-713: traccia pulita e sulle strade, una volta sola, con i
       // suoi km (li legge il riepilogo qui sotto). Google giù = la riprova il job.
