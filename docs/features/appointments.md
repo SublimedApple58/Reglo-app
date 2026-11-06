@@ -189,19 +189,24 @@ Nella multipla moto l'auto al seguito era **una sola per tutte le date**: bastav
 - `approveAvailabilityOverride()` — approve out-of-availability booking
 - `createExamEvent()`, `addExamStudent()`, `removeExamStudent()`, `cancelExamEvent()`
 - **Esami senza allievi (2026-07-16)**: un esame si può ora creare **senza selezionare allievi** (le autoscuole spesso non sanno subito chi parteciperà). Non esiste un'entità "esame": è un gruppo di righe `AutoscuolaAppointment` (una per allievo) con `type="esame"`. Per rappresentare un esame vuoto la colonna `AutoscuolaAppointment.studentId` è ora **nullable** (SOLO per gli esami: un esame vuoto = **1 riga segnaposto** con `studentId=null`; ogni altro tipo ha sempre uno studentId — invariante a livello applicativo). Tutte le vie di creazione (`createExamEvent`, `addExamStudent`, API route istruttori `POST /api/autoscuole/exam`, e il mobile che ri-chiama `createExam` sullo stesso slot) passano per l'helper condiviso **`materializeExamSlot()`**: 0 allievi → crea/mantiene 1 segnaposto; aggiungere il **primo** allievo **converte** il segnaposto (niente riga fantasma), gli altri ottengono righe proprie. Identità slot = `(companyId, "esame", startsAt, endsAt, instructorId)`. Il serializer (`mapCaseStudent`) mappa la riga senza allievo su uno **student sintetico** `{ id: "exam-empty[:apptId]", firstName: "Esame" }` così il client non dereferenzia mai `student` null; l'agenda web (`AutoscuoleAgendaPage`, helper `isExamPlaceholder`) e mobile (`weeklyAgenda.isExamPlaceholder`, `exam-manage`, `WeeklyLiveCard`, `WeeklyAgendaView`) escludono i segnaposto da conteggi/liste e mostrano "vuoto"/"Nessun allievo". La rimozione mantiene il guard "non puoi togliere l'ultimo allievo — usa Annulla esame" (si torna a vuoto solo cancellando l'esame). Migrazione: `20260716163809_exam_student_nullable` (solo `DROP NOT NULL`).
-### Contatore "x/6" guide obbligatorie
+### Contatore obbligo guide (ore) e colori agenda
 
-La regola sta in **`lib/autoscuole/mandatory-lessons.ts`** (`REQUIRED_LESSONS_COUNT`,
-`isMandatoryLessonDuration`) ed è usata da entrambi i punti che la mostrano:
+Le regole stanno in **`lib/autoscuole/mandatory-lessons.ts`**:
 
-- `summary` di `getAutoscuolaStudentDrivingRegister` → contatore del dettaglio allievo web
-- `summary` di `getAutoscuolaStudentsWithProgress` → contatore della lista Allievi web
-- `buildAppointmentGridFlags` → flag `mandatoryLesson` dei colori agenda
+- **Contatore web (scheda e lista Allievi)** — `summary` di `getAutoscuolaStudentDrivingRegister`
+  e `getAutoscuolaStudentsWithProgress`. Dal **2026-11-06** (segnalazione Ricca) conta le **ore
+  guidate**: tutte le guide completate del percorso in corso, qualunque durata, sommate e portate a
+  mezz'ore con 5' di tolleranza (`mandatoryHoursProgress`, `creditedMinutes`). Campi
+  `completedMinutes` / `requiredMinutes` / `remainingMinutes`; la UI mostra «2,5/6 h». Soglia =
+  `REQUIRED_DRIVING_HOURS` (6; quando diventano 8 si cambia la costante). Prima contavano solo le
+  guide da 60' esatti: chi faceva mezz'ore restava a 0/6 e le guide Road (fine reale dal REG-723,
+  es. 55'/65') non contavano.
+- **Colori agenda** — `buildAppointmentGridFlags` → flag `mandatoryLesson`: restano le prime 6
+  guide da **esattamente** 60 minuti (`isMandatoryLessonDuration`, criterio 2026-06-12).
 
-**Contano SOLO le guide da esattamente 60 minuti.** Fino al 2026-09-18 il contatore del
-dettaglio allievo contava tutte le guide completate (anche quelle da 30 minuti) mentre
-l'agenda applicava già il criterio dei 60: le due viste si contraddicevano. Ora la regola è
-una sola. `endsAt` nullo non conta (altrove vale 30 minuti, `computeAppointmentEnd`).
+`endsAt` nullo non conta (altrove vale 30 minuti, `computeAppointmentEnd`). Il gemello mobile
+(`reglo-mobile/src/utils/mandatoryLessons.ts`, contatore di `InstructorNotesScreen`) è ancora col
+criterio dei 60'.
 
 **Lista Allievi (REG-635, 2026-10-26).** La lista legge solo le guide che possono
 contare (`status = "completed"` e `endsAt` non nullo) di tutti gli allievi mostrati, senza

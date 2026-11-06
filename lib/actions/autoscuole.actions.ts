@@ -199,6 +199,7 @@ import {
 import {
   REQUIRED_LESSONS_COUNT,
   isMandatoryLessonDuration,
+  mandatoryHoursProgress,
 } from "@/lib/autoscuole/mandatory-lessons";
 
 const createStudentSchema = z.object({
@@ -2208,23 +2209,24 @@ const buildDrivingRegisterData = ({
     .map(([type, count]) => ({ type, count }))
     .sort((a, b) => b.count - a.count || a.type.localeCompare(b.type));
 
-  // Obbligo: contano SOLO le guide da 60 minuti (stesso criterio dei flag
-  // dell'agenda). `byLessonType` qui sopra continua invece a contare tutte le
-  // guide completate: è un riepilogo dei tipi svolti, non dell'obbligo.
+  // Obbligo: dal 2026-11-06 si contano le ORE guidate (tutte le guide
+  // completate, qualunque durata), a mezz'ore — vedi `mandatory-lessons.ts`.
+  // Prima contavano solo le guide da 60 minuti esatti: mezz'ore e guide Road
+  // allineate all'orario reale restavano fuori (segnalazione Ricca).
+  // `byLessonType` qui sopra resta un riepilogo dei tipi svolti.
   //
   // REG-458 — e contano solo quelle del percorso IN CORSO. Prima si contava
   // tutta la vita dell'allievo in autoscuola: chi apriva un secondo percorso se
   // lo trovava gia' a "Obbligo completato" il primo giorno. Senza percorso
   // aperto (allievo patentato, o nato prima che il percorso esistesse) resta il
-  // conteggio di sempre: niente cambia per nessuno il giorno del rilascio,
-  // perche' dopo il backfill ogni allievo ha un percorso solo e lo copre tutto.
+  // conteggio di sempre.
   const activePath = openPath(paths);
-  const mandatoryLessons = completedLessons.filter(isMandatoryLessonDuration);
-  const summaryCount = activePath
-    ? mandatoryLessons.filter(
+  const pathLessons = activePath
+    ? completedLessons.filter(
         (lesson) => pathForDate(paths, lesson.startsAt)?.id === activePath.id,
-      ).length
-    : mandatoryLessons.length;
+      )
+    : completedLessons;
+  const progress = mandatoryHoursProgress(pathLessons);
 
   return {
     activeCase: activeCase
@@ -2250,10 +2252,15 @@ const buildDrivingRegisterData = ({
         licenseNumber: p.licenseNumber,
       })),
     summary: {
-      completedLessons: summaryCount,
+      // Guide completate nel percorso (qualunque durata): informativo.
+      completedLessons: pathLessons.length,
       requiredLessons: REQUIRED_LESSONS_COUNT,
-      remaining: Math.max(0, REQUIRED_LESSONS_COUNT - summaryCount),
-      isCompleted: summaryCount >= REQUIRED_LESSONS_COUNT,
+      remaining: Math.max(0, REQUIRED_LESSONS_COUNT - pathLessons.length),
+      isCompleted: progress.isCompleted,
+      // L'obbligo vero, in minuti a mezz'ore: è quello che mostra il web.
+      completedMinutes: progress.completedMinutes,
+      requiredMinutes: progress.requiredMinutes,
+      remainingMinutes: progress.remainingMinutes,
     },
     byLessonType,
     lessons: drivingLessons.map((lesson) => {

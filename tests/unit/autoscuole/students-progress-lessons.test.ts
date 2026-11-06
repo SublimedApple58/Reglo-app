@@ -129,11 +129,12 @@ describe("lista Allievi: contatore guide (REG-635)", () => {
     lessons.push({ ...lesson("anna", 4, "completed"), endsAt: null });
 
     const res = await getAutoscuolaStudentsWithProgress();
-    const anna = (res.data as Array<{ id: string; summary: { completedLessons: number } }>).find(
-      (s) => s.id === "anna",
-    );
-    // La guida da 30 minuti passa il filtro ma non conta per l'obbligo.
-    expect(anna?.summary.completedLessons).toBe(1);
+    const anna = (
+      res.data as Array<{ id: string; summary: { completedLessons: number; completedMinutes: number } }>
+    ).find((s) => s.id === "anna");
+    // Dal 2026-11-06 l'obbligo si conta in ore: 60' + 30' = 1,5 ore.
+    expect(anna?.summary.completedLessons).toBe(2);
+    expect(anna?.summary.completedMinutes).toBe(90);
     expect(lessonQueries[0].where).toMatchObject({ status: "completed", endsAt: { not: null } });
   });
 });

@@ -256,6 +256,10 @@ type Student = StudentProfile & {
     requiredLessons: number;
     remaining: number;
     isCompleted: boolean;
+    /** Obbligo in ore (minuti a mezz'ore). Assente per gli affiliati. */
+    completedMinutes?: number;
+    requiredMinutes?: number;
+    remainingMinutes?: number;
   };
 };
 
@@ -469,6 +473,16 @@ type LessonEntry = {
 type LessonFilter = "all" | "upcoming" | "unpaid" | "completed" | "cancelled";
 
 /** «14 giugno 2026» — le date dello storico percorsi. */
+/** Minuti dell'obbligo in ore all'italiana: 150 → "2,5", 360 → "6". */
+const formatDrivingHours = (minutes: number): string =>
+  (minutes / 60).toLocaleString("it-IT", { maximumFractionDigits: 1 });
+
+const drivingHoursRemainingLabel = (minutes: number): string => {
+  if (minutes === 30) return "Manca mezz'ora";
+  if (minutes === 60) return "Manca 1 ora";
+  return `Mancano ${formatDrivingHours(minutes)} ore`;
+};
+
 const formatPathDate = (iso: string): string => {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
@@ -504,6 +518,10 @@ type StudentRegister = {
     requiredLessons: number;
     remaining: number;
     isCompleted: boolean;
+    /** Obbligo in ore (minuti a mezz'ore). Assente per gli affiliati. */
+    completedMinutes?: number;
+    requiredMinutes?: number;
+    remainingMinutes?: number;
   };
   extendedSummary?: ExtendedSummary;
   byLessonType: Array<{
@@ -2650,14 +2668,14 @@ export function AutoscuoleStudentsPage({
                 <p className="text-sm font-semibold text-foreground">
                   {affiliate
                     ? student.summary.completedLessons
-                    : `${student.summary.completedLessons}/${student.summary.requiredLessons}`}
+                    : `${formatDrivingHours(student.summary.completedMinutes ?? 0)}/${formatDrivingHours(student.summary.requiredMinutes ?? 0)} h`}
                 </p>
                 <p className="mt-px text-[11px] font-medium text-[#929292]">
                   {affiliate
                     ? "Guide col consorzio"
                     : student.summary.isCompleted
                       ? "Obbligo completato"
-                      : "Guide"}
+                      : "Ore di guida"}
                 </p>
               </div>
               <div className="flex shrink-0 justify-end">
@@ -3188,22 +3206,24 @@ export function AutoscuoleStudentsPage({
           <p className={cn(sectionLabelClass, "mb-3")}>Obbligo guide</p>
           <div className="mb-2.5 flex items-baseline gap-1">
             <span className="text-[32px] font-bold leading-none tracking-[-1px] text-foreground">
-              {register.summary.completedLessons}
+              {formatDrivingHours(register.summary.completedMinutes ?? 0)}
             </span>
-            <span className="text-base font-medium text-[#929292]">/{register.summary.requiredLessons}</span>
+            <span className="text-base font-medium text-[#929292]">
+              /{formatDrivingHours(register.summary.requiredMinutes ?? 0)} ore
+            </span>
           </div>
           <div className="mb-1.5 h-1 overflow-hidden rounded-[2px] bg-[#f2f2f2]">
             <div
               className="h-full rounded-[2px] bg-navy-900 transition-all"
               style={{
-                width: `${Math.min(100, (register.summary.completedLessons / Math.max(1, register.summary.requiredLessons)) * 100)}%`,
+                width: `${Math.min(100, ((register.summary.completedMinutes ?? 0) / Math.max(1, register.summary.requiredMinutes ?? 0)) * 100)}%`,
               }}
             />
           </div>
           <p className="text-[12px] font-medium text-[#929292]">
             {register.summary.isCompleted
               ? "Obbligo completato"
-              : `${register.summary.remaining} rimanenti`}
+              : drivingHoursRemainingLabel(register.summary.remainingMinutes ?? 0)}
           </p>
         </section>
 
