@@ -62,6 +62,12 @@ ricompare nel foglio SOLO sulle guide che hanno un suo punteggio, marcata "(non 
   compilare il pagellino tutti i giorni, quindi sono loro a sapere quali voci servono. Restano
   fuori segretarie e allievi. `getEvaluationSheet` invece non ha guardia: la lettura è per
   chiunque abbia accesso al servizio.
+- **Chi legge il pagellino di una guida** (`getAppointmentEvaluation`, REG-729 del 06/11): lo
+  staff qualunque guida dell'autoscuola; l'**allievo solo le sue** e solo se l'autoscuola gli ha
+  aperto le note (`limits.studentNotesEnabled`), altrimenti «Guida non trovata». Stesso
+  interruttore negli elenchi guide (`getAutoscuolaAppointments`, rami light e full) e nel
+  registro (`getAutoscuolaStudentDrivingRegister`: un allievo solo il proprio). Test:
+  `tests/unit/autoscuole/appointment-evaluation-access.test.ts`.
 - La configurazione si fa **anche dall'app** (Altro → Pagellino) dalla stessa data, tramite
   `GET`/`PUT /api/autoscuole/evaluation-sheet` — due proxy secchi sulle action di questo file,
   nessuna logica duplicata. Il disegno e i gesti stanno in

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
-import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
+import { isInstructor, isOwner, isStudent } from "@/lib/autoscuole/roles";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
@@ -56,6 +56,15 @@ export type EvaluationSheetDTO = {
  */
 const canManageSettings = (role: string, autoscuolaRole: string | null) =>
   role === "admin" || isOwner(autoscuolaRole) || isInstructor(autoscuolaRole);
+
+/** Le note (e quindi il pagellino) sono aperte agli allievi? `limits.studentNotesEnabled`. */
+async function areStudentNotesEnabled(companyId: string): Promise<boolean> {
+  const service = await prisma.companyService.findFirst({
+    where: { companyId, serviceKey: "AUTOSCUOLE" },
+    select: { limits: true },
+  });
+  return ((service?.limits ?? {}) as Record<string, unknown>).studentNotesEnabled === true;
+}
 
 /** Voci ATTIVE di una company, in ordine. Usata anche dalla route mobile. */
 export async function listCompanyEvaluationItems(
@@ -188,11 +197,19 @@ export async function getAppointmentEvaluation(appointmentId: string): Promise<
 > {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    // Un ALLIEVO legge solo il pagellino delle SUE guide, e solo se
+    // l'autoscuola gli ha aperto le note (stesso interruttore dell'elenco
+    // guide). Prima bastava essere della stessa autoscuola.
+    const callerIsStudent = isStudent(membership.autoscuolaRole);
     const appointment = await prisma.autoscuolaAppointment.findFirst({
-      where: { id: appointmentId, companyId: membership.companyId },
+      where: {
+        id: appointmentId,
+        companyId: membership.companyId,
+        ...(callerIsStudent ? { studentId: membership.userId } : {}),
+      },
       select: { id: true },
     });
-    if (!appointment) {
+    if (!appointment || (callerIsStudent && !(await areStudentNotesEnabled(membership.companyId)))) {
       return { success: false as const, message: "Guida non trovata." };
     }
 

@@ -22,12 +22,12 @@ import { LESSON_BUFFER_BLOCK_REASON } from "@/lib/autoscuole/agenda-occupancy";
 const STEP_MS = 5 * 60 * 1000;
 
 /**
- * Segnalazione Ricca (06/11): guida 9:00–10:00 avviata in Road alle 8:45 → in
- * agenda 8:45–9:45, la durata prenotata resta quella. L'inizio diventa l'avvio
- * in Road arrotondato per difetto ai 5 minuti (8:47 → 8:45), solo se è PRIMA
- * dell'inizio prenotato: in ritardo l'inizio non si tocca (la guida si
- * accorcia, va bene così). Gemello mobile: `effectiveLessonEnd` in
- * `reglo-mobile/src/road/returnEta.ts` (residuo e avvisi durante la guida).
+ * Segnalazione Ricca (06/11, REG-728): guida 9:00–10:00 avviata in Road alle
+ * 8:45 → l'inizio diventa l'avvio in Road arrotondato per difetto ai 5 minuti
+ * (8:47 → 8:45), solo se è PRIMA dell'inizio prenotato: in ritardo l'inizio
+ * non si tocca. La fine NON scala con l'anticipo: è l'orario reale di
+ * chiusura (`roadLessonEnd`), quindi chiusa alle 9:50 → 8:45–9:50 (65'), ed è
+ * questa durata che conta per le ore obbligatorie (REG-726).
  */
 export function roadLessonStart(startsAt: Date, startedAt: Date | null): Date {
   if (!startedAt) return startsAt;
@@ -119,11 +119,11 @@ export async function alignLessonEndToRoad(
     }
   }
 
-  // Partita in anticipo: inizio e fine prenotata scalano insieme (durata
-  // invariata), poi la fine segue l'orario reale come sempre.
+  // Partita in anticipo: l'inizio va all'avvio reale; la fine segue sempre
+  // l'orario reale di chiusura (REG-728: non scala con l'anticipo).
   const start = roadLessonStart(a.startsAt, startedAt);
   const early = a.startsAt.getTime() - start.getTime();
-  const end = roadLessonEnd(start, new Date(bookedEnd.getTime() - early), endedAt, next);
+  const end = roadLessonEnd(start, bookedEnd, endedAt, next);
   if (!early && end.getTime() === bookedEnd.getTime() && a.endsAt) return false;
   await db.autoscuolaAppointment.update({
     where: { id: a.id },

@@ -107,7 +107,7 @@ describe("REG-723 alignLessonEndToRoad", () => {
   });
 });
 
-describe("Ricca 06/11: guida avviata in anticipo", () => {
+describe("REG-728 guida avviata in anticipo: inizio all'avvio, fine alla chiusura reale", () => {
   it("l'inizio diventa l'avvio arrotondato per difetto ai 5 minuti", () => {
     expect(roadLessonStart(at("09:00"), new Date("2026-11-04T08:47:30Z"))).toEqual(at("08:45"));
   });
@@ -130,13 +130,28 @@ describe("Ricca 06/11: guida avviata in anticipo", () => {
     ]);
   });
 
-  it("avviata in anticipo ma guidata fino alla fine prenotata: si allunga come uno sforo", async () => {
+  it("avviata in anticipo e guidata fino alla fine prenotata: 8:45–10:00, 75'", async () => {
     const { db, writes } = fakeDb({ lesson: { id: "a", startsAt: at("09:00"), endsAt: at("10:00") } });
     await alignLessonEndToRoad(db, "a", at("10:00"), at("08:45"));
     expect(writes).toEqual([{ what: "lesson", data: { startsAt: at("08:45"), endsAt: at("10:00") } }]);
   });
 
-  it("avviata in ritardo: resta l'inizio prenotato e si accorcia la fine", async () => {
+  it("la fine NON scala con l'anticipo: chiusa alle 9:52 → 8:45–9:55", async () => {
+    const { db, writes } = fakeDb({ lesson: { id: "a", startsAt: at("09:00"), endsAt: at("10:00") } });
+    await alignLessonEndToRoad(db, "a", new Date("2026-11-04T09:52:10Z"), new Date("2026-11-04T08:47:00Z"));
+    expect(writes).toEqual([{ what: "lesson", data: { startsAt: at("08:45"), endsAt: at("09:55") } }]);
+  });
+
+  it("in anticipo e oltre la fine prenotata: si ferma al prossimo impegno, non prima della fine prenotata", async () => {
+    const { db, writes } = fakeDb({
+      lesson: { id: "a", startsAt: at("09:00"), endsAt: at("10:00") },
+      nextLesson: at("10:15"),
+    });
+    await alignLessonEndToRoad(db, "a", at("10:30"), at("08:45"));
+    expect(writes).toEqual([{ what: "lesson", data: { startsAt: at("08:45"), endsAt: at("10:15") } }]);
+  });
+
+  it("avviata in ritardo e chiusa all'orario: inizio e fine prenotati restano", async () => {
     const { db, writes } = fakeDb({ lesson: { id: "a", startsAt: at("09:00"), endsAt: at("10:00") } });
     await alignLessonEndToRoad(db, "a", at("10:00"), at("09:10"));
     expect(writes).toEqual([]);

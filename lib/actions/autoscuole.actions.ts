@@ -2568,6 +2568,11 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const companyId = membership.companyId;
+    // Il registro (note, penali, pagellini) è dello staff: un allievo, al più,
+    // il proprio.
+    if (isStudent(membership.autoscuolaRole) && studentId !== membership.userId) {
+      return { success: false, message: "Allievo non trovato." };
+    }
 
     const studentMembership = await prisma.companyMember.findFirst({
       where: {
@@ -3400,13 +3405,16 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
           groupLessonKind: gl?.kind ?? null,
           groupLessonMotoType: gl?.motoLessonType ?? null,
           groupLessonFilled: gl?.filled ?? null,
-          evaluations: (item.evaluations ?? []).map((e) => ({
-            itemId: e.item.id,
-            label: e.item.label,
-            scaleMax: e.item.scaleMax,
-            score: e.score,
-            notApplicable: e.notApplicable,
-          })),
+          // Come il ramo light: all'allievo con le note spente niente pagellino.
+          evaluations: studentNotesEnabled
+            ? (item.evaluations ?? []).map((e) => ({
+                itemId: e.item.id,
+                label: e.item.label,
+                scaleMax: e.item.scaleMax,
+                score: e.score,
+                notApplicable: e.notApplicable,
+              }))
+            : [],
         };
       }),
     };
