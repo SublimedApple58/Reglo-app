@@ -617,7 +617,7 @@ export function GroupLessonCreateDialog({
               </div>
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Ora inizio</Label>
-                <TimePickerInput value={time} onChange={setTime} />
+                <TimePickerInput freeInput value={time} onChange={setTime} />
               </div>
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Durata</Label>

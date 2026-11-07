@@ -603,6 +603,7 @@ function DurationField({
         })}
         <div className="mx-0.5 h-5 w-px shrink-0 bg-[#e6e6e8]" />
         <TimePickerInput
+          freeInput
           value={endTime}
           minTime={examMinToTime(Math.min(startMin + 15, 1440))}
           maxTime="24:00"
@@ -6473,7 +6474,7 @@ export function AutoscuoleAgendaPage({
                 </div>
                 <div>
                   <p className="mb-1.5 text-xs font-semibold text-[#555555]">Orario</p>
-                  <TimePickerInput value={form.time} onChange={(value) => setForm((prev) => ({ ...prev, time: value }))} />
+                  <TimePickerInput freeInput value={form.time} onChange={(value) => setForm((prev) => ({ ...prev, time: value }))} />
                 </div>
               </div>
               <div>
@@ -6518,7 +6519,7 @@ export function AutoscuoleAgendaPage({
                     </span>
                     <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
                       <DatePickerInput value={entry.day} onChange={(value) => updateEntry(entry.id, { day: value })} />
-                      <TimePickerInput value={entry.time} onChange={(value) => updateEntry(entry.id, { time: value })} />
+                      <TimePickerInput freeInput value={entry.time} onChange={(value) => updateEntry(entry.id, { time: value })} />
                     </div>
                     {entries.length > 1 ? (
                       <button
@@ -7343,6 +7344,7 @@ export function AutoscuoleAgendaPage({
                   <div>
                     <div className="mb-1.5 text-[13px] font-semibold text-[#6a6a6a]">Orario</div>
                     <TimePickerInput
+                      freeInput
                       value={examDraftTime}
                       placeholder="Orario da definire"
                       minuteStep={15}
@@ -7816,7 +7818,7 @@ export function AutoscuoleAgendaPage({
             {examForm.timeSet && (
               <div>
                 <p className="mb-1.5 text-xs font-semibold text-[#555555]">Orario</p>
-                <TimePickerInput value={examForm.time} onChange={(v) => setExamForm((f) => ({ ...f, time: v }))} />
+                <TimePickerInput freeInput value={examForm.time} onChange={(v) => setExamForm((f) => ({ ...f, time: v }))} />
               </div>
             )}
           </div>
@@ -8013,7 +8015,7 @@ export function AutoscuoleAgendaPage({
             </div>
             <div>
               <p className="mb-1.5 text-xs font-semibold text-[#555555]">Ora inizio</p>
-              <TimePickerInput value={blockForm.startTime} onChange={(v) => setBlockForm((f) => ({ ...f, startTime: v }))} />
+              <TimePickerInput freeInput value={blockForm.startTime} onChange={(v) => setBlockForm((f) => ({ ...f, startTime: v }))} />
             </div>
           </div>
           <DurationField

@@ -682,6 +682,7 @@ export function GroupLessonManageDialog({
                 <div>
                   <div className="mb-1.5 text-[12px] font-semibold text-[#6a6a6a]">Inizio</div>
                   <TimePickerInput
+                    freeInput
                     value={startLocal.slice(11, 16) || null}
                     onChange={(t) => setStartLocal(`${startLocal.slice(0, 10)}T${t}`)}
                     minTime="06:00"

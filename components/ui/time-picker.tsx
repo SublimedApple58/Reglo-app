@@ -282,7 +282,9 @@ export function TimePickerInput({
                   const next = formatTypedTime(e.target.value);
                   setTyped(next);
                   setTypedError(false);
-                  const parsed = parseTypedTime(next, bounds);
+                  // Le colonne seguono solo un orario completo: «145» mentre si
+                  // scrive 14:50 non deve saltare a 1:45 (Invio accetta anche «950»).
+                  const parsed = /^\d{1,2}:\d{2}$/.test(next) ? parseTypedTime(next, bounds) : null;
                   if (parsed) {
                     touchedRef.current = true;
                     setDraft(parsed);
