@@ -161,6 +161,7 @@ import { useAtomValue as useAtomValueRoad } from "jotai";
 import { companyAtom as companyAtomRoad } from "@/atoms/company.store";
 import { isRoadEnabled } from "@/lib/services";
 import { StudentRoadLine, StudentRoadTab, useStudentRoad } from "./road/StudentRoad";
+import { EvaluationRows } from "./EvaluationRows";
 import { usePathname as useRoadPathname, useRouter as useRoadRouter, useSearchParams as useRoadSearchParams } from "next/navigation";
 import {
   blockUntilDateToInstant,
@@ -388,43 +389,7 @@ function EvaluationRecap({
         <span className="font-medium text-[#929292]">{label}</span>
         <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} strokeWidth={2.2} />
       </button>
-      {open && (
-        <div className="mt-1.5 rounded-[10px] border border-[#ececec] bg-white px-3">
-          {list.map((row, i) => (
-            <div
-              key={row.itemId}
-              className={cn(
-                "flex items-center justify-between gap-3 py-2",
-                i > 0 && "border-t border-[#f4f4f6]",
-              )}
-            >
-              <span
-                className={cn(
-                  "text-[12.5px] font-medium",
-                  row.notApplicable ? "text-[#a3a3ad]" : "text-foreground",
-                )}
-              >
-                {row.label}
-              </span>
-              {/* Voce esclusa da questa guida: si mostra lo stesso, così si
-                  distingue "non si applicava" da "dimenticata". */}
-              {row.notApplicable || row.score == null ? (
-                <span className="shrink-0 text-[11.5px] font-medium text-[#a3a3ad]">
-                  — non valutabile
-                </span>
-              ) : (
-                <span className="flex shrink-0 items-center gap-0.5 text-[11px]">
-                  {Array.from({ length: row.scaleMax }, (_, j) => (
-                    <span key={j} className={j < row.score! ? "text-yellow-400" : "text-gray-200"}>
-                      ★
-                    </span>
-                  ))}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      {open && <EvaluationRows rows={list} className="mt-1.5" />}
     </div>
   );
 }
@@ -1500,6 +1465,23 @@ export function AutoscuoleStudentsPage({
     () => students.find((student) => student.id === selectedStudentId) ?? null,
     [selectedStudentId, students],
   );
+
+  // Tab Road: il pagellino più recente dell'allievo (stessi dati della tab Note).
+  const lastEvaluation = React.useMemo(() => {
+    const withSheet = (register?.lessons ?? []).filter(
+      (l) => l.status !== "cancelled" && (l.evaluations?.length ?? 0) > 0,
+    );
+    if (!withSheet.length) return null;
+    const last = withSheet.reduce((a, b) =>
+      new Date(b.startsAt).getTime() > new Date(a.startsAt).getTime() ? b : a,
+    );
+    return {
+      lessonId: last.id,
+      startsAt: new Date(last.startsAt).toISOString(),
+      instructorName: last.instructorName,
+      rows: last.evaluations ?? [],
+    };
+  }, [register]);
 
   const loadRegister = React.useCallback(
     async (studentId: string) => {
@@ -4767,6 +4749,7 @@ export function AutoscuoleStudentsPage({
                   studentId={selectedStudentId}
                   studentName={[register.student?.firstName, register.student?.lastName].filter(Boolean).join(" ")}
                   data={studentRoad.data}
+                  lastEvaluation={lastEvaluation}
                 />
               ) : null}
             </>

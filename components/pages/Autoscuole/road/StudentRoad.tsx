@@ -2,13 +2,26 @@
 
 import React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
+import { AnimatePresence, motion } from "motion/react";
 import { ChevronRight } from "lucide-react";
 import type { Marker as MlMarker } from "maplibre-gl";
 
 import { cn } from "@/lib/utils";
 import { roadApi, type RoadStudentHotspot, type RoadStudentItem, type RoadStudentRoad } from "@/lib/autoscuole/road/client";
-import { addHtmlMarker, htmlElement, lineBounds, toLngLat, useRoadMap } from "./road-map";
+import { evaluationSummary, evaluationSummaryLabel } from "@/lib/autoscuole/evaluation-sheet";
+import { EvaluationRows, type EvaluationRow } from "../EvaluationRows";
+import {
+  addHtmlMarker,
+  htmlElement,
+  lineBounds,
+  raiseRoute,
+  removeRoute,
+  toLngLat,
+  upsertRoute,
+  useRoadMap,
+} from "./road-map";
 import { RoadMapFallback, SymbolTile } from "./road-ui";
 import { RouteThumb } from "./RoadExamRoutesSection";
 import { useCompanyHotspots } from "./road-hotspot-match";
@@ -19,7 +32,8 @@ import { currentUrl, hotspotHref, rememberList, rememberPrev, roadViewHref, sess
  * numeri, andamento, i suoi punti critici e le ultime guide; nella tab «Note»
  * resta solo una riga di testo sotto la guida, che apre il dettaglio in Road
  * (il ritorno riporta qui). Dati da `GET /road/students/[id]` (titolare:
- * tutte; istruttore: le sue).
+ * tutte; istruttore: le sue). In cima l'ultimo pagellino e la mappa con
+ * tutti i percorsi sovrapposti (Ricca, punti 6 e 10).
  */
 
 const km = (m: number) => (m / 1000).toLocaleString("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -86,15 +100,24 @@ export function StudentRoadLine({ item, all }: { item: RoadStudentItem; all: Roa
   );
 }
 
+export type StudentLastEvaluation = {
+  lessonId: string;
+  startsAt: string;
+  instructorName: string | null;
+  rows: EvaluationRow[];
+};
+
 /** Tab «Road» della scheda allievo (REG-720). */
 export function StudentRoadTab({
   studentId,
   studentName,
   data,
+  lastEvaluation,
 }: {
   studentId: string;
   studentName: string;
   data: RoadStudentRoad | null;
+  lastEvaluation?: StudentLastEvaluation | null;
 }) {
   const locale = useLocale();
   const open = useOpenSessionHref();
@@ -105,7 +128,7 @@ export function StudentRoadTab({
     return (
       <div className="space-y-3" data-testid="student-road-tab">
         <div className="h-20 animate-pulse rounded-2xl bg-[#f7f7f7]" />
-        <div className="h-48 animate-pulse rounded-2xl bg-[#f7f7f7]" />
+        <div className="h-[340px] animate-pulse rounded-[18px] bg-[#f7f7f7]" />
       </div>
     );
   }
@@ -115,6 +138,7 @@ export function StudentRoadTab({
   if (!items.length) {
     return (
       <div className="pt-6" data-testid="student-road-tab">
+        {lastEvaluation ? <LastEvaluationCard evaluation={lastEvaluation} className="mb-7" /> : null}
         <b className="block text-[15px] font-semibold text-[#111111]">Ancora nessuna guida con Road</b>
         <p className="mt-1 text-[13.5px] leading-[1.5] text-[#6a6a6a]">
           Quando l&apos;istruttore registra una guida di {first} con Road, qui trovi percorsi, errori e dove sbaglia più spesso.
@@ -134,6 +158,7 @@ export function StudentRoadTab({
 
   return (
     <div className="leading-[1.25]" data-testid="student-road-tab">
+      {lastEvaluation ? <LastEvaluationCard evaluation={lastEvaluation} className="mb-7" /> : null}
       <div className="grid grid-cols-3">
         <Stat value={String(items.length)} label={items.length === 1 ? "guida in Road" : "guide in Road"} />
         <Stat value={km(meters)} unit="km" label="percorsi" divided />
@@ -149,6 +174,8 @@ export function StudentRoadTab({
           </b>
         </p>
       ) : null}
+
+      <AllRoutesMap items={items} />
 
       {hotspots.length ? (
         <>
@@ -246,6 +273,236 @@ export function StudentRoadTab({
         <ChevronRight className="size-4" strokeWidth={2.2} />
       </Link>
     </div>
+  );
+}
+
+/** «Ultimo pagellino»: le voci della guida valutata più di recente. */
+function LastEvaluationCard({ evaluation, className }: { evaluation: StudentLastEvaluation; className?: string }) {
+  const label = evaluationSummaryLabel(evaluationSummary(evaluation.rows));
+  return (
+    <section className={className} data-testid="student-road-last-evaluation">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-[16px] font-semibold text-[#111111]">Ultimo pagellino</h3>
+        {label ? <span className="text-[13px] font-semibold tabular-nums text-[#111111]">{label}</span> : null}
+      </div>
+      <p className="mt-0.5 text-[13px] text-[#6a6a6a]">
+        {longDay(evaluation.startsAt)}
+        {evaluation.instructorName ? ` · ${evaluation.instructorName}` : ""}
+      </p>
+      <EvaluationRows rows={evaluation.rows} className="mt-3 rounded-[14px] px-4" />
+    </section>
+  );
+}
+
+/**
+ * Le tracce da inquadrare: quelle entro 25 km dal centro mediano. Una traccia
+ * isolata lontana (GPS impazzito, prova fuori zona) si disegna lo stesso ma
+ * non allarga la vista a mezza Italia.
+ */
+function framedTracks(items: RoadStudentItem[]) {
+  const centers = items.map((it) => {
+    const n = it.thumb.length;
+    return [it.thumb.reduce((a, p) => a + p[0], 0) / n, it.thumb.reduce((a, p) => a + p[1], 0) / n] as const;
+  });
+  const median = (xs: number[]) => {
+    const sorted = [...xs].sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
+  };
+  const lat = median(centers.map((c) => c[0]));
+  const lng = median(centers.map((c) => c[1]));
+  const kmPerDegLng = 111 * Math.cos((lat * Math.PI) / 180);
+  const near = items.filter((_, i) => {
+    const dLat = (centers[i][0] - lat) * 111;
+    const dLng = (centers[i][1] - lng) * kmPerDegLng;
+    return Math.hypot(dLat, dLng) <= 25;
+  });
+  return near.length ? near : items;
+}
+
+const ALL_ROUTES = "srt-all";
+const ALL_ROUTES_HIT = "srt-all-hit";
+const ALL_ROUTES_HOVER = "srt-hover";
+
+/**
+ * «Tutti i percorsi»: le miniature (60 punti) di ogni guida sovrapposte. Le
+ * più recenti sono nere e sopra, le vecchie sfumano verso il fondo; passando
+ * su una traccia si accende col bordo bianco, il clic apre quella guida.
+ */
+function AllRoutesMap({ items }: { items: RoadStudentItem[] }) {
+  const router = useRouter();
+  const open = useOpenSessionHref();
+  const drawable = React.useMemo(() => items.filter((it) => it.thumb.length >= 2), [items]);
+  const ref = React.useRef<HTMLDivElement>(null);
+  const start = drawable[0]?.thumb[0] ?? [45.07, 7.68];
+  const { handle, failed } = useRoadMap(ref, { center: start, zoom: 13 });
+  const [hover, setHover] = React.useState<{ item: RoadStudentItem; x: number; y: number } | null>(null);
+  const hoverIdRef = React.useRef<string | null>(null);
+
+  // Riferimenti sempre aggiornati per i listener della mappa (registrati una volta).
+  const byIdRef = React.useRef(new Map<string, RoadStudentItem>());
+  byIdRef.current = new Map(drawable.map((it) => [it.id, it]));
+  const openRef = React.useRef<(item: RoadStudentItem) => void>(() => {});
+  openRef.current = (item) => {
+    const { href, onClick } = open(item, items);
+    onClick();
+    router.push(href);
+  };
+
+  React.useEffect(() => {
+    if (!handle) return;
+    const { map } = handle;
+    const n = drawable.length;
+    // Dalla più vecchia alla più recente: l'ultima disegnata sta sopra.
+    const features = drawable
+      .map((it, i) => ({
+        type: "Feature" as const,
+        properties: { id: it.id, age: n > 1 ? i / (n - 1) : 0 },
+        geometry: { type: "LineString" as const, coordinates: it.thumb.map((p) => toLngLat(p)) },
+      }))
+      .reverse();
+    const data = { type: "FeatureCollection" as const, features };
+    const src = map.getSource(ALL_ROUTES) as { setData?: (d: typeof data) => void } | undefined;
+    if (src?.setData) src.setData(data);
+    else {
+      map.addSource(ALL_ROUTES, { type: "geojson", data });
+      map.addLayer({
+        id: `${ALL_ROUTES}-c`,
+        type: "line",
+        source: ALL_ROUTES,
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": "#ffffff",
+          "line-width": ["interpolate", ["linear"], ["get", "age"], 0, 7, 1, 5],
+          "line-opacity": ["interpolate", ["linear"], ["get", "age"], 0, 0.9, 1, 0.45],
+        },
+      });
+      map.addLayer({
+        id: ALL_ROUTES,
+        type: "line",
+        source: ALL_ROUTES,
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": ["interpolate", ["linear"], ["get", "age"], 0, "#111111", 0.5, "#77736b", 1, "#c4bfb3"],
+          "line-width": ["interpolate", ["linear"], ["get", "age"], 0, 3.4, 1, 2.2],
+          "line-opacity": ["interpolate", ["linear"], ["get", "age"], 0, 1, 1, 0.75],
+        },
+      });
+      // Fascia invisibile più larga: le tracce sottili si prendono col mouse.
+      map.addLayer({
+        id: ALL_ROUTES_HIT,
+        type: "line",
+        source: ALL_ROUTES,
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#000000", "line-width": 14, "line-opacity": 0 },
+      });
+    }
+    const pts = framedTracks(drawable).flatMap((it) => it.thumb.map((p) => toLngLat(p)));
+    const b = lineBounds(handle.lib, pts);
+    if (b) map.fitBounds(b, { padding: 36, duration: 0, maxZoom: 15 });
+  }, [handle, drawable]);
+
+  React.useEffect(() => {
+    if (!handle) return;
+    const { map, lib } = handle;
+    // La rotella resta allo scorrimento della scheda: zoom coi pulsanti o col doppio clic.
+    map.scrollZoom.disable();
+    const nav = new lib.NavigationControl({ showCompass: false });
+    map.addControl(nav, "top-right");
+
+    const clear = () => {
+      hoverIdRef.current = null;
+      removeRoute(map, ALL_ROUTES_HOVER);
+      map.getCanvas().style.cursor = "";
+      setHover(null);
+    };
+    const onMove = (e: { point: { x: number; y: number }; features?: Array<{ properties?: Record<string, unknown> }> }) => {
+      const id = e.features?.[0]?.properties?.id;
+      const item = typeof id === "string" ? byIdRef.current.get(id) : undefined;
+      if (!item) return clear();
+      map.getCanvas().style.cursor = "pointer";
+      if (hoverIdRef.current !== item.id) {
+        hoverIdRef.current = item.id;
+        upsertRoute(map, ALL_ROUTES_HOVER, item.thumb.map((p) => toLngLat(p)), { width: 4.5, color: "#111111", opacity: 1 });
+        raiseRoute(map, ALL_ROUTES_HOVER);
+      }
+      setHover({ item, x: e.point.x, y: e.point.y });
+    };
+    const onClick = (e: { features?: Array<{ properties?: Record<string, unknown> }> }) => {
+      const id = e.features?.[0]?.properties?.id;
+      const item = typeof id === "string" ? byIdRef.current.get(id) : undefined;
+      if (item) openRef.current(item);
+    };
+    map.on("mousemove", ALL_ROUTES_HIT, onMove);
+    map.on("mouseleave", ALL_ROUTES_HIT, clear);
+    map.on("click", ALL_ROUTES_HIT, onClick);
+    return () => {
+      map.off("mousemove", ALL_ROUTES_HIT, onMove);
+      map.off("mouseleave", ALL_ROUTES_HIT, clear);
+      map.off("click", ALL_ROUTES_HIT, onClick);
+      map.removeControl(nav);
+    };
+  }, [handle]);
+
+  if (!drawable.length) return null;
+  return (
+    <section className="mt-7" data-testid="student-road-all-routes">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-[16px] font-semibold text-[#111111]">Tutti i percorsi</h3>
+        <span className="text-[13px] tabular-nums text-[#6a6a6a]">
+          {drawable.length === 1 ? "1 guida" : `${drawable.length} guide`}
+        </span>
+      </div>
+      <div className="relative mt-3 h-[340px] overflow-hidden rounded-[18px] border border-[#ebebeb] bg-[#f4f1ea] md:h-[380px]">
+        <div
+          className={cn(
+            "absolute inset-0 transition-opacity duration-300 ease-out [&_.maplibregl-ctrl-group]:!overflow-hidden [&_.maplibregl-ctrl-group]:!rounded-xl [&_.maplibregl-ctrl-group]:!shadow-[0_2px_10px_rgba(0,0,0,0.12)] [&_.maplibregl-ctrl-bottom-right]:origin-bottom-right [&_.maplibregl-ctrl-bottom-right]:scale-90",
+            handle ? "opacity-100" : "opacity-0",
+          )}
+        >
+          <div ref={ref} className="h-full w-full" />
+        </div>
+        {!handle ? <RoadMapFallback failed={failed} /> : null}
+        <AnimatePresence>
+          {hover ? (
+            <div
+              key="srt-tip"
+              className="pointer-events-none absolute z-10"
+              style={{
+                left: hover.x,
+                top: hover.y,
+                transform: `translate(${hover.x > 260 ? "calc(-100% - 12px)" : "12px"}, -50%)`,
+              }}
+            >
+              <motion.div
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                className="whitespace-nowrap rounded-xl bg-white px-3 py-2 text-[12.5px] leading-[1.35] shadow-[0_6px_20px_rgba(0,0,0,0.14)]"
+                data-testid="student-road-route-tip"
+              >
+                <b className="block font-semibold text-[#111111]">{longDay(hover.item.startedAt)}</b>
+                <span className="tabular-nums text-[#6a6a6a]">
+                  {hhmm(hover.item.startedAt)} · {km(hover.item.distanceMeters)} km
+                  {hover.item.markerBad ? ` · ${hover.item.markerBad} da migliorare` : ""}
+                </span>
+              </motion.div>
+            </div>
+          ) : null}
+        </AnimatePresence>
+      </div>
+      <div className="mt-2.5 flex items-center gap-2.5 text-[12.5px] text-[#6a6a6a]">
+        <span className="flex items-center gap-1.5">
+          <i className="block h-[3px] w-5 rounded-full bg-[#111111]" />
+          Più recenti
+        </span>
+        <span className="flex items-center gap-1.5">
+          <i className="block h-[2px] w-5 rounded-full bg-[#c4bfb3]" />
+          Meno recenti
+        </span>
+        <span className="ml-auto hidden sm:inline">Clic su un percorso per aprire la guida</span>
+      </div>
+    </section>
   );
 }
 
