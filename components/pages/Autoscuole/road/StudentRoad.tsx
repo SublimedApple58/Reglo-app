@@ -10,8 +10,6 @@ import type { Marker as MlMarker } from "maplibre-gl";
 
 import { cn } from "@/lib/utils";
 import { roadApi, type RoadStudentHotspot, type RoadStudentItem, type RoadStudentRoad } from "@/lib/autoscuole/road/client";
-import { evaluationSummary, evaluationSummaryLabel } from "@/lib/autoscuole/evaluation-sheet";
-import { EvaluationRows, type EvaluationRow } from "../EvaluationRows";
 import {
   addHtmlMarker,
   htmlElement,
@@ -32,8 +30,8 @@ import { currentUrl, hotspotHref, rememberList, rememberPrev, roadViewHref, sess
  * numeri, andamento, i suoi punti critici e le ultime guide; nella tab «Note»
  * resta solo una riga di testo sotto la guida, che apre il dettaglio in Road
  * (il ritorno riporta qui). Dati da `GET /road/students/[id]` (titolare:
- * tutte; istruttore: le sue). In cima l'ultimo pagellino e la mappa con
- * tutti i percorsi sovrapposti (Ricca, punti 6 e 10).
+ * tutte; istruttore: le sue). Sotto i numeri la mappa con
+ * tutti i percorsi sovrapposti (Ricca, punto 6).
  */
 
 const km = (m: number) => (m / 1000).toLocaleString("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -100,25 +98,16 @@ export function StudentRoadLine({ item, all }: { item: RoadStudentItem; all: Roa
   );
 }
 
-export type StudentLastEvaluation = {
-  lessonId: string;
-  startsAt: string;
-  instructorName: string | null;
-  rows: EvaluationRow[];
-};
-
 /** Tab «Road» della scheda allievo (REG-720). */
 export function StudentRoadTab({
   studentId,
   studentName,
   data,
-  lastEvaluation,
   instructorByLesson,
 }: {
   studentId: string;
   studentName: string;
   data: RoadStudentRoad | null;
-  lastEvaluation?: StudentLastEvaluation | null;
   /** Istruttore per guida (`appointmentId`), dal registro: nell'elenco dei percorsi. */
   instructorByLesson?: Map<string, string | null>;
 }) {
@@ -141,7 +130,6 @@ export function StudentRoadTab({
   if (!items.length) {
     return (
       <div className="pt-6" data-testid="student-road-tab">
-        {lastEvaluation ? <LastEvaluationCard evaluation={lastEvaluation} className="mb-7" /> : null}
         <b className="block text-[15px] font-semibold text-[#111111]">Ancora nessuna guida con Road</b>
         <p className="mt-1 text-[13.5px] leading-[1.5] text-[#6a6a6a]">
           Quando l&apos;istruttore registra una guida di {first} con Road, qui trovi percorsi, errori e dove sbaglia più spesso.
@@ -161,7 +149,6 @@ export function StudentRoadTab({
 
   return (
     <div className="leading-[1.25]" data-testid="student-road-tab">
-      {lastEvaluation ? <LastEvaluationCard evaluation={lastEvaluation} className="mb-7" /> : null}
       <div className="grid grid-cols-3">
         <Stat value={String(items.length)} label={items.length === 1 ? "guida in Road" : "guide in Road"} />
         <Stat value={km(meters)} unit="km" label="percorsi" divided />
@@ -276,24 +263,6 @@ export function StudentRoadTab({
         <ChevronRight className="size-4" strokeWidth={2.2} />
       </Link>
     </div>
-  );
-}
-
-/** «Ultimo pagellino»: le voci della guida valutata più di recente. */
-function LastEvaluationCard({ evaluation, className }: { evaluation: StudentLastEvaluation; className?: string }) {
-  const label = evaluationSummaryLabel(evaluationSummary(evaluation.rows));
-  return (
-    <section className={className} data-testid="student-road-last-evaluation">
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-[16px] font-semibold text-[#111111]">Ultimo pagellino</h3>
-        {label ? <span className="text-[13px] font-semibold tabular-nums text-[#111111]">{label}</span> : null}
-      </div>
-      <p className="mt-0.5 text-[13px] text-[#6a6a6a]">
-        {longDay(evaluation.startsAt)}
-        {evaluation.instructorName ? ` · ${evaluation.instructorName}` : ""}
-      </p>
-      <EvaluationRows rows={evaluation.rows} className="mt-3 rounded-[14px] px-4" />
-    </section>
   );
 }
 
