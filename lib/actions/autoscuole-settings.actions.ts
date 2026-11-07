@@ -501,6 +501,8 @@ const autoscuolaSettingsPatchSchema = z
     // REG-648 Road: giro della prossima guida e avvisi delle tappe (accesi di default).
     roadPlanEnabled: z.boolean().optional(),
     roadPlanAlertsEnabled: z.boolean().optional(),
+    // Ricca 07/11: guide avviate in anticipo, «Mantieni la durata prenotata» (spenta = orari reali).
+    roadEarlyKeepDuration: z.boolean().optional(),
     // Ordine custom delle colonne istruttore in agenda (REG-449): elenco di id,
     // anche parziale. Array vuoto = si torna all'ordine alfabetico.
     agendaInstructorOrder: z.array(z.string()).optional(),
@@ -731,6 +733,8 @@ export type AutoscuolaSettingsData = {
   roadPlanEnabled: boolean;
   /** REG-648: «Avvisi delle tappe durante la guida», acceso se assente. */
   roadPlanAlertsEnabled: boolean;
+  /** Ricca 07/11: guide avviate in anticipo — true = «Mantieni la durata prenotata», false (default) = «Orari reali». */
+  roadEarlyKeepDuration: boolean;
   agendaInstructorOrder: string[];
   studentNameOrder: StudentNameOrder;
 };
@@ -1146,6 +1150,8 @@ const resolveAutoscuolaSettingsData = async (
     // REG-648: nascono ACCESI (decisione di Tiziano, 29/10).
     roadPlanEnabled: limits.roadPlanEnabled !== false,
     roadPlanAlertsEnabled: limits.roadPlanAlertsEnabled !== false,
+    // Ricca 07/11: nasce SPENTA (orari reali, come REG-728).
+    roadEarlyKeepDuration: limits.roadEarlyKeepDuration === true,
     agendaInstructorOrder: asAgendaInstructorOrder(limits.agendaInstructorOrder),
     studentNameOrder: asStudentNameOrder(limits.studentNameOrder),
   };
@@ -1890,6 +1896,7 @@ export async function updateAutoscuolaSettings(
       roadCustomMarkers: payload.roadCustomMarkers ?? parseRoadCustomMarkers(limits.roadCustomMarkers),
       roadPlanEnabled: payload.roadPlanEnabled ?? limits.roadPlanEnabled !== false,
       roadPlanAlertsEnabled: payload.roadPlanAlertsEnabled ?? limits.roadPlanAlertsEnabled !== false,
+      roadEarlyKeepDuration: payload.roadEarlyKeepDuration ?? limits.roadEarlyKeepDuration === true,
       studentNameOrder: asStudentNameOrder(
         payload.studentNameOrder ?? limits.studentNameOrder,
       ),

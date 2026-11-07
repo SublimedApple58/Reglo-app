@@ -36,6 +36,29 @@ export function roadLessonStart(startsAt: Date, startedAt: Date | null): Date {
 }
 
 /**
+ * Impostazione «Guide avviate in anticipo» (Ricca, 07/11): `limits.roadEarlyKeepDuration`.
+ * - false / assente (DEFAULT) = «Orari reali»: come REG-728, la fine è la
+ *   chiusura reale;
+ * - true = «Mantieni la durata prenotata»: partita alle 8:45 una guida da 60'
+ *   → finisce alle 9:45 (anche se chiusa prima); se si sfora vale la regola di
+ *   sempre (orario reale, fino al prossimo impegno).
+ * Solo per le guide avviate PRIMA dell'inizio prenotato.
+ */
+export const roadEarlyKeepsDuration = (limits: Record<string, unknown>) => limits.roadEarlyKeepDuration === true;
+
+/**
+ * Fine della guida mentre si guida (app: residuo, «Fine 9:45», avvisi). Con
+ * «Mantieni la durata» e avvio in anticipo = inizio anticipato + durata
+ * prenotata; altrimenti la fine prenotata (REG-728).
+ */
+export function roadDriveEnd(startsAt: Date, bookedEnd: Date, startedAt: Date | null, keepDuration: boolean): Date {
+  if (!keepDuration) return bookedEnd;
+  const start = roadLessonStart(startsAt, startedAt);
+  const early = startsAt.getTime() - start.getTime();
+  return early > 0 ? new Date(bookedEnd.getTime() - early) : bookedEnd;
+}
+
+/**
  * La nuova fine della guida. `next` = inizio del prossimo impegno
  * dell'istruttore (null = nessuno): ferma solo l'allungamento, mai oltre la
  * fine prenotata all'indietro.
@@ -71,6 +94,7 @@ export async function alignLessonEndToRoad(
   appointmentId: string,
   endedAt: Date,
   startedAt: Date | null = null,
+  keepDuration = false,
 ): Promise<boolean> {
   const a = await db.autoscuolaAppointment.findUnique({
     where: { id: appointmentId },
@@ -119,11 +143,16 @@ export async function alignLessonEndToRoad(
     }
   }
 
-  // Partita in anticipo: l'inizio va all'avvio reale; la fine segue sempre
-  // l'orario reale di chiusura (REG-728: non scala con l'anticipo).
+  // Partita in anticipo: l'inizio va all'avvio reale. La fine segue l'orario
+  // reale di chiusura (REG-728: non scala con l'anticipo); con «Mantieni la
+  // durata prenotata» vale almeno inizio + durata prenotata, e se si sfora
+  // l'orario reale fino al prossimo impegno.
   const start = roadLessonStart(a.startsAt, startedAt);
   const early = a.startsAt.getTime() - start.getTime();
-  const end = roadLessonEnd(start, bookedEnd, endedAt, next);
+  const kept = keepDuration && early > 0 ? roadDriveEnd(a.startsAt, bookedEnd, startedAt, true) : null;
+  const end = kept
+    ? new Date(Math.max(kept.getTime(), roadLessonEnd(start, kept, endedAt, next).getTime()))
+    : roadLessonEnd(start, bookedEnd, endedAt, next);
   if (!early && end.getTime() === bookedEnd.getTime() && a.endsAt) return false;
   await db.autoscuolaAppointment.update({
     where: { id: a.id },

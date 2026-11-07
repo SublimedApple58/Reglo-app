@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { useLocale } from "next-intl";
-import { ChevronRight, Pencil, X } from "lucide-react";
+import { Check, ChevronRight, Pencil, X } from "lucide-react";
 
 import {
   getAutoscuolaSettings,
@@ -37,7 +37,9 @@ const newId = () =>
  *
  * In cima (REG-651) i due interruttori del giro, accesi di default e salvati
  * al tocco: «Proponi il giro» (`roadPlanEnabled`) e «Avvisi delle tappe»
- * (`roadPlanAlertsEnabled`, conta solo col giro acceso).
+ * (`roadPlanAlertsEnabled`, conta solo col giro acceso). Sotto (Ricca 07/11)
+ * «Guide avviate in anticipo»: orari reali (default) o durata prenotata
+ * (`roadEarlyKeepDuration`).
  */
 export function RoadSettingsPane() {
   const toast = useFeedbackToast();
@@ -47,6 +49,9 @@ export function RoadSettingsPane() {
   const [editing, setEditing] = React.useState<{ id: string; label: string } | null>(null);
   const [plan, setPlan] = React.useState<{ roadPlanEnabled: boolean; roadPlanAlertsEnabled: boolean } | null>(null);
   const [planSaving, setPlanSaving] = React.useState<PlanKey | null>(null);
+  // Ricca 07/11: guide avviate in anticipo (false = orari reali, default).
+  const [keepDuration, setKeepDuration] = React.useState<boolean | null>(null);
+  const [keepSaving, setKeepSaving] = React.useState<boolean | null>(null);
 
   React.useEffect(() => {
     let alive = true;
@@ -58,6 +63,7 @@ export function RoadSettingsPane() {
           roadPlanEnabled: res.data.roadPlanEnabled !== false,
           roadPlanAlertsEnabled: res.data.roadPlanAlertsEnabled !== false,
         });
+        setKeepDuration(res.data.roadEarlyKeepDuration === true);
       } else {
         setItems([]);
         toast.error({ description: res.message ?? "Impossibile caricare le segnalazioni." });
@@ -93,6 +99,18 @@ export function RoadSettingsPane() {
       return;
     }
     setPlan({ ...plan, [key]: value });
+  };
+
+  const chooseEarly = async (value: boolean) => {
+    if (keepDuration === null || keepSaving !== null || value === keepDuration) return;
+    setKeepSaving(value);
+    const res = await updateAutoscuolaSettings({ roadEarlyKeepDuration: value });
+    setKeepSaving(null);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile salvare l'impostazione." });
+      return;
+    }
+    setKeepDuration(value);
   };
 
   const add = async () => {
@@ -169,6 +187,37 @@ export function RoadSettingsPane() {
               divided
             />
           </>
+        )}
+      </div>
+
+      {/* Ricca 07/11: guida partita prima dell'orario prenotato. */}
+      <div className="mt-[30px] text-base font-semibold text-[#222222]">Guide avviate in anticipo</div>
+      <div className="mt-3.5 rounded-[18px] border border-[#ebebeb]" data-testid="road-early-settings">
+        {keepDuration === null ? (
+          <div className="space-y-3 p-[18px]">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-2/3" />
+          </div>
+        ) : (
+          <div role="radiogroup" aria-label="Guide avviate in anticipo">
+            <ChoiceRow
+              title="Orari reali"
+              description="La guida inizia quando l'istruttore parte in Road e finisce quando la termina. Partita alle 8:45 e terminata alle 9:50: in agenda 8:45–9:50."
+              selected={!keepDuration}
+              saving={keepSaving === false}
+              onSelect={() => void chooseEarly(false)}
+              testId="road-early-real"
+            />
+            <ChoiceRow
+              title="Mantieni la durata prenotata"
+              description="La guida dura quanto prenotato da quando parte. Una guida da 60 minuti partita alle 8:45 finisce alle 9:45: in app minuti rimasti e avvisi di fine contano da lì."
+              selected={keepDuration}
+              saving={keepSaving === true}
+              onSelect={() => void chooseEarly(true)}
+              testId="road-early-keep"
+              divided
+            />
+          </div>
         )}
       </div>
 
@@ -331,6 +380,55 @@ function PlanToggleRow({
         <InlineToggle checked={checked} onChange={onToggle} disabled={disabled || saving} size="lg" />
       </div>
     </div>
+  );
+}
+
+/** Una scelta fra due (Ricca 07/11): riga intera cliccabile, spunta a destra. */
+function ChoiceRow({
+  title,
+  description,
+  selected,
+  saving,
+  onSelect,
+  testId,
+  divided,
+}: {
+  title: string;
+  description: string;
+  selected: boolean;
+  saving: boolean;
+  onSelect: () => void;
+  testId: string;
+  divided?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onSelect}
+      data-testid={testId}
+      className={cn(
+        "flex w-full cursor-pointer items-center gap-4 px-[18px] py-4 text-left transition-colors duration-200 first:rounded-t-[18px] last:rounded-b-[18px] hover:bg-[#fafafa]",
+        divided && "border-t border-[#f0f0f0]",
+      )}
+    >
+      <span className="min-w-0 flex-1">
+        <b className="block text-[15px] font-medium text-[#222222]">{title}</b>
+        <span className="mt-0.5 block text-[13.5px] leading-[1.45] text-[#6a6a6a]">{description}</span>
+      </span>
+      <span className="grid w-6 shrink-0 place-items-center">
+        {saving ? (
+          <LoadingDots />
+        ) : (
+          <Check
+            className={cn("size-5 text-[#111111] transition-opacity duration-200", selected ? "opacity-100" : "opacity-0")}
+            strokeWidth={2.2}
+            aria-hidden
+          />
+        )}
+      </span>
+    </button>
   );
 }
 

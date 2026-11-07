@@ -1,4 +1,4 @@
-import { alignLessonEndToRoad, roadLessonEnd, roadLessonStart, slidLessonPause } from "@/lib/autoscuole/road/lesson-end";
+import { alignLessonEndToRoad, roadDriveEnd, roadEarlyKeepsDuration, roadLessonEnd, roadLessonStart, slidLessonPause } from "@/lib/autoscuole/road/lesson-end";
 
 const at = (hm: string) => new Date(`2026-11-04T${hm}:00.000Z`);
 
@@ -155,5 +155,59 @@ describe("REG-728 guida avviata in anticipo: inizio all'avvio, fine alla chiusur
     const { db, writes } = fakeDb({ lesson: { id: "a", startsAt: at("09:00"), endsAt: at("10:00") } });
     await alignLessonEndToRoad(db, "a", at("10:00"), at("09:10"));
     expect(writes).toEqual([]);
+  });
+});
+
+describe("Ricca: «Mantieni la durata prenotata» per le guide avviate in anticipo", () => {
+  it("l'impostazione è spenta di default (Orari reali)", () => {
+    expect(roadEarlyKeepsDuration({})).toBe(false);
+    expect(roadEarlyKeepsDuration({ roadEarlyKeepDuration: true })).toBe(true);
+  });
+
+  it("in guida: 9:00–10:00 avviata alle 8:47 → fine 9:45; spenta o in ritardo resta 10:00", () => {
+    expect(roadDriveEnd(at("09:00"), at("10:00"), new Date("2026-11-04T08:47:30Z"), true)).toEqual(at("09:45"));
+    expect(roadDriveEnd(at("09:00"), at("10:00"), at("08:45"), false)).toEqual(at("10:00"));
+    expect(roadDriveEnd(at("09:00"), at("10:00"), at("09:05"), true)).toEqual(at("10:00"));
+    expect(roadDriveEnd(at("09:00"), at("10:00"), null, true)).toEqual(at("10:00"));
+  });
+
+  it("avviata alle 8:45 e chiusa alle 9:30 → 8:45–9:45 (la durata resta 60'), pausa dopo", async () => {
+    const { db, writes } = fakeDb({
+      lesson: { id: "a", startsAt: at("09:00"), endsAt: at("10:00") },
+      pause: { id: "p", startsAt: at("10:00"), endsAt: at("10:10") },
+      nextLesson: at("11:00"),
+    });
+    expect(await alignLessonEndToRoad(db, "a", at("09:30"), at("08:45"), true)).toBe(true);
+    expect(writes).toEqual([
+      { what: "lesson", data: { startsAt: at("08:45"), endsAt: at("09:45") } },
+      { what: "pause", data: { startsAt: at("09:45"), endsAt: at("09:55") } },
+    ]);
+  });
+
+  it("chiusa alle 9:45 in punto → 8:45–9:45", async () => {
+    const { db, writes } = fakeDb({ lesson: { id: "a", startsAt: at("09:00"), endsAt: at("10:00") } });
+    await alignLessonEndToRoad(db, "a", at("09:45"), at("08:45"), true);
+    expect(writes).toEqual([{ what: "lesson", data: { startsAt: at("08:45"), endsAt: at("09:45") } }]);
+  });
+
+  it("se si sfora la fine tenuta vale l'orario reale: chiusa alle 9:52 → 8:45–9:55", async () => {
+    const { db, writes } = fakeDb({ lesson: { id: "a", startsAt: at("09:00"), endsAt: at("10:00") } });
+    await alignLessonEndToRoad(db, "a", new Date("2026-11-04T09:52:10Z"), at("08:45"), true);
+    expect(writes).toEqual([{ what: "lesson", data: { startsAt: at("08:45"), endsAt: at("09:55") } }]);
+  });
+
+  it("sfora oltre il prossimo impegno: si ferma lì", async () => {
+    const { db, writes } = fakeDb({
+      lesson: { id: "a", startsAt: at("09:00"), endsAt: at("10:00") },
+      nextLesson: at("10:15"),
+    });
+    await alignLessonEndToRoad(db, "a", at("10:30"), at("08:45"), true);
+    expect(writes).toEqual([{ what: "lesson", data: { startsAt: at("08:45"), endsAt: at("10:15") } }]);
+  });
+
+  it("avviata in ritardo: l'impostazione non c'entra (fine reale come sempre)", async () => {
+    const { db, writes } = fakeDb({ lesson: { id: "a", startsAt: at("09:00"), endsAt: at("10:00") } });
+    await alignLessonEndToRoad(db, "a", at("09:40"), at("09:10"), true);
+    expect(writes).toEqual([{ what: "lesson", data: { endsAt: at("09:40") } }]);
   });
 });

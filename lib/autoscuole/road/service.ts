@@ -14,7 +14,7 @@ import {
   resolveMarkerLabel,
   type RoadCustomMarker,
 } from "@/lib/autoscuole/road/catalog";
-import { alignLessonEndToRoad } from "@/lib/autoscuole/road/lesson-end";
+import { alignLessonEndToRoad, roadDriveEnd, roadEarlyKeepsDuration } from "@/lib/autoscuole/road/lesson-end";
 import { drivingSeconds, resolveEndedAt, sanitizePoints, trackDistanceMeters, type RoadPoint } from "@/lib/autoscuole/road/geo";
 import {
   buildCleanTrack,
@@ -140,6 +140,17 @@ function lessonDTO(a: AppointmentRow) {
     // Chiave della variante colore dell'auto 3D (veicolo → tinta istruttore → bianco).
     carColor: resolveCarColor(a.vehicle?.color, a.instructor?.color),
   };
+}
+
+/**
+ * La guida di una sessione IN CORSO: in più `roadEndsAt`, la fine che l'app usa
+ * mentre si guida (residuo, «Fine 9:45», avvisi). Con «Mantieni la durata
+ * prenotata» e avvio in anticipo è inizio anticipato + durata; altrimenti è
+ * `endsAt`. Le app che non lo leggono restano sulla fine prenotata.
+ */
+function liveLessonDTO(a: AppointmentRow, startedAt: Date | null, keepDuration: boolean) {
+  const dto = lessonDTO(a);
+  return { ...dto, roadEndsAt: roadDriveEnd(a.startsAt, lessonEnd(a), startedAt, keepDuration).toISOString() };
 }
 
 const sessionSelect = {
@@ -327,7 +338,10 @@ export async function getRoadState() {
     return ok({
       ...base,
       activeSession: active
-        ? { ...sessionDTO(active, active.appointment.startsAt), lesson: lessonDTO(active.appointment) }
+        ? {
+            ...sessionDTO(active, active.appointment.startsAt),
+            lesson: liveLessonDTO(active.appointment, active.startedAt, roadEarlyKeepsDuration(ctx.limits)),
+          }
         : null,
       eligibleLesson: eligible ? lessonDTO(eligible) : null,
     });
@@ -365,7 +379,11 @@ export async function startRoadSession(input: { appointmentId: string; plan?: un
     // Ripresa (app chiusa e riaperta): stessa sessione, anche se già chiusa
     // la restituiamo così la mobile mostra il riepilogo invece di un errore.
     if (appointment.roadSession) {
-      return ok({ ...sessionDTO(appointment.roadSession, appointment.startsAt), lesson: lessonDTO(appointment), resumed: true });
+      return ok({
+        ...sessionDTO(appointment.roadSession, appointment.startsAt),
+        lesson: liveLessonDTO(appointment, appointment.roadSession.startedAt, roadEarlyKeepsDuration(ctx.limits)),
+        resumed: true,
+      });
     }
 
     if (!ROAD_ELIGIBLE_STATUSES.includes(appointment.status)) {
@@ -411,7 +429,11 @@ export async function startRoadSession(input: { appointmentId: string; plan?: un
       }
       return s;
     });
-    return ok({ ...sessionDTO(created, appointment.startsAt), lesson: lessonDTO(appointment), resumed: false });
+    return ok({
+      ...sessionDTO(created, appointment.startsAt),
+      lesson: liveLessonDTO(appointment, created.startedAt, roadEarlyKeepsDuration(ctx.limits)),
+      resumed: false,
+    });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return startRoadSession(input); // doppio tap: la seconda chiamata riprende
@@ -814,7 +836,8 @@ export async function endRoadSession(sessionId: string, input: { endedAt?: unkno
       });
       // REG-723: l'agenda segue l'orario reale (libere e prenotate), pausa compresa.
       // Segnalazione Ricca: partita in anticipo = anche l'inizio si sposta.
-      if (await alignLessonEndToRoad(prisma, session.appointmentId, endedAt, session.startedAt)) {
+      // Ricca 07/11: con «Mantieni la durata prenotata» l'anticipo non accorcia la guida.
+      if (await alignLessonEndToRoad(prisma, session.appointmentId, endedAt, session.startedAt, roadEarlyKeepsDuration(ctx.limits))) {
         await invalidateLessonAgenda(ctx.companyId);
       }
       await savePlanReached(sessionId, ctx.companyId).catch((e) => console.warn("[road] planReached", e));
