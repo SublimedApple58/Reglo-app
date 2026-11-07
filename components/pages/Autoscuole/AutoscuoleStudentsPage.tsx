@@ -1466,6 +1466,11 @@ export function AutoscuoleStudentsPage({
     [selectedStudentId, students],
   );
 
+  // Tab Road: l'istruttore di ogni guida, per l'elenco sotto «Tutti i percorsi».
+  const instructorByLesson = React.useMemo(
+    () => new Map((register?.lessons ?? []).map((l) => [l.id, l.instructorName])),
+    [register],
+  );
   // Tab Road: il pagellino più recente dell'allievo (stessi dati della tab Note).
   const lastEvaluation = React.useMemo(() => {
     const withSheet = (register?.lessons ?? []).filter(
@@ -4750,6 +4755,7 @@ export function AutoscuoleStudentsPage({
                   studentName={[register.student?.firstName, register.student?.lastName].filter(Boolean).join(" ")}
                   data={studentRoad.data}
                   lastEvaluation={lastEvaluation}
+                  instructorByLesson={instructorByLesson}
                 />
               ) : null}
             </>

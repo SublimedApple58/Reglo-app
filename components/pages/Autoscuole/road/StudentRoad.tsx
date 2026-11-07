@@ -113,11 +113,14 @@ export function StudentRoadTab({
   studentName,
   data,
   lastEvaluation,
+  instructorByLesson,
 }: {
   studentId: string;
   studentName: string;
   data: RoadStudentRoad | null;
   lastEvaluation?: StudentLastEvaluation | null;
+  /** Istruttore per guida (`appointmentId`), dal registro: nell'elenco dei percorsi. */
+  instructorByLesson?: Map<string, string | null>;
 }) {
   const locale = useLocale();
   const open = useOpenSessionHref();
@@ -175,7 +178,7 @@ export function StudentRoadTab({
         </p>
       ) : null}
 
-      <AllRoutesMap items={items} />
+      <AllRoutesMap items={items} instructorByLesson={instructorByLesson} />
 
       {hotspots.length ? (
         <>
@@ -322,31 +325,66 @@ function framedTracks(items: RoadStudentItem[]) {
 const ALL_ROUTES = "srt-all";
 const ALL_ROUTES_HIT = "srt-all-hit";
 const ALL_ROUTES_HOVER = "srt-hover";
+const LIST_PREVIEW = 6;
 
 /**
- * «Tutti i percorsi»: le miniature (60 punti) di ogni guida sovrapposte. Le
- * più recenti sono nere e sopra, le vecchie sfumano verso il fondo; passando
- * su una traccia si accende col bordo bianco, il clic apre quella guida.
+ * Un colore per guida, dalla palette istruttori dell'agenda
+ * (`INSTRUCTOR_COLOR_CHOICES`) senza blu, azzurro, indaco e ciano, un tono più
+ * scuro (Tailwind 600) per restare sobri e leggibili sul fondo caldo. Ordine
+ * pensato perché due guide vicine nel tempo abbiano tinte lontane.
  */
-function AllRoutesMap({ items }: { items: RoadStudentItem[] }) {
+const ROUTE_COLORS = [
+  "#E11D48", // corallo
+  "#059669", // smeraldo
+  "#D97706", // ambra
+  "#7C3AED", // viola
+  "#0D9488", // teal
+  "#EA580C", // arancio
+  "#C026D3", // fucsia
+  "#65A30D", // lime
+  "#DB2777", // rosa
+  "#57534E", // pietra
+];
+const routeColor = (i: number) => ROUTE_COLORS[i % ROUTE_COLORS.length];
+const shortDay = (iso: string) => {
+  const s = new Date(iso).toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/Rome" });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
+
+/**
+ * «Tutti i percorsi»: le miniature (60 punti) di ogni guida sovrapposte, ognuna
+ * col suo colore (le recenti più spesse e piene, le vecchie più trasparenti).
+ * Sotto, l'elenco delle guide: passando su una riga o su una traccia quella
+ * si accende e le altre si attenuano; il clic apre la guida.
+ */
+function AllRoutesMap({
+  items,
+  instructorByLesson,
+}: {
+  items: RoadStudentItem[];
+  instructorByLesson?: Map<string, string | null>;
+}) {
   const router = useRouter();
   const open = useOpenSessionHref();
   const drawable = React.useMemo(() => items.filter((it) => it.thumb.length >= 2), [items]);
+  const colorById = React.useMemo(() => new Map(drawable.map((it, i) => [it.id, routeColor(i)])), [drawable]);
   const ref = React.useRef<HTMLDivElement>(null);
   const start = drawable[0]?.thumb[0] ?? [45.07, 7.68];
   const { handle, failed } = useRoadMap(ref, { center: start, zoom: 13 });
-  const [hover, setHover] = React.useState<{ item: RoadStudentItem; x: number; y: number } | null>(null);
-  const hoverIdRef = React.useRef<string | null>(null);
+  const [activeId, setActiveId] = React.useState<string | null>(null);
+  const [tip, setTip] = React.useState<{ id: string; x: number; y: number } | null>(null);
+  const [showAll, setShowAll] = React.useState(false);
 
   // Riferimenti sempre aggiornati per i listener della mappa (registrati una volta).
   const byIdRef = React.useRef(new Map<string, RoadStudentItem>());
   byIdRef.current = new Map(drawable.map((it) => [it.id, it]));
-  const openRef = React.useRef<(item: RoadStudentItem) => void>(() => {});
-  openRef.current = (item) => {
+  const openItem = (item: RoadStudentItem) => {
     const { href, onClick } = open(item, items);
     onClick();
     router.push(href);
   };
+  const openRef = React.useRef(openItem);
+  openRef.current = openItem;
 
   React.useEffect(() => {
     if (!handle) return;
@@ -356,7 +394,7 @@ function AllRoutesMap({ items }: { items: RoadStudentItem[] }) {
     const features = drawable
       .map((it, i) => ({
         type: "Feature" as const,
-        properties: { id: it.id, age: n > 1 ? i / (n - 1) : 0 },
+        properties: { id: it.id, age: n > 1 ? i / (n - 1) : 0, color: routeColor(i) },
         geometry: { type: "LineString" as const, coordinates: it.thumb.map((p) => toLngLat(p)) },
       }))
       .reverse();
@@ -364,6 +402,7 @@ function AllRoutesMap({ items }: { items: RoadStudentItem[] }) {
     const src = map.getSource(ALL_ROUTES) as { setData?: (d: typeof data) => void } | undefined;
     if (src?.setData) src.setData(data);
     else {
+      const fade = { duration: 220, delay: 0 };
       map.addSource(ALL_ROUTES, { type: "geojson", data });
       map.addLayer({
         id: `${ALL_ROUTES}-c`,
@@ -372,8 +411,8 @@ function AllRoutesMap({ items }: { items: RoadStudentItem[] }) {
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": "#ffffff",
-          "line-width": ["interpolate", ["linear"], ["get", "age"], 0, 7, 1, 5],
-          "line-opacity": ["interpolate", ["linear"], ["get", "age"], 0, 0.9, 1, 0.45],
+          "line-width": ["interpolate", ["linear"], ["get", "age"], 0, 8, 1, 5],
+          "line-opacity": ["interpolate", ["linear"], ["get", "age"], 0, 0.95, 1, 0.5],
         },
       });
       map.addLayer({
@@ -382,9 +421,9 @@ function AllRoutesMap({ items }: { items: RoadStudentItem[] }) {
         source: ALL_ROUTES,
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
-          "line-color": ["interpolate", ["linear"], ["get", "age"], 0, "#111111", 0.5, "#77736b", 1, "#c4bfb3"],
-          "line-width": ["interpolate", ["linear"], ["get", "age"], 0, 3.4, 1, 2.2],
-          "line-opacity": ["interpolate", ["linear"], ["get", "age"], 0, 1, 1, 0.75],
+          "line-color": ["get", "color"],
+          "line-width": ["interpolate", ["linear"], ["get", "age"], 0, 4.6, 1, 2.6],
+          "line-opacity": ["interpolate", ["linear"], ["get", "age"], 0, 1, 1, 0.5],
         },
       });
       // Fascia invisibile più larga: le tracce sottili si prendono col mouse.
@@ -395,11 +434,36 @@ function AllRoutesMap({ items }: { items: RoadStudentItem[] }) {
         layout: { "line-cap": "round", "line-join": "round" },
         paint: { "line-color": "#000000", "line-width": 14, "line-opacity": 0 },
       });
+      // Attenuare e riaccendere le tracce in dissolvenza, mai di botto.
+      map.setPaintProperty(ALL_ROUTES, "line-opacity-transition", fade);
+      map.setPaintProperty(`${ALL_ROUTES}-c`, "line-opacity-transition", fade);
     }
     const pts = framedTracks(drawable).flatMap((it) => it.thumb.map((p) => toLngLat(p)));
     const b = lineBounds(handle.lib, pts);
     if (b) map.fitBounds(b, { padding: 36, duration: 0, maxZoom: 15 });
   }, [handle, drawable]);
+
+  // Traccia attiva (dalla mappa o dall'elenco): sopra e piena, le altre attenuate.
+  React.useEffect(() => {
+    if (!handle) return;
+    const { map } = handle;
+    if (!map.getLayer(ALL_ROUTES)) return;
+    const item = activeId ? byIdRef.current.get(activeId) : undefined;
+    if (!item) {
+      map.setPaintProperty(ALL_ROUTES, "line-opacity", ["interpolate", ["linear"], ["get", "age"], 0, 1, 1, 0.5]);
+      map.setPaintProperty(`${ALL_ROUTES}-c`, "line-opacity", ["interpolate", ["linear"], ["get", "age"], 0, 0.95, 1, 0.5]);
+      removeRoute(map, ALL_ROUTES_HOVER);
+      return;
+    }
+    map.setPaintProperty(ALL_ROUTES, "line-opacity", 0.16);
+    map.setPaintProperty(`${ALL_ROUTES}-c`, "line-opacity", 0.12);
+    upsertRoute(map, ALL_ROUTES_HOVER, item.thumb.map((p) => toLngLat(p)), {
+      width: 5.5,
+      color: colorById.get(item.id) ?? "#111111",
+      opacity: 1,
+    });
+    raiseRoute(map, ALL_ROUTES_HOVER);
+  }, [handle, activeId, colorById]);
 
   React.useEffect(() => {
     if (!handle) return;
@@ -410,22 +474,16 @@ function AllRoutesMap({ items }: { items: RoadStudentItem[] }) {
     map.addControl(nav, "top-right");
 
     const clear = () => {
-      hoverIdRef.current = null;
-      removeRoute(map, ALL_ROUTES_HOVER);
       map.getCanvas().style.cursor = "";
-      setHover(null);
+      setActiveId(null);
+      setTip(null);
     };
     const onMove = (e: { point: { x: number; y: number }; features?: Array<{ properties?: Record<string, unknown> }> }) => {
       const id = e.features?.[0]?.properties?.id;
-      const item = typeof id === "string" ? byIdRef.current.get(id) : undefined;
-      if (!item) return clear();
+      if (typeof id !== "string" || !byIdRef.current.has(id)) return clear();
       map.getCanvas().style.cursor = "pointer";
-      if (hoverIdRef.current !== item.id) {
-        hoverIdRef.current = item.id;
-        upsertRoute(map, ALL_ROUTES_HOVER, item.thumb.map((p) => toLngLat(p)), { width: 4.5, color: "#111111", opacity: 1 });
-        raiseRoute(map, ALL_ROUTES_HOVER);
-      }
-      setHover({ item, x: e.point.x, y: e.point.y });
+      setActiveId(id);
+      setTip({ id, x: e.point.x, y: e.point.y });
     };
     const onClick = (e: { features?: Array<{ properties?: Record<string, unknown> }> }) => {
       const id = e.features?.[0]?.properties?.id;
@@ -444,6 +502,8 @@ function AllRoutesMap({ items }: { items: RoadStudentItem[] }) {
   }, [handle]);
 
   if (!drawable.length) return null;
+  const tipItem = tip ? byIdRef.current.get(tip.id) : undefined;
+  const listed = showAll ? drawable : drawable.slice(0, LIST_PREVIEW);
   return (
     <section className="mt-7" data-testid="student-road-all-routes">
       <div className="flex items-baseline justify-between gap-3">
@@ -463,14 +523,14 @@ function AllRoutesMap({ items }: { items: RoadStudentItem[] }) {
         </div>
         {!handle ? <RoadMapFallback failed={failed} /> : null}
         <AnimatePresence>
-          {hover ? (
+          {tip && tipItem ? (
             <div
               key="srt-tip"
               className="pointer-events-none absolute z-10"
               style={{
-                left: hover.x,
-                top: hover.y,
-                transform: `translate(${hover.x > 260 ? "calc(-100% - 12px)" : "12px"}, -50%)`,
+                left: tip.x,
+                top: tip.y,
+                transform: `translate(${tip.x > 260 ? "calc(-100% - 12px)" : "12px"}, -50%)`,
               }}
             >
               <motion.div
@@ -481,27 +541,68 @@ function AllRoutesMap({ items }: { items: RoadStudentItem[] }) {
                 className="whitespace-nowrap rounded-xl bg-white px-3 py-2 text-[12.5px] leading-[1.35] shadow-[0_6px_20px_rgba(0,0,0,0.14)]"
                 data-testid="student-road-route-tip"
               >
-                <b className="block font-semibold text-[#111111]">{longDay(hover.item.startedAt)}</b>
+                <b className="block font-semibold text-[#111111]">{longDay(tipItem.startedAt)}</b>
                 <span className="tabular-nums text-[#6a6a6a]">
-                  {hhmm(hover.item.startedAt)} · {km(hover.item.distanceMeters)} km
-                  {hover.item.markerBad ? ` · ${hover.item.markerBad} da migliorare` : ""}
+                  {hhmm(tipItem.startedAt)} · {km(tipItem.distanceMeters)} km
+                  {tipItem.markerBad ? ` · ${tipItem.markerBad} da migliorare` : ""}
                 </span>
               </motion.div>
             </div>
           ) : null}
         </AnimatePresence>
       </div>
-      <div className="mt-2.5 flex items-center gap-2.5 text-[12.5px] text-[#6a6a6a]">
-        <span className="flex items-center gap-1.5">
-          <i className="block h-[3px] w-5 rounded-full bg-[#111111]" />
-          Più recenti
-        </span>
-        <span className="flex items-center gap-1.5">
-          <i className="block h-[2px] w-5 rounded-full bg-[#c4bfb3]" />
-          Meno recenti
-        </span>
-        <span className="ml-auto hidden sm:inline">Clic su un percorso per aprire la guida</span>
-      </div>
+
+      <ul className="mt-2" onMouseLeave={() => setActiveId(null)} data-testid="student-road-routes-list">
+        <AnimatePresence initial={false}>
+          {listed.map((it) => {
+            const instructor = instructorByLesson?.get(it.appointmentId) ?? null;
+            const dimmed = activeId !== null && activeId !== it.id;
+            return (
+              <motion.li
+                key={it.id}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                className="overflow-hidden"
+              >
+                <button
+                  type="button"
+                  onMouseEnter={() => setActiveId(it.id)}
+                  onFocus={() => setActiveId(it.id)}
+                  onBlur={() => setActiveId(null)}
+                  onClick={() => openItem(it)}
+                  data-testid="student-road-routes-row"
+                  className={cn(
+                    "grid w-full cursor-pointer grid-cols-[10px_minmax(0,1fr)_auto_14px] items-center gap-3 rounded-xl px-2 py-2 text-left transition-[background-color,opacity] duration-200 ease-out",
+                    activeId === it.id ? "bg-[#f5f5f5]" : "hover:bg-[#f7f7f7]",
+                    dimmed && "opacity-45",
+                  )}
+                >
+                  <span className="size-2.5 rounded-full" style={{ backgroundColor: colorById.get(it.id) }} aria-hidden />
+                  <span className="min-w-0 truncate text-[13.5px] text-[#6a6a6a]">
+                    <b className="font-semibold text-[#111111]">{shortDay(it.startedAt)}</b>
+                    <span className="tabular-nums"> · {hhmm(it.startedAt)}</span>
+                    {instructor ? ` · ${instructor}` : ""}
+                  </span>
+                  <span className="text-[13px] font-semibold tabular-nums text-[#111111]">{km(it.distanceMeters)} km</span>
+                  <ChevronRight className="size-3.5 text-[#b0b0b0]" strokeWidth={2.2} />
+                </button>
+              </motion.li>
+            );
+          })}
+        </AnimatePresence>
+      </ul>
+      {drawable.length > LIST_PREVIEW ? (
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          data-testid="student-road-routes-more"
+          className="mt-1 cursor-pointer px-2 py-1.5 text-[13.5px] font-semibold text-[#111111] underline decoration-[#c8c8c8] underline-offset-[3px] transition-colors duration-200 hover:decoration-[#111111]"
+        >
+          {showAll ? "Mostra meno" : `Mostra tutte le ${drawable.length} guide`}
+        </button>
+      ) : null}
     </section>
   );
 }
