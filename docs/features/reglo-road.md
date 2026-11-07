@@ -306,3 +306,11 @@ Nessuna modifica al backend: l'app istruttore richiama `POST /road/plan/route` c
 - **Celle a mano**: `scripts/road/build-osm-cells.ts --box s,w,n,e | --overpass-file | --geojsonseq` (`--out`, `--upload --yes`). Teramo (73 celle) caricate il 04/11 per le prove.
 - **Job mensile** `trigger/autoscuole-road-osm-cells.ts` (`0 3 2 * *`, medium-2x, disco 10 GB, durata max 3 h): Geofabrik Italia (~2 GB) → `osmium tags-filter` strade in auto → blocchi da 20 × 14 celle (`osmium extract -s smart` + `export geojsonseq`) → R2. osmium entra nell'immagine Trigger con `aptGet` in `trigger.config.ts` (`@trigger.dev/build`). **Non ancora deployato** (Trigger non ha staging). Al rilascio: le variabili `R2_*` devono esserci anche su Trigger (servono anche al job di manutenzione per la fine guida).
 - **Misura**: `scripts/road/measure-osm-match.ts --cells <dir> --raw lotti.json --clean clean.json` (file esportati in sola lettura). Test: `tests/unit/road/road-osm-match.test.ts` (controviale, inversioni, carreggiate a senso unico, ritardo 4 s = fine guida, celle).
+
+## Ricca — «Guide avviate in anticipo» (07/11/2026)
+
+- Impostazioni › Reglo Road (`RoadSettingsPane`, `ChoiceRow`): «Orari reali» (DEFAULT, comportamento REG-728) o «Mantieni la durata prenotata». Salvata in `limits.roadEarlyKeepDuration` (JSON dei limiti, nessuna migrazione; `updateAutoscuolaSettings`).
+- `lib/autoscuole/road/lesson-end.ts`: `roadEarlyKeepsDuration(limits)`, `roadDriveEnd(...)`; `alignLessonEndToRoad(..., keepDuration)` con la durata tenuta: guida 9:00–10:00 partita alle 8:45 → 8:45–9:45 anche se chiusa prima; se si sfora, orario reale fino al prossimo impegno; la pausa slitta come sempre. Solo per avvii in anticipo.
+- Guida in corso (`getRoadState`, avvio, ripresa): `lesson.roadEndsAt` (`liveLessonDTO`) = la fine che l'app usa per residuo e avvisi. Test: `tests/unit/road/road-lesson-end.test.ts` (sezione «Mantieni la durata prenotata»).
+- Nessun job Trigger.dev toccato.
+
