@@ -603,6 +603,7 @@ function DurationField({
         })}
         <div className="mx-0.5 h-5 w-px shrink-0 bg-[#e6e6e8]" />
         <TimePickerInput
+          freeInput
           value={endTime}
           minTime={examMinToTime(Math.min(startMin + 15, 1440))}
           maxTime="24:00"
@@ -2097,16 +2098,75 @@ export function AutoscuoleAgendaPage({
     if (createOpen) createLocationTouchedRef.current = false;
   }, [createOpen]);
 
-  // Auto-scroll to current time on first load
+  /**
+   * Porta in vista "adesso": l'ora attuale e, in vista settimana, la colonna
+   * di oggi. Con molti istruttori la griglia è più larga dello schermo e,
+   * aprendo di giovedì, oggi restava fuori a destra (si partiva da lunedì).
+   */
+  const scrollToNow = React.useCallback(
+    (behavior: ScrollBehavior) => {
+      const scroller = calendarScrollRef.current;
+      if (!scroller) return;
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
+      const top = Math.max(0, currentMinutes * PIXELS_PER_MINUTE - scroller.clientHeight / 3);
+      let left = scroller.scrollLeft;
+      const headerWrap = scroller.parentElement?.querySelector<HTMLElement>("[data-agenda-header-wrap]");
+      const todayHeader = headerWrap?.querySelector<HTMLElement>(`[data-agenda-day-header="${formatYmd(now)}"]`);
+      if (headerWrap && todayHeader) {
+        const offset =
+          todayHeader.getBoundingClientRect().left -
+          headerWrap.getBoundingClientRect().left +
+          headerWrap.scrollLeft;
+        // 56px = gutter degli orari, sticky a sinistra.
+        left = Math.max(0, offset - 56);
+      }
+      scroller.scrollTo({ top, left, behavior });
+    },
+    [PIXELS_PER_MINUTE, DAY_START_HOUR],
+  );
+
+  // Al primo caricamento: ora attuale e colonna di oggi.
   React.useEffect(() => {
     if (!loading && calendarScrollRef.current && !hasAutoScrolled.current) {
       hasAutoScrolled.current = true;
-      const now = new Date();
-      const currentMinutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
-      const scrollTarget = currentMinutes * PIXELS_PER_MINUTE - calendarScrollRef.current.clientHeight / 3;
-      calendarScrollRef.current.scrollTop = Math.max(0, scrollTarget);
+      scrollToNow("auto");
     }
-  }, [loading, PIXELS_PER_MINUTE, DAY_START_HOUR]);
+  }, [loading, scrollToNow]);
+
+  // «Oggi»: si cambia periodo, poi si scorre quando la griglia nuova è a schermo.
+  const pendingNowScrollRef = React.useRef(false);
+  const goToToday = () => {
+    const today = normalizeDay(new Date());
+    pendingNowScrollRef.current = true;
+    setWeekStart(weekAnchor(today, viewPrefs.weekMode));
+    setDayFocus(today);
+  };
+  // «Oggi»: sempre al suo posto (il layout non salta); con oggi già a schermo
+  // resta attenuato e non cliccabile.
+  const renderTodayButton = (className: string) => (
+    <button
+      type="button"
+      data-testid="agenda-today"
+      disabled={todayVisible}
+      aria-label="Vai a oggi"
+      className={cn(
+        "shrink-0 items-center justify-center rounded-full bg-[#f2f2f2] px-4 text-[13px] font-medium text-foreground transition-[background-color,opacity] duration-200 ease-out enabled:cursor-pointer enabled:hover:bg-[#e8e8e8] disabled:cursor-default disabled:opacity-40",
+        className,
+      )}
+      onClick={goToToday}
+    >
+      Oggi
+    </button>
+  );
+  React.useEffect(() => {
+    if (!pendingNowScrollRef.current || loading) return;
+    const id = requestAnimationFrame(() => {
+      pendingNowScrollRef.current = false;
+      scrollToNow("smooth");
+    });
+    return () => cancelAnimationFrame(id);
+  }, [weekStart, dayFocus, viewMode, loading, scrollToNow]);
 
   // Close the slot menu with Escape.
   React.useEffect(() => {
@@ -3858,6 +3918,11 @@ export function AutoscuoleAgendaPage({
   const visibleWeekDays = allWeekDays.filter((d) => viewPrefs.days.includes(d.getDay()));
   const days = visibleWeekDays.length ? visibleWeekDays : allWeekDays;
   const visibleDays = viewMode === "week" ? days : [dayFocus];
+  // Periodo intero, non solo i giorni mostrati: con la domenica nascosta,
+  // di domenica «Oggi» non comparirebbe per riportare alla stessa settimana.
+  const todayVisible = (viewMode === "week" ? allWeekDays : [dayFocus]).some(
+    (d) => d.getTime() === todayNormalized.getTime(),
+  );
   // In fullscreen sopra la griglia resta solo la toolbar (niente header app né
   // titolo), quindi recuperiamo lo spazio verticale liberato.
   const agendaGridHeight = isAgendaFullscreen ? "calc(100vh - 132px)" : "calc(100vh - 240px)";
@@ -4198,6 +4263,9 @@ export function AutoscuoleAgendaPage({
               onClick={() => viewMode === "week" ? setWeekStart((prev) => addDays(prev, 7)) : setDayFocus((prev) => addDays(prev, 1))}>
               <ChevronRight className="size-4" />
             </button>
+            {/* Su telefono la riga degli strumenti è già piena: «Oggi» chiude
+                la riga della data, alto come le frecce. */}
+            {renderTodayButton("flex h-10 md:hidden")}
             {/* REG-632: in vista giorno la nota sta accanto alla data. */}
             {viewMode === "day" && dayNoteMap.has(formatYmd(dayFocus)) && (
               <DayNoteChip
@@ -4229,6 +4297,8 @@ export function AutoscuoleAgendaPage({
               { value: "day", label: "Giorno" },
             ]}
           />
+          {/* Da tablet in su «Oggi» sta dopo Settimana/Giorno, alto come il segmentato. */}
+          {renderTodayButton("hidden md:flex ml-1 py-[11.5px]")}
 
           <div className="min-w-2 flex-1" />
 
@@ -6404,7 +6474,7 @@ export function AutoscuoleAgendaPage({
                 </div>
                 <div>
                   <p className="mb-1.5 text-xs font-semibold text-[#555555]">Orario</p>
-                  <TimePickerInput value={form.time} onChange={(value) => setForm((prev) => ({ ...prev, time: value }))} />
+                  <TimePickerInput freeInput value={form.time} onChange={(value) => setForm((prev) => ({ ...prev, time: value }))} />
                 </div>
               </div>
               <div>
@@ -6449,7 +6519,7 @@ export function AutoscuoleAgendaPage({
                     </span>
                     <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
                       <DatePickerInput value={entry.day} onChange={(value) => updateEntry(entry.id, { day: value })} />
-                      <TimePickerInput value={entry.time} onChange={(value) => updateEntry(entry.id, { time: value })} />
+                      <TimePickerInput freeInput value={entry.time} onChange={(value) => updateEntry(entry.id, { time: value })} />
                     </div>
                     {entries.length > 1 ? (
                       <button
@@ -7274,6 +7344,7 @@ export function AutoscuoleAgendaPage({
                   <div>
                     <div className="mb-1.5 text-[13px] font-semibold text-[#6a6a6a]">Orario</div>
                     <TimePickerInput
+                      freeInput
                       value={examDraftTime}
                       placeholder="Orario da definire"
                       minuteStep={15}
@@ -7747,7 +7818,7 @@ export function AutoscuoleAgendaPage({
             {examForm.timeSet && (
               <div>
                 <p className="mb-1.5 text-xs font-semibold text-[#555555]">Orario</p>
-                <TimePickerInput value={examForm.time} onChange={(v) => setExamForm((f) => ({ ...f, time: v }))} />
+                <TimePickerInput freeInput value={examForm.time} onChange={(v) => setExamForm((f) => ({ ...f, time: v }))} />
               </div>
             )}
           </div>
@@ -7944,7 +8015,7 @@ export function AutoscuoleAgendaPage({
             </div>
             <div>
               <p className="mb-1.5 text-xs font-semibold text-[#555555]">Ora inizio</p>
-              <TimePickerInput value={blockForm.startTime} onChange={(v) => setBlockForm((f) => ({ ...f, startTime: v }))} />
+              <TimePickerInput freeInput value={blockForm.startTime} onChange={(v) => setBlockForm((f) => ({ ...f, startTime: v }))} />
             </div>
           </div>
           <DurationField

@@ -128,6 +128,7 @@ export function ProposeSlotDialog({
             <div>
               <div className="mb-[7px] text-[13px] font-semibold text-[#222222]">Orario</div>
               <TimePickerInput
+                freeInput
                 value={time}
                 onChange={(v) => onChange({ time: v })}
                 className="h-[43px] w-full rounded-[12px] border-[#e2e2e2] px-3.5 text-[14px] font-semibold text-[#222222]"

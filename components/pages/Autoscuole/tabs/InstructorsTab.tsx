@@ -1697,7 +1697,7 @@ function MalattiaTab({
       {half && (
         <div className="mt-1">
           <div className={LBL}>Orario inizio malattia</div>
-          <TimePickerInput value={time} onChange={setTime} minTime="06:00" maxTime="20:00" className="w-full justify-between py-[11px]" />
+          <TimePickerInput freeInput value={time} onChange={setTime} minTime="06:00" maxTime="20:00" className="w-full justify-between py-[11px]" />
         </div>
       )}
 
@@ -1910,7 +1910,7 @@ function FerieTab({
       {half && (
         <div className="mt-1">
           <div className={LBL}>Orario inizio ferie</div>
-          <TimePickerInput value={time} onChange={setTime} minTime="06:00" maxTime="20:00" className="w-full justify-between py-[11px]" />
+          <TimePickerInput freeInput value={time} onChange={setTime} minTime="06:00" maxTime="20:00" className="w-full justify-between py-[11px]" />
         </div>
       )}
 

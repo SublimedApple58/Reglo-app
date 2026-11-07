@@ -1501,6 +1501,12 @@ export function AutoscuoleStudentsPage({
     [selectedStudentId, students],
   );
 
+  // Tab Road: l'istruttore di ogni guida, per l'elenco sotto «Tutti i percorsi».
+  const instructorByLesson = React.useMemo(
+    () => new Map((register?.lessons ?? []).map((l) => [l.id, l.instructorName])),
+    [register],
+  );
+
   const loadRegister = React.useCallback(
     async (studentId: string) => {
       const requestId = registerRequestRef.current + 1;
@@ -4767,6 +4773,7 @@ export function AutoscuoleStudentsPage({
                   studentId={selectedStudentId}
                   studentName={[register.student?.firstName, register.student?.lastName].filter(Boolean).join(" ")}
                   data={studentRoad.data}
+                  instructorByLesson={instructorByLesson}
                 />
               ) : null}
             </>

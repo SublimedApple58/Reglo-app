@@ -921,7 +921,7 @@ export function EditAppointmentDialog({
             </div>
             <div className="flex flex-col gap-2">
               <label className="text-xs font-medium text-slate-700">Orario</label>
-              <TimePickerInput value={newTime} onChange={setNewTime} />
+              <TimePickerInput freeInput value={newTime} onChange={setNewTime} />
             </div>
           </div>
 

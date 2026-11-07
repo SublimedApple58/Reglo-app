@@ -130,6 +130,22 @@ Definiti via `--radius: 0.875rem` (**14px**) in `:root`:
 > i token (`rounded-lg` campi, `rounded-md` riquadri, `rounded-full` pastiglie):
 > prima convivevano 8, 9, 10, 12, 14, 18, 20 e 22px.
 
+### Orari: scelte rapide + orario libero
+
+`TimePickerInput` (`components/ui/time-picker.tsx`) ha colonne ore | minuti a
+quarti (`minuteStep`). Con **`freeInput`** in cima al pannello c'è il campo
+«Scrivi un orario», a fuoco all'apertura: «1450», «14:50», «14.50» o «950»,
+Invio conferma; le colonne seguono l'orario solo quando è completo (HH:MM) e
+un minuto fuori passo (es. 50) compare nella colonna al suo posto. Orario
+impossibile o fuori da `minTime`/`maxTime` → bordo e messaggio `#C13515`.
+Parsing in `lib/time-input.ts` (test `tests/unit/ui/time-input.test.ts`).
+`freeInput` va **solo dove lo staff crea o sposta eventi** (guida, multipla,
+esame, blocco, gruppi, malattia/ferie, modifica guida, proposta consorzio):
+fasce di disponibilità e impostazioni restano a quarti, il backend le vuole a
+multipli di 30' (`lesson-policy`). Le prenotazioni dell'allievo restano a slot.
+E2e: `tests/e2e/orari-liberi.auth.spec.ts`. Mobile: `app/(tabs)/home/time-picker.tsx`
+(segmentato 00·15·30·45·Altro + «Minuti esatti»).
+
 ### Campi di form: una forma sola
 
 Ogni campo in cui si **scrive o si sceglie un valore** ha la stessa forma:
