@@ -2141,6 +2141,23 @@ export function AutoscuoleAgendaPage({
     setWeekStart(weekAnchor(today, viewPrefs.weekMode));
     setDayFocus(today);
   };
+  // «Oggi»: sempre al suo posto (il layout non salta); con oggi già a schermo
+  // resta attenuato e non cliccabile.
+  const renderTodayButton = (className: string) => (
+    <button
+      type="button"
+      data-testid="agenda-today"
+      disabled={todayVisible}
+      aria-label="Vai a oggi"
+      className={cn(
+        "shrink-0 items-center justify-center rounded-full bg-[#f2f2f2] px-4 text-[13px] font-medium text-foreground transition-[background-color,opacity] duration-200 ease-out enabled:cursor-pointer enabled:hover:bg-[#e8e8e8] disabled:cursor-default disabled:opacity-40",
+        className,
+      )}
+      onClick={goToToday}
+    >
+      Oggi
+    </button>
+  );
   React.useEffect(() => {
     if (!pendingNowScrollRef.current || loading) return;
     const id = requestAnimationFrame(() => {
@@ -4245,24 +4262,9 @@ export function AutoscuoleAgendaPage({
               onClick={() => viewMode === "week" ? setWeekStart((prev) => addDays(prev, 7)) : setDayFocus((prev) => addDays(prev, 1))}>
               <ChevronRight className="size-4" />
             </button>
-            {/* «Oggi» come in app: solo quando oggi non è nel periodo a schermo. */}
-            <AnimatePresence initial={false}>
-              {!todayVisible && (
-                <motion.button
-                  key="agenda-today"
-                  type="button"
-                  data-testid="agenda-today"
-                  initial={{ opacity: 0, x: -4 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -4 }}
-                  transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                  className="ml-1 flex h-10 shrink-0 cursor-pointer items-center rounded-full px-3 text-[13px] font-semibold text-foreground underline decoration-[#d4d4d4] underline-offset-4 transition-colors hover:bg-[#f2f2f2] hover:decoration-foreground md:h-[30px]"
-                  onClick={goToToday}
-                >
-                  Oggi
-                </motion.button>
-              )}
-            </AnimatePresence>
+            {/* Su telefono la riga degli strumenti è già piena: «Oggi» chiude
+                la riga della data, alto come le frecce. */}
+            {renderTodayButton("flex h-10 md:hidden")}
             {/* REG-632: in vista giorno la nota sta accanto alla data. */}
             {viewMode === "day" && dayNoteMap.has(formatYmd(dayFocus)) && (
               <DayNoteChip
@@ -4294,6 +4296,8 @@ export function AutoscuoleAgendaPage({
               { value: "day", label: "Giorno" },
             ]}
           />
+          {/* Da tablet in su «Oggi» sta dopo Settimana/Giorno, alto come il segmentato. */}
+          {renderTodayButton("hidden md:flex ml-1 py-[11.5px]")}
 
           <div className="min-w-2 flex-1" />
 
