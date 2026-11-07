@@ -2097,16 +2097,58 @@ export function AutoscuoleAgendaPage({
     if (createOpen) createLocationTouchedRef.current = false;
   }, [createOpen]);
 
-  // Auto-scroll to current time on first load
+  /**
+   * Porta in vista "adesso": l'ora attuale e, in vista settimana, la colonna
+   * di oggi. Con molti istruttori la griglia è più larga dello schermo e,
+   * aprendo di giovedì, oggi restava fuori a destra (si partiva da lunedì).
+   */
+  const scrollToNow = React.useCallback(
+    (behavior: ScrollBehavior) => {
+      const scroller = calendarScrollRef.current;
+      if (!scroller) return;
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
+      const top = Math.max(0, currentMinutes * PIXELS_PER_MINUTE - scroller.clientHeight / 3);
+      let left = scroller.scrollLeft;
+      const headerWrap = scroller.parentElement?.querySelector<HTMLElement>("[data-agenda-header-wrap]");
+      const todayHeader = headerWrap?.querySelector<HTMLElement>(`[data-agenda-day-header="${formatYmd(now)}"]`);
+      if (headerWrap && todayHeader) {
+        const offset =
+          todayHeader.getBoundingClientRect().left -
+          headerWrap.getBoundingClientRect().left +
+          headerWrap.scrollLeft;
+        // 56px = gutter degli orari, sticky a sinistra.
+        left = Math.max(0, offset - 56);
+      }
+      scroller.scrollTo({ top, left, behavior });
+    },
+    [PIXELS_PER_MINUTE, DAY_START_HOUR],
+  );
+
+  // Al primo caricamento: ora attuale e colonna di oggi.
   React.useEffect(() => {
     if (!loading && calendarScrollRef.current && !hasAutoScrolled.current) {
       hasAutoScrolled.current = true;
-      const now = new Date();
-      const currentMinutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
-      const scrollTarget = currentMinutes * PIXELS_PER_MINUTE - calendarScrollRef.current.clientHeight / 3;
-      calendarScrollRef.current.scrollTop = Math.max(0, scrollTarget);
+      scrollToNow("auto");
     }
-  }, [loading, PIXELS_PER_MINUTE, DAY_START_HOUR]);
+  }, [loading, scrollToNow]);
+
+  // «Oggi»: si cambia periodo, poi si scorre quando la griglia nuova è a schermo.
+  const pendingNowScrollRef = React.useRef(false);
+  const goToToday = () => {
+    const today = normalizeDay(new Date());
+    pendingNowScrollRef.current = true;
+    setWeekStart(weekAnchor(today, viewPrefs.weekMode));
+    setDayFocus(today);
+  };
+  React.useEffect(() => {
+    if (!pendingNowScrollRef.current || loading) return;
+    const id = requestAnimationFrame(() => {
+      pendingNowScrollRef.current = false;
+      scrollToNow("smooth");
+    });
+    return () => cancelAnimationFrame(id);
+  }, [weekStart, dayFocus, viewMode, loading, scrollToNow]);
 
   // Close the slot menu with Escape.
   React.useEffect(() => {
@@ -3858,6 +3900,11 @@ export function AutoscuoleAgendaPage({
   const visibleWeekDays = allWeekDays.filter((d) => viewPrefs.days.includes(d.getDay()));
   const days = visibleWeekDays.length ? visibleWeekDays : allWeekDays;
   const visibleDays = viewMode === "week" ? days : [dayFocus];
+  // Periodo intero, non solo i giorni mostrati: con la domenica nascosta,
+  // di domenica «Oggi» non comparirebbe per riportare alla stessa settimana.
+  const todayVisible = (viewMode === "week" ? allWeekDays : [dayFocus]).some(
+    (d) => d.getTime() === todayNormalized.getTime(),
+  );
   // In fullscreen sopra la griglia resta solo la toolbar (niente header app né
   // titolo), quindi recuperiamo lo spazio verticale liberato.
   const agendaGridHeight = isAgendaFullscreen ? "calc(100vh - 132px)" : "calc(100vh - 240px)";
@@ -4198,6 +4245,24 @@ export function AutoscuoleAgendaPage({
               onClick={() => viewMode === "week" ? setWeekStart((prev) => addDays(prev, 7)) : setDayFocus((prev) => addDays(prev, 1))}>
               <ChevronRight className="size-4" />
             </button>
+            {/* «Oggi» come in app: solo quando oggi non è nel periodo a schermo. */}
+            <AnimatePresence initial={false}>
+              {!todayVisible && (
+                <motion.button
+                  key="agenda-today"
+                  type="button"
+                  data-testid="agenda-today"
+                  initial={{ opacity: 0, x: -4 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -4 }}
+                  transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                  className="ml-1 flex h-10 shrink-0 cursor-pointer items-center rounded-full px-3 text-[13px] font-semibold text-foreground underline decoration-[#d4d4d4] underline-offset-4 transition-colors hover:bg-[#f2f2f2] hover:decoration-foreground md:h-[30px]"
+                  onClick={goToToday}
+                >
+                  Oggi
+                </motion.button>
+              )}
+            </AnimatePresence>
             {/* REG-632: in vista giorno la nota sta accanto alla data. */}
             {viewMode === "day" && dayNoteMap.has(formatYmd(dayFocus)) && (
               <DayNoteChip
