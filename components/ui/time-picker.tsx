@@ -2,10 +2,11 @@
 
 import React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { Clock } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { formatTypedTime, parseTypedTime } from "@/lib/time-input";
 
 /**
  * TimePickerInput — selettore orario ispirato al TimePicker di Ant Design,
@@ -21,6 +22,12 @@ import { cn } from "@/lib/utils";
  * modali il body ha pointer-events:none (che il content sovrascrive), mentre
  * il popover `modal` innescava una race di cleanup con la Dialog che lasciava
  * il body congelato dopo la chiusura (Escape chiudeva entrambi in un colpo).
+ *
+ * `freeInput` (orari spezzati, es. 14:50): in cima al pannello un campo dove
+ * scrivere l'orario («1450», «14:50»), a fuoco all'apertura; Invio conferma.
+ * I minuti restano scelte rapide a quarti, e un minuto libero compare nella
+ * colonna al suo posto. Solo dove lo staff crea o sposta eventi: fasce e
+ * impostazioni restano a quarti (il backend le vuole a multipli di 30').
  */
 
 function pad(value: number) {
@@ -131,6 +138,7 @@ export function TimePickerInput({
   placeholder,
   onClear,
   clearLabel = "Azzera",
+  freeInput = false,
   className,
 }: {
   /** Orario corrente "HH:MM" (null/undefined = non impostato, mostra placeholder). */
@@ -147,6 +155,8 @@ export function TimePickerInput({
   /** Se presente, il footer mostra un link che azzera il valore e chiude. */
   onClear?: () => void;
   clearLabel?: string;
+  /** Orario libero: campo per scriverlo (es. 14:50) oltre alle scelte rapide. */
+  freeInput?: boolean;
   className?: string;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -163,6 +173,18 @@ export function TimePickerInput({
   for (let h = min.hour; h <= max.hour; h += 1) hours.push(h);
   const minutes: number[] = [];
   for (let m = 0; m < 60; m += minuteStep) minutes.push(m);
+  // Minuto fuori passo (scritto a mano o già salvato): compare al suo posto.
+  if (freeInput && !minutes.includes(draft.minute)) {
+    minutes.push(draft.minute);
+    minutes.sort((a, b) => a - b);
+  }
+
+  // Campo «Scrivi un orario»: segue le colonne, e le colonne seguono lui
+  // appena quello che c'è scritto è un orario valido.
+  const [typed, setTyped] = React.useState("");
+  const [typedError, setTypedError] = React.useState(false);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const bounds = { min, max };
 
   // Minuti fuori range sulle ore di bordo (es. max 10:00 → alle 10 solo :00)
   const disabledMinutes = new Set<number>();
@@ -189,7 +211,10 @@ export function TimePickerInput({
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
       touchedRef.current = false;
-      setDraft(parseTime(value ?? minTime ?? "09:00"));
+      const start = parseTime(value ?? minTime ?? "09:00");
+      setDraft(start);
+      setTyped(value != null ? `${pad(start.hour)}:${pad(start.minute)}` : "");
+      setTypedError(false);
     } else {
       const next = `${pad(draft.hour)}:${pad(draft.minute)}`;
       if ((value != null || touchedRef.current) && next !== value) onChange(next);
@@ -230,15 +255,81 @@ export function TimePickerInput({
           align="end"
           sideOffset={4}
           collisionPadding={8}
+          onOpenAutoFocus={(e) => {
+            if (!freeInput) return;
+            e.preventDefault();
+            inputRef.current?.focus();
+          }}
           className="pointer-events-auto z-[200] rounded-xl border border-[#ebebeb] bg-white shadow-dropdown outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-1 data-[side=top]:slide-in-from-bottom-1"
         >
+          {freeInput && (
+            <div className="border-b border-[#ebebeb] px-2 pb-2 pt-2">
+              <input
+                ref={inputRef}
+                value={typed}
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder="Scrivi un orario"
+                aria-label="Scrivi un orario"
+                aria-invalid={typedError}
+                data-testid="time-picker-free-input"
+                className={cn(
+                  "h-9 w-full rounded-[8px] border-[1.5px] bg-white px-2.5 text-center text-sm font-semibold tabular-nums text-[#222222] outline-none transition-colors duration-200 placeholder:font-medium placeholder:text-[#a3a3a3]",
+                  typedError ? "border-[#C13515]" : "border-[#dddddd] focus:border-[#222222]",
+                )}
+                onFocus={(e) => e.currentTarget.select()}
+                onChange={(e) => {
+                  const next = formatTypedTime(e.target.value);
+                  setTyped(next);
+                  setTypedError(false);
+                  const parsed = parseTypedTime(next, bounds);
+                  if (parsed) {
+                    touchedRef.current = true;
+                    setDraft(parsed);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  const parsed = parseTypedTime(typed, bounds);
+                  if (!parsed) {
+                    setTypedError(true);
+                    return;
+                  }
+                  const next = `${pad(parsed.hour)}:${pad(parsed.minute)}`;
+                  touchedRef.current = false;
+                  setDraft(parsed);
+                  setOpen(false);
+                  if (next !== value) onChange(next);
+                }}
+              />
+              <AnimatePresence initial={false}>
+                {typedError && (
+                  <motion.p
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                    className="overflow-hidden pt-1 text-center text-[11.5px] font-medium text-[#C13515]"
+                  >
+                    {minTime || maxTime
+                      ? `Tra ${pad(min.hour)}:${pad(min.minute)} e ${pad(max.hour)}:${pad(max.minute)}`
+                      : "Orario non valido"}
+                  </motion.p>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
           <div className="flex divide-x divide-[#ebebeb]">
             <TimeColumn
               values={hours}
               selected={draft.hour}
               onSelect={(hour) => {
                 touchedRef.current = true;
-                setDraft((prev) => ({ hour, minute: clampMinute(hour, prev.minute) }));
+                const minute = clampMinute(hour, draft.minute);
+                setDraft({ hour, minute });
+                setTyped(`${pad(hour)}:${pad(minute)}`);
+                setTypedError(false);
               }}
               format={pad}
               layoutKey={`${columnId}-h`}
@@ -250,6 +341,8 @@ export function TimePickerInput({
               onSelect={(minute) => {
                 touchedRef.current = true;
                 setDraft((prev) => ({ ...prev, minute }));
+                setTyped(`${pad(draft.hour)}:${pad(minute)}`);
+                setTypedError(false);
               }}
               format={pad}
               layoutKey={`${columnId}-m`}
