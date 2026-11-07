@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 
 import { resolveCarColor } from "@/lib/autoscuole/road/car-colors";
 import { normalizeSentiment } from "@/lib/autoscuole/road/catalog";
+import { HISTORY_SESSIONS, historyLine } from "@/lib/autoscuole/road/history-line";
 import { prisma } from "@/db/prisma";
 import { requireServiceAccess } from "@/lib/service-access";
 import { roadHeadquarters } from "@/lib/autoscuole/road/headquarters";
@@ -1064,6 +1065,36 @@ export async function getRoadForStudent(studentId: string) {
     const { loadStudentHotspots } = await import("@/lib/autoscuole/road/lesson-plan-service");
     const hotspots = await loadStudentHotspots(ctx.companyId, studentId);
     return ok({ items, briefing, hotspots });
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
+/**
+ * Tasto «Storico» della guida dal vivo (Ricca, punti 8+9): le ultime
+ * `HISTORY_SESSIONS` tracce dell'allievo, ANCHE quelle fatte con altri
+ * istruttori (come briefing e punti critici: servono a chi lo porta oggi).
+ * Solo la forma, sfoltita: niente segnalazioni, km o pagellino.
+ */
+export async function getRoadStudentHistory(studentId: string) {
+  try {
+    const ctx = await roadContext();
+    if (!ctx.roadEnabled) return ok({ items: [] });
+    if (!canSeeAll(ctx) && !(await ownInstructorId(ctx))) return fail("Non autorizzato.", "FORBIDDEN");
+    const sessions = await prisma.roadSession.findMany({
+      where: { companyId: ctx.companyId, studentId, status: { not: "active" } },
+      orderBy: { startedAt: "desc" },
+      take: HISTORY_SESSIONS,
+      select: { id: true, status: true, startedAt: true },
+    });
+    const items = await Promise.all(
+      sessions.map(async (x) => ({
+        id: x.id,
+        startedAt: x.startedAt.toISOString(),
+        track: historyLine((await readCleanTrack(x.id, x.status)).path),
+      })),
+    );
+    return ok({ items: items.filter((x) => x.track.length >= 2) });
   } catch (error) {
     return fail(formatError(error));
   }
