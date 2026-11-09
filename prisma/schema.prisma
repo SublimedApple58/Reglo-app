@@ -74,6 +74,16 @@ model User {
   whatsappConsentAt                    DateTime?                              @db.Timestamp(6)
   /// Da dove viene il consenso: `app_registrazione`, `app_profilo`, `autoscuola`.
   whatsappConsentSource                String?
+  /// Telefono con cui l'utente ACCEDE all'app (E.164, es. `+393331234567`), in
+  /// alternativa all'email. Valorizzato solo per gli allievi creati dall'autoscuola
+  /// con telefono + password. Distinto da `phone` (recapito, non unico e spesso
+  /// non normalizzato): questo è unico perché identifica l'account al login.
+  loginPhone                           String?                                @unique(map: "user_login_phone_key")
+  /// Data di nascita, chiesta all'allievo nell'onboarding del primo accesso.
+  birthDate                            DateTime?                              @db.Date
+  /// Quando l'utente ha completato e confermato i suoi dati al primo accesso.
+  /// Null per gli account creati col telefono = onboarding da fare.
+  profileCompletedAt                   DateTime?                              @db.Timestamp(6)
   createdAt                            DateTime                               @default(now()) @db.Timestamp(6)
   updatedAt                            DateTime                               @updatedAt
   account                              Account[]

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/db/prisma";
 import { compare } from "@/lib/encrypt";
 import { buildMobileAuthPayload } from "@/lib/mobile-auth-payload";
+import { isPhoneIdentifier, normalizeLoginPhone } from "@/lib/users/login-phone";
 
 export async function POST(request: Request) {
   const payload = await request.json();
@@ -18,7 +19,15 @@ export async function POST(request: Request) {
   // Qui c'era una scorciatoia che, con la credenziale unica del backoffice,
   // creava al volo un utente admin: tolta col REG-413 insieme alla password
   // di riserva nel codice.
-  const user = await prisma.user.findFirst({ where: { email } });
+  // «Email o telefono» arriva nel campo `email` (anche dalle app già
+  // installate): senza `@` è il numero di un allievo creato col telefono.
+  let user;
+  if (isPhoneIdentifier(email)) {
+    const loginPhone = normalizeLoginPhone(email);
+    user = loginPhone ? await prisma.user.findUnique({ where: { loginPhone } }) : null;
+  } else {
+    user = await prisma.user.findFirst({ where: { email } });
+  }
 
   if (!user || !user.password) {
     return NextResponse.json(

@@ -12,19 +12,13 @@
  */
 import { prisma } from "@/db/prisma";
 import { isWhatsAppCapable, normalizeToE164 } from "@/lib/phone-e164";
+import { isUndeliverableEmail } from "@/lib/users/placeholder-email";
 
 export type ChannelReachMap = {
   push: { reachable: number; total: number };
   whatsapp: { reachable: number; total: number };
   email: { reachable: number; total: number };
 };
-
-/**
- * Email segnaposto degli allievi senza indirizzo vero (allievi consorzio creati
- * con solo nome e telefono): esistono per far funzionare l'account, ma un'email
- * lì dentro non la legge nessuno.
- */
-const PLACEHOLDER_EMAIL_DOMAIN = "@no-app.reglo.local";
 
 export async function getChannelReach(companyId: string): Promise<ChannelReachMap> {
   const students = await prisma.companyMember.findMany({
@@ -61,7 +55,8 @@ export async function getChannelReach(companyId: string): Promise<ChannelReachMa
       if (normalized.ok && isWhatsAppCapable(normalized.e164)) whatsapp += 1;
     }
 
-    if (user.email && !user.email.endsWith(PLACEHOLDER_EMAIL_DOMAIN)) email += 1;
+    // Email segnaposto (allievi senza indirizzo vero): non la legge nessuno.
+    if (!isUndeliverableEmail(user.email)) email += 1;
   }
 
   return {

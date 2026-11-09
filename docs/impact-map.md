@@ -171,6 +171,12 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Mobile auth**: self-deletion mobile usa lo stesso `deleteAndAnonymizeUserAccount`
 - → **Ex allievi (REG-629)**: `deleteAndAnonymizeUserAccount` e `deleteUser` scrivono `AutoscuolaFormerStudent` PRIMA di togliere la `CompanyMember`; la cancellazione ora azzera anche `signatureKey` e cancella i file R2 di foto e firma
 
+### Allievo con telefono + password
+- → **Mobile auth**: `POST /api/mobile/auth/login` accetta un telefono nel campo `email` (niente `@` → lookup su `User.loginPhone`, E.164 unico)
+- → **Users Directory**: `createCompanyUser({ loginWithPhone })` — email segnaposto + password; `deleteAndAnonymizeUserAccount` libera anche `loginPhone`
+- → **Email (tutti gli invii)**: `sendDynamicEmail` scarta i destinatari `*.reglo.local` (segnaposto consorzio/telefono, account eliminati) — vale per notify, comunicazioni, pagamenti
+- → **Password reset**: ancora solo via email → un allievo col solo telefono non può recuperarla da solo
+
 ### Ex allievi (REG-629)
 - → **Users Directory / Mobile self-deletion**: unica fonte delle righe (`archiveFormerStudentMemberships`)
 - → **Payments & Credits**: saldo = `isLessonUnpaid` + `isCompanyManualMode` (`lesson-unpaid.ts`), importo da `priceAmount`/`penaltyAmount`; il pagamento si registra con `setManualPaymentStatus`

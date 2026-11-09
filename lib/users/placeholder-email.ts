@@ -25,3 +25,11 @@ export const isPlaceholderEmail = (email: string | null | undefined): boolean =>
 /** L'email da mostrare in UI: null quando è un segnaposto (→ "—"). */
 export const displayEmail = (email: string | null | undefined): string | null =>
   !email || isPlaceholderEmail(email) ? null : email;
+
+/**
+ * Vero per gli indirizzi che non appartengono a nessuna casella: i segnaposto
+ * qui sopra e gli account anonimizzati (`deleted+<id>@deleted.reglo.local`).
+ * Tutto il dominio riservato `.reglo.local` è fittizio per costruzione.
+ */
+export const isUndeliverableEmail = (email: string | null | undefined): boolean =>
+  !email || email.trim().toLowerCase().endsWith(".reglo.local");

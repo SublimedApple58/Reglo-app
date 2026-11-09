@@ -25,6 +25,7 @@ import { operationallyCancelAppointmentsByResource } from '@/lib/autoscuole/oper
 import { deleteAndAnonymizeUserAccount, releaseEmailIfOrphaned } from '@/lib/account-deletion';
 import { archiveFormerStudentMemberships } from '@/lib/autoscuole/former-students';
 import { buildPlaceholderEmail } from '@/lib/users/placeholder-email';
+import { normalizeLoginPhone } from '@/lib/users/login-phone';
 
 // Sign in the user with credentials
 export async function signInWithCredentials(
@@ -597,6 +598,12 @@ export async function createCompanyUser(input: {
   /** Telefono dell'allievo — l'unico recapito quando l'email non c'è. */
   phone?: string;
   /**
+   * Solo allievi: l'allievo accede all'app col TELEFONO + password invece che
+   * con l'email (richiesta Ricca). Il numero diventa `User.loginPhone` (E.164,
+   * unico); l'email, se manca, resta un segnaposto. Vedi lib/users/login-phone.ts.
+   */
+  loginWithPhone?: boolean;
+  /**
    * REG-500: l'allievo ha accettato gli avvisi di servizio su WhatsApp?
    * Lo dichiara l'autoscuola quando inserisce il numero al posto suo.
    * Omesso = nessuna scelta registrata (consenso implicito).
@@ -635,11 +642,36 @@ export async function createCompanyUser(input: {
       throw new Error('Numero di telefono non valido.');
     }
 
+    // Allievo che entra col telefono: numero valido e libero + password.
+    let loginPhone: string | null = null;
+    if (input.loginWithPhone) {
+      if (input.autoscuolaRole !== 'STUDENT') {
+        throw new Error("L'accesso col telefono è previsto solo per gli allievi.");
+      }
+      loginPhone = normalizeLoginPhone(typedPhone);
+      if (!loginPhone) {
+        throw new Error(
+          'Numero di telefono non valido. Scrivi un cellulare, con il prefisso se è estero.',
+        );
+      }
+      if (!input.password || input.password.length < 6) {
+        throw new Error('La password deve avere almeno 6 caratteri.');
+      }
+      const phoneTaken = await prisma.user.findUnique({
+        where: { loginPhone },
+        select: { id: true },
+      });
+      if (phoneTaken) {
+        throw new Error('Questo numero è già usato per accedere da un altro account.');
+      }
+    }
+
     // Allievo di consorzio senza credenziali: bastano nome e telefono, l'app
     // non è obbligatoria per lui (REG-464). Fuori da quel caso email e
     // password restano obbligatorie come prima.
     const credentialsOptional =
-      input.autoscuolaRole === 'STUDENT' && Boolean(input.consorzioSchoolId);
+      input.autoscuolaRole === 'STUDENT' &&
+      (Boolean(input.consorzioSchoolId) || Boolean(loginPhone));
     if (!typedEmail) {
       if (!credentialsOptional) throw new Error("L'email è obbligatoria.");
       if (!typedPhone) throw new Error('Senza email serve almeno un numero di telefono.');
@@ -759,9 +791,9 @@ export async function createCompanyUser(input: {
       if (!emailFree) throw new Error('Esiste già un account con questa email.');
     }
 
-    // Senza email: indirizzo segnaposto univoco e nessuna password (l'account
-    // esiste in gestionale ma non può accedere finché non gli si danno
-    // credenziali). Vedi lib/users/placeholder-email.ts.
+    // Senza email: indirizzo segnaposto univoco. Senza password l'account esiste
+    // in gestionale ma non accede; con `loginPhone` accede col telefono.
+    // Vedi lib/users/placeholder-email.ts.
     const email = typedEmail || buildPlaceholderEmail(crypto.randomUUID());
     const hashedPassword = input.password ? await hash(input.password) : null;
 
@@ -772,6 +804,7 @@ export async function createCompanyUser(input: {
           email,
           password: hashedPassword,
           phone: toStoredPhone(typedPhone),
+          loginPhone,
           role: 'user',
           activeCompanyId: input.companyId,
           ...(typedPhone ? whatsAppConsentFields(input.whatsappConsent, 'autoscuola') : {}),

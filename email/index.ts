@@ -6,6 +6,7 @@ import {
   VERIFIED_EMAIL_SENDERS,
 } from "@/lib/constants";
 import { externalSendsDisabled } from "@/lib/app-env";
+import { isUndeliverableEmail } from "@/lib/users/placeholder-email";
 import {
   renderRegloEmail,
   renderRegloEmailText,
@@ -104,10 +105,22 @@ export const sendDynamicEmail = async ({
     footerNote,
     preheader,
   };
-  const resend = getResend({ allowInternal: internalStaffOnly && isInternalRecipient(to) });
+  // Gli indirizzi segnaposto (allievi senza email, account eliminati) non sono
+  // caselle vere: si tolgono qui, in un punto solo, invece di sperare che ogni
+  // chiamante se ne ricordi. Se non resta nessuno, la mail non parte.
+  const recipients = (Array.isArray(to) ? to : [to]).filter(
+    (address) => !isUndeliverableEmail(address),
+  );
+  if (recipients.length === 0) {
+    console.info("[email] nessun destinatario reale — invio saltato", { subject });
+    return;
+  }
+  const resend = getResend({
+    allowInternal: internalStaffOnly && isInternalRecipient(recipients),
+  });
   await resend.emails.send({
     from: formatSender(from),
-    to,
+    to: recipients,
     subject,
     html: renderRegloEmail(content, { baseUrl }),
     text: renderRegloEmailText(content),

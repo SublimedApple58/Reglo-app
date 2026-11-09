@@ -127,6 +127,7 @@ export async function deleteAndAnonymizeUserAccount(
         imageAvatar: null,
         signatureKey: null,
         phone: null,
+        loginPhone: null,
         paymentMethod: null,
         activeCompanyId: null,
         emailVerified: null,
