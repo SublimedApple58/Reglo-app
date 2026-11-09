@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/db/prisma";
 import { compare } from "@/lib/encrypt";
 import { buildMobileAuthPayload } from "@/lib/mobile-auth-payload";
+import { isActivationPending } from "@/lib/auth/first-access";
 import { isPhoneIdentifier, normalizeLoginPhone } from "@/lib/users/login-phone";
 
 export async function POST(request: Request) {
@@ -27,6 +28,19 @@ export async function POST(request: Request) {
     user = loginPhone ? await prisma.user.findUnique({ where: { loginPhone } }) : null;
   } else {
     user = await prisma.user.findFirst({ where: { email } });
+  }
+
+  // Allievo creato col telefono che non ha ancora fatto il primo accesso: non
+  // ha password, l'app lo porta su «Primo accesso» (lib/auth/first-access.ts).
+  if (user && isActivationPending(user)) {
+    return NextResponse.json(
+      {
+        success: false,
+        code: "ACTIVATION_REQUIRED",
+        message: "Il tuo account non è ancora attivo. Tocca «Primo accesso» per completarlo.",
+      },
+      { status: 401 },
+    );
   }
 
   if (!user || !user.password) {

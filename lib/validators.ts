@@ -86,6 +86,26 @@ export const mobilePasswordResetConfirmSchema = z
     path: ['confirmPassword'],
   });
 
+// «Primo accesso» dell'allievo creato col telefono (lib/auth/first-access.ts).
+const isAdultishBirthDate = (value: string) => {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.valueOf())) return false;
+  const years = (Date.now() - date.valueOf()) / (365.25 * 24 * 3600 * 1000);
+  return years >= 14 && years <= 100;
+};
+
+export const firstAccessCompleteSchema = z.object({
+  activationToken: z.string().min(10),
+  firstName: z.string().trim().min(1, 'Scrivi il tuo nome'),
+  lastName: z.string().trim().min(1, 'Scrivi il tuo cognome'),
+  email: z.string().trim().email("Controlla l'email: non sembra valida"),
+  password: z.string().min(6, 'La password deve avere almeno 6 caratteri'),
+  birthDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data di nascita non valida')
+    .refine(isAdultishBirthDate, 'Controlla la data di nascita'),
+});
+
 // Schema for updating the user profile
 export const updateProfileSchema = z.object({
   name: z.string().min(3, 'Name must be at leaast 3 characters'),
