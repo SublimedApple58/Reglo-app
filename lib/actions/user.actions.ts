@@ -598,9 +598,10 @@ export async function createCompanyUser(input: {
   /** Telefono dell'allievo — l'unico recapito quando l'email non c'è. */
   phone?: string;
   /**
-   * Solo allievi: l'allievo accede all'app col TELEFONO + password invece che
-   * con l'email (richiesta Ricca). Il numero diventa `User.loginPhone` (E.164,
-   * unico); l'email, se manca, resta un segnaposto. Vedi lib/users/login-phone.ts.
+   * Solo allievi: l'allievo accede all'app col TELEFONO invece che con l'email
+   * (richiesta Ricca). Il numero diventa `User.loginPhone` (E.164, unico);
+   * l'email resta un segnaposto e la password di norma manca: le sceglie
+   * l'allievo al primo accesso. Vedi lib/users/login-phone.ts.
    */
   loginWithPhone?: boolean;
   /**
@@ -654,7 +655,9 @@ export async function createCompanyUser(input: {
           'Numero di telefono non valido. Scrivi un cellulare, con il prefisso se è estero.',
         );
       }
-      if (!input.password || input.password.length < 6) {
+      // La password di solito non c'è: la sceglie l'allievo al primo accesso,
+      // dopo aver dimostrato che il numero è suo. Finché manca non può entrare.
+      if (input.password && input.password.length < 6) {
         throw new Error('La password deve avere almeno 6 caratteri.');
       }
       const phoneTaken = await prisma.user.findUnique({

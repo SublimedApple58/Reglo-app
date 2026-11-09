@@ -960,16 +960,12 @@ export function AutoscuoleStudentsPage({
     () => ({
       firstName: "",
       lastName: "",
-      email: "",
-      password: "",
       phone: "",
       whatsappConsent: true,
       licenseCategory: "B",
       transmission: "manual",
       assignedInstructorId: "__none__",
       studentPhase: "PRATICA" as "AWAITING" | "TEORIA" | "PRATICA",
-      // Come entra l'allievo nell'app: email + password, o telefono + password.
-      loginMethod: "email" as "email" | "phone",
     }),
     [],
   );
@@ -2226,7 +2222,6 @@ export function AutoscuoleStudentsPage({
       if (!company?.id || createSaving) return;
       const firstName = createForm.firstName.trim();
       const lastName = createForm.lastName.trim();
-      const email = createForm.email.trim();
       // Vista ridotta: l'anagrafica nasce nel consorzio, senza credenziali —
       // stesso trattamento degli allievi creati dal consorzio (REG-464).
       if (affiliate) {
@@ -2257,13 +2252,14 @@ export function AutoscuoleStudentsPage({
         void load(true);
         return;
       }
-      const withPhone = createForm.loginMethod === "phone";
-      const loginPhone = withPhone ? normalizeLoginPhone(createForm.phone) : null;
-      if (!firstName || !lastName || !createForm.password || (withPhone ? !createForm.phone.trim() : !email)) {
+      // Il titolare scrive solo anagrafica, telefono e percorso: email e password
+      // le sceglie l'allievo al primo accesso, dopo aver confermato il numero.
+      const loginPhone = normalizeLoginPhone(createForm.phone);
+      if (!firstName || !lastName || !createForm.phone.trim()) {
         toast.error({ description: "Compila tutti i campi obbligatori." });
         return;
       }
-      if (withPhone && !loginPhone) {
+      if (!loginPhone) {
         toast.error({ description: "Numero non valido. Scrivi un cellulare, con il prefisso se è estero." });
         return;
       }
@@ -2271,14 +2267,9 @@ export function AutoscuoleStudentsPage({
       const res = await createCompanyUser({
         companyId: company.id,
         name: `${firstName} ${lastName}`,
-        ...(withPhone
-          ? {
-              phone: createForm.phone.trim(),
-              loginWithPhone: true,
-              whatsappConsent: createForm.whatsappConsent,
-            }
-          : { email }),
-        password: createForm.password,
+        phone: createForm.phone.trim(),
+        loginWithPhone: true,
+        whatsappConsent: createForm.whatsappConsent,
         autoscuolaRole: "STUDENT",
         licenseCategory: createForm.licenseCategory,
         transmission: createForm.transmission,
@@ -2292,10 +2283,8 @@ export function AutoscuoleStudentsPage({
         return;
       }
       toast.success({
-        title: "Account creato",
-        description: loginPhone
-          ? `${formatStudentName({ firstName, lastName }, studentNameOrder)} può accedere all'app con il numero ${formatLoginPhone(loginPhone)}.`
-          : `${formatStudentName({ firstName, lastName }, studentNameOrder)} può accedere all'app con la sua email.`,
+        title: "Allievo creato",
+        description: `${formatStudentName({ firstName, lastName }, studentNameOrder)} entrerà nell'app con il numero ${formatLoginPhone(loginPhone)}.`,
       });
       setCreateOpen(false);
       setCreateForm(emptyCreateForm);
@@ -4155,7 +4144,7 @@ export function AutoscuoleStudentsPage({
                 )}
                 <button
                   type="button"
-                  title={affiliate ? "Aggiungi allievo" : "Crea account allievo"}
+                  title={affiliate ? "Aggiungi allievo" : "Nuovo allievo"}
                   onClick={openCreateDialog}
                   className="flex size-9 shrink-0 cursor-pointer items-center justify-center text-[#929292] transition-colors hover:text-foreground"
                 >
@@ -4401,13 +4390,11 @@ export function AutoscuoleStudentsPage({
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{affiliate ? "Aggiungi allievo" : "Crea account allievo"}</DialogTitle>
+            <DialogTitle>{affiliate ? "Aggiungi allievo" : "Nuovo allievo"}</DialogTitle>
             <DialogDescription>
               {affiliate
                 ? "Nome, cognome e telefono. L'allievo viene registrato presso il consorzio con la tua autoscuola e non riceve accesso all'app."
-                : createForm.loginMethod === "phone"
-                  ? "Crea direttamente l'account: l'allievo accede all'app con il suo numero e la password scelta qui."
-                  : "Crea direttamente l'account: l'allievo accede all'app con email e password scelte qui."}
+                : "Bastano nome, cognome e telefono. Email e password le sceglie l'allievo al primo accesso nell'app."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateStudent} className="space-y-4">
@@ -4450,73 +4437,25 @@ export function AutoscuoleStudentsPage({
                 />
               </div>
             ) : (
-              <>
-                <div className="space-y-2">
-                  <Label>Accesso all&apos;app</Label>
-                  <SegmentedControl
-                    fluid
-                    className="flex w-full"
-                    value={createForm.loginMethod}
-                    onChange={(value) => setCreateForm((p) => ({ ...p, loginMethod: value }))}
-                    options={[
-                      { value: "email", label: "Email" },
-                      { value: "phone", label: "Telefono" },
-                    ]}
-                  />
-                </div>
-                {createForm.loginMethod === "phone" ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="create-login-phone">Telefono</Label>
-                    <Input
-                      id="create-login-phone"
-                      type="tel"
-                      inputMode="tel"
-                      autoComplete="off"
-                      placeholder="333 123 4567"
-                      value={createForm.phone}
-                      onChange={(event) => setCreateForm((p) => ({ ...p, phone: event.target.value }))}
-                      required
-                    />
-                    <CreateLoginPhoneHint raw={createForm.phone} />
-                  </div>
-                ) : (
-                <div className="space-y-2">
-                  <Label htmlFor="create-email">Email</Label>
-                  <Input
-                    id="create-email"
-                    type="email"
-                    placeholder="allievo@esempio.com"
-                    value={createForm.email}
-                    onChange={(event) => setCreateForm((p) => ({ ...p, email: event.target.value }))}
-                    required
-                  />
-                </div>
-                )}
-                <div className="space-y-2">
-                  <Label htmlFor="create-password">Password</Label>
-                  <Input
-                    id="create-password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={createForm.password}
-                    onChange={(event) => setCreateForm((p) => ({ ...p, password: event.target.value }))}
-                    required
-                    minLength={6}
-                  />
-                  {createForm.loginMethod === "phone" && (
-                    <p className="text-xs text-muted-foreground">
-                      Almeno 6 caratteri. Comunicala tu all&apos;allievo insieme al numero.
-                    </p>
-                  )}
-                </div>
-                {createForm.loginMethod === "phone" && (
-                  <WhatsAppConsentField
-                    id="create-login-whatsapp-consent"
-                    checked={createForm.whatsappConsent}
-                    onCheckedChange={(next) => setCreateForm((p) => ({ ...p, whatsappConsent: next }))}
-                  />
-                )}
-              </>
+              <div className="space-y-2">
+                <Label htmlFor="create-login-phone">Telefono</Label>
+                <Input
+                  id="create-login-phone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="off"
+                  placeholder="333 123 4567"
+                  value={createForm.phone}
+                  onChange={(event) => setCreateForm((p) => ({ ...p, phone: event.target.value }))}
+                  required
+                />
+                <CreateLoginPhoneHint raw={createForm.phone} />
+                <WhatsAppConsentField
+                  id="create-login-whatsapp-consent"
+                  checked={createForm.whatsappConsent}
+                  onCheckedChange={(next) => setCreateForm((p) => ({ ...p, whatsappConsent: next }))}
+                />
+              </div>
             )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -4613,7 +4552,7 @@ export function AutoscuoleStudentsPage({
                 ) : (
                   <>
                     <UserPlus className="mr-2 h-4 w-4" />
-                    {affiliate ? "Aggiungi allievo" : "Crea account"}
+                    {affiliate ? "Aggiungi allievo" : "Crea allievo"}
                   </>
                 )}
               </Button>

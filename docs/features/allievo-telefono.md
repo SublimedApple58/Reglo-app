@@ -12,15 +12,15 @@ L'autoscuola può creare un allievo con **solo telefono + password**, senza emai
 
 ## File
 - `lib/users/login-phone.ts` — `isPhoneIdentifier` (niente `@` = telefono), `normalizeLoginPhone` (su `normalizeToE164`: `333…`, `+39 333…`, `0039 333…`, `39333…` → stesso E.164; estero solo col `+`).
-- `lib/actions/user.actions.ts` `createCompanyUser` — nuovo `loginWithPhone`: solo `STUDENT`, telefono valido, password ≥ 6, numero non già usato come `loginPhone` («Questo numero è già usato per accedere da un altro account»). Email facoltativa.
+- `lib/actions/user.actions.ts` `createCompanyUser` — nuovo `loginWithPhone`: solo `STUDENT`, telefono valido, password facoltativa (≥ 6 se c'è), numero non già usato come `loginPhone` («Questo numero è già usato per accedere da un altro account»). Email facoltativa.
 - `app/api/mobile/auth/login/route.ts` — il campo `email` accetta anche un telefono: senza `@` cerca per `loginPhone`. Funziona con le app già installate (2.4.0/2.4.2), nessun force-update.
 - `lib/account-deletion.ts` — l'anonimizzazione azzera anche `loginPhone` (il numero torna libero).
 - `email/index.ts` `sendDynamicEmail` — scarta i destinatari `*.reglo.local` (segnaposto e account eliminati, `isUndeliverableEmail`); se non resta nessuno l'invio salta. Prima diversi chiamanti (`notify.ts`, `communications.ts`, `payments.ts`…) mandavano a `@no-app.reglo.local`.
 - Test: `tests/unit/users/login-phone.test.ts`.
 
-## Web — dialog «Crea account allievo»
-`components/pages/Autoscuole/AutoscuoleStudentsPage.tsx`: sotto nome e cognome c'è «Accesso all'app» (`SegmentedControl` Email | Telefono, campo `loginMethod` del form). Con Telefono: campo telefono con sotto il numero esatto di accesso («Accederà con +39 333 123 4567», `CreateLoginPhoneHint`, errore inline se non valido), password con nota «comunicala tu all'allievo», consenso WhatsApp (`WhatsAppConsentField`). Chiama `createCompanyUser({ phone, loginWithPhone: true, whatsappConsent })`. La vista ridotta (affiliate) non cambia.
+## Web — dialog «Nuovo allievo»
+`components/pages/Autoscuole/AutoscuoleStudentsPage.tsx` (vista non ridotta): il titolare scrive **solo nome, cognome, telefono e percorso** (categoria, cambio, fase, istruttore). Niente email, niente password (decisione Tiziano 09/11): le sceglie l'allievo al primo accesso. Sotto il telefono il numero esatto di accesso («Accederà con +39 333 123 4567», `CreateLoginPhoneHint`, errore inline se non valido) e il consenso WhatsApp. Chiama `createCompanyUser({ phone, loginWithPhone: true, whatsappConsent })` → account con `loginPhone`, email segnaposto e `password = null`: **non entra finché non attiva l'account** (metodo di verifica del numero da decidere). Il vecchio modo «email + password» del dialog è stato tolto; la vista ridotta (affiliate) non cambia.
 
 ## Limiti noti
 - Login web (NextAuth) solo email: gli allievi usano l'app.
-- Il recupero password è solo via email: un allievo col solo telefono va aiutato dall'autoscuola finché non inserisce un'email (fase successiva).
+- Recupero password dall'app: si può scrivere email o telefono; il codice parte sempre all'email vera dell'account (`findResetAccount` in `lib/auth/password-reset.ts`). Senza email vera (attivazione non fatta) non parte niente, risposta identica (niente enumerazione).
