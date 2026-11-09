@@ -184,6 +184,7 @@ import {
   type BookingInitiator,
 } from "@/lib/autoscuole/booking-block";
 import { releaseExpiredManualBlocks } from "@/lib/autoscuole/booking-block-expiry";
+import { examinersSchema, normalizeExaminers } from "@/lib/autoscuole/exam-examiners";
 import {
   LESSON_ALL_ALLOWED_TYPES,
   getCompatibleLessonTypesForInterval,
@@ -1395,6 +1396,8 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           // Esito esame: il pannello di gestione lo mostra sulla riga dell'iscritto
           // e la modalina "Registra esito" ci si apre sopra. Viaggia con ...rest.
           examOutcome: true,
+          // REG-640: esaminatori esterni, mostrati e modificati nel pannello esame.
+          examiners: true,
           cancellationKind: true,
           cancellationReason: true,
           replacedByAppointmentId: true,
@@ -1724,6 +1727,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           bookingSource: BOOKING_SOURCE.groupLesson,
           // Una guida di gruppo vuota non è un esame: nessun esito, mai.
           examOutcome: null,
+          examiners: [],
           cancellationKind: null,
           cancellationReason: null,
           replacedByAppointmentId: null,
@@ -9728,8 +9732,30 @@ export async function materializeExamSlot(params: {
   /** REG-585: istruttori aggiuntivi, replicati su OGNI riga dell'esame. */
   coInstructorIds?: string[];
   notes: string | null;
+  /**
+   * REG-640: esaminatori esterni. `undefined` = "non li sto toccando": la riga
+   * nuova eredita quelli già sull'esame, così un allievo aggiunto dopo (anche
+   * da un client che non conosce il campo) non nasce senza esaminatore.
+   */
+  examiners?: string[];
 }): Promise<number> {
   const { companyId, studentIds, startsAt, endsAt, instructorId, notes } = params;
+  const examiners =
+    params.examiners !== undefined
+      ? normalizeExaminers(params.examiners)
+      : (
+          await prisma.autoscuolaAppointment.findFirst({
+            where: {
+              companyId,
+              type: "esame",
+              startsAt,
+              endsAt: endsAt ?? null,
+              instructorId: instructorId ?? null,
+              status: { not: "cancelled" },
+            },
+            select: { examiners: true },
+          })
+        )?.examiners ?? [];
   // Il principale non si duplica nel join: lì stanno solo i colleghi.
   const coInstructorIds = Array.from(
     new Set((params.coInstructorIds ?? []).filter((id) => id && id !== instructorId)),
@@ -9745,6 +9771,7 @@ export async function materializeExamSlot(params: {
     instructorId: instructorId ?? null,
     vehicleId: null,
     paymentRequired: false,
+    examiners,
     // Un esame è una riga PER ALLIEVO: gli istruttori aggiuntivi vanno su
     // tutte, altrimenti il collega vedrebbe solo una parte dei candidati.
     ...(coInstructorIds.length
@@ -9789,6 +9816,7 @@ export async function materializeExamSlot(params: {
           data: {
             studentId: studentIds[i],
             ...(notes != null ? { notes } : {}),
+            examiners,
             // REG-585: riallinea gli istruttori aggiuntivi del placeholder a
             // quelli richiesti ora (il titolare può averli cambiati nel mentre).
             coInstructors: {
@@ -9938,6 +9966,8 @@ const createExamEventSchema = z.object({
   /** REG-585: istruttori aggiuntivi. Nessun tetto al numero (scelta di Tiziano). */
   coInstructorIds: z.array(z.string().uuid()).optional(),
   notes: z.string().optional(),
+  /** REG-640: esaminatori esterni, nomi liberi. */
+  examiners: examinersSchema.optional(),
 });
 
 export async function createExamEvent(
@@ -10068,6 +10098,7 @@ export async function createExamEvent(
       instructorId: payload.instructorId ?? null,
       coInstructorIds,
       notes: payload.notes ?? null,
+      examiners: payload.examiners,
     });
 
     await invalidateAgendaAndPaymentsCache(companyId);
@@ -10104,6 +10135,8 @@ const addExamStudentSchema = z.object({
    */
   coInstructorIds: z.array(z.string().uuid()).optional(),
   notes: z.string().optional(),
+  /** REG-640: esaminatori esterni, nomi liberi. */
+  examiners: examinersSchema.optional(),
 });
 
 export async function addExamStudent(
@@ -10134,6 +10167,7 @@ export async function addExamStudent(
       // REG-589: la riga nuova nasce con gli stessi accompagnatori delle altre.
       coInstructorIds: payload.coInstructorIds,
       notes: payload.notes ?? null,
+      examiners: payload.examiners,
     });
 
     await invalidateAgendaAndPaymentsCache(companyId);
@@ -10415,13 +10449,19 @@ export async function updateExamTime(
   }
 }
 
-const updateExamNotesSchema = z.object({
+const updateExamDetailsSchema = z.object({
   appointmentIds: z.array(z.string().uuid()).min(1),
   notes: z.string().max(2000).nullable().optional(),
+  /** REG-640: assente = non toccarli. */
+  examiners: examinersSchema.optional(),
 });
 
-export async function updateExamNotes(
-  input: z.infer<typeof updateExamNotesSchema>,
+/**
+ * Note ed esaminatori dell'esame, scritti su tutte le sue righe. Ogni campo
+ * assente resta com'è: il web salva entrambi, il mobile può salvarne uno.
+ */
+export async function updateExamDetails(
+  input: z.infer<typeof updateExamDetailsSchema>,
 ) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
@@ -10432,16 +10472,60 @@ export async function updateExamNotes(
     ) {
       return { success: false as const, message: "Operazione non consentita." };
     }
-    const payload = updateExamNotesSchema.parse(input);
-    const notes = payload.notes?.trim() ? payload.notes.trim() : null;
+    const payload = updateExamDetailsSchema.parse(input);
+    const data: Prisma.AutoscuolaAppointmentUpdateManyMutationInput = {};
+    if (payload.notes !== undefined) {
+      data.notes = payload.notes?.trim() ? payload.notes.trim() : null;
+    }
+    if (payload.examiners !== undefined) {
+      data.examiners = normalizeExaminers(payload.examiners);
+    }
+    if (!Object.keys(data).length) return { success: true as const };
 
     await prisma.autoscuolaAppointment.updateMany({
       where: { id: { in: payload.appointmentIds }, companyId: membership.companyId, type: "esame" },
-      data: { notes },
+      data,
     });
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
     return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+/**
+ * REG-640: i nomi di esaminatori che l'autoscuola ha già scritto, il più
+ * recente prima — suggerimenti per non ribattere sempre lo stesso nome.
+ * I doppioni con maiuscole diverse contano come uno (vince la grafia più
+ * recente).
+ */
+export async function listExamExaminerSuggestions() {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (
+      membership.role !== "admin" &&
+      membership.autoscuolaRole !== "OWNER" &&
+      !isInstructor(membership.autoscuolaRole)
+    ) {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+    const rows = await prisma.$queryRaw<{ name: string; startsAt: Date }[]>`
+      SELECT DISTINCT ON (lower(t.name)) t.name, t."startsAt"
+      FROM (
+        SELECT unnest(a."examiners") AS name, a."startsAt"
+        FROM "AutoscuolaAppointment" a
+        WHERE a."companyId" = ${membership.companyId}::uuid
+          AND a."type" = 'esame'
+          AND cardinality(a."examiners") > 0
+      ) t
+      ORDER BY lower(t.name), t."startsAt" DESC
+    `;
+    const names = rows
+      .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())
+      .slice(0, 30)
+      .map((r) => r.name);
+    return { success: true as const, data: names };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }

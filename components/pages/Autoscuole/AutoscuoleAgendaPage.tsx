@@ -29,6 +29,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CancelAppointmentDialog, type CancelDialogTarget, type CancelFault, type LateOutcome } from "@/components/pages/Autoscuole/CancelAppointmentDialog";
 import { CoInstructorPicker } from "@/components/pages/Autoscuole/CoInstructorPicker";
+import { ExaminersField } from "@/components/pages/Autoscuole/ExaminersField";
+import { normalizeExaminers } from "@/lib/autoscuole/exam-examiners";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   Select,
@@ -59,7 +61,8 @@ import {
   removeExamStudent,
   updateExamInstructor,
   updateExamTime,
-  updateExamNotes,
+  updateExamDetails,
+  listExamExaminerSuggestions,
   cancelExamEvent,
   dismissCancelledAppointmentsFromAgenda,
   updateCancelledLessonAgendaNote,
@@ -229,6 +232,8 @@ type AppointmentRow = {
   /** Esito esame: "idoneo" | "respinto" | null = non ancora registrato. */
   examOutcome?: string | null;
   notes?: string | null;
+  /** REG-640: esaminatori esterni (solo esami). */
+  examiners?: string[];
 };
 
 // Group-lesson cards: standard = teal, moto = orange (same style, different
@@ -267,6 +272,7 @@ type ExamGroup = {
   coInstructors: Array<{ id: string; name: string }>;
   appointments: AppointmentRow[];
   notes: string | null;
+  examiners: string[];
 };
 
 // A studentless "placeholder" row for an exam created before its participants
@@ -1365,7 +1371,7 @@ export function AutoscuoleAgendaPage({
   const [blockForm, setBlockForm] = React.useState({ instructorId: "", date: "", startTime: "09:00", duration: "60", reason: "", description: "", recurring: false, recurringWeeks: 12 });
   const [blockDeleteConfirm, setBlockDeleteConfirm] = React.useState<{ id: string; recurrenceGroupId: string | null } | null>(null);
   const [examDialogOpen, setExamDialogOpen] = React.useState(false);
-  const [examForm, setExamForm] = React.useState({ date: "", time: "09:00", duration: "60", timeSet: true, instructorId: "", coInstructorIds: [] as string[], studentIds: [] as string[], note: "" });
+  const [examForm, setExamForm] = React.useState({ date: "", time: "09:00", duration: "60", timeSet: true, instructorId: "", coInstructorIds: [] as string[], studentIds: [] as string[], note: "", examiners: [] as string[] });
   const [examCreating, setExamCreating] = React.useState(false);
   const [examStudentSearch, setExamStudentSearch] = React.useState("");
   // Pannello laterale "Aggiungi allievi" (stesso pattern delle guide di gruppo).
@@ -1432,6 +1438,18 @@ export function AutoscuoleAgendaPage({
   // Modello DRAFT: orario/istruttore/allievi/note si modificano in locale e si
   // applicano con un unico "Salva modifiche" (niente auto-save a ogni tocco).
   const [examNoteDraft, setExamNoteDraft] = React.useState("");
+  const [examDraftExaminers, setExamDraftExaminers] = React.useState<string[]>([]);
+  // REG-640: nomi di esaminatori già usati, per i suggerimenti. Si caricano
+  // all'apertura di «Nuovo esame» o del pannello esame.
+  const [examinerSuggestions, setExaminerSuggestions] = React.useState<string[]>([]);
+  const loadExaminerSuggestions = React.useCallback(() => {
+    void listExamExaminerSuggestions().then((r) => {
+      if (r.success) setExaminerSuggestions(r.data);
+    });
+  }, []);
+  React.useEffect(() => {
+    if (examDialogOpen) loadExaminerSuggestions();
+  }, [examDialogOpen, loadExaminerSuggestions]);
   const [examDraftTime, setExamDraftTime] = React.useState<string | null>(null);
   const [examDraftDurationMin, setExamDraftDurationMin] = React.useState(60);
   const [examDraftInstructorId, setExamDraftInstructorId] = React.useState<string | null>(null);
@@ -1446,6 +1464,8 @@ export function AutoscuoleAgendaPage({
         const g = examPanelGroup;
         const gs = toDate(g.startsAt);
         setExamNoteDraft(g.notes ?? "");
+        setExamDraftExaminers(g.examiners);
+        loadExaminerSuggestions();
         setExamDraftTime(g.endsAt ? `${String(gs.getHours()).padStart(2, "0")}:${String(gs.getMinutes()).padStart(2, "0")}` : null);
         setExamDraftDurationMin(g.endsAt ? Math.max(15, Math.round((toDate(g.endsAt).getTime() - gs.getTime()) / 60000)) : 60);
         setExamDraftInstructorId(g.instructorId ?? null);
@@ -1458,13 +1478,14 @@ export function AutoscuoleAgendaPage({
       setExamPanelBrowseOpen(false);
       setExamPanelStudentSearch("");
       setExamNoteDraft("");
+      setExamDraftExaminers([]);
       setExamDraftTime(null);
       setExamDraftDurationMin(60);
       setExamDraftInstructorId(null);
       setExamDraftCoInstructorIds([]);
       setExamDraftStudentIds([]);
     }
-  }, [examPanelGroup]);
+  }, [examPanelGroup, loadExaminerSuggestions]);
   const [legendOpen, setLegendOpen] = React.useState(false);
   // Criterio colore dei blocchi guida (pannello Impostazioni → Aspetto):
   // "durata" (storico) o "patente" + colori personalizzati per voce.
@@ -1816,6 +1837,7 @@ export function AutoscuoleAgendaPage({
         coInstructors: Array.from(coById.values()),
         appointments: appts,
         notes: first.notes ?? null,
+        examiners: first.examiners ?? [],
       });
     }
     return { regularAppointments: regular, examGroups: groups };
@@ -4699,7 +4721,7 @@ export function AutoscuoleAgendaPage({
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
-                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setExamForm({ date: formatYmd(newEventDay()), time: "09:00", duration: "60", timeSet: true, instructorId: "", coInstructorIds: [], studentIds: [], note: "" }); setExamStudentSearch(""); setExamDialogOpen(true); }}
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setExamForm({ date: formatYmd(newEventDay()), time: "09:00", duration: "60", timeSet: true, instructorId: "", coInstructorIds: [], studentIds: [], note: "", examiners: [] }); setExamStudentSearch(""); setExamDialogOpen(true); }}
                 >
                   <GraduationCap className="size-4 text-foreground" strokeWidth={1.7} />
                   Esame
@@ -4917,7 +4939,7 @@ export function AutoscuoleAgendaPage({
                 label: "Esame",
                 icon: <GraduationCap className="size-4 text-foreground" strokeWidth={1.7} />,
                 onSelect: () => closeAnd(() => {
-                  setExamForm({ date: slotMenu.ymd, time: slotMenu.time, duration: "60", timeSet: true, instructorId: slotMenu.instructorId ?? "", coInstructorIds: [], studentIds: [], note: "" });
+                  setExamForm({ date: slotMenu.ymd, time: slotMenu.time, duration: "60", timeSet: true, instructorId: slotMenu.instructorId ?? "", coInstructorIds: [], studentIds: [], note: "", examiners: [] });
                   setExamStudentSearch("");
                   setExamDialogOpen(true);
                 }),
@@ -7246,8 +7268,9 @@ export function AutoscuoleAgendaPage({
             const origCoIds = eg.coInstructors.map((co) => co.id);
             const coChanged = sortIds(examDraftCoInstructorIds) !== sortIds(origCoIds);
             const noteChanged = examNoteDraft.trim() !== (eg.notes ?? "").trim();
+            const examinersChanged = normalizeExaminers(examDraftExaminers).join("\n") !== eg.examiners.join("\n");
             const studentsChanged = sortIds(examDraftStudentIds) !== sortIds(origStudentIds);
-            const examDirty = timingChanged || instrChanged || coChanged || noteChanged || studentsChanged;
+            const examDirty = timingChanged || instrChanged || coChanged || noteChanged || examinersChanged || studentsChanged;
             // endsAt = start + durata scelta. Preservare la durata è ciò che tiene
             // insieme il gruppo esame (chiave = start|end|istruttore): un allievo
             // aggiunto o un cambio orario mantengono lo stesso [start,end].
@@ -7290,7 +7313,7 @@ export function AutoscuoleAgendaPage({
                   }
                 }
                 for (const sid of added) {
-                  const r = await addExamStudent({ studentId: sid, startsAt, endsAt, instructorId: examDraftInstructorId, coInstructorIds: examDraftCoInstructorIds, notes: examNoteDraft.trim() || undefined });
+                  const r = await addExamStudent({ studentId: sid, startsAt, endsAt, instructorId: examDraftInstructorId, coInstructorIds: examDraftCoInstructorIds, notes: examNoteDraft.trim() || undefined, examiners: normalizeExaminers(examDraftExaminers) });
                   if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
                 }
                 const keptApptIds = origStudentIds
@@ -7309,8 +7332,12 @@ export function AutoscuoleAgendaPage({
                     const r = await updateExamInstructor({ appointmentIds: metaApptIds, instructorId: examDraftInstructorId, coInstructorIds: examDraftCoInstructorIds });
                     if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
                   }
-                  if (noteChanged) {
-                    const r = await updateExamNotes({ appointmentIds: metaApptIds, notes: examNoteDraft.trim() || null });
+                  if (noteChanged || examinersChanged) {
+                    const r = await updateExamDetails({
+                      appointmentIds: metaApptIds,
+                      ...(noteChanged ? { notes: examNoteDraft.trim() || null } : {}),
+                      ...(examinersChanged ? { examiners: normalizeExaminers(examDraftExaminers) } : {}),
+                    });
                     if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
                   }
                 }
@@ -7392,6 +7419,17 @@ export function AutoscuoleAgendaPage({
                         label="Altri accompagnatori"
                       />
                     </div>
+                  </div>
+
+                  {/* REG-640: esaminatori esterni, prima degli allievi */}
+                  <div>
+                    <div className="mb-1.5 text-[13px] font-semibold text-[#6a6a6a]">Esaminatori</div>
+                    <ExaminersField
+                      value={examDraftExaminers}
+                      onChange={setExamDraftExaminers}
+                      suggestions={examinerSuggestions}
+                      disabled={examPanelPending}
+                    />
                   </div>
 
                   {/* Allievi iscritti */}
@@ -7792,6 +7830,7 @@ export function AutoscuoleAgendaPage({
                   instructorId: instrId,
                   coInstructorIds: examForm.coInstructorIds,
                   notes: examForm.note.trim() || undefined,
+                  examiners: normalizeExaminers(examForm.examiners),
                 });
                 setExamCreating(false);
                 if (res.success) {
@@ -7858,6 +7897,15 @@ export function AutoscuoleAgendaPage({
                 label="Altri accompagnatori"
               />
             </div>
+          </div>
+          {/* REG-640: esaminatori esterni, prima degli allievi */}
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Esaminatori</p>
+            <ExaminersField
+              value={examForm.examiners}
+              onChange={(next) => setExamForm((f) => ({ ...f, examiners: next }))}
+              suggestions={examinerSuggestions}
+            />
           </div>
           <div>
             <p className="mb-1.5 text-xs font-semibold text-[#555555]">

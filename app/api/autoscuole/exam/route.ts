@@ -3,7 +3,8 @@ import { z } from "zod";
 import { prisma } from "@/db/prisma";
 import { requireServiceAccess } from "@/lib/service-access";
 import { formatError } from "@/lib/utils";
-import { createExamEvent, updateExamTime, updateExamInstructor, materializeExamSlot, notifyExamStudentsOnCreate } from "@/lib/actions/autoscuole.actions";
+import { createExamEvent, updateExamTime, updateExamInstructor, updateExamDetails, materializeExamSlot, notifyExamStudentsOnCreate } from "@/lib/actions/autoscuole.actions";
+import { examinersSchema } from "@/lib/autoscuole/exam-examiners";
 import { after } from "next/server";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
@@ -17,6 +18,8 @@ const createExamSchema = z.object({
   endsAt: z.string().optional().nullable(),
   instructorId: z.string().uuid().optional().nullable(),
   notes: z.string().optional(),
+  /** REG-640: esaminatori esterni, nomi liberi. */
+  examiners: examinersSchema.optional(),
 });
 
 export async function POST(request: Request) {
@@ -170,6 +173,7 @@ export async function POST(request: Request) {
         endsAt,
         instructorId: resolvedInstructorId,
         notes: payload.notes ?? null,
+        examiners: payload.examiners,
       });
 
       await invalidateAutoscuoleCache({
@@ -216,6 +220,12 @@ const updateExamTimeSchema = z.object({
   endsAt: z.string().optional().nullable(),
 });
 
+const updateExamDetailsSchema = z.object({
+  appointmentIds: z.array(z.string().uuid()).min(1),
+  notes: z.string().max(2000).nullable().optional(),
+  examiners: examinersSchema.optional(),
+});
+
 const updateExamInstructorSchema = z.object({
   appointmentIds: z.array(z.string().uuid()).min(1),
   instructorId: z.string().uuid().optional().nullable(),
@@ -242,6 +252,11 @@ export async function PATCH(request: Request) {
     // aggiunge o toglie un collega), senza si sta spostando l'orario.
     if (body && typeof body === "object" && "coInstructorIds" in body) {
       const result = await updateExamInstructor(updateExamInstructorSchema.parse(body));
+      return NextResponse.json(result, { status: result.success ? 200 : 400 });
+    }
+    // REG-640: senza orario né accompagnatori è la modifica di note/esaminatori.
+    if (body && typeof body === "object" && !("startsAt" in body)) {
+      const result = await updateExamDetails(updateExamDetailsSchema.parse(body));
       return NextResponse.json(result, { status: result.success ? 200 : 400 });
     }
     const payload = updateExamTimeSchema.parse(body);

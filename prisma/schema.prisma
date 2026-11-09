@@ -663,6 +663,11 @@ model AutoscuolaAppointment {
   examOutcome                  String?
   examOutcomeAt                DateTime? @db.Timestamp(6)
   examOutcomeByUserId          String?   @db.Uuid
+  /// REG-640: esaminatori dell'esame (type = "esame"), nomi liberi di persone
+  /// ESTERNE all'autoscuola — non istruttori, quindi niente relazione. Di solito
+  /// uno. Come `notes`, replicati su ogni riga dello stesso esame (una riga per
+  /// allievo). Regole in lib/autoscuole/exam-examiners.ts.
+  examiners                    String[]  @default([])
   createdAt                    DateTime  @default(now()) @db.Timestamp(6)
   updatedAt                    DateTime  @updatedAt
 
