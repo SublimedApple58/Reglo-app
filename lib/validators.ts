@@ -62,6 +62,30 @@ export const passwordResetConfirmSchema = z
     path: ['confirmPassword'],
   });
 
+// App: stesso flusso, ma il campo `email` accetta anche il telefono di chi
+// accede col numero (lib/users/login-phone.ts). Il nome del campo resta
+// `email` per compatibilità con le app già installate.
+const resetIdentifier = z.string().trim().min(3, 'Inserisci email o telefono');
+
+export const mobilePasswordResetRequestSchema = z.object({ email: resetIdentifier });
+
+export const mobilePasswordResetVerifySchema = z.object({
+  email: resetIdentifier,
+  code: z.string().length(6, 'Code must be exactly 6 digits'),
+});
+
+export const mobilePasswordResetConfirmSchema = z
+  .object({
+    email: resetIdentifier,
+    code: z.string().length(6, 'Code must be exactly 6 digits'),
+    password: z.string().min(6, 'Password must be at least 6 characters'),
+    confirmPassword: z.string().min(6, 'Confirm password must be at least 6 characters'),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ['confirmPassword'],
+  });
+
 // Schema for updating the user profile
 export const updateProfileSchema = z.object({
   name: z.string().min(3, 'Name must be at leaast 3 characters'),

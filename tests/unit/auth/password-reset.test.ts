@@ -32,7 +32,7 @@ type CodeRow = {
 };
 
 const db = {
-  users: [] as Array<{ id: string; email: string; name: string | null }>,
+  users: [] as Array<{ id: string; email: string; name: string | null; loginPhone?: string | null }>,
   codes: [] as CodeRow[],
   transactions: [] as unknown[][],
 };
@@ -42,6 +42,9 @@ jest.mock("@/db/prisma", () => ({
     user: {
       findFirst: jest.fn(async ({ where }: { where: { email: string } }) =>
         db.users.find((u) => u.email === where.email) ?? null,
+      ),
+      findUnique: jest.fn(async ({ where }: { where: { loginPhone: string } }) =>
+        db.users.find((u) => u.loginPhone && u.loginPhone === where.loginPhone) ?? null,
       ),
       update: jest.fn(async (args: unknown) => args),
     },
@@ -272,6 +275,42 @@ describe("verifica del codice", () => {
     await prepare();
 
     expect(await checkPasswordResetCode("nessuno@example.com", "123456")).toEqual({ ok: false });
+  });
+});
+
+describe("allievo che accede col telefono", () => {
+  const seedPhoneUser = (email: string) => {
+    const user = { id: "user-phone", email, name: "Giulia", loginPhone: "+393331234567" };
+    db.users.push(user);
+    return user;
+  };
+
+  it("scrivendo il numero, il codice parte all'email inserita al primo accesso", async () => {
+    seedPhoneUser("giulia@example.com");
+    await requestPasswordResetCode("333 123 4567", "app");
+    await flushAfter();
+
+    expect(sendDynamicEmail).toHaveBeenCalledTimes(1);
+    expect(sendDynamicEmail.mock.calls[0][0].to).toBe("giulia@example.com");
+    const check = await checkPasswordResetCode("+39 333 1234567", sentCode());
+    expect(check).toMatchObject({ ok: true, userId: "user-phone", email: "giulia@example.com" });
+  });
+
+  it("senza un'email vera non crea codici e non manda niente", async () => {
+    seedPhoneUser("allievo+abc@no-app.reglo.local");
+    await requestPasswordResetCode("3331234567", "app");
+    await flushAfter();
+
+    expect(sendDynamicEmail).not.toHaveBeenCalled();
+    expect(db.codes).toHaveLength(0);
+  });
+
+  it("un numero sconosciuto non manda niente", async () => {
+    seedPhoneUser("giulia@example.com");
+    await requestPasswordResetCode("333 0000000", "app");
+    await flushAfter();
+
+    expect(sendDynamicEmail).not.toHaveBeenCalled();
   });
 });
 

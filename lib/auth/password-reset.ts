@@ -5,6 +5,8 @@ import { after } from "next/server";
 import { prisma } from "@/db/prisma";
 import { sendDynamicEmail } from "@/email";
 import { compare, hash } from "@/lib/encrypt";
+import { isPhoneIdentifier, normalizeLoginPhone } from "@/lib/users/login-phone";
+import { isUndeliverableEmail } from "@/lib/users/placeholder-email";
 
 /** OTP / reset-code policy (password reset, web + mobile). */
 export const RESET_CODE_TTL_MS = 15 * 60 * 1000; // 15 minutes
@@ -83,12 +85,30 @@ export function findValidResetCode(userId: string) {
 // qui una volta sola: due copie divergono, e a divergere sarebbe la sicurezza.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * L'account a cui si riferisce «email o telefono». Il telefono vale solo per
+ * gli allievi che accedono col numero (`User.loginPhone`): il codice parte
+ * comunque per email, all'indirizzo che l'allievo ha inserito al primo accesso.
+ */
+async function findResetAccount(rawIdentifier: string) {
+  const identifier = rawIdentifier.trim();
+  if (isPhoneIdentifier(identifier)) {
+    const loginPhone = normalizeLoginPhone(identifier);
+    return loginPhone ? prisma.user.findUnique({ where: { loginPhone } }) : null;
+  }
+  return prisma.user.findFirst({ where: { email: identifier.toLowerCase() } });
+}
+
 /** Messaggio unico per codice sbagliato, scaduto o inesistente: non dice quale. */
 export const RESET_INVALID_CODE_MESSAGE = "Codice non valido o scaduto.";
 
 /** Risposta di "manda il codice": identica che l'email esista o no. */
 export const RESET_GENERIC_REQUEST_MESSAGE =
   "Se l'email è registrata, ti abbiamo inviato un codice.";
+
+/** Come sopra, per l'app dove si può scrivere anche il telefono. */
+export const RESET_GENERIC_REQUEST_MESSAGE_APP =
+  "Se l'account esiste, ti abbiamo inviato un codice all'email collegata.";
 
 /**
  * Manda un codice all'email, se corrisponde a un account e i limiti lo
@@ -99,13 +119,16 @@ export const RESET_GENERIC_REQUEST_MESSAGE =
  * esiste (altrimenti il tempo di risposta diventa un oracolo).
  */
 export async function requestPasswordResetCode(
-  rawEmail: string,
+  rawIdentifier: string,
   channel: "app" | "browser",
 ): Promise<void> {
-  const email = rawEmail.toLowerCase().trim();
-  const user = await prisma.user.findFirst({ where: { email } });
+  const user = await findResetAccount(rawIdentifier);
 
-  if (!user || !(await canRequestResetCode(user.id))) return;
+  // Allievo col telefono che non ha ancora inserito un'email (primo accesso non
+  // fatto): non c'è dove mandare il codice. Stessa risposta di sempre.
+  if (!user || isUndeliverableEmail(user.email)) return;
+  if (!(await canRequestResetCode(user.id))) return;
+  const email = user.email;
 
   const code = await createResetCode(user.id);
   const minutes = Math.round(RESET_CODE_TTL_MS / 60000);
@@ -145,16 +168,16 @@ type ResetCodeCheck =
  * il codice: chi prova a indovinare ha 5 colpi, non infiniti.
  */
 export async function checkPasswordResetCode(
-  rawEmail: string,
+  rawIdentifier: string,
   rawCode: string,
 ): Promise<ResetCodeCheck> {
-  const email = rawEmail.toLowerCase().trim();
   const code = rawCode.trim();
 
-  const user = await prisma.user.findFirst({ where: { email } });
+  const user = await findResetAccount(rawIdentifier);
   const record = user ? await findValidResetCode(user.id) : null;
 
   if (!user || !record) return { ok: false };
+  const email = user.email;
 
   if (!(await compare(code, record.codeHash))) {
     const attempts = record.attempts + 1;

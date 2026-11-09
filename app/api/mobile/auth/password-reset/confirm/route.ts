@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/db/prisma";
 import { buildMobileAuthPayload } from "@/lib/mobile-auth-payload";
-import { passwordResetConfirmSchema } from "@/lib/validators";
+import { mobilePasswordResetConfirmSchema } from "@/lib/validators";
 import {
   applyNewPassword,
   checkPasswordResetCode,
@@ -11,7 +11,7 @@ import {
 
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => null);
-  const parsed = passwordResetConfirmSchema.safeParse(payload);
+  const parsed = mobilePasswordResetConfirmSchema.safeParse(payload);
 
   if (!parsed.success) {
     const message = parsed.error?.issues?.[0]?.message ?? "Dati non validi.";

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { passwordResetVerifySchema } from "@/lib/validators";
+import { mobilePasswordResetVerifySchema } from "@/lib/validators";
 import {
   checkPasswordResetCode,
   RESET_INVALID_CODE_MESSAGE,
@@ -10,7 +10,7 @@ import {
 // codice ma NON lo consuma — il consumo avviene in /confirm.
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => null);
-  const parsed = passwordResetVerifySchema.safeParse(payload);
+  const parsed = mobilePasswordResetVerifySchema.safeParse(payload);
 
   const check = parsed.success
     ? await checkPasswordResetCode(parsed.data.email, parsed.data.code)
