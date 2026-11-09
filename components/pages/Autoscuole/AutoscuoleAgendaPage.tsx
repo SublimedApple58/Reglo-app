@@ -7357,13 +7357,11 @@ export function AutoscuoleAgendaPage({
                 {/* Header */}
                 <div className="flex items-center gap-2.5 pr-10">
                   <DialogTitle className="text-[19px] font-bold tracking-[-0.2px] text-foreground">Esame</DialogTitle>
-                  <span className="shrink-0 rounded-full bg-[#ede9fe] px-2.5 py-1 text-[11px] font-bold tracking-[0.3px] text-[#6d28d9]">
-                    {draftStudents.length} {draftStudents.length === 1 ? "allievo" : "allievi"}
-                  </span>
                 </div>
                 <DialogDescription className="mt-1 text-[13px] font-medium leading-normal text-[#929292]">
                   {egStart.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}
                   {examHasTime ? ` · ${formatTimeRange(egStart, egEnd)}` : " · Orario da definire"}
+                  {` · ${draftStudents.length} ${draftStudents.length === 1 ? "allievo" : "allievi"}`}
                 </DialogDescription>
 
                 <div className="mt-5 space-y-5">

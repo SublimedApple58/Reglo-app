@@ -12,6 +12,9 @@ import { cn } from "@/lib/utils";
  * riposizionare cliccando gli slot. Ancorata al punto di apertura (di solito
  * il bottone "+"), chiusa solo da X / Annulla / Escape — mai da click fuori.
  */
+/** Altezza della fascia in basso dove compare la pill «Altri campi». */
+const HINT_ZONE_PX = 48;
+
 export function CreateEventPopover({
   open,
   onClose,
@@ -73,11 +76,26 @@ export function CreateEventPopover({
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const [canScrollUp, setCanScrollUp] = React.useState(false);
   const [canScrollDown, setCanScrollDown] = React.useState(false);
+  // La pill non deve MAI coprire un campo (REG-640: copriva le Note di «Nuovo
+  // esame»): se nella fascia in basso dove starebbe c'è un controllo, sparisce
+  // e resta solo una sfumatura corta.
+  const [fieldUnderHint, setFieldUnderHint] = React.useState(false);
   const updateScrollHints = React.useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     setCanScrollUp(el.scrollTop > 4);
-    setCanScrollDown(el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+    const down = el.scrollTop + el.clientHeight < el.scrollHeight - 4;
+    setCanScrollDown(down);
+    if (!down) return setFieldUnderHint(false);
+    const box = el.getBoundingClientRect();
+    const zoneTop = box.bottom - HINT_ZONE_PX;
+    const controls = el.querySelectorAll("input, textarea, select, button, [role='combobox']");
+    setFieldUnderHint(
+      Array.from(controls).some((c) => {
+        const r = c.getBoundingClientRect();
+        return r.height > 0 && r.top < box.bottom && r.bottom > zoneTop;
+      }),
+    );
   }, []);
   React.useEffect(() => {
     if (!open) return;
@@ -221,15 +239,17 @@ export function CreateEventPopover({
                 canScrollUp ? "opacity-100" : "opacity-0",
               )}
             />
-            {/* Fade + pill "Altri campi" quando c'è contenuto sotto la piega */}
+            {/* Fade + pill "Altri campi" quando c'è contenuto sotto la piega.
+                Con un campo nella fascia: niente pill e sfumatura corta. */}
             <div
               aria-hidden
               className={cn(
-                "pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white via-white/70 to-transparent transition-opacity duration-200",
+                "pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-white to-transparent transition-[opacity,height] duration-200",
+                fieldUnderHint ? "h-3" : "h-16 via-white/70",
                 canScrollDown ? "opacity-100" : "opacity-0",
               )}
             />
-            {canScrollDown && (
+            {canScrollDown && !fieldUnderHint && (
               <button
                 type="button"
                 onClick={() => {
