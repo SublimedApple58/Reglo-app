@@ -172,10 +172,12 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Ex allievi (REG-629)**: `deleteAndAnonymizeUserAccount` e `deleteUser` scrivono `AutoscuolaFormerStudent` PRIMA di togliere la `CompanyMember`; la cancellazione ora azzera anche `signatureKey` e cancella i file R2 di foto e firma
 
 ### Allievo con telefono + password
-- → **Mobile auth**: `POST /api/mobile/auth/login` accetta un telefono nel campo `email` (niente `@` → lookup su `User.loginPhone`, E.164 unico)
+- → **Mobile auth**: `POST /api/mobile/auth/login` accetta un telefono nel campo `email` (niente `@` → lookup su `User.loginPhone`, E.164 unico) e risponde `ACTIVATION_REQUIRED` per gli account mai attivati
+- → **Primo accesso mobile**: `POST /api/mobile/auth/first-access/{start,complete}` (`lib/auth/first-access.ts`), app `reglo-mobile/docs/features/first-access.md`
+- → **Lista/scheda allievi**: `toStudentProfile` espone `loginPhone`/`activatedAt` e nasconde le email segnaposto
 - → **Users Directory**: `createCompanyUser({ loginWithPhone })` — email segnaposto + password; `deleteAndAnonymizeUserAccount` libera anche `loginPhone`
 - → **Email (tutti gli invii)**: `sendDynamicEmail` scarta i destinatari `*.reglo.local` (segnaposto consorzio/telefono, account eliminati) — vale per notify, comunicazioni, pagamenti
-- → **Password reset**: ancora solo via email → un allievo col solo telefono non può recuperarla da solo
+- → **Password reset**: dall'app si può scrivere il telefono; il codice va all'email scelta al primo accesso (`findResetAccount`)
 
 ### Ex allievi (REG-629)
 - → **Users Directory / Mobile self-deletion**: unica fonte delle righe (`archiveFormerStudentMemberships`)

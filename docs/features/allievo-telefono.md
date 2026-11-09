@@ -2,7 +2,7 @@
 
 L'autoscuola può creare un allievo con **solo telefono + password**, senza email: l'allievo entra subito nell'app col numero.
 
-> Stato (09/11/2026, branch `feat/allievo-telefono`): fatti il **backend** (schema, creazione, login) e il **dialog web**. Da fare: foglio di creazione nell'app, login «Email o telefono» lato app, onboarding al primo accesso, recupero password senza email.
+> Stato (09/11/2026, branch `feat/allievo-telefono`, NON in staging né in prod): backend, web e app fatti e provati in locale. Decisione Tiziano: **nessun codice di verifica**, l'allievo si riconosce dal numero al «Primo accesso».
 
 ## Modello
 - `User.loginPhone` — numero con cui l'utente **accede**, sempre E.164 (`+393331234567`), `@unique`. Distinto da `User.phone` (recapito: non unico, in prod spesso senza prefisso). Valorizzato solo per gli account creati con l'accesso col telefono; gli account esistenti non lo hanno.
@@ -18,8 +18,20 @@ L'autoscuola può creare un allievo con **solo telefono + password**, senza emai
 - `email/index.ts` `sendDynamicEmail` — scarta i destinatari `*.reglo.local` (segnaposto e account eliminati, `isUndeliverableEmail`); se non resta nessuno l'invio salta. Prima diversi chiamanti (`notify.ts`, `communications.ts`, `payments.ts`…) mandavano a `@no-app.reglo.local`.
 - Test: `tests/unit/users/login-phone.test.ts`.
 
-## Web — dialog «Nuovo allievo»
-`components/pages/Autoscuole/AutoscuoleStudentsPage.tsx` (vista non ridotta): il titolare scrive **solo nome, cognome, telefono e percorso** (categoria, cambio, fase, istruttore). Niente email, niente password (decisione Tiziano 09/11): le sceglie l'allievo al primo accesso. Sotto il telefono il numero esatto di accesso («Accederà con +39 333 123 4567», `CreateLoginPhoneHint`, errore inline se non valido) e il consenso WhatsApp. Chiama `createCompanyUser({ phone, loginWithPhone: true, whatsappConsent })` → account con `loginPhone`, email segnaposto e `password = null`: **non entra finché non attiva l'account** (metodo di verifica del numero da decidere). Il vecchio modo «email + password» del dialog è stato tolto; la vista ridotta (affiliate) non cambia.
+## Primo accesso (lib/auth/first-access.ts)
+- `POST /api/mobile/auth/first-access/start` `{ phone }` → se c'è un allievo con quel `loginPhone`, **mai attivato** (`password` e `profileCompletedAt` nulli) e con membership STUDENT: permesso firmato HMAC (`NEXTAUTH_SECRET`, 30 min, nessuna tabella) + nome, cognome, numero, autoscuola. Altrimenti 404 con un messaggio unico (numero inesistente, non valido o già attivato).
+- `POST /api/mobile/auth/first-access/complete` `{ activationToken, firstName, lastName, email, password, birthDate }` (`firstAccessCompleteSchema`: email valida, password ≥ 6, nascita 14–100 anni) → `releaseEmailIfOrphaned`, poi `updateMany` condizionato a `password: null` (due attivazioni concorrenti: vince una sola) → `name`, `email`, `password`, `birthDate`, `profileCompletedAt`; risponde `buildMobileAuthPayload` (sessione aperta).
+- Login mobile: numero di un account mai attivato → 401 `code: "ACTIVATION_REQUIRED"`, l'app apre il primo accesso.
+- Limiti (`lib/auth/rate-limit.ts`, Upstash Redis INCR+EXPIRE, senza Redis lascia passare): start 5/15 min per numero e 20/15 min per IP; complete 20/15 min per IP.
+- ⚠️ **Senza codice**: chi conosce il numero di un allievo non ancora attivato può attivarlo al posto suo, e il fatto che il flusso prosegua rivela che il numero esiste. Mitigazioni: solo account mai attivati, limiti, risposta generica, stato visibile al titolare.
+- Test: `tests/unit/auth/first-access.test.ts`.
+
+## Web — dialog «Nuovo allievo» e stato del primo accesso
+- `AutoscuoleStudentsPage.tsx` (vista non ridotta): sotto nome e cognome «Accesso all'app» = `SegmentedControl` **Telefono** (predefinito) | **Email e password**.
+  - Telefono: solo numero (con «Accederà con +39 …», `CreateLoginPhoneHint`) + consenso WhatsApp → `createCompanyUser({ phone, loginWithPhone: true, whatsappConsent })`, account senza email vera né password.
+  - Email e password: il modo classico di prima.
+- Il titolare vede l'attivazione: `toStudentProfile` aggiunge `loginPhone` e `activatedAt` (da `profileCompletedAt`) per gli allievi creati col telefono, e nasconde le email segnaposto (`displayEmail`). Scheda allievo → riga «Accesso all'app»: «Primo accesso non ancora fatto» (con il numero da usare) o «Attivato il 9 novembre 2026». Lista → il cellulare barrato esistente (`NeverAccessedListMark`) ha il testo «Primo accesso non ancora fatto…».
+- La vista ridotta (affiliate) non cambia.
 
 ## Limiti noti
 - Login web (NextAuth) solo email: gli allievi usano l'app.
