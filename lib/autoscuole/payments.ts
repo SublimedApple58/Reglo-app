@@ -3,6 +3,7 @@ import Stripe from "stripe";
 
 import { prisma as defaultPrisma } from "@/db/prisma";
 import { sendDynamicEmail } from "@/email";
+import { isUndeliverableEmail } from "@/lib/users/placeholder-email";
 import { getFicConnection } from "@/lib/integrations/fatture-in-cloud";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 // REG-604: punto di invio unico (i canali restano paymentNotificationChannels).
@@ -68,6 +69,18 @@ const getStripe = () => {
     stripeSingleton = new Stripe(key);
   }
   return stripeSingleton;
+};
+
+/**
+ * Email e nome del customer Stripe di un allievo. Gli allievi senza email vera
+ * (segnaposto `@no-app.reglo.local` — consorzio o accesso col telefono) non
+ * passano l'indirizzo finto a Stripe, che altrimenti lo userebbe per ricevute
+ * e comunicazioni: il customer nasce senza email.
+ */
+const stripeCustomerIdentity = (user: { email: string; name: string | null }) => {
+  const email = isUndeliverableEmail(user.email) ? undefined : user.email;
+  const name = user.name && user.name !== "NO_NAME" ? user.name : email;
+  return { ...(email ? { email } : {}), ...(name ? { name } : {}) };
 };
 
 const isStripeMissingCustomerError = (error: unknown) => {
@@ -680,8 +693,7 @@ export async function getOrCreateStudentPaymentProfile({
 
     const stripe = getStripe();
     const customer = await stripe.customers.create({
-      email: member.user.email,
-      name: member.user.name ?? member.user.email,
+      ...stripeCustomerIdentity(member.user),
       metadata: {
         companyId,
         studentId,
@@ -745,8 +757,7 @@ const recreateStripeCustomerForProfile = async ({
 
   const stripe = getStripe();
   const customer = await stripe.customers.create({
-    email: member.user.email,
-    name: member.user.name ?? member.user.email,
+    ...stripeCustomerIdentity(member.user),
     metadata: {
       companyId,
       studentId,
