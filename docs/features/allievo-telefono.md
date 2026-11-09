@@ -2,7 +2,7 @@
 
 L'autoscuola può creare un allievo con **solo telefono + password**, senza email: l'allievo entra subito nell'app col numero.
 
-> Stato (09/11/2026, branch `feat/allievo-telefono`): fatto il **backend** (schema, creazione, login). Da fare: dialog web, foglio di creazione nell'app, login «Email o telefono» lato app, onboarding al primo accesso, recupero password senza email.
+> Stato (09/11/2026, branch `feat/allievo-telefono`): fatti il **backend** (schema, creazione, login) e il **dialog web**. Da fare: foglio di creazione nell'app, login «Email o telefono» lato app, onboarding al primo accesso, recupero password senza email.
 
 ## Modello
 - `User.loginPhone` — numero con cui l'utente **accede**, sempre E.164 (`+393331234567`), `@unique`. Distinto da `User.phone` (recapito: non unico, in prod spesso senza prefisso). Valorizzato solo per gli account creati con l'accesso col telefono; gli account esistenti non lo hanno.
@@ -17,6 +17,9 @@ L'autoscuola può creare un allievo con **solo telefono + password**, senza emai
 - `lib/account-deletion.ts` — l'anonimizzazione azzera anche `loginPhone` (il numero torna libero).
 - `email/index.ts` `sendDynamicEmail` — scarta i destinatari `*.reglo.local` (segnaposto e account eliminati, `isUndeliverableEmail`); se non resta nessuno l'invio salta. Prima diversi chiamanti (`notify.ts`, `communications.ts`, `payments.ts`…) mandavano a `@no-app.reglo.local`.
 - Test: `tests/unit/users/login-phone.test.ts`.
+
+## Web — dialog «Crea account allievo»
+`components/pages/Autoscuole/AutoscuoleStudentsPage.tsx`: sotto nome e cognome c'è «Accesso all'app» (`SegmentedControl` Email | Telefono, campo `loginMethod` del form). Con Telefono: campo telefono con sotto il numero esatto di accesso («Accederà con +39 333 123 4567», `CreateLoginPhoneHint`, errore inline se non valido), password con nota «comunicala tu all'allievo», consenso WhatsApp (`WhatsAppConsentField`). Chiama `createCompanyUser({ phone, loginWithPhone: true, whatsappConsent })`. La vista ridotta (affiliate) non cambia.
 
 ## Limiti noti
 - Login web (NextAuth) solo email: gli allievi usano l'app.
