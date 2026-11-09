@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 import { after } from "next/server";
 import { z } from "zod";
 import { dayNoteKey } from "@/lib/autoscuole/day-notes";
+import { displayEmail } from "@/lib/users/placeholder-email";
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
@@ -857,6 +858,9 @@ type UserSnapshot = {
   name: string;
   email: string;
   phone: string | null;
+  /** Allievi creati col telefono: numero di accesso e attivazione (primo accesso). */
+  loginPhone?: string | null;
+  profileCompletedAt?: Date | null;
 };
 
 const toStudentProfile = (
@@ -864,7 +868,8 @@ const toStudentProfile = (
   createdAt: Date,
   neverAccessedSet?: Set<string>,
 ) => {
-  const email = normalizeEmail(user.email);
+  // Le email segnaposto (allievi senza indirizzo vero) non si mostrano: "—".
+  const email = normalizeEmail(displayEmail(user.email));
   const nameParts = parseNameParts(user.name, email);
   return {
     id: user.id,
@@ -874,6 +879,14 @@ const toStudentProfile = (
     phone: user.phone ?? null,
     status: "active",
     createdAt,
+    // Solo per gli allievi creati col telefono: il titolare vede se hanno già
+    // fatto il «Primo accesso» nell'app (lib/auth/first-access.ts).
+    ...(user.loginPhone
+      ? {
+          loginPhone: user.loginPhone,
+          activatedAt: user.profileCompletedAt ? user.profileCompletedAt.toISOString() : null,
+        }
+      : {}),
     // Present only when the caller resolved it (agenda directory + students list).
     ...(neverAccessedSet ? { neverAccessed: neverAccessedSet.has(user.id) } : {}),
   };
@@ -884,6 +897,8 @@ const STUDENT_USER_SELECT = {
   name: true,
   email: true,
   phone: true,
+  loginPhone: true,
+  profileCompletedAt: true,
 } as const;
 
 /**
@@ -2587,6 +2602,8 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
             name: true,
             email: true,
             phone: true,
+            loginPhone: true,
+            profileCompletedAt: true,
           },
         },
       },
@@ -2840,6 +2857,8 @@ export async function getAutoscuolaStudentLessonCredits(studentId: string) {
             name: true,
             email: true,
             phone: true,
+            loginPhone: true,
+            profileCompletedAt: true,
           },
         },
       },

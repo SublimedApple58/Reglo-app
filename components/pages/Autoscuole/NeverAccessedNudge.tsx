@@ -46,7 +46,14 @@ function buildWhatsAppMessage(name: string, startsAt: string | Date | null): str
  * Indicatore "mai in app" per la lista allievi: cellulare-divieto 3D con
  * tooltip esplicativo all'hover. Statico (nessuna animazione).
  */
-export function NeverAccessedListMark({ hasPhone }: { hasPhone: boolean }) {
+export function NeverAccessedListMark({
+  hasPhone,
+  pendingActivation = false,
+}: {
+  hasPhone: boolean;
+  /** Allievo creato col telefono che non ha ancora fatto il «Primo accesso». */
+  pendingActivation?: boolean;
+}) {
   return (
     <span className="group relative inline-flex shrink-0 items-center">
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -58,7 +65,9 @@ export function NeverAccessedListMark({ hasPhone }: { hasPhone: boolean }) {
         className="drop-shadow-sm"
       />
       <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-50 w-52 -translate-x-1/2 translate-y-1 rounded-lg bg-[#111111] px-3 py-2 text-[11.5px] leading-snug text-white opacity-0 shadow-xl transition-all duration-150 group-hover:translate-y-0 group-hover:opacity-100">
-        {hasPhone
+        {pendingActivation
+          ? "Primo accesso non ancora fatto: nell'app tocca «Primo accesso» e scrive il suo numero. Finché non lo fa non riceve i promemoria."
+          : hasPhone
           ? "Account creato ma mai usato: non riceve i promemoria delle guide. Contattalo tu."
           : "Account creato ma mai usato. Nessun numero registrato: non puoi avvisarlo da qui."}
       </span>
