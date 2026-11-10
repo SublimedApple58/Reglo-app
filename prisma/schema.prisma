@@ -2687,11 +2687,13 @@ model RoadMarker {
   /// Segno della segnalazione: "good" (fatto bene) | "bad" (da migliorare).
   /// Null = segnalazioni nate prima del segno (neutre).
   sentiment  String?
-  /// Road novembre R7: "point" | "zone"; null = punto (segnalazioni di prima).
-  /// La zona è un cerchio di `radiusM` metri (50 | 100 | 200) attorno a lat/lng;
-  /// nei punti critici conta il centro.
-  shape      String?
-  radiusM    Int?
+  /// Road novembre R7: «zona» = tratto della strada percorsa lungo 50 | 100 | 200 m,
+  /// centrato sul punto (null = punto). Nei punti critici conta il centro (lat/lng).
+  /// Regole in lib/autoscuole/road/marker-extent.ts.
+  extentM    Int?
+  /// R7: il tratto ([lat, lng][]) ricavato dalla traccia della guida a guida finita
+  /// (null = non ancora calcolato, o la segnalazione è lontana dalla strada percorsa).
+  extent     Json?
   recordedAt DateTime @db.Timestamp(6)
   createdAt  DateTime @default(now()) @db.Timestamp(6)
 

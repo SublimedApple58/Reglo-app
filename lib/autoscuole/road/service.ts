@@ -40,6 +40,7 @@ import {
 } from "@/lib/autoscuole/road/lesson-plan";
 import { EXAM_ROUTE_MAX_WAYPOINTS, pathLengthMeters, simplifyPath, type LatLng } from "@/lib/autoscuole/road/exam-routes";
 import { waypointsFromTrack } from "@/lib/autoscuole/road/snap";
+import { markerExtent, normalizeExtentM, storedExtent } from "@/lib/autoscuole/road/marker-extent";
 import {
   canStartRoadExam,
   examAnchorRow,
@@ -263,11 +264,11 @@ function markerDTO(m: {
   lng: number;
   street: string | null;
   sentiment: string | null;
-  shape: string | null;
-  radiusM: number | null;
+  extentM: number | null;
+  extent: unknown;
   recordedAt: Date;
 }) {
-  const zone = markerZone(m.shape, m.radiusM);
+  const extentM = normalizeExtentM(m.extentM);
   return {
     id: m.id,
     clientId: m.clientId,
@@ -278,9 +279,10 @@ function markerDTO(m: {
     lng: m.lng,
     street: m.street,
     sentiment: normalizeSentiment(m.sentiment),
-    // R7: punto preciso o zona (cerchio di `radiusM` metri attorno a lat/lng).
-    shape: zone ? ("zone" as const) : ("point" as const),
-    radiusM: zone,
+    // R7: punto (extentM null) o zona = tratto della strada percorsa di `extentM`
+    // metri; `extent` è il tratto calcolato a guida finita (null finché non c'è).
+    extentM,
+    extent: extentM ? storedExtent(m.extent) : null,
     recordedAt: m.recordedAt.toISOString(),
   };
 }
@@ -294,24 +296,31 @@ const markerSelect = {
   lng: true,
   street: true,
   sentiment: true,
-  shape: true,
-  radiusM: true,
+  extentM: true,
+  extent: true,
   recordedAt: true,
 } as const;
 
-/** R7: raggi ammessi per una segnalazione «zona», in metri. */
-export const ROAD_ZONE_RADII = [50, 100, 200] as const;
-
-/** Raggio della zona, o null se è un punto (anche dati sporchi = punto). */
-function markerZone(shape: string | null | undefined, radiusM: number | null | undefined): number | null {
-  if (shape !== "zone") return null;
-  return (ROAD_ZONE_RADII as readonly number[]).includes(Number(radiusM)) ? Number(radiusM) : null;
-}
-
-/** Colonne da scrivere per punto/zona: un punto si salva come null/null. */
-function markerShapeData(shape: string | null | undefined, radiusM: number | null | undefined) {
-  const zone = markerZone(shape, radiusM);
-  return zone ? { shape: "zone", radiusM: zone } : { shape: null, radiusM: null };
+/**
+ * R7: ricalcola (e salva) i tratti delle segnalazioni «zona» di una guida finita
+ * sulla sua traccia pulita. A «Termina guida», dopo una modifica di lunghezza o
+ * posizione a guida finita. In guida il tratto lo disegna il telefono.
+ */
+async function saveMarkerExtents(sessionId: string, only?: string) {
+  const s = await prisma.roadSession.findUnique({ where: { id: sessionId }, select: { status: true, cleanTrack: true } });
+  if (!s || s.status === "active") return;
+  const path = storedCleanTrack(s.cleanTrack)?.path ?? (await loadTrack(sessionId)).map((p) => [p[1], p[2], p[0]] as [number, number, number]);
+  const markers = await prisma.roadMarker.findMany({
+    where: { sessionId, extentM: { not: null }, ...(only ? { id: only } : {}) },
+    select: { id: true, lat: true, lng: true, recordedAt: true, extentM: true },
+  });
+  for (const m of markers) {
+    const line = markerExtent(path, { lat: m.lat, lng: m.lng, recordedAtMs: m.recordedAt.getTime(), extentM: m.extentM });
+    await prisma.roadMarker.update({
+      where: { id: m.id },
+      data: { extent: line ? (line as unknown as Prisma.InputJsonValue) : Prisma.DbNull },
+    });
+  }
 }
 
 /**
@@ -675,9 +684,8 @@ export async function addRoadMarker(
     street?: string | null;
     /** "good" | "bad"; assente = neutra (client vecchi). */
     sentiment?: string | null;
-    /** R7: "point" (default) | "zone" con `radiusM` 50 | 100 | 200. */
-    shape?: string | null;
-    radiusM?: number | null;
+    /** R7: lunghezza del tratto (50 | 100 | 200); assente/null = punto. */
+    extentM?: number | null;
     recordedAt?: string;
   },
 ) {
@@ -719,12 +727,18 @@ export async function addRoadMarker(
         lng,
         street: typeof input?.street === "string" ? input.street.trim().slice(0, 120) || null : null,
         sentiment: normalizeSentiment(input?.sentiment),
-        ...markerShapeData(input?.shape, input?.radiusM),
+        extentM: normalizeExtentM(input?.extentM),
         recordedAt: Number.isNaN(recordedAt.getTime()) ? new Date() : recordedAt,
       },
       select: markerSelect,
     });
     invalidateRoadHotspots(ctx.companyId);
+    // R7: zona arrivata dalla coda offline a guida già finita: il tratto subito.
+    if (marker.extentM != null && session.status !== "active") {
+      await saveMarkerExtents(sessionId, marker.id).catch((e) => console.warn("[road] markerExtents", e));
+      const fresh = await prisma.roadMarker.findUnique({ where: { id: marker.id }, select: markerSelect });
+      if (fresh) return ok(markerDTO(fresh));
+    }
     return ok(markerDTO(marker));
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -763,7 +777,7 @@ export async function removeRoadMarker(sessionId: string, markerIdOrClientId: st
  * Road novembre R3/R7 (Tiziano 10/11/2026): istruttore della guida e titolare
  * la modificano **sempre**, senza limite di tempo (prima: 2 h dopo la
  * chiusura), anche dal web. Si cambiano anche tipo (`kind`, l'etichetta si
- * ricalcola), punto/zona (`shape`, `radiusM`) e, se la posizione cambia, la
+ * ricalcola), punto/zona (`extentM`, R7) e, se la posizione cambia, la
  * via: quella mandata dall'app o, dal web, quella trovata con Places.
  */
 export async function updateRoadMarker(
@@ -777,8 +791,8 @@ export async function updateRoadMarker(
     recordedAt?: string;
     note?: string | null;
     kind?: string;
-    shape?: string | null;
-    radiusM?: number | null;
+    /** R7: 50 | 100 | 200, null = torna punto. */
+    extentM?: number | null;
   },
 ) {
   try {
@@ -797,7 +811,10 @@ export async function updateRoadMarker(
       data.kind = kind;
       data.label = label;
     }
-    if (input && "shape" in input) Object.assign(data, markerShapeData(input.shape, input.radiusM));
+    if (input && "extentM" in input) {
+      data.extentM = normalizeExtentM(input.extentM);
+      data.extent = Prisma.DbNull;
+    }
     let moved: { lat: number; lng: number } | null = null;
     if (input?.lat != null || input?.lng != null) {
       const lat = Number(input.lat);
@@ -827,8 +844,14 @@ export async function updateRoadMarker(
         data.street = await streetAt(moved.lat, moved.lng);
       }
     }
-    const updated = await prisma.roadMarker.update({ where: { id: marker.id }, data, select: markerSelect });
-    if (data.lat != null || data.kind != null || data.sentiment !== undefined || "shape" in data) {
+    // Posizione cambiata: il tratto va ricalcolato (a guida finita, qui sotto).
+    if (data.lat != null) data.extent = Prisma.DbNull;
+    let updated = await prisma.roadMarker.update({ where: { id: marker.id }, data, select: markerSelect });
+    if (updated.extentM != null && updated.extent == null && loaded.session.status !== "active") {
+      await saveMarkerExtents(sessionId, marker.id);
+      updated = (await prisma.roadMarker.findUnique({ where: { id: marker.id }, select: markerSelect })) ?? updated;
+    }
+    if (data.lat != null || data.kind != null || data.sentiment !== undefined || "extentM" in data) {
       invalidateRoadHotspots(ctx.companyId);
     }
     return ok(markerDTO(updated));
@@ -983,6 +1006,8 @@ export async function endRoadSession(sessionId: string, input: { endedAt?: unkno
       // REG-665 / REG-713: traccia pulita e sulle strade, una volta sola, con i
       // suoi km (li legge il riepilogo qui sotto). Google giù = la riprova il job.
       await saveRoadCleanTrack(prisma, sessionId).catch((e) => console.warn("[road] cleanTrack", e));
+      // R7: i tratti delle segnalazioni «zona» sulla traccia pulita.
+      await saveMarkerExtents(sessionId).catch((e) => console.warn("[road] markerExtents", e));
     }
     return getRoadSessionDetail(sessionId);
   } catch (error) {
@@ -1045,7 +1070,15 @@ async function buildDetail(sessionId: string, companyId: string) {
     // REG-713: i km sono quelli salvati sulla sessione (gli stessi di storico e liste).
     ...sessionDTO(s, s.appointment.startsAt),
     lesson: await sessionLessonDTO(s.mode, s.appointment, s.startedAt, {}, false),
-    markers: s.markers.map(markerDTO),
+    // R7: guida finita senza tratto salvato (chiusa dal job, segnalazione in coda
+    // arrivata dopo): il tratto si ricava al volo dalla traccia, senza scrivere.
+    markers: s.markers.map((m) => {
+      const dto = markerDTO(m);
+      if (dto.extentM && !dto.extent && s.status !== "active") {
+        return { ...dto, extent: markerExtent(clean.path, { lat: m.lat, lng: m.lng, recordedAtMs: m.recordedAt.getTime(), extentM: dto.extentM }) };
+      }
+      return dto;
+    }),
     // REG-677: i ripassi «Meglio / No» sui punti critici dell'allievo in questa guida.
     hotspotChecks: s.hotspotChecks.map(hotspotCheckDTO),
     // Per la mappa bastano [lat, lng]; il tempo serve a disegnare il "fatto fin qui".

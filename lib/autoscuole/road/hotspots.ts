@@ -33,6 +33,8 @@ export type HotspotMarker = {
   recordedAt: Date;
   /** REG-677: la nota dell'istruttore (letta solo per i punti dell'allievo). */
   note?: string | null;
+  /** Road novembre R7: il tratto della segnalazione «zona» (solo per il disegno; il conteggio usa lat/lng). */
+  extent?: Array<[number, number]> | null;
 };
 
 export type HotspotExamRoute = { id: string; name: string; path: LatLng[] };

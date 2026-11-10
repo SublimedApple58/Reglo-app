@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/db/prisma";
+import { storedExtent } from "@/lib/autoscuole/road/marker-extent";
 import { formatError } from "@/lib/utils";
 import { isInstructor } from "@/lib/autoscuole/roles";
 import {
@@ -90,6 +91,8 @@ async function loadMarkers(companyId: string, f: CleanHotspotFilters) {
       lng: true,
       street: true,
       recordedAt: true,
+      extentM: true,
+      extent: true,
       session: { select: { studentId: true } },
     },
   });
@@ -104,6 +107,8 @@ async function loadMarkers(companyId: string, f: CleanHotspotFilters) {
       lng: r.lng,
       street: r.street,
       recordedAt: r.recordedAt,
+      // R7: il tratto serve solo al disegno del dettaglio.
+      extent: r.extentM ? storedExtent(r.extent) : null,
     }),
   );
 }
@@ -201,6 +206,8 @@ export type RoadHotspotDetailDTO = {
   students: Array<{ id: string; name: string; errors: number }>;
   /** Guide di altri istruttori non mostrate (0 per il titolare). */
   hiddenSessions: number;
+  /** Road novembre R7: i tratti delle segnalazioni «zona» di questo punto critico (guide visibili). */
+  extents: Array<{ sessionId: string; line: Array<[number, number]> }>;
 };
 
 export async function getRoadHotspotDetail(key: string, input: HotspotFilters) {
@@ -265,6 +272,9 @@ export async function getRoadHotspotDetail(key: string, input: HotspotFilters) {
         .sort((a, b) => b.startedAt.localeCompare(a.startedAt)),
       students: [...studentErrors.values()].sort((a, b) => b.errors - a.errors || a.name.localeCompare(b.name)),
       hiddenSessions: sessions.length - visible.length,
+      extents: inside
+        .filter((m) => m.extent && visible.some((v) => v.id === m.sessionId))
+        .map((m) => ({ sessionId: m.sessionId, line: m.extent! })),
     });
   } catch (error) {
     return fail(formatError(error));
