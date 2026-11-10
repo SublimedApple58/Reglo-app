@@ -22,7 +22,16 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { studentHref } from "./road-nav";
-import { addHtmlMarker, escapeHtml, htmlElement, lineBounds, toLngLat, useRoadMap, type RoadMapHandle } from "./road-map";
+import {
+  addHtmlMarker,
+  escapeHtml,
+  htmlElement,
+  lineBounds,
+  toLngLat,
+  upsertExtents,
+  useRoadMap,
+  type RoadMapHandle,
+} from "./road-map";
 import {
   hhmm,
   ROAD_MAP_BOX_CLASS,
@@ -212,6 +221,13 @@ export function RoadHotspotsView({ onOpen }: { onOpen: (sessionId: string, list:
   }, [selected, current, handle]);
 
   React.useEffect(() => () => pinsRef.current.forEach(({ marker }) => marker.remove()), []);
+
+  // R7: nel punto critico aperto, i tratti delle segnalazioni «zona» di ogni guida.
+  React.useEffect(() => {
+    if (!handle) return;
+    const lines = detail && selected ? (detail.extents ?? []).map((e) => e.line.map((p) => toLngLat(p))) : [];
+    upsertExtents(handle.map, "road-hotspot-extents", lines);
+  }, [handle, detail, selected]);
 
   // Sotto lg il pannello sta sotto la mappa: toccato un punto, lo porta in vista.
   const panelRef = React.useRef<HTMLDivElement>(null);

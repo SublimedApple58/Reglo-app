@@ -175,6 +175,8 @@ export type RoadHotspotDetail = {
   }>;
   students: Array<{ id: string; name: string | null; errors: number }>;
   hiddenSessions: number;
+  /** Road novembre R7: i tratti [lat, lng][] delle segnalazioni «zona» (server vecchi: assente). */
+  extents?: Array<{ sessionId: string; line: Array<[number, number]> }>;
 };
 
 export type RoadHotspotFilters = {
@@ -310,7 +312,14 @@ export const roadApi = {
   updateMarker: (
     sessionId: string,
     markerId: string,
-    body: { kind?: string; sentiment?: "good" | "bad" | null; note?: string | null; lat?: number; lng?: number },
+    body: {
+      kind?: string;
+      sentiment?: "good" | "bad" | null;
+      note?: string | null;
+      lat?: number;
+      lng?: number;
+      extentM?: number | null;
+    },
   ) =>
     call<RoadMarker>(`/sessions/${encodeURIComponent(sessionId)}/markers/${encodeURIComponent(markerId)}`, undefined, {
       method: "PATCH",

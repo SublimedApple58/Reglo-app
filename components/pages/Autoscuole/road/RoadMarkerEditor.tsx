@@ -20,7 +20,7 @@ import { LoadingDots } from "@/components/ui/loading-dots";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { hhmm, SymbolTile } from "./road-ui";
 
-type Busy = null | "sentiment" | "kind" | "note" | "remove";
+type Busy = null | "sentiment" | "kind" | "note" | "extent" | "remove";
 
 /**
  * Road novembre R3 (anteprima r3-r7-web approvata da Tiziano il 10/11/2026) —
@@ -162,6 +162,30 @@ export function RoadMarkerEditor({
         rows={2}
         className="mt-1.5 w-full resize-none rounded-xl border border-[#dcdcdc] bg-white px-3 py-2.5 text-[14px] text-[#111111] outline-none transition-colors duration-200 placeholder:text-[#9a9a9a] focus:border-[#111111]"
       />
+
+      {/* R7: punto o tratto della strada percorsa (Tiziano 10/11/2026). */}
+      <span className="mt-3.5 block text-[12.5px] font-semibold text-[#6a6a6a]">Dove</span>
+      <div className="mt-1.5 flex rounded-xl bg-[#f2f2f2] p-[3px]" role="radiogroup" aria-label="Punto o tratto">
+        {([null, 50, 100, 200] as const).map((v) => {
+          const on = (marker.extentM ?? null) === v;
+          return (
+            <button
+              key={String(v)}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              disabled={Boolean(busy)}
+              onClick={() => !on && void patch("extent", { extentM: v })}
+              className={cn(
+                "flex h-9 flex-1 cursor-pointer items-center justify-center rounded-[9px] text-[13.5px] font-medium transition-colors duration-200",
+                on ? "bg-[#111111] font-semibold text-white" : "text-[#3a3a3c] hover:text-[#111111]",
+              )}
+            >
+              {busy === "extent" && !on ? <LoadingDots /> : v == null ? "Punto" : `${v} m`}
+            </button>
+          );
+        })}
+      </div>
 
       <div className="mt-3.5 flex items-center justify-between gap-3">
         <button

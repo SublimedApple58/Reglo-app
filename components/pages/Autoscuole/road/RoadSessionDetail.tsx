@@ -31,6 +31,7 @@ import {
   lineBounds,
   removeRoute,
   toLngLat,
+  upsertExtents,
   upsertRoute,
   useRoadMap,
 } from "./road-map";
@@ -180,6 +181,12 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
     const { map } = handle;
     const coords = detail.track.map((p) => toLngLat([p[0], p[1]]));
     if (coords.length >= 2) upsertRoute(map, "road-detail", coords, { width: 6, color: "#111111", opacity: 1 });
+    // R7: i tratti delle segnalazioni «zona» sopra la linea.
+    upsertExtents(
+      map,
+      "road-extents",
+      detail.markers.filter((m) => m.extent && m.extent.length >= 2).map((m) => m.extent!.map((p) => toLngLat(p))),
+    );
 
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
@@ -612,7 +619,7 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
                   <div className="min-w-0">
                     <b className="block text-[14.5px] font-medium text-[#111111]">{m.label}</b>
                     <span className="text-[13px] text-[#6a6a6a]">
-                      {[m.street, m.note ? `«${m.note}»` : null].filter(Boolean).join(" · ")}
+                      {[m.extentM ? `Tratto ${m.extentM} m` : null, m.street, m.note ? `«${m.note}»` : null].filter(Boolean).join(" · ")}
                       <MarkerPlaceLinks
                         hotspot={m.sentiment === "good" ? null : hotspots.find(m)}
                         number={hotspots.number}

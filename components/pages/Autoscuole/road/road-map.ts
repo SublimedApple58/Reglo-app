@@ -229,6 +229,37 @@ export function removeRoute(map: MlMap, id: string) {
   if (map.getSource(id)) map.removeSource(id);
 }
 
+/**
+ * Road novembre R7: i tratti delle segnalazioni «zona» sopra la linea della
+ * guida — alone rosso leggero e linea piena. `lines` in [lng, lat]; vuoto = via.
+ */
+export function upsertExtents(map: MlMap, id: string, lines: Array<Array<[number, number]>>) {
+  const data = {
+    type: "Feature" as const,
+    properties: {},
+    geometry: { type: "MultiLineString" as const, coordinates: lines },
+  };
+  const src = map.getSource(id) as { setData?: (d: typeof data) => void } | undefined;
+  if (src?.setData) src.setData(data);
+  else map.addSource(id, { type: "geojson", data });
+  if (!map.getLayer(`${id}-h`)) {
+    map.addLayer({
+      id: `${id}-h`,
+      type: "line",
+      source: id,
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#DC2626", "line-opacity": 0.22, "line-width": 14 },
+    });
+    map.addLayer({
+      id,
+      type: "line",
+      source: id,
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#DC2626", "line-width": 4.5 },
+    });
+  }
+}
+
 /** Porta il percorso sopra gli altri (il selezionato). */
 export function raiseRoute(map: MlMap, id: string) {
   if (map.getLayer(`${id}-c`)) map.moveLayer(`${id}-c`);
