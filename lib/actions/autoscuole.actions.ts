@@ -82,6 +82,11 @@ import {
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
 import { isInstructor, isOwner, isStudent } from "@/lib/autoscuole/roles";
+import {
+  CONCLUDED_INSTRUCTOR_CHANGE_DAYS,
+  isConcludedForInstructorChange,
+  isWithinConcludedInstructorChangeWindow,
+} from "@/lib/autoscuole/concluded-instructor-change";
 import { canManageLessonPayments } from "@/lib/autoscuole/lesson-payments";
 import {
   loadPaymentHistories,
@@ -6572,33 +6577,63 @@ export async function updateAutoscuolaAppointmentDetails(
     // The vehicle stays attached (decision: vehicles are company resources,
     // not instructor-owned).
     if (payload.instructorId !== undefined && payload.instructorId !== appointment.instructorId) {
-      // Block on completed/cancelled appointments: it doesn't make sense to
-      // reassign a guida that's already happened or been called off.
+      // Annullate: mai. Concluse (completata/assente): solo il titolare/admin,
+      // entro 30 giorni, per correggere un sostituto "al volo" (Macchiavello).
+      // Gruppi ed esami si cambiano dal loro foglio, non posto per posto.
       const status = normalizeStatus(appointment.status);
-      if (["cancelled", "completed", "no_show"].includes(status)) {
+      const concluded = isConcludedForInstructorChange(status);
+      if (status === "cancelled") {
         return {
           success: false,
-          message: "Non puoi cambiare l'istruttore di una guida già conclusa o annullata.",
+          message: "Non puoi cambiare l'istruttore di una guida annullata.",
         };
       }
+      if (concluded) {
+        const canManage = membership.role === "admin" || isOwner(membership.autoscuolaRole);
+        if (!canManage || appointment.groupLessonId || normalizeLessonType(appointment.type) === "esame") {
+          return {
+            success: false,
+            message: "Non puoi cambiare l'istruttore di una guida già conclusa.",
+          };
+        }
+        if (!isWithinConcludedInstructorChangeWindow(appointment.startsAt)) {
+          return {
+            success: false,
+            message: `L'istruttore di una guida conclusa si può cambiare solo entro ${CONCLUDED_INSTRUCTOR_CHANGE_DAYS} giorni dalla guida.`,
+          };
+        }
+      }
 
-      const appointmentEndDate = computeAppointmentEnd({
-        startsAt: appointment.startsAt,
-        endsAt: appointment.endsAt,
-      });
-      const availability = await verifyInstructorAvailability({
-        companyId: membership.companyId,
-        instructorId: payload.instructorId,
-        startsAt: appointment.startsAt,
-        endsAt: appointmentEndDate,
-        excludeAppointmentId: appointment.id,
-      });
-      if (!availability.available) {
-        return {
-          success: false,
-          message: availability.detail,
-          code: "INSTRUCTOR_UNAVAILABLE" as const,
-        };
+      if (concluded) {
+        // Sul passato la disponibilità non ha senso (il sostituto era spesso di
+        // riposo o in permesso: è per questo che era libero). Resta il controllo
+        // che l'istruttore sia di questa autoscuola e attivo.
+        const instructor = await prisma.autoscuolaInstructor.findFirst({
+          where: { id: payload.instructorId, companyId: membership.companyId, status: { not: "inactive" } },
+          select: { id: true },
+        });
+        if (!instructor) {
+          return { success: false, message: "Istruttore non valido per questa autoscuola." };
+        }
+      } else {
+        const appointmentEndDate = computeAppointmentEnd({
+          startsAt: appointment.startsAt,
+          endsAt: appointment.endsAt,
+        });
+        const availability = await verifyInstructorAvailability({
+          companyId: membership.companyId,
+          instructorId: payload.instructorId,
+          startsAt: appointment.startsAt,
+          endsAt: appointmentEndDate,
+          excludeAppointmentId: appointment.id,
+        });
+        if (!availability.available) {
+          return {
+            success: false,
+            message: availability.detail,
+            code: "INSTRUCTOR_UNAVAILABLE" as const,
+          };
+        }
       }
 
       // Push notification to the student about the instructor swap is deferred:
