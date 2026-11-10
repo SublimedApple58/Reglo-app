@@ -1,4 +1,5 @@
 import { haversineMeters } from "@/lib/autoscuole/road/geo";
+import { EXAMINERS_MAX, normalizeExaminers } from "@/lib/autoscuole/exam-examiners";
 
 /**
  * REG-641 Reglo Road — percorsi d'esame dell'autoscuola: logica pura
@@ -129,6 +130,8 @@ export type ExamRouteFields = {
   path: LatLng[];
   lengthMeters: number;
   sourceSessionId: string | null;
+  /** R4: esaminatori del percorso (vuoto = «Senza esaminatore»). */
+  examiners: string[];
 };
 
 type Parsed<T> = { ok: true; value: T } | { ok: false; message: string };
@@ -177,6 +180,13 @@ export function parseExamRouteInput(
       return { ok: false, message: "Guida di origine non valida." };
     }
     out.sourceSessionId = (v as string | null) ?? null;
+  }
+  if (has("examiners")) {
+    const v = body.examiners;
+    if (!Array.isArray(v) || v.length > EXAMINERS_MAX * 2 || v.some((x) => typeof x !== "string")) {
+      return { ok: false, message: "Esaminatori non validi." };
+    }
+    out.examiners = normalizeExaminers(v as string[]);
   }
   return { ok: true, value: out };
 }

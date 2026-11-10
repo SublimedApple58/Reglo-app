@@ -12,6 +12,7 @@ import {
 } from "@/lib/autoscuole/road/exam-routes";
 import { loadRoadTrack } from "@/lib/autoscuole/road/maintenance";
 import { SnapError, snapWaypoints, waypointsFromTrack } from "@/lib/autoscuole/road/snap";
+import { examRouteOrigin, groupExamRoutesByExaminer, type ExamRouteOrigin } from "@/lib/autoscuole/road/road-exam";
 
 /**
  * REG-641 Reglo Road — percorsi d'esame dell'autoscuola (API).
@@ -36,6 +37,9 @@ const routeSelect = {
   path: true,
   lengthMeters: true,
   sourceSessionId: true,
+  examiners: true,
+  origin: true,
+  examAt: true,
   archivedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -50,6 +54,9 @@ type RouteRow = {
   path: unknown;
   lengthMeters: number;
   sourceSessionId: string | null;
+  examiners: string[];
+  origin: string;
+  examAt: Date | null;
   archivedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -64,6 +71,12 @@ export type RoadExamRouteDTO = {
   path: LatLng[];
   lengthMeters: number;
   sourceSessionId: string | null;
+  /** R4: esaminatori (vuoto = «Senza esaminatore»). */
+  examiners: string[];
+  /** R4: "drawn" = disegnato dal titolare, "exam" = registrato con Road Exam. */
+  origin: ExamRouteOrigin;
+  /** R4: quando si è svolto l'esame registrato. */
+  examAt: string | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -87,6 +100,9 @@ function routeDTO(r: RouteRow): RoadExamRouteDTO {
     path: asLatLng(r.path),
     lengthMeters: r.lengthMeters,
     sourceSessionId: r.sourceSessionId,
+    examiners: r.examiners,
+    origin: examRouteOrigin(r.origin),
+    examAt: r.examAt?.toISOString() ?? null,
     archivedAt: r.archivedAt?.toISOString() ?? null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
@@ -118,6 +134,24 @@ export async function listRoadExamRoutes(input: { archived?: boolean } = {}) {
   }
 }
 
+/**
+ * R4b: percorsi attivi raggruppati per esaminatore (un percorso con due
+ * esaminatori sta in entrambi; «Senza esaminatore» in fondo). Lo leggono tutti
+ * (servono a «Prova il percorso» in guida); assegnare resta del titolare.
+ */
+export async function listRoadExamRoutesByExaminer() {
+  const res = await listRoadExamRoutes();
+  if (!res.success) return res;
+  return ok(
+    groupExamRoutesByExaminer(res.data).map((g) => ({
+      key: g.key,
+      name: g.name,
+      lastExamAt: g.lastExamAt,
+      routes: g.routes,
+    })),
+  );
+}
+
 /** Una guida di origine deve essere di questa autoscuola. */
 async function sessionBelongs(companyId: string, sessionId: string | null | undefined) {
   if (!sessionId) return true;
@@ -144,6 +178,7 @@ export async function createRoadExamRoute(raw: unknown) {
         path: v.path!,
         lengthMeters: v.lengthMeters ?? 0,
         sourceSessionId: v.sourceSessionId ?? null,
+        examiners: v.examiners ?? [],
         createdById: ctx.membership.userId,
       },
       select: routeSelect,
@@ -177,6 +212,7 @@ export async function updateRoadExamRoute(id: string, raw: unknown) {
         ...(v.waypoints !== undefined ? { waypoints: v.waypoints } : {}),
         ...(v.path !== undefined ? { path: v.path, lengthMeters: v.lengthMeters ?? 0 } : {}),
         ...(v.sourceSessionId !== undefined ? { sourceSessionId: v.sourceSessionId } : {}),
+        ...(v.examiners !== undefined ? { examiners: v.examiners } : {}),
         ...(restore ? { archivedAt: null } : {}),
       },
       select: routeSelect,

@@ -316,3 +316,17 @@ Nessuna modifica al backend: l'app istruttore richiama `POST /road/plan/route` c
 - Guida in corso (`getRoadState`, avvio, ripresa): `lesson.roadEndsAt` (`liveLessonDTO`) = la fine che l'app usa per residuo e avvisi. Test: `tests/unit/road/road-lesson-end.test.ts` (sezione «Mantieni la durata prenotata»).
 - Nessun job Trigger.dev toccato.
 
+
+## Road Exam (Road novembre R4, backend 10/11/2026)
+
+Decisioni di Tiziano: nessun account per l'esaminatore (restano i nomi liberi di REG-640); **solo il tracciato** (niente segnalazioni, ripassi, pagellino); avviano l'istruttore dell'esame, i co-istruttori e il titolare (esame senza istruttore = qualunque istruttore); due esaminatori = il percorso sta sotto entrambi; i percorsi senza esaminatore li assegna il titolare a mano. Piano: `plans/road/010-road-novembre.md`.
+
+- **Migrazione** `20261114090000_road_exam` (solo aggiunte): `RoadSession.mode` (`"lesson"` default | `"exam"`), `examiners String[]`, `startedById` (+ indice `companyId, startedById, status`); `RoadExamRoute.examiners String[]`, `origin` (`"drawn"` default | `"exam"`), `examAt`.
+- **Regole pure**: `lib/autoscuole/road/road-exam.ts` (`canStartRoadExam`, `examAnchorRow`, `examRouteName`, `groupExamRoutesByExaminer`, `examStopFromRoute`, `planWithExamStop`). Test: `tests/unit/road/road-exam.test.ts`.
+- **Avvio** `POST /api/autoscuole/road/exam` `{ appointmentIds }` → `startRoadExamSession`: righe tutte `esame`, stesso orario, solo il giorno dell'esame (Roma). Sessione ancorata alla riga non annullata con l'id più piccolo, `studentId` null, `mode "exam"`, `startedById` = chi avvia (il titolare può non avere la scheda istruttore: `getRoadState` e `loadOwnSession` lo riconoscono da `startedById`). Già avviata su una riga dell'esame = ripresa. Chiude come abbandonata un'altra sessione attiva della stessa persona.
+- **DTO**: `mode`, `examiners` nella sessione; in esame `lesson.student = null` e `lesson.exam = { appointmentIds, studentCount, place, examiners }` (righe dello stesso orario e istruttore). Vale per stato, dettaglio, «Dal vivo», storico, ultime guide. `toClose` (pagellino) ignora gli esami.
+- **Durante**: punti GPS come una guida; segnalazioni e ripassi rifiutati (`EXAM_MODE`).
+- **Fine** (`endRoadSession`): niente `completed` sull'esame né riallineo d'agenda; traccia pulita, poi `saveExamRouteFromSession` crea UNA volta il `RoadExamRoute` (`origin "exam"`, nome «Esame 12 nov · Rossi», esaminatori letti dalle righe in quel momento, `examSite` = luogo dell'esame, `sourceSessionId`). Meno di 2 punti = nessun percorso. Una sessione d'esame chiusa dal job come abbandonata NON crea il percorso (il job Trigger non è stato toccato): il titolare lo ricava con «Da una guida Road» (REG-642).
+- **Percorsi per esaminatore**: `GET /api/autoscuole/road/exam-routes?by=examiner` → gruppi `{ key, name, lastExamAt, routes }` (minuscole per la chiave, grafia più recente per il nome, «Senza esaminatore» = `key ""` in fondo). Il DTO dei percorsi ha `examiners`, `origin`, `examAt`; il titolare assegna con `PATCH /exam-routes/[id] { examiners }`.
+- **Prova il percorso** (R4c) `PUT /api/autoscuole/road/sessions/[id]/plan` `{ examRouteId | null }` → `setRoadSessionExamRoute`: solo guide attive (non esami); la tappa la costruisce il server dal percorso salvato, sostituisce un altro percorso d'esame nel giro e va in fondo (giro pieno = cede l'ultima tappa), `custom: true`. A fine guida la copertura passa da `planReached` come sempre.
+- **Da fare**: UI mobile e web (anteprime in attesa), tipi mobile.

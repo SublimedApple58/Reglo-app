@@ -2600,6 +2600,14 @@ model RoadSession {
   /// REG-665: traccia pulita e agganciata alla strada + soste, calcolata una
   /// volta a fine guida (o alla prima lettura). Vedi lib/autoscuole/road/clean-track.ts.
   cleanTrack     Json?
+  /// R4 Road Exam: "lesson" (default) | "exam". In un esame `studentId` è null,
+  /// `appointmentId` è una riga dell'esame (quella con l'id più piccolo) e si
+  /// registra solo il tracciato (niente segnalazioni né pagellino).
+  mode           String    @default("lesson")
+  /// R4: esaminatori dell'esame al momento della registrazione (nomi liberi, REG-640).
+  examiners      String[]  @default([])
+  /// R4: chi ha avviato la sessione (il titolare può non essere istruttore).
+  startedById    String?   @db.Uuid
   createdAt      DateTime  @default(now()) @db.Timestamp(6)
   updatedAt      DateTime  @default(now()) @updatedAt @db.Timestamp(6)
 
@@ -2613,6 +2621,7 @@ model RoadSession {
   @@index([companyId, startedAt])
   @@index([studentId, startedAt])
   @@index([status, startedAt])
+  @@index([companyId, startedById, status])
 }
 
 /// Percorso d'esame dell'autoscuola (REG-641): lo disegna il titolare (punti
@@ -2629,6 +2638,13 @@ model RoadExamRoute {
   path              Json
   lengthMeters      Int       @default(0)
   sourceSessionId   String?   @db.Uuid
+  /// R4: esaminatori a cui il percorso appartiene (nomi liberi, REG-640). Vuoto
+  /// = «Senza esaminatore» (il titolare li assegna a mano).
+  examiners         String[]  @default([])
+  /// R4: "drawn" (disegnato dal titolare, default) | "exam" (registrato con Road Exam).
+  origin            String    @default("drawn")
+  /// R4: quando si è svolto l'esame registrato (solo origin "exam").
+  examAt            DateTime? @db.Timestamp(6)
   createdById       String?   @db.Uuid
   archivedAt        DateTime? @db.Timestamp(6)
   createdAt         DateTime  @default(now()) @db.Timestamp(6)

@@ -38,7 +38,17 @@ import {
   type PlanReached,
   type StoredPlan,
 } from "@/lib/autoscuole/road/lesson-plan";
-import type { LatLng } from "@/lib/autoscuole/road/exam-routes";
+import { EXAM_ROUTE_MAX_WAYPOINTS, pathLengthMeters, simplifyPath, type LatLng } from "@/lib/autoscuole/road/exam-routes";
+import { waypointsFromTrack } from "@/lib/autoscuole/road/snap";
+import {
+  canStartRoadExam,
+  examAnchorRow,
+  examRouteName,
+  examRowsExaminers,
+  examStopFromRoute,
+  planWithExamStop,
+  roadSessionMode,
+} from "@/lib/autoscuole/road/road-exam";
 
 /**
  * REG-638 Reglo Road — logica server. Le route in `app/api/autoscuole/road/**`
@@ -174,6 +184,8 @@ const sessionSelect = {
   lastEtaAt: true,
   plan: true,
   planReached: true,
+  mode: true,
+  examiners: true,
 } satisfies Prisma.RoadSessionSelect;
 type SessionRow = Prisma.RoadSessionGetPayload<{ select: typeof sessionSelect }>;
 
@@ -204,7 +216,41 @@ function sessionDTO(s: SessionRow, lessonStartsAt: Date) {
     planReached: (s.planReached as PlanReached | null) ?? null,
     // REG-699: rientro stimato dal telefono (solo con il giro, solo a guida in corso).
     etaAt: s.status === "active" ? (s.lastEtaAt?.toISOString() ?? null) : null,
+    // R4: "exam" = Road Exam (solo tracciato, senza allievo).
+    mode: roadSessionMode(s.mode),
+    examiners: s.examiners,
   };
+}
+
+/**
+ * R4: in Road Exam la «guida» è l'esame intero, non la riga a cui è ancorata la
+ * sessione: niente allievo singolo, ma quanti allievi, dove ed esaminatori.
+ */
+async function examLessonInfo(anchor: { id: string; companyId: string; startsAt: Date; instructorId: string | null }) {
+  const rows = await prisma.autoscuolaAppointment.findMany({
+    where: { companyId: anchor.companyId, type: "esame", startsAt: anchor.startsAt, status: { not: "cancelled" } },
+    select: { id: true, studentId: true, examiners: true, location: { select: { name: true } }, instructorId: true },
+  });
+  const same = rows.filter((r) => r.instructorId === anchor.instructorId);
+  const group = same.length ? same : rows;
+  return {
+    appointmentIds: group.map((r) => r.id),
+    studentCount: group.filter((r) => r.studentId).length,
+    place: group.find((r) => r.location?.name)?.location?.name ?? null,
+    examiners: examRowsExaminers(group),
+  };
+}
+
+async function sessionLessonDTO(
+  mode: string,
+  a: AppointmentRow,
+  startedAt: Date | null,
+  limits: Record<string, unknown>,
+  live: boolean,
+) {
+  const base = live ? liveLessonDTO(a, startedAt, roadEarlyKeepsDuration(limits)) : lessonDTO(a);
+  if (roadSessionMode(mode) !== "exam") return base;
+  return { ...base, student: null, exam: await examLessonInfo(a) };
 }
 
 function markerDTO(m: {
@@ -319,10 +365,12 @@ const hotspotCheckSelect = {
 async function loadOwnSession(ctx: RoadCtx, sessionId: string) {
   const session = await prisma.roadSession.findFirst({
     where: { id: sessionId, companyId: ctx.companyId },
-    select: { ...sessionSelect, instructorId: true, studentId: true, companyId: true },
+    select: { ...sessionSelect, instructorId: true, studentId: true, companyId: true, startedById: true },
   });
   if (!session) return { error: fail("Sessione Road non trovata.", "NOT_FOUND") };
-  if (!canSeeAll(ctx)) {
+  // R4: chi ha avviato Road Exam (anche un titolare senza scheda istruttore).
+  const startedByMe = session.startedById != null && session.startedById === ctx.membership.userId;
+  if (!canSeeAll(ctx) && !startedByMe) {
     const mine = await ownInstructorId(ctx);
     if (!mine || mine !== session.instructorId) return { error: fail("Questa guida non è tua.", "FORBIDDEN") };
   }
@@ -346,14 +394,25 @@ export async function getRoadState() {
     if (!ctx.roadEnabled) return ok({ ...base, activeSession: null, eligibleLesson: null });
 
     const instructorId = await ownInstructorId(ctx);
-    if (!instructorId) return ok({ ...base, activeSession: null, eligibleLesson: null });
-
-    const now = new Date();
+    // R4: un Road Exam avviato da me (anche da titolare senza scheda istruttore).
     const active = await prisma.roadSession.findFirst({
-      where: { companyId: ctx.companyId, instructorId, status: "active" },
+      where: {
+        companyId: ctx.companyId,
+        status: "active",
+        OR: [...(instructorId ? [{ instructorId }] : []), { startedById: ctx.membership.userId }],
+      },
       orderBy: { startedAt: "desc" },
       select: { ...sessionSelect, appointment: { select: appointmentSelect } },
     });
+    const activeSession = active
+      ? {
+          ...sessionDTO(active, active.appointment.startsAt),
+          lesson: await sessionLessonDTO(active.mode, active.appointment, active.startedAt, ctx.limits, true),
+        }
+      : null;
+    if (!instructorId) return ok({ ...base, activeSession, eligibleLesson: null });
+
+    const now = new Date();
     const opensFrom = new Date(now.getTime() + ROAD_ENTRY_OPENS_MIN * 60 * 1000);
     const candidates = await prisma.autoscuolaAppointment.findMany({
       where: {
@@ -370,12 +429,7 @@ export async function getRoadState() {
 
     return ok({
       ...base,
-      activeSession: active
-        ? {
-            ...sessionDTO(active, active.appointment.startsAt),
-            lesson: liveLessonDTO(active.appointment, active.startedAt, roadEarlyKeepsDuration(ctx.limits)),
-          }
-        : null,
+      activeSession,
       eligibleLesson: eligible ? lessonDTO(eligible) : null,
     });
   } catch (error) {
@@ -439,7 +493,7 @@ export async function startRoadSession(input: { appointmentId: string; plan?: un
     // Un istruttore ha una sola sessione attiva: quella vecchia (guida
     // precedente dimenticata aperta) si chiude come abbandonata.
     await prisma.roadSession.updateMany({
-      where: { companyId: ctx.companyId, instructorId, status: "active" },
+      where: { companyId: ctx.companyId, status: "active", OR: [{ instructorId }, { startedById: ctx.membership.userId }] },
       data: { status: "abandoned", endedAt: now },
     });
 
@@ -449,6 +503,7 @@ export async function startRoadSession(input: { appointmentId: string; plan?: un
           companyId: ctx.companyId,
           appointmentId: appointment.id,
           instructorId,
+          startedById: ctx.membership.userId,
           studentId: appointment.studentId,
           vehicleId: appointment.vehicleId,
           startedAt: now,
@@ -631,6 +686,8 @@ export async function addRoadMarker(
     const loaded = await loadOwnSession(ctx, sessionId);
     if ("error" in loaded) return loaded.error!;
     const { session } = loaded;
+    // R4: Road Exam registra solo il tracciato.
+    if (roadSessionMode(session.mode) === "exam") return fail("In Road Exam non si fanno segnalazioni.", "EXAM_MODE");
     // Una segnalazione in coda offline può arrivare dopo «Termina guida»:
     // la accettiamo fino a 2 ore dopo la chiusura.
     if (session.status !== "active") {
@@ -807,6 +864,7 @@ export async function addRoadHotspotCheck(
     const loaded = await loadOwnSession(ctx, sessionId);
     if ("error" in loaded) return loaded.error!;
     const { session } = loaded;
+    if (roadSessionMode(session.mode) === "exam") return fail("In Road Exam non si fanno ripassi.", "EXAM_MODE");
     if (session.status !== "active") {
       const closedAt = session.endedAt?.getTime() ?? 0;
       if (Date.now() - closedAt > 2 * 60 * 60 * 1000) return fail("La guida è chiusa.", "SESSION_CLOSED");
@@ -896,6 +954,17 @@ export async function endRoadSession(sessionId: string, input: { endedAt?: unkno
     const { session } = loaded;
 
     const queuedClose = session.status === "abandoned" && input.endedAt != null;
+    // R4: Road Exam non tocca l'agenda (niente «completata», niente orari): chiude,
+    // pulisce la traccia e la salva come percorso d'esame dei suoi esaminatori.
+    if (roadSessionMode(session.mode) === "exam" && (session.status === "active" || queuedClose)) {
+      const endedAt = resolveEndedAt(input.endedAt, session.startedAt);
+      await finalizeRoadSession(prisma, sessionId, "completed", endedAt);
+      await saveRoadCleanTrack(prisma, sessionId).catch((e) => console.warn("[road] cleanTrack", e));
+      await saveExamRouteFromSession(sessionId, ctx.companyId, ctx.membership.userId).catch((e) =>
+        console.warn("[road] examRoute", e),
+      );
+      return getRoadSessionDetail(sessionId);
+    }
     if (session.status === "active" || queuedClose) {
       const endedAt = resolveEndedAt(input.endedAt, session.startedAt);
       await finalizeRoadSession(prisma, sessionId, "completed", endedAt);
@@ -975,7 +1044,7 @@ async function buildDetail(sessionId: string, companyId: string) {
   return {
     // REG-713: i km sono quelli salvati sulla sessione (gli stessi di storico e liste).
     ...sessionDTO(s, s.appointment.startsAt),
-    lesson: lessonDTO(s.appointment),
+    lesson: await sessionLessonDTO(s.mode, s.appointment, s.startedAt, {}, false),
     markers: s.markers.map(markerDTO),
     // REG-677: i ripassi «Meglio / No» sui punti critici dell'allievo in questa guida.
     hotspotChecks: s.hotspotChecks.map(hotspotCheckDTO),
@@ -1346,12 +1415,12 @@ export async function getRoadLive() {
       now: now.toISOString(),
       base: base ? pin(base) : null,
       places: locations.filter((l) => !l.isDefault).map((l) => ({ id: l.id, ...pin(l) })),
-      sessions: active.map((s) => ({
+      sessions: await Promise.all(active.map(async (s) => ({
         ...sessionDTO(s, s.appointment.startsAt),
-        lesson: lessonDTO(s.appointment),
+        lesson: await sessionLessonDTO(s.mode, s.appointment, s.startedAt, {}, false),
         ...markerSummary(counts, s.id),
         recentMarkers: recent.filter((m) => m.sessionId === s.id).slice(0, 3).map(markerDTO),
-      })),
+      }))),
       atBase,
     });
   } catch (error) {
@@ -1423,11 +1492,11 @@ export async function getRoadHistory(input: {
     const page = rows.slice(0, take);
     const counts = await markerCounts(page.map((r) => r.id));
     return ok({
-      items: page.map((s) => ({
+      items: await Promise.all(page.map(async (s) => ({
         ...sessionDTO(s, s.appointment.startsAt),
-        lesson: lessonDTO(s.appointment),
+        lesson: await sessionLessonDTO(s.mode, s.appointment, s.startedAt, {}, false),
         ...markerSummary(counts, s.id),
-      })),
+      }))),
       nextCursor: rows.length > take ? page[page.length - 1].id : null,
     });
   } catch (error) {
@@ -1891,6 +1960,8 @@ async function roadTabExtras(
   const last = mySessions[0];
   if (
     last?.endedAt &&
+    // R4: Road Exam non ha pagellino.
+    roadSessionMode(last.mode) !== "exam" &&
     ctx.limits.evaluationSheetEnabled === true &&
     now.getTime() - last.endedAt.getTime() <= TO_CLOSE_HOURS * 60 * 60 * 1000 &&
     last.appointment.status !== "cancelled"
@@ -1912,7 +1983,7 @@ async function roadTabExtras(
     mySessions.map(async (s) => ({
       ...sessionDTO(s, s.appointment.startsAt),
       ...markerSummary(sessionCounts, s.id),
-      lesson: lessonDTO(s.appointment),
+      lesson: await sessionLessonDTO(s.mode, s.appointment, s.startedAt, {}, false),
       thumb: thumbs.get(s.id) ?? [],
     })),
   );
@@ -1967,6 +2038,188 @@ export async function undoFreeRoadSession(input: { sessionId?: unknown }) {
     });
     if (!removed.success) return fail(removed.message ?? "Impossibile annullare la guida.");
     return ok({ appointmentId: session.appointmentId });
+  } catch (error) {
+    return fail(formatError(error));
+  }
+}
+
+// ─── R4 Road Exam ────────────────────────────────────────────────────────────
+
+const examRowSelect = {
+  id: true,
+  companyId: true,
+  type: true,
+  status: true,
+  startsAt: true,
+  instructorId: true,
+  examiners: true,
+  coInstructors: { select: { instructorId: true } },
+  roadSession: { select: { id: true } },
+} satisfies Prisma.AutoscuolaAppointmentSelect;
+
+/**
+ * Avvia (o riprende) Road Exam su un esame: `appointmentIds` = le sue righe (una
+ * per allievo, come le manda la scheda esame). La sessione si àncora alla riga
+ * con l'id più piccolo; `studentId` null. Possono avviarla l'istruttore
+ * dell'esame, i co-istruttori e il titolare; esame senza istruttore =
+ * qualunque istruttore. Niente controllo d'orario: l'esame si registra quando
+ * c'è (anche in anticipo o in ritardo), ma solo il giorno dell'esame.
+ */
+export async function startRoadExamSession(input: { appointmentIds?: unknown }) {
+  try {
+    const ctx = await roadContext();
+    if (!ctx.roadEnabled) return fail("Reglo Road non è attivo per questa autoscuola.", "ROAD_DISABLED");
+    const ids = Array.isArray(input?.appointmentIds)
+      ? [...new Set(input.appointmentIds.filter((x): x is string => typeof x === "string"))].slice(0, 50)
+      : [];
+    if (!ids.length) return fail("Esame mancante.");
+    const rows = await prisma.autoscuolaAppointment.findMany({
+      where: { id: { in: ids }, companyId: ctx.companyId },
+      select: examRowSelect,
+    });
+    if (!rows.length || rows.length !== ids.length) return fail("Esame non trovato.", "NOT_FOUND");
+    if (rows.some((r) => r.type !== "esame")) return fail("Road Exam funziona solo sugli esami.", "NOT_ELIGIBLE");
+    const startsAt = rows[0].startsAt.getTime();
+    if (rows.some((r) => r.startsAt.getTime() !== startsAt)) return fail("Le righe non sono dello stesso esame.", "INVALID");
+
+    const instructorId = await ownInstructorId(ctx);
+    const allowed = canStartRoadExam(
+      rows.map((r) => ({ instructorId: r.instructorId, coInstructorIds: r.coInstructors.map((c) => c.instructorId) })),
+      { isOwner: canSeeAll(ctx), instructorId },
+    );
+    if (!allowed) return fail("Puoi registrare solo gli esami che accompagni.", "FORBIDDEN");
+
+    // Ripresa: una riga dell'esame ha già la sua sessione.
+    const existing = rows.find((r) => r.roadSession)?.roadSession?.id;
+    if (existing) {
+      const detail = await prisma.roadSession.findUnique({
+        where: { id: existing },
+        select: { ...sessionSelect, appointment: { select: appointmentSelect } },
+      });
+      if (detail) {
+        return ok({
+          ...sessionDTO(detail, detail.appointment.startsAt),
+          lesson: await sessionLessonDTO(detail.mode, detail.appointment, detail.startedAt, ctx.limits, true),
+          resumed: true,
+        });
+      }
+    }
+
+    const anchor = examAnchorRow(rows);
+    if (!anchor) return fail("L'esame è stato annullato.", "NOT_ELIGIBLE");
+    const now = new Date();
+    if (romeDayBounds(now).start.getTime() > startsAt || romeDayBounds(now).end.getTime() <= startsAt) {
+      return fail("Road Exam si usa il giorno dell'esame.", "NOT_TODAY");
+    }
+
+    await prisma.roadSession.updateMany({
+      where: {
+        companyId: ctx.companyId,
+        status: "active",
+        OR: [...(instructorId ? [{ instructorId }] : []), { startedById: ctx.membership.userId }],
+      },
+      data: { status: "abandoned", endedAt: now },
+    });
+    const created = await prisma.roadSession.create({
+      data: {
+        companyId: ctx.companyId,
+        appointmentId: anchor.id,
+        instructorId,
+        studentId: null,
+        vehicleId: null,
+        startedAt: now,
+        mode: "exam",
+        examiners: examRowsExaminers(rows),
+        startedById: ctx.membership.userId,
+      },
+      select: { ...sessionSelect, appointment: { select: appointmentSelect } },
+    });
+    return ok({
+      ...sessionDTO(created, created.appointment.startsAt),
+      lesson: await sessionLessonDTO(created.mode, created.appointment, created.startedAt, ctx.limits, true),
+      resumed: false,
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return startRoadExamSession(input); // doppio tap: la seconda chiamata riprende
+    }
+    return fail(formatError(error));
+  }
+}
+
+/**
+ * Fine Road Exam: la traccia pulita diventa un percorso d'esame (origin "exam")
+ * sotto gli esaminatori scritti sull'esame in quel momento. Una volta sola per
+ * sessione; meno di 2 punti = niente percorso.
+ */
+export async function saveExamRouteFromSession(sessionId: string, companyId: string, userId: string | null) {
+  const s = await prisma.roadSession.findFirst({
+    where: { id: sessionId, companyId, mode: "exam" },
+    select: { id: true, cleanTrack: true, appointment: { select: { id: true, startsAt: true, instructorId: true, companyId: true } } },
+  });
+  if (!s) return null;
+  const already = await prisma.roadExamRoute.findFirst({ where: { companyId, sourceSessionId: sessionId }, select: { id: true } });
+  if (already) return already.id;
+  const clean = storedCleanTrack(s.cleanTrack);
+  const raw = clean?.path?.length ? clean.path : (await loadTrack(sessionId)).map((p) => [p[1], p[2]] as LatLng);
+  if (raw.length < 2) return null;
+  const path = simplifyPath(raw as LatLng[]);
+  const info = await examLessonInfo(s.appointment);
+  const site = info.place;
+  const row = await prisma.roadExamRoute.create({
+    data: {
+      companyId,
+      name: examRouteName(s.appointment.startsAt, info.examiners),
+      examSite: site,
+      licenseCategories: [],
+      waypoints: waypointsFromTrack(raw as LatLng[], EXAM_ROUTE_MAX_WAYPOINTS) as unknown as Prisma.InputJsonValue,
+      path: path as unknown as Prisma.InputJsonValue,
+      lengthMeters: pathLengthMeters(path),
+      sourceSessionId: sessionId,
+      createdById: userId,
+      examiners: info.examiners,
+      origin: "exam",
+      examAt: s.appointment.startsAt,
+    },
+    select: { id: true },
+  });
+  await prisma.roadSession.update({ where: { id: sessionId }, data: { examiners: info.examiners } });
+  invalidateRoadHotspots(companyId);
+  return row.id;
+}
+
+/**
+ * R4c «Prova il percorso»: a guida in corso l'istruttore mette nel giro un
+ * percorso d'esame (di un esaminatore); `examRouteId` null lo toglie. La tappa
+ * la costruisce il server dal percorso salvato; la copertura a fine guida passa
+ * da `planReached` come per il giro scelto alla partenza.
+ */
+export async function setRoadSessionExamRoute(sessionId: string, input: { examRouteId?: unknown }) {
+  try {
+    const ctx = await roadContext();
+    const loaded = await loadOwnSession(ctx, sessionId);
+    if ("error" in loaded) return loaded.error!;
+    const { session } = loaded;
+    if (session.status !== "active") return fail("La guida è chiusa.", "SESSION_CLOSED");
+    if (roadSessionMode(session.mode) === "exam") return fail("Durante Road Exam non si prova un percorso.", "EXAM_MODE");
+    const routeId = input?.examRouteId;
+    let stop = null;
+    if (routeId != null) {
+      if (typeof routeId !== "string") return fail("Percorso non valido.", "INVALID");
+      const route = await prisma.roadExamRoute.findFirst({
+        where: { id: routeId, companyId: ctx.companyId, archivedAt: null },
+        select: { id: true, name: true, path: true },
+      });
+      if (!route) return fail("Percorso non trovato.", "NOT_FOUND");
+      stop = examStopFromRoute({ id: route.id, name: route.name, path: (Array.isArray(route.path) ? route.path : []) as LatLng[] });
+      if (!stop) return fail("Il percorso non ha una linea.", "INVALID");
+    }
+    const plan = planWithExamStop(parseStoredPlan(session.plan) ?? null, stop);
+    await prisma.roadSession.update({
+      where: { id: sessionId },
+      data: { plan: plan ? (plan as unknown as Prisma.InputJsonValue) : Prisma.DbNull },
+    });
+    return ok({ plan });
   } catch (error) {
     return fail(formatError(error));
   }
