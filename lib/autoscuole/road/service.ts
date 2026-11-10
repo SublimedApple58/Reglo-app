@@ -2213,6 +2213,7 @@ export async function saveExamRouteFromSession(sessionId: string, companyId: str
       examiners: info.examiners,
       origin: "exam",
       examAt: s.appointment.startsAt,
+      startStreet: await streetAt(path[0][0], path[0][1]),
     },
     select: { id: true },
   });

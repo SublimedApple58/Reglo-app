@@ -11,6 +11,7 @@ import {
   type LatLng,
 } from "@/lib/autoscuole/road/exam-routes";
 import { loadRoadTrack } from "@/lib/autoscuole/road/maintenance";
+import { streetAt } from "@/lib/autoscuole/road/street-at";
 import { SnapError, snapWaypoints, waypointsFromTrack } from "@/lib/autoscuole/road/snap";
 import { examRouteOrigin, groupExamRoutesByExaminer, type ExamRouteOrigin } from "@/lib/autoscuole/road/road-exam";
 
@@ -40,6 +41,7 @@ const routeSelect = {
   examiners: true,
   origin: true,
   examAt: true,
+  startStreet: true,
   archivedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -57,6 +59,7 @@ type RouteRow = {
   examiners: string[];
   origin: string;
   examAt: Date | null;
+  startStreet: string | null;
   archivedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -77,6 +80,8 @@ export type RoadExamRouteDTO = {
   origin: ExamRouteOrigin;
   /** R4: quando si è svolto l'esame registrato. */
   examAt: string | null;
+  /** R4: via di partenza («Parte da Via …»), null se non trovata. */
+  startStreet: string | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -89,6 +94,13 @@ const invalidateHotspots = (companyId: string) =>
   invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.ROAD] }).catch(() => undefined);
 
 const asLatLng = (v: unknown): LatLng[] => (Array.isArray(v) ? (v as LatLng[]) : []);
+
+/** R4: la via del primo punto del percorso (null se Google non la trova). */
+export async function examRouteStartStreet(path: unknown): Promise<string | null> {
+  const first = asLatLng(path)[0];
+  if (!first || !Number.isFinite(first[0]) || !Number.isFinite(first[1])) return null;
+  return streetAt(first[0], first[1]);
+}
 
 function routeDTO(r: RouteRow): RoadExamRouteDTO {
   return {
@@ -103,6 +115,7 @@ function routeDTO(r: RouteRow): RoadExamRouteDTO {
     examiners: r.examiners,
     origin: examRouteOrigin(r.origin),
     examAt: r.examAt?.toISOString() ?? null,
+    startStreet: r.startStreet,
     archivedAt: r.archivedAt?.toISOString() ?? null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
@@ -114,6 +127,23 @@ async function loadCtx(write: boolean) {
   if (!ctx.roadEnabled) return { error: fail("Reglo Road non è attivo.", "ROAD_DISABLED") };
   if (write && !canSeeAll(ctx)) return { error: fail("Solo il titolare può modificare i percorsi d'esame.", "FORBIDDEN") };
   return { ctx };
+}
+
+/**
+ * I percorsi salvati prima di `startStreet` (o quando Google non ha risposto)
+ * la ricevono alla prima lettura: pochi per volta, la via resta in cache Redis.
+ */
+const START_STREET_FILL_MAX = 10;
+async function fillStartStreets(rows: RouteRow[]) {
+  const missing = rows.filter((r) => !r.startStreet && !r.archivedAt && asLatLng(r.path).length).slice(0, START_STREET_FILL_MAX);
+  await Promise.all(
+    missing.map(async (r) => {
+      const street = await examRouteStartStreet(r.path);
+      if (!street) return;
+      r.startStreet = street;
+      await prisma.roadExamRoute.update({ where: { id: r.id }, data: { startStreet: street }, select: { id: true } }).catch(() => undefined);
+    }),
+  );
 }
 
 /** Percorsi attivi dell'autoscuola (con `archived` anche quelli archiviati, solo titolare). */
@@ -128,6 +158,7 @@ export async function listRoadExamRoutes(input: { archived?: boolean } = {}) {
       orderBy: [{ archivedAt: { sort: "asc", nulls: "first" } }, { name: "asc" }],
       select: routeSelect,
     });
+    await fillStartStreets(rows);
     return ok(rows.map(routeDTO));
   } catch (error) {
     return fail(formatError(error));
@@ -179,6 +210,7 @@ export async function createRoadExamRoute(raw: unknown) {
         lengthMeters: v.lengthMeters ?? 0,
         sourceSessionId: v.sourceSessionId ?? null,
         examiners: v.examiners ?? [],
+        startStreet: await examRouteStartStreet(v.path),
         createdById: ctx.membership.userId,
       },
       select: routeSelect,
@@ -210,7 +242,9 @@ export async function updateRoadExamRoute(id: string, raw: unknown) {
         ...(v.examSite !== undefined ? { examSite: v.examSite } : {}),
         ...(v.licenseCategories !== undefined ? { licenseCategories: v.licenseCategories } : {}),
         ...(v.waypoints !== undefined ? { waypoints: v.waypoints } : {}),
-        ...(v.path !== undefined ? { path: v.path, lengthMeters: v.lengthMeters ?? 0 } : {}),
+        ...(v.path !== undefined
+          ? { path: v.path, lengthMeters: v.lengthMeters ?? 0, startStreet: await examRouteStartStreet(v.path) }
+          : {}),
         ...(v.sourceSessionId !== undefined ? { sourceSessionId: v.sourceSessionId } : {}),
         ...(v.examiners !== undefined ? { examiners: v.examiners } : {}),
         ...(restore ? { archivedAt: null } : {}),

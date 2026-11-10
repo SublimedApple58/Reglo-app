@@ -2645,6 +2645,8 @@ model RoadExamRoute {
   origin            String    @default("drawn")
   /// R4: quando si è svolto l'esame registrato (solo origin "exam").
   examAt            DateTime? @db.Timestamp(6)
+  /// R4: via del primo punto del percorso («Parte da Via …» in guida), dal server.
+  startStreet       String?
   createdById       String?   @db.Uuid
   archivedAt        DateTime? @db.Timestamp(6)
   createdAt         DateTime  @default(now()) @db.Timestamp(6)
