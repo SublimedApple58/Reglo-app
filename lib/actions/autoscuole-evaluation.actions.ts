@@ -191,6 +191,13 @@ export async function getAppointmentEvaluation(appointmentId: string): Promise<
         items: Array<EvaluationItemDTO & { archived: boolean }>;
         /** score null = voce marcata "non valutabile" su questa guida. */
         scores: Array<{ itemId: string; score: number | null; notApplicable: boolean }>;
+        /**
+         * Road novembre R2 — «pagellino come livello»: per ogni voce l'ultimo
+         * voto dato all'allievo nelle guide PRIMA di questa (anche di altri
+         * istruttori). Il foglio lo mostra attenuato; non è un voto di questa
+         * guida e non si salva qui.
+         */
+        previous: Array<{ itemId: string; score: number; scaleMax: number; appointmentId: string; startsAt: string }>;
       };
     }
   | { success: false; message: string }
@@ -207,13 +214,13 @@ export async function getAppointmentEvaluation(appointmentId: string): Promise<
         companyId: membership.companyId,
         ...(callerIsStudent ? { studentId: membership.userId } : {}),
       },
-      select: { id: true },
+      select: { id: true, studentId: true, startsAt: true },
     });
     if (!appointment || (callerIsStudent && !(await areStudentNotesEnabled(membership.companyId)))) {
       return { success: false as const, message: "Guida non trovata." };
     }
 
-    const [active, enabled, saved] = await Promise.all([
+    const [active, enabled, saved, previous] = await Promise.all([
       listCompanyEvaluationItems(membership.companyId),
       isEvaluationSheetEnabled(membership.companyId),
       prisma.autoscuolaAppointmentEvaluation.findMany({
@@ -225,6 +232,9 @@ export async function getAppointmentEvaluation(appointmentId: string): Promise<
           item: { select: { id: true, label: true, scaleMax: true, position: true, archivedAt: true } },
         },
       }),
+      appointment.studentId
+        ? latestStudentScores(membership.companyId, appointment.studentId, appointment.id, appointment.startsAt)
+        : Promise.resolve([]),
     ]);
 
     const activeIds = new Set(active.map((i) => i.id));
@@ -248,9 +258,54 @@ export async function getAppointmentEvaluation(appointmentId: string): Promise<
           score: s.score,
           notApplicable: s.notApplicable,
         })),
+        previous,
       },
     };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
+}
+
+/**
+ * Road novembre R2: l'ultimo voto per voce dato all'allievo nelle guide
+ * iniziate prima di `before` (esclusa la guida `excludeId`), da qualunque
+ * istruttore. Guide annullate e righe «non valutabile» non contano. Per un
+ * allievo le righe sono poche: si leggono tutte, la più recente per voce vince.
+ */
+async function latestStudentScores(companyId: string, studentId: string, excludeId: string, before: Date) {
+  const rows = await prisma.autoscuolaAppointmentEvaluation.findMany({
+    where: {
+      score: { not: null },
+      notApplicable: false,
+      appointment: {
+        companyId,
+        studentId,
+        id: { not: excludeId },
+        startsAt: { lt: before },
+        status: { not: "cancelled" },
+      },
+    },
+    select: {
+      itemId: true,
+      score: true,
+      item: { select: { scaleMax: true } },
+      appointment: { select: { id: true, startsAt: true } },
+    },
+    orderBy: { appointment: { startsAt: "desc" } },
+  });
+  const seen = new Set<string>();
+  const out: Array<{ itemId: string; score: number; scaleMax: number; appointmentId: string; startsAt: string }> = [];
+  for (const r of rows) {
+    if (seen.has(r.itemId) || r.score == null) continue;
+    seen.add(r.itemId);
+    const scaleMax = asEvaluationScale(r.item.scaleMax);
+    out.push({
+      itemId: r.itemId,
+      score: Math.min(r.score, scaleMax),
+      scaleMax,
+      appointmentId: r.appointment.id,
+      startsAt: r.appointment.startsAt.toISOString(),
+    });
+  }
+  return out;
 }

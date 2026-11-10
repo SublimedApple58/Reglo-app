@@ -230,3 +230,12 @@ ma senza testo, che prima sparivano.
 
 Resta da decidere: la statistica "voto medio" nella scheda allievo mobile (oggi media delle
 stelline storiche, si congela col tempo).
+
+## Pagellino come LIVELLO (Road novembre R2, Tiziano 10/11/2026)
+
+Concettualmente il pagellino è il **livello attuale** del ragazzo: per ogni voce conta l'ultimo voto dato, in qualunque guida e da qualunque istruttore. Nessun setting, nessuna migrazione: il livello è calcolato.
+
+- **Valutando una guida** si vedono TUTTE le voci; quelle che il ragazzo ha già avuto mostrano l'ultimo voto in **oro tenue** (`rgba(250,204,21,0.34)`, variante B scelta da Tiziano) con «ultimo voto 4/5 · 3 nov». Se va bene non si tocca niente; toccando si sovrascrive (oro pieno, «prima era 2/5 · 5 nov»). L'oro tenue **non si salva**: una voce non toccata resta «non valutata» in QUESTA guida (storico per guida invariato).
+- **Backend**: `getAppointmentEvaluation` restituisce anche `previous[]` = `{ itemId, score, scaleMax, appointmentId, startsAt }`, l'ultimo voto per voce dato all'allievo nelle guide iniziate prima di questa (`latestStudentScores`; escluse annullate e «non valutabile»).
+- **Web, modifica guida** (`EditAppointmentDialog`): via il modello «aggiungi voce» — tutte le voci in elenco, `StarRatingInput ghost`; il payload resta solo le voci votate qui.
+- **Livello nella scheda allievo**: `studentEvaluationLevels` (`lib/autoscuole/evaluation-sheet.ts`, unit-testato) sostituisce `aggregateStudentEvaluations` nel web (`EvaluationLevels`, tab Note): per voce ultimo voto + data, voci mai valutate in grigio, media dei livelli in testa, «Da allenare». Mobile: stessa logica in `src/utils/evaluationSheet.ts` (scheda istruttore e vista allievo).

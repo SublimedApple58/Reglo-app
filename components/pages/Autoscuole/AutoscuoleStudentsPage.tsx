@@ -11,10 +11,10 @@ import {
 
 import { cn } from "@/lib/utils";
 import {
-  aggregateStudentEvaluations,
   evaluationSummary,
   evaluationSummaryLabel,
-  type StudentEvaluationAggregate,
+  studentEvaluationLevels,
+  type StudentEvaluationLevels,
 } from "@/lib/autoscuole/evaluation-sheet";
 import { getEvaluationSheet } from "@/lib/actions/autoscuole-evaluation.actions";
 import { getQuizStudentDetailForStaff } from "@/lib/actions/autoscuole-quiz.actions";
@@ -284,69 +284,90 @@ type ExtendedSummary = {
  * Barre e non stelline: una media come 4,2 con le stelline si potrebbe
  * disegnare solo con mezze stelle finte.
  */
-function EvaluationAverages({ aggregate }: { aggregate: StudentEvaluationAggregate }) {
+const LEVEL_MONTHS = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
+/** «oggi», «ieri», «3 nov» (+ anno se non è quest'anno). */
+function levelDate(iso: string | null) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const now = new Date();
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(now) - day(d)) / 86_400_000);
+  if (diff === 0) return "oggi";
+  if (diff === 1) return "ieri";
+  return `${d.getDate()} ${LEVEL_MONTHS[d.getMonth()]}${d.getFullYear() !== now.getFullYear() ? ` ${d.getFullYear()}` : ""}`;
+}
+
+/**
+ * Road novembre R2 (Tiziano 10/11/2026): il pagellino come LIVELLO — per ogni
+ * voce l'ultimo voto dato, con la data; al posto della media su tutte le guide.
+ * Le voci del pagellino mai valutate restano in fondo, in grigio.
+ */
+function EvaluationLevels({
+  levels,
+  sheetItems,
+}: {
+  levels: StudentEvaluationLevels;
+  sheetItems: ReadonlyArray<{ id: string; label: string; scaleMax: number }>;
+}) {
   const fmt = (n: number) => n.toFixed(1).replace(".", ",");
+  const rated = new Set(levels.items.map((i) => i.itemId));
+  const never = sheetItems.filter((i) => !rated.has(i.id));
+  const rows = [
+    ...levels.items.map((item) => ({ key: item.itemId, label: item.label, archived: item.archived, item })),
+    ...never.map((i) => ({ key: i.id, label: i.label, archived: false, item: null })),
+  ];
   return (
     <div className="mb-6">
-      <p className={sectionLabelClass}>Pagellino · media su tutte le guide</p>
+      <p className={sectionLabelClass}>Pagellino · livello attuale (l&apos;ultimo voto di ogni voce)</p>
       <div className="rounded-[14px] border border-[#ececec] bg-white px-4 pb-3 pt-3.5">
         <div className="mb-3 flex items-baseline justify-between gap-3">
           <span className="text-[20px] font-bold leading-none tracking-[-0.4px] text-[#111111]">
-            {aggregate.average != null ? (
+            {levels.average != null ? (
               <>
-                {fmt(aggregate.average)}
-                <span className="text-[13px] font-semibold text-[#929292]">
-                  /{aggregate.scaleMax} di media
-                </span>
+                {fmt(levels.average)}
+                <span className="text-[13px] font-semibold text-[#929292]">/{levels.scaleMax}</span>
               </>
             ) : (
-              <span className="text-[13px] font-semibold text-[#929292]">
-                Scale diverse: media per voce
-              </span>
+              <span className="text-[13px] font-semibold text-[#929292]">Scale diverse: livello per voce</span>
             )}
           </span>
           <span className="text-[11.5px] font-semibold text-[#929292]">
-            {aggregate.lessonCount === 1 ? "1 guida valutata" : `${aggregate.lessonCount} guide valutate`}
+            {sheetItems.length
+              ? `${levels.items.filter((i) => !i.archived).length} voci su ${sheetItems.length} valutate`
+              : `${levels.items.length} voci valutate`}
           </span>
         </div>
-        {aggregate.items.map((item, i) => (
-          <div
-            key={item.itemId}
-            className={cn("flex items-center gap-3 py-[7px]", i > 0 && "border-t border-[#f6f6f8]")}
-          >
-            <span className="w-[168px] shrink-0 text-[12.5px] font-medium text-[#111111]">
-              {item.label}
-              {item.archived ? (
-                <span className="font-normal text-[#a3a3ad]"> (non più in uso)</span>
-              ) : null}
+        {rows.map((row, i) => (
+          <div key={row.key} className={cn("flex items-center gap-3 py-[7px]", i > 0 && "border-t border-[#f6f6f8]")}>
+            <span
+              className={cn(
+                "w-[168px] shrink-0 text-[12.5px] font-medium",
+                row.item ? "text-[#111111]" : "text-[#a3a3ad]",
+              )}
+            >
+              {row.label}
+              {row.archived ? <span className="font-normal text-[#a3a3ad]"> (non più in uso)</span> : null}
             </span>
             <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#f2f2f4]">
-              <span
-                className="block h-full rounded-full bg-[#facc15]"
-                style={{ width: `${(item.average / item.scaleMax) * 100}%` }}
-              />
+              {row.item ? (
+                <span
+                  className="block h-full rounded-full bg-[#facc15]"
+                  style={{ width: `${(row.item.score / row.item.scaleMax) * 100}%` }}
+                />
+              ) : null}
             </span>
             <span className="w-[34px] text-right text-[12.5px] font-bold text-[#111111]">
-              {fmt(item.average)}
+              {row.item ? `${row.item.score}/${row.item.scaleMax}` : "—"}
             </span>
-            <span className="w-[62px] text-right text-[11.5px] font-medium text-[#929292]">
-              {item.count === 1 ? "su 1 guida" : `su ${item.count} guide`}
+            <span className="w-[78px] text-right text-[11.5px] font-medium text-[#929292]">
+              {row.item ? levelDate(row.item.lastAt) : "mai valutata"}
             </span>
           </div>
         ))}
-        {aggregate.weakest || aggregate.notEvaluated > 0 ? (
+        {levels.weakest ? (
           <p className="mt-2.5 border-t border-[#f6f6f8] pt-2 text-[11.5px] font-medium text-[#929292]">
-            {aggregate.weakest ? (
-              <>
-                Voce più bassa: <span className="font-semibold text-[#111111]">{aggregate.weakest.label}</span>{" "}
-                ({fmt(aggregate.weakest.average)}/{aggregate.weakest.scaleMax} su {aggregate.weakest.count}{" "}
-                {aggregate.weakest.count === 1 ? "guida" : "guide"})
-              </>
-            ) : null}
-            {aggregate.weakest && aggregate.notEvaluated > 0 ? " · " : ""}
-            {aggregate.notEvaluated > 0
-              ? `${aggregate.notEvaluated} ${aggregate.notEvaluated === 1 ? "voce non ancora valutata" : "voci non ancora valutate"}`
-              : ""}
+            Da allenare: <span className="font-semibold text-[#111111]">{levels.weakest.label}</span> (
+            {levels.weakest.score}/{levels.weakest.scaleMax})
           </p>
         ) : null}
       </div>
@@ -3925,11 +3946,11 @@ export function AutoscuoleStudentsPage({
     }
     // Stesso ordine del tab "Guide": più recenti in cima (REG-584).
     const orderedLessons = [...register.lessons].sort(byMostRecentFirst);
-    const aggregate = aggregateStudentEvaluations(orderedLessons, evalSheetItems);
+    const levels = studentEvaluationLevels(orderedLessons, evalSheetItems);
     return (
       <div>
-        {aggregate ? <EvaluationAverages aggregate={aggregate} /> : null}
-        {aggregate ? <p className={sectionLabelClass}>Guida per guida</p> : null}
+        {levels ? <EvaluationLevels levels={levels} sheetItems={evalSheetItems} /> : null}
+        {levels ? <p className={sectionLabelClass}>Guida per guida</p> : null}
         {orderedLessons.map((lesson) => {
           const hasNote = !!lesson.notes?.trim();
           const isExam = lesson.type === "esame";

@@ -255,3 +255,85 @@ export const aggregateStudentEvaluations = (
     weakest,
   };
 };
+
+export type StudentEvaluationLevel = {
+  itemId: string;
+  label: string;
+  scaleMax: number;
+  /** L'ultimo voto dato su questa voce (intero). */
+  score: number;
+  /** Inizio della guida dell'ultimo voto. */
+  lastAt: string | null;
+  archived: boolean;
+};
+
+export type StudentEvaluationLevels = {
+  items: StudentEvaluationLevel[];
+  /** Media dei livelli (una voce = un voto); null con scale miste. */
+  average: number | null;
+  scaleMax: number | null;
+  /** Voci del pagellino attuale mai valutate. */
+  notEvaluated: number;
+  /** Voce col livello più basso (in proporzione alla scala). */
+  weakest: StudentEvaluationLevel | null;
+};
+
+/**
+ * Road novembre R2 (Tiziano 10/11/2026) — il pagellino come LIVELLO del
+ * ragazzo: per ogni voce l'ultimo voto dato, in qualunque guida. Sostituisce la
+ * media nella scheda allievo. Stesse esclusioni della media (guide annullate,
+ * «non valutabile», voci senza voto); ordine del pagellino della scuola.
+ */
+export const studentEvaluationLevels = (
+  lessons: ReadonlyArray<{
+    startsAt?: Date | string | null;
+    cancelledAt?: Date | string | null;
+    evaluations?: ReadonlyArray<{
+      itemId: string;
+      label: string;
+      scaleMax: number;
+      score: number | null;
+      notApplicable?: boolean;
+    }> | null;
+  }>,
+  sheetItems: ReadonlyArray<{ id: string; label: string; scaleMax: number }> = [],
+): StudentEvaluationLevels | null => {
+  const at = (d: Date | string | null | undefined) => (d ? new Date(d).getTime() : 0);
+  const sorted = [...lessons].sort((a, b) => at(b.startsAt) - at(a.startsAt));
+  const acc = new Map<string, StudentEvaluationLevel>();
+  const order = new Map(sheetItems.map((item, index) => [item.id, index]));
+  for (const lesson of sorted) {
+    if (lesson.cancelledAt) continue;
+    for (const row of lesson.evaluations ?? []) {
+      if (row.notApplicable || row.score == null || acc.has(row.itemId)) continue;
+      acc.set(row.itemId, {
+        itemId: row.itemId,
+        label: row.label,
+        scaleMax: row.scaleMax,
+        score: Math.min(row.score, row.scaleMax),
+        lastAt: lesson.startsAt ? new Date(lesson.startsAt).toISOString() : null,
+        archived: !order.has(row.itemId),
+      });
+    }
+  }
+  if (!acc.size) return null;
+  const items = [...acc.values()].sort((a, b) => {
+    const ia = order.get(a.itemId);
+    const ib = order.get(b.itemId);
+    if (ia != null && ib != null) return ia - ib;
+    if (ia != null) return -1;
+    if (ib != null) return 1;
+    return a.label.localeCompare(b.label, "it");
+  });
+  const scales = new Set(items.map((i) => i.scaleMax));
+  const average = scales.size === 1 ? items.reduce((s, i) => s + i.score, 0) / items.length : null;
+  const weakest =
+    items.length > 1 ? items.reduce((min, i) => (i.score / i.scaleMax < min.score / min.scaleMax ? i : min)) : null;
+  return {
+    items,
+    average,
+    scaleMax: scales.size === 1 ? items[0].scaleMax : null,
+    notEvaluated: sheetItems.filter((item) => !acc.has(item.id)).length,
+    weakest,
+  };
+};

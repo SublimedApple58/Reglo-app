@@ -247,3 +247,45 @@ describe("pagellino — media per voce sull'allievo", () => {
     expect(agg.weakest.itemId).toBe("c");
   });
 });
+
+describe("Road novembre R2 — pagellino come livello (ultimo voto per voce)", () => {
+  const { studentEvaluationLevels } = jest.requireActual("@/lib/autoscuole/evaluation-sheet");
+  const row = (itemId: string, score: number | null, extra = {}) => ({ itemId, label: itemId.toUpperCase(), scaleMax: 5, score, ...extra });
+  const SHEET = [
+    { id: "a", label: "A", scaleMax: 5 },
+    { id: "b", label: "B", scaleMax: 5 },
+    { id: "c", label: "C", scaleMax: 5 },
+  ];
+
+  it("è null senza voti", () => {
+    expect(studentEvaluationLevels([], SHEET)).toBeNull();
+  });
+
+  it("prende l'ultimo voto di ogni voce, anche da guide diverse, a prescindere dall'ordine", () => {
+    const lv = studentEvaluationLevels(
+      [
+        { startsAt: "2026-11-03T10:00:00Z", evaluations: [row("a", 2), row("b", 5)] },
+        { startsAt: "2026-11-10T10:00:00Z", evaluations: [row("a", 4)] },
+        { startsAt: "2026-11-05T10:00:00Z", evaluations: [row("b", 3), row("c", null)] },
+      ],
+      SHEET,
+    );
+    expect(lv.items.map((i: { itemId: string; score: number }) => [i.itemId, i.score])).toEqual([["a", 4], ["b", 3]]);
+    expect(lv.items[0].lastAt).toBe("2026-11-10T10:00:00.000Z");
+    expect(lv.average).toBe(3.5);
+    expect(lv.notEvaluated).toBe(1);
+    expect(lv.weakest.itemId).toBe("b");
+  });
+
+  it("ignora guide annullate e voci «non valutabili»", () => {
+    const lv = studentEvaluationLevels(
+      [
+        { startsAt: "2026-11-01T10:00:00Z", evaluations: [row("a", 3)] },
+        { startsAt: "2026-11-09T10:00:00Z", cancelledAt: "2026-11-09T09:00:00Z", evaluations: [row("a", 1)] },
+        { startsAt: "2026-11-08T10:00:00Z", evaluations: [row("a", null, { notApplicable: true })] },
+      ],
+      SHEET,
+    );
+    expect(lv.items[0].score).toBe(3);
+  });
+});
