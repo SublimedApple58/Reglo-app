@@ -68,4 +68,4 @@ Anteprime: `/tmp/hiro-anteprime/road-novembre/` — ogni parte di UI passa prima
 - [x] R2 — variante B oro tenue; backend `previous`, livello web/mobile (web c2ae72d, mobile b775437) — verificato sul simulatore il 10/11 (oro tenue, sovrascrittura «Prima era», salvata solo la voce votata, livello «oggi»); vista allievo non provata (gate cellulare)
 - [~] R3 — backend + coda offline fatti (web ddfbabc, mobile 6294d7a); grafica: anteprime r3-pin.png + r3-r7-web.png inviate 10/11, in attesa di ok
 - [~] R7 — migrazione `20261113090000_road_marker_zone` (NON applicata), backend + tipi fatti; anteprime r7-zona.png + r3-r7-web.png inviate 10/11, in attesa di ok
-- [ ] R4a · [ ] R4b · [ ] R4c
+- [~] R4a · [~] R4b · [~] R4c — backend fatto (web 7e5a7ab, migrazione `20261114090000_road_exam` NON applicata); anteprime r4-app-esame, r4-app-percorsi, r4-web-percorsi inviate 10/11, in attesa di ok. Il percorso nasce solo con «Termina registrazione»: una sessione d'esame chiusa dal job come abbandonata non lo crea (job Trigger non toccato).
