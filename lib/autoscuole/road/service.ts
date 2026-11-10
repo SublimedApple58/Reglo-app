@@ -1640,13 +1640,20 @@ export async function getRoadFreeStartOptions() {
         where: {
           companyId: ctx.companyId,
           instructorId,
+          // Le guide di oggi: l'esame non è una guida (una riga per allievo).
+          type: { not: "esame" },
           startsAt: { gte: day.start, lt: day.end },
           status: { notIn: ["cancelled", "proposal"] },
         },
         orderBy: { startsAt: "asc" },
-        select: { startsAt: true, student: { select: { name: true } } },
+        select: { startsAt: true, groupLessonId: true, student: { select: { name: true } } },
       }),
-    ]);
+    ]).then(([v, b, p, r, c, rows]) => {
+      // Una guida di gruppo ha una riga per allievo: conta una volta.
+      const seenGroups = new Set<string>();
+      const today = rows.filter((x) => !x.groupLessonId || (!seenGroups.has(x.groupLessonId) && !!seenGroups.add(x.groupLessonId)));
+      return [v, b, p, r, c, today] as const;
+    });
 
     // Auto impegnate adesso → con chi (per «in guida con …»).
     const busy = new Map<string, string | null>();
