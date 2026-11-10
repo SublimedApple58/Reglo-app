@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  LEGACY_INSTRUCTORS_EXCEPTIONS,
+  type StudentBookingExceptions,
+  type StudentBookingExceptionsByPath,
+} from "@/lib/autoscuole/student-booking-policy";
+import type { StudentBookingSettingsValue } from "@/components/pages/Autoscuole/tabs/BookingsTab";
 import React from "react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -551,6 +557,11 @@ export function AutoscuoleResourcesPage({
     auto?: string;
     pro?: string;
   }>({});
+  // Prenotazione allievi «solo eccezioni»: eccezioni di default + per percorso.
+  const [studentBookingExceptions, setStudentBookingExceptions] =
+    React.useState<StudentBookingExceptions>(LEGACY_INSTRUCTORS_EXCEPTIONS);
+  const [studentBookingExceptionsByPath, setStudentBookingExceptionsByPath] =
+    React.useState<StudentBookingExceptionsByPath>({});
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
   const [instructors, setInstructors] = React.useState<InstructorDetail[]>([]);
   // Sick leave state
@@ -822,6 +833,8 @@ export function AutoscuoleResourcesPage({
     setAppBookingActorsByPath(
       (res.data.appBookingActorsByPath as { moto?: string; auto?: string; pro?: string }) ?? {},
     );
+    setStudentBookingExceptions(res.data.studentBookingExceptions ?? LEGACY_INSTRUCTORS_EXCEPTIONS);
+    setStudentBookingExceptionsByPath(res.data.studentBookingExceptionsByPath ?? {});
     setInstructorBookingMode(
       INSTRUCTOR_BOOKING_MODE_OPTIONS.some(
         (option) => option.value === res.data.instructorBookingMode,
@@ -931,6 +944,41 @@ export function AutoscuoleResourcesPage({
       },
     }),
   );
+  /**
+   * Prenotazione degli allievi dall'app: «chi prenota» ed eccezioni cambiano
+   * insieme (es. «Attiva» → «Solo eccezioni» tocca actors + eccezioni), quindi
+   * un solo patch con i quattro campi, rollback unico se il server rifiuta.
+   */
+  const saveStudentBooking = (next: StudentBookingSettingsValue) => {
+    const prev: StudentBookingSettingsValue = {
+      appBookingActors,
+      appBookingActorsByPath,
+      studentBookingExceptions,
+      studentBookingExceptionsByPath,
+    };
+    const apply = (v: StudentBookingSettingsValue) => {
+      setAppBookingActors(v.appBookingActors as AppBookingActorsValue);
+      setAppBookingActorsByPath(v.appBookingActorsByPath);
+      setStudentBookingExceptions(v.studentBookingExceptions);
+      setStudentBookingExceptionsByPath(v.studentBookingExceptionsByPath);
+    };
+    apply(next);
+    void persistSettings(
+      {
+        appBookingActors: next.appBookingActors as AppBookingActorsValue,
+        appBookingActorsByPath: next.appBookingActorsByPath as {
+          moto?: AppBookingActorsValue;
+          auto?: AppBookingActorsValue;
+          pro?: AppBookingActorsValue;
+        },
+        studentBookingExceptions: next.studentBookingExceptions,
+        studentBookingExceptionsByPath: next.studentBookingExceptionsByPath,
+        // Richiesta dal backend quando gli istruttori sono coinvolti.
+        instructorBookingMode,
+      },
+      () => apply(prev),
+    );
+  };
   const saveInstructorBookingMode = persistField(
     instructorBookingMode,
     setInstructorBookingMode,
@@ -2375,6 +2423,9 @@ export function AutoscuoleResourcesPage({
             setAppBookingActors={(v) => saveAppBookingActors(v as AppBookingActorsValue)}
             appBookingActorsByPath={appBookingActorsByPath}
             setAppBookingActorsByPath={(v) => saveAppBookingActorsByPath(v)}
+            studentBookingExceptions={studentBookingExceptions}
+            studentBookingExceptionsByPath={studentBookingExceptionsByPath}
+            onStudentBookingChange={saveStudentBooking}
             instructorBookingMode={instructorBookingMode}
             setInstructorBookingMode={(v) => saveInstructorBookingMode(v as InstructorBookingModeValue)}
             bookingSlotDurations={bookingSlotDurations}

@@ -28,6 +28,14 @@ import { companyAtom } from "@/atoms/company.store";
 import { isConsortium } from "@/lib/services";
 import { cn } from "@/lib/utils";
 import {
+  LAST_MINUTE_HOURS_MAX,
+  LAST_MINUTE_HOURS_MIN,
+  resolveStudentBookingMode,
+  type StudentBookingExceptions,
+  type StudentBookingExceptionsByPath,
+} from "@/lib/autoscuole/student-booking-policy";
+import type { LicensePathBucket } from "@/lib/autoscuole/license";
+import {
   NATIONAL_HOLIDAYS,
   nationalHolidayDateLabel,
 } from "@/lib/autoscuole/national-holidays";
@@ -35,6 +43,14 @@ import {
   getQuizSeatsContext,
   setAutoAssignQuizOnSignup,
 } from "@/lib/actions/autoscuole-settings.actions";
+
+/** I quattro campi che compongono «Prenotazione degli allievi dall'app». */
+export type StudentBookingSettingsValue = {
+  appBookingActors: string;
+  appBookingActorsByPath: { moto?: string; auto?: string; pro?: string };
+  studentBookingExceptions: StudentBookingExceptions;
+  studentBookingExceptionsByPath: StudentBookingExceptionsByPath;
+};
 
 export type BookingsTabProps = {
   // Generali (motore prenotazioni)
@@ -47,6 +63,11 @@ export type BookingsTabProps = {
   // REG-426: per-license-path override map ({} = nessun override, vale il default).
   appBookingActorsByPath: { moto?: string; auto?: string; pro?: string };
   setAppBookingActorsByPath: (next: { moto?: string; auto?: string; pro?: string }) => void;
+  // Prenotazione allievi «solo eccezioni» (default + per percorso). Le modifiche
+  // passano tutte da `onStudentBookingChange` (un solo salvataggio).
+  studentBookingExceptions: StudentBookingExceptions;
+  studentBookingExceptionsByPath: StudentBookingExceptionsByPath;
+  onStudentBookingChange: (next: StudentBookingSettingsValue) => void;
   instructorBookingMode: string;
   setInstructorBookingMode: (v: string) => void;
   bookingSlotDurations: number[];
@@ -454,6 +475,379 @@ function RegistrationSection() {
  * (configurazione motore) e Gestione allievi (regole verso gli allievi) in
  * quattro sub-tab: Generali / Limiti / Guide / App allievi.
  */
+
+type StudentBookingModeValue = "open" | "exceptions" | "closed";
+
+const STUDENT_BOOKING_MODE_OPTIONS: Array<{ value: StudentBookingModeValue; label: string }> = [
+  { value: "open", label: "Attiva" },
+  { value: "exceptions", label: "Solo eccezioni" },
+  { value: "closed", label: "Disattiva" },
+];
+
+const EXCEPTION_ROWS: Array<{
+  key: "slotFill" | "groupSeats" | "lastMinute";
+  title: string;
+  description: string;
+}> = [
+  {
+    key: "slotFill",
+    title: "Slot liberato da un annullamento",
+    description: "Quando un allievo annulla, gli altri ricevono una notifica: il primo che conferma prende il posto.",
+  },
+  {
+    key: "groupSeats",
+    title: "Posti liberi nelle guide di gruppo",
+    description: "Quando si libera un posto in una guida di gruppo, chi partecipa alle guide di gruppo può prenderlo.",
+  },
+  {
+    key: "lastMinute",
+    title: "Ultimo minuto",
+    description: "Gli allievi possono prenotare da soli i posti ancora vuoti nelle prossime ore.",
+  },
+];
+
+const modeOf = (actors: string | undefined, ex: StudentBookingExceptions): StudentBookingModeValue =>
+  resolveStudentBookingMode(
+    (actors === "students" || actors === "both" || actors === "instructors" ? actors : "students"),
+    ex,
+  );
+
+/** Passa a «Solo eccezioni» senza lasciare l'elenco vuoto (sarebbe «Disattiva»). */
+export const toExceptions = (ex: StudentBookingExceptions): StudentBookingExceptions => ({
+  ...ex,
+  enabled: true,
+  slotFill: ex.slotFill || (!ex.groupSeats && !ex.lastMinute),
+});
+
+/** Ore dell'ultimo minuto: si salva all'uscita dal campo, valore limitato 1–168. */
+function LastMinuteHoursInput({ value, onCommit }: { value: number; onCommit: (v: number) => void }) {
+  const [draft, setDraft] = React.useState(String(value));
+  React.useEffect(() => setDraft(String(value)), [value]);
+  const commit = () => {
+    const n = Math.round(Number(draft));
+    if (!Number.isFinite(n) || draft.trim() === "") {
+      setDraft(String(value));
+      return;
+    }
+    const clamped = Math.min(LAST_MINUTE_HOURS_MAX, Math.max(LAST_MINUTE_HOURS_MIN, n));
+    setDraft(String(clamped));
+    if (clamped !== value) onCommit(clamped);
+  };
+  return (
+    <div className="mt-3 flex items-center gap-3">
+      <input
+        type="number"
+        inputMode="numeric"
+        min={LAST_MINUTE_HOURS_MIN}
+        max={LAST_MINUTE_HOURS_MAX}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        aria-label="Ore dell'ultimo minuto"
+        className="h-11 w-[96px] rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 text-[15px] font-medium text-foreground outline-none transition focus:border-[#222222]"
+      />
+      <span className="text-[14px] font-medium text-[#6a6a6a]">ore prima della guida</span>
+    </div>
+  );
+}
+
+/** Elenco eccezioni (riquadro bordato del prototipo). `compact` = dentro una riga percorso.
+ * Usato anche dal gruppo autonomo (InstructorsTab). */
+export function ExceptionsList({
+  value,
+  onChange,
+  compact,
+}: {
+  value: StudentBookingExceptions;
+  onChange: (next: StudentBookingExceptions) => void;
+  compact?: boolean;
+}) {
+  return (
+    <div className={cn(!compact && "mt-4 rounded-[14px] border border-[#dddddd] bg-white")}>
+      {EXCEPTION_ROWS.map((row, i) => {
+        const checked = value[row.key];
+        const toggle = () => {
+          const next = { ...value, [row.key]: !checked };
+          // Spegnere l'ultima eccezione equivale a «Disattiva».
+          if (!next.slotFill && !next.groupSeats && !next.lastMinute) next.enabled = false;
+          onChange(next);
+        };
+        return (
+          <div
+            key={row.key}
+            className={cn(
+              compact ? "py-3 pl-10 pr-5" : "px-5 py-4",
+              i > 0 && !compact && "border-t border-[#f0f0f0]",
+            )}
+          >
+            <div className="flex items-center justify-between gap-6">
+              <div className="min-w-0">
+                <div className={cn("font-semibold text-foreground", compact ? "text-sm" : "text-[15px]")}>
+                  {row.title}
+                </div>
+                {!compact ? (
+                  <div className="mt-0.5 max-w-[620px] text-[13.5px] font-medium leading-relaxed text-[#6a6a6a]">
+                    {row.description}
+                  </div>
+                ) : null}
+              </div>
+              <InlineToggle checked={checked} onChange={toggle} size="lg" />
+            </div>
+            <AnimatePresence initial={false}>
+              {row.key === "lastMinute" && checked ? (
+                <motion.div
+                  key="hours"
+                  initial={{ height: 0, opacity: 0, overflow: "hidden" }}
+                  animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
+                  exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+                  transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
+                >
+                  <LastMinuteHoursInput
+                    value={value.lastMinuteHours}
+                    onCommit={(hours) => onChange({ ...value, lastMinuteHours: hours })}
+                  />
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * «Prenotazione degli allievi dall'app»: Attiva / Solo eccezioni / Disattiva,
+ * con eccezioni per percorso patente. Sotto il cofano resta `appBookingActors`
+ * (+ per percorso) e `studentBookingExceptions` (+ per percorso).
+ */
+function StudentBookingField({
+  value,
+  onChange,
+  onOpenLimits,
+}: {
+  value: StudentBookingSettingsValue;
+  onChange: (next: StudentBookingSettingsValue) => void;
+  onOpenLimits: () => void;
+}) {
+  const byPath = value.appBookingActorsByPath;
+  const perPath = Boolean(byPath.moto || byPath.auto || byPath.pro);
+  const defaultMode = modeOf(value.appBookingActors, value.studentBookingExceptions);
+  const bucketActors = (key: LicensePathBucket) => byPath[key] ?? value.appBookingActors;
+  const bucketExceptions = (key: LicensePathBucket) =>
+    value.studentBookingExceptionsByPath[key] ?? value.studentBookingExceptions;
+  const bucketMode = (key: LicensePathBucket) => modeOf(bucketActors(key), bucketExceptions(key));
+
+  // «Anche gli istruttori» vale per tutto ciò che è «Attiva».
+  const openActors = perPath
+    ? LICENSE_PATH_BUCKETS.filter((b) => bucketMode(b.key) === "open").map((b) => bucketActors(b.key))
+    : defaultMode === "open"
+      ? [value.appBookingActors]
+      : [];
+  const instructorsToo = openActors.length > 0 && openActors.every((a) => a === "both");
+  const openValue = instructorsToo || (openActors.length === 0 && value.appBookingActors !== "students")
+    ? "both"
+    : "students";
+
+  const applyMode = (
+    mode: StudentBookingModeValue,
+    ex: StudentBookingExceptions,
+  ): { actors: string; exceptions: StudentBookingExceptions } => {
+    if (mode === "open") return { actors: openValue, exceptions: ex };
+    if (mode === "exceptions") return { actors: "instructors", exceptions: toExceptions(ex) };
+    return { actors: "instructors", exceptions: { ...ex, enabled: false } };
+  };
+
+  const setDefaultMode = (v: string) => {
+    if (v === "per_path") {
+      // Parte da tre percorsi uguali al valore attuale.
+      const ex = value.studentBookingExceptions;
+      onChange({
+        ...value,
+        appBookingActorsByPath: { moto: value.appBookingActors, auto: value.appBookingActors, pro: value.appBookingActors },
+        studentBookingExceptionsByPath: { moto: ex, auto: ex, pro: ex },
+      });
+      return;
+    }
+    const next = applyMode(v as StudentBookingModeValue, value.studentBookingExceptions);
+    onChange({
+      appBookingActors: next.actors,
+      studentBookingExceptions: next.exceptions,
+      appBookingActorsByPath: {},
+      studentBookingExceptionsByPath: {},
+    });
+  };
+
+  const setBucket = (key: LicensePathBucket, actors: string, exceptions: StudentBookingExceptions) =>
+    onChange({
+      ...value,
+      appBookingActorsByPath: { ...byPath, [key]: actors },
+      studentBookingExceptionsByPath: { ...value.studentBookingExceptionsByPath, [key]: exceptions },
+    });
+
+  const setInstructorsToo = (on: boolean) => {
+    const actors = on ? "both" : "students";
+    if (!perPath) {
+      onChange({ ...value, appBookingActors: actors });
+      return;
+    }
+    const nextByPath = { ...byPath };
+    for (const b of LICENSE_PATH_BUCKETS) {
+      if (bucketMode(b.key) === "open") nextByPath[b.key] = actors;
+    }
+    onChange({ ...value, appBookingActorsByPath: nextByPath });
+  };
+
+  return (
+    <>
+      <SettingRow
+        title="Prenotazione degli allievi dall'app"
+        description="Attiva: gli allievi prenotano quando vogliono. Solo eccezioni: prenotano solo nei casi che scegli tu. Disattiva: le guide le fissano solo istruttori e segreteria."
+        control={
+          <Select value={perPath ? "per_path" : defaultMode} onValueChange={setDefaultMode}>
+            <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[280px]")}>
+              <SelectValue placeholder="Seleziona" />
+            </SelectTrigger>
+            <SelectContent>
+              {STUDENT_BOOKING_MODE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+              <SelectItem value="per_path">Differenzia per percorso patente…</SelectItem>
+            </SelectContent>
+          </Select>
+        }
+      />
+
+      <AnimatePresence initial={false} mode="wait">
+        {perPath ? (
+          <motion.div
+            key="per-path"
+            initial={{ height: 0, opacity: 0, overflow: "hidden" }}
+            animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
+            exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+            transition={{ duration: 0.24, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            <div className="mt-4 rounded-[14px] border border-[#dddddd] bg-white">
+              {LICENSE_PATH_BUCKETS.map((bucket, i) => {
+                const mode = bucketMode(bucket.key);
+                const ex = bucketExceptions(bucket.key);
+                return (
+                  <div key={bucket.key} className={cn(i > 0 && "border-t border-[#f0f0f0]")}>
+                    <div className="flex items-center justify-between gap-4 px-5 py-3.5">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-foreground">{bucket.label}</div>
+                        <div className="mt-0.5 text-[12px] font-medium text-[#a0a0a0]">{bucket.cats}</div>
+                      </div>
+                      <Select
+                        value={mode}
+                        onValueChange={(v) => {
+                          const next = applyMode(v as StudentBookingModeValue, ex);
+                          setBucket(bucket.key, next.actors, next.exceptions);
+                        }}
+                      >
+                        <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[200px]")}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STUDENT_BOOKING_MODE_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <AnimatePresence initial={false}>
+                      {mode === "exceptions" ? (
+                        <motion.div
+                          key="exceptions"
+                          initial={{ height: 0, opacity: 0, overflow: "hidden" }}
+                          animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
+                          exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+                          transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
+                          className="border-t border-[#f0f0f0] pb-2"
+                        >
+                          <ExceptionsList
+                            compact
+                            value={ex}
+                            onChange={(nextEx) =>
+                              setBucket(bucket.key, nextEx.enabled ? "instructors" : bucketActors(bucket.key), nextEx)
+                            }
+                          />
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        ) : defaultMode === "exceptions" ? (
+          <motion.div
+            key="exceptions"
+            initial={{ height: 0, opacity: 0, overflow: "hidden" }}
+            animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
+            exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+            transition={{ duration: 0.24, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            <ExceptionsList
+              value={value.studentBookingExceptions}
+              onChange={(nextEx) => onChange({ ...value, studentBookingExceptions: nextEx })}
+            />
+          </motion.div>
+        ) : defaultMode === "closed" ? (
+          <motion.div
+            key="closed"
+            initial={{ height: 0, opacity: 0, overflow: "hidden" }}
+            animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
+            exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+            transition={{ duration: 0.24, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            <div className="mt-4 rounded-[14px] border border-[#dddddd] bg-white px-5 py-4 text-[13.5px] font-medium leading-relaxed text-[#6a6a6a]">
+              Gli allievi non possono prenotare in nessun caso e non ricevono notifiche di posti liberi. Le guide le
+              fissano istruttori e segreteria.
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      {openActors.length > 0 ? (
+        <div className="mt-6">
+          <SettingRow
+            title="Anche gli istruttori prenotano dall'app"
+            description={
+              perPath
+                ? "Vale per i percorsi con prenotazione attiva. Con «Solo eccezioni» e «Disattiva» gli istruttori prenotano sempre."
+                : "Gli istruttori possono fissare le guide degli allievi dal telefono."
+            }
+            checked={instructorsToo}
+            onToggle={() => setInstructorsToo(!instructorsToo)}
+          />
+        </div>
+      ) : null}
+
+      {perPath || defaultMode === "exceptions" ? (
+        <p className="mt-5 text-[13.5px] font-medium text-[#6a6a6a]">
+          Gli scambi tra allievi non dipendono da qui: si attivano in{" "}
+          <button
+            type="button"
+            onClick={onOpenLimits}
+            className="cursor-pointer text-foreground underline underline-offset-2"
+          >
+            Limiti
+          </button>
+          .
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 export default function BookingsTab({
   availabilityWeeks,
   setAvailabilityWeeks,
@@ -462,7 +856,10 @@ export default function BookingsTab({
   appBookingActors,
   setAppBookingActors,
   appBookingActorsByPath,
-  setAppBookingActorsByPath,
+  setAppBookingActorsByPath: _setAppBookingActorsByPath,
+  studentBookingExceptions,
+  studentBookingExceptionsByPath,
+  onStudentBookingChange,
   instructorBookingMode,
   setInstructorBookingMode,
   bookingSlotDurations,
@@ -556,110 +953,40 @@ export default function BookingsTab({
       {/* ══ GENERALI ══ */}
       <div className={cn("divide-y divide-[#ebebeb]", subTab !== "generali" && "hidden")}>
         <div className="py-6">
-          {/* REG-426: un solo controllo. Il dropdown ha una voce "Differenzia per
-              percorso patente…" che, quando scelta, espande (animato) il pannello
-              con le righe moto/auto/professionali. */}
+          <StudentBookingField
+            value={{
+              appBookingActors,
+              appBookingActorsByPath: appBookingActorsByPath ?? {},
+              studentBookingExceptions,
+              studentBookingExceptionsByPath,
+            }}
+            onChange={onStudentBookingChange}
+            onOpenLimits={() => setSubTab("limiti")}
+          />
           {(() => {
-            const byPath = appBookingActorsByPath ?? {};
-            const perPath = Boolean(byPath.moto || byPath.auto || byPath.pro);
             // La modalità istruttore serve se gli istruttori sono coinvolti in un
             // valore qualsiasi (default o uno dei percorsi).
+            const byPath = appBookingActorsByPath ?? {};
+            const perPath = Boolean(byPath.moto || byPath.auto || byPath.pro);
             const instructorsInvolved = perPath
               ? [byPath.moto, byPath.auto, byPath.pro].some((v) => v === "instructors" || v === "both")
               : appBookingActors === "instructors" || appBookingActors === "both";
+            if (!instructorsInvolved) return null;
             return (
-              <>
-                <SettingRow
-                  title="Chi può prenotare dall'app"
-                  description="Scegli chi può prenotare le guide in autonomia. Con «Differenzia per percorso patente» imposti un valore diverso per moto, auto e professionali."
-                  control={
-                    <Select
-                      value={perPath ? "per_path" : appBookingActors}
-                      onValueChange={(v) => {
-                        if (v === "per_path") {
-                          // Entra in modalità per-percorso: parte da 3 righe tutte
-                          // sul valore attuale, così è un punto di partenza sensato.
-                          setAppBookingActorsByPath({ moto: appBookingActors, auto: appBookingActors, pro: appBookingActors });
-                        } else {
-                          setAppBookingActors(v);
-                          if (perPath) setAppBookingActorsByPath({});
-                        }
-                      }}
-                    >
-                      <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[260px]")}>
-                        <SelectValue placeholder="Seleziona" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {APP_BOOKING_ACTOR_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                        <SelectItem value="per_path">Differenzia per percorso patente…</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  }
-                />
-                <AnimatePresence initial={false}>
-                  {perPath && (
-                    <motion.div
-                      key="per-path-panel"
-                      initial={{ height: 0, opacity: 0, overflow: "hidden" }}
-                      animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
-                      exit={{ height: 0, opacity: 0, overflow: "hidden" }}
-                      transition={{ duration: 0.24, ease: [0.25, 0.1, 0.25, 1] }}
-                    >
-                      <div className="mt-3 rounded-[14px] border border-[#dddddd] bg-white">
-                        {LICENSE_PATH_BUCKETS.map((bucket, i) => (
-                          <div
-                            key={bucket.key}
-                            className={cn(
-                              "flex items-center justify-between gap-4 px-5 py-3.5",
-                              i > 0 && "border-t border-[#f0f0f0]",
-                            )}
-                          >
-                            <div className="min-w-0">
-                              <div className="text-sm font-semibold text-foreground">{bucket.label}</div>
-                              <div className="mt-0.5 text-[12px] font-medium text-[#a0a0a0]">{bucket.cats}</div>
-                            </div>
-                            <Select
-                              value={byPath[bucket.key] ?? appBookingActors}
-                              onValueChange={(v) => setAppBookingActorsByPath({ ...byPath, [bucket.key]: v })}
-                            >
-                              <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[200px]")}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {APP_BOOKING_ACTOR_OPTIONS.map((option) => (
-                                  <SelectItem key={option.value} value={option.value}>
-                                    {option.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-                {instructorsInvolved && (
-                  <FieldBlock label="Modalità istruttore">
-                    <Select value={instructorBookingMode} onValueChange={setInstructorBookingMode}>
-                      <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[320px]")}>
-                        <SelectValue placeholder="Seleziona modalità" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {INSTRUCTOR_BOOKING_MODE_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FieldBlock>
-                )}
-              </>
+              <FieldBlock label="Modalità istruttore">
+                <Select value={instructorBookingMode} onValueChange={setInstructorBookingMode}>
+                  <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[320px]")}>
+                    <SelectValue placeholder="Seleziona modalità" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INSTRUCTOR_BOOKING_MODE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FieldBlock>
             );
           })()}
         </div>
