@@ -10,7 +10,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Pausa tra le guide (REG-484)**: ogni guida prenotata crea subito dopo di sé un `AutoscuolaInstructorBlock` `reason="lesson_buffer"` sull'istruttore (`createLessonBufferBlock`, chiamato da `createAutoscuolaAppointment`, `createAutoscuolaAppointmentBatch`, `createBookingRequest`, `respondWaitlistOffer`). **Il blocco non segue la guida**: annullo/spostamento/rimozione lo lasciano orfano, va tolto a mano. Vedi `features/lesson-buffer.md`
 - → **Payments**: cancel refunds credits (`refundLessonCreditIfEligible`; l'annullo web `annulFutureAppointment` rende il credito via `adjustStudentLessonCredits` o azzera l'importo `waived`), confirm consumes credits, settlement charges Stripe, `coverAppointmentWithLessonCredit` applica 1 credito a una guida da pagare
 - → **Blocchi guide annullate (REG-623)**: con `cancelledLessonBlocks` acceso, ogni annullata `manual_cancel` (o `operational_cancel` + `school_fault`) resta in agenda come blocco finché **una riga attiva dello stesso istruttore** (anche co-istruttore) non copre l'orario. Derivato, non salvato (`findCancelledLessonBlocks`): chi cambia `cancellationKind`, i motivi di `operational_cancel` o l'appartenenza alla colonna istruttore cambia anche quali blocchi compaiono. La X scrive solo `agendaDismissedAt`. REG-624: la nota dell'ufficio (`agendaNote`) passa dalla rotta **bootstrap condivisa con il mobile**, che la toglie se manca `officeNotes=1` o il ruolo non è titolare/admin (`withOfficeNotes`): chi tocca quella rotta o la sua cache non deve far trapelare la nota all'app. Vedi `features/cancelled-lesson-blocks.md`. Lo stesso filtro toglie le **note del giorno** (REG-632, `dayNotes`): vedi `features/day-notes.md`
-- → **Repositioning (retired)**: cancel now cancels only — no reposition/proposal (`queueOperationalRepositionForAppointment` is cancel-only behind `REPOSITIONING_ENABLED=false`)
+- → **Repositioning (rimosso 2026-06-09)**: l'annullo annulla e basta; il vecchio motore e la route `/reposition` non esistono più (vedi `operational-cancellation.ts`)
 - → **Notifications**: push on create/cancel/reschedule/propose (l'annullo web via `annulFutureAppointment` notifica con reason `owner_delete`)
 - → **Cache**: invalidates AGENDA + PAYMENTS
 - → **Communications**: case status change triggers notifications
@@ -312,12 +312,12 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Communications**: deadline reminders (pink sheet, medical expiry)
 - → **Notifications**: push on case status change
 
-### Repositioning (retired 2026-06-08 — cancel-only, see features/repositioning.md)
+### Repositioning (RIMOSSO 2026-06-09 — codice cancellato, vedi features/repositioning.md)
 - → **Appointments**: cancellation entry points now cancel only (no proposal)
 - → **Payments**: refunds lesson credit on cancel if the lesson was upcoming
 - → **Notifications**: reason-specific cancellation push/email
 - → **Cache**: invalidates AGENDA / PAYMENTS
-- (legacy, dead behind `REPOSITIONING_ENABLED=false`) Booking Engine slot-matching
+- Codice e route cancellati: nessun collegamento attivo. Le cancellazioni stanno in `operational-cancellation.ts`.
 
 ### Penalties
 - → **Payments**: penalty charge via Stripe, tracked in AppointmentPayment; `resolveLateCancellation` "dismiss" ora **restituisce il credito** (+1) se la guida era coperta e non ancora resa, "charge" lo ri-scala / segna `manualPaymentStatus=unpaid`
@@ -527,7 +527,6 @@ autoscuole-reminders.ts → communications.ts →
   processInvoiceFinalization → payments.ts (push to FIC)
   processConfiguredReminders + MorningReminders + AppointmentReminders (push + WhatsApp)
   processCaseDeadlines (pink sheet, medical expiry alerts)
-  processPendingRepositions → repositioning.ts → slot-matcher.ts
 ```
 
 ### Pausa tra le guide (REG-484)

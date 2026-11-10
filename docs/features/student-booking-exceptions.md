@@ -31,7 +31,7 @@ Tre stati visibili: **Attiva** (`students`/`both`), **Solo eccezioni** (`instruc
 - `lib/autoscuole/student-phase-notifications.ts` — testi coerenti con la modalità.
 - `app/api/autoscuole/notifications/route.ts` — recupero filtrato per allievo e canale.
 - `lib/actions/autoscuole-settings.actions.ts`, `app/api/autoscuole/instructor-settings/route.ts`, `lib/actions/autoscuole.actions.ts` (`instructorSettingsSchema`) — salvataggio.
-- Test: `tests/unit/autoscuole/student-booking-policy.test.ts`.
+- Test: `tests/unit/autoscuole/student-booking-policy.test.ts` (matrice modalità × canale × blocco, cascata, default «Disattiva») e `tests/unit/autoscuole/student-booking-policy-loader.test.ts` (policy dalla riga del membro: gruppo autonomo attivo/inattivo, eccezioni per percorso, blocco a tempo, fase).
 
 ## Contratto per il mobile
 `GET /api/autoscuole/booking-options` → `bookingPolicy: { mode: "open"|"exceptions"|"closed", hold: null|"blocked"|"awaiting"|"theory"|"license_missing", exceptions: {slotFill, groupSeats, lastMinute, lastMinuteHours}, lastMinuteUntil: ISO|null }`.

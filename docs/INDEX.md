@@ -34,7 +34,7 @@
 | Aspetto (pannello Impostazioni: criterio colore agenda durata/patente + colori istruttori + ordine colonne istruttore + veicolo nei blocchi REG-633) | [appearance-settings.md](features/appearance-settings.md) | `AspettoSettingsPane.tsx`, `lib/autoscuole/agenda-vehicle-label.ts` (REG-633), `lib/autoscuole/agenda-color-criterion.ts` (`LICENSE_COLOR_ENTRIES`), `lib/autoscuole/agenda-instructor-order.ts` (`agendaInstructorOrder`, REG-449), `autoscuole-settings.actions.ts` (`agendaColorCriterion`), `AutoscuoleAgendaPage.tsx` (`licenseColorEntryForTag`, legenda dinamica) |
 | Communications | [communications.md](features/communications.md) | `communications.ts`, `whatsapp-delivery.ts` (cancello unico), `whatsapp-sender.ts` (Telnyx), `whatsapp-templates.ts`, `whatsapp-consent.ts`, `delivery-log.ts` |
 | Cases & Deadlines | [cases-deadlines.md](features/cases-deadlines.md) | `autoscuole.actions.ts` |
-| Repositioning **(retired)** | [repositioning.md](features/repositioning.md) | `repositioning.ts` |
+| Repositioning **(rimosso, solo storico)** | [repositioning.md](features/repositioning.md) | — (codice cancellato il 2026-06-09; oggi `operational-cancellation.ts`) |
 | Penalties | [penalties.md](features/penalties.md) | `payments.ts`, `communications.ts` |
 | Voice AI | [voice-ai.md](features/voice-ai.md) | `voice.ts`, `voice-webhook.ts` |
 | Solo Segretaria (secretary-only) | [secretary-only.md](features/secretary-only.md) | `lib/services.ts` (`secretaryOnly`, `isSecretaryOnly`), `AutoscuoleNav.tsx`, `AutoscuoleTabsPage.tsx`, `AutoscuoleResourcesPage.tsx`, `AutoscuoleShell.tsx`, `BackofficeCompaniesPage.tsx` |
