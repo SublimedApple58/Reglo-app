@@ -64,8 +64,8 @@ Anteprime: `/tmp/hiro-anteprime/road-novembre/` — ogni parte di UI passa prima
 ## Avanzamento
 - [x] R1 — verificato sul simulatore contro DB staging (web 3d4b0ae, mobile 6208dd1)
 - [x] R6 — viola dell'esame, app A + web approvati (mobile fef61c6, web de78a26)
-- [x] R5 — scheda completa dentro Road, fogli registrati in /road + `studentSheetHref`, `dayOnly` (mobile abf7e86) — da verificare sul simulatore
-- [x] R2 — variante B oro tenue; backend `previous`, livello web/mobile (web c2ae72d, mobile b775437) — da verificare sul simulatore
-- [~] R3 — backend + coda offline fatti (web ddfbabc, mobile 6294d7a); grafica in attesa di anteprime
-- [~] R7 — migrazione `20261113090000_road_marker_zone` (NON applicata), backend + tipi fatti; grafica in attesa di anteprime
+- [x] R5 — scheda completa dentro Road, fogli registrati in /road + `studentSheetHref`, `dayOnly` (mobile abf7e86) — verificato sul simulatore contro staging il 10/11 (scheda, Pagamenti, Impostazioni, Road allievo, percorso, mappa, dettagli guida; guida sotto continua)
+- [x] R2 — variante B oro tenue; backend `previous`, livello web/mobile (web c2ae72d, mobile b775437) — verificato sul simulatore il 10/11 (oro tenue, sovrascrittura «Prima era», salvata solo la voce votata, livello «oggi»); vista allievo non provata (gate cellulare)
+- [~] R3 — backend + coda offline fatti (web ddfbabc, mobile 6294d7a); grafica: anteprime r3-pin.png + r3-r7-web.png inviate 10/11, in attesa di ok
+- [~] R7 — migrazione `20261113090000_road_marker_zone` (NON applicata), backend + tipi fatti; anteprime r7-zona.png + r3-r7-web.png inviate 10/11, in attesa di ok
 - [ ] R4a · [ ] R4b · [ ] R4c
