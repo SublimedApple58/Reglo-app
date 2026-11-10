@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useAtomValue } from "jotai";
 import { AlertCircle, CalendarDays, Check, CheckCircle2, Clock, Loader2, Plus, Route, Star, TrafficCone, UserCog, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,12 @@ import {
   updateAutoscuolaAppointmentStatus,
 } from "@/lib/actions/autoscuole.actions";
 import { cn } from "@/lib/utils";
+import { companyAtom } from "@/atoms/company.store";
+import {
+  CONCLUDED_INSTRUCTOR_CHANGE_DAYS,
+  isConcludedForInstructorChange,
+  isWithinConcludedInstructorChangeWindow,
+} from "@/lib/autoscuole/concluded-instructor-change";
 import { getEvaluationSheet } from "@/lib/actions/autoscuole-evaluation.actions";
 
 type StudentLite = {
@@ -251,6 +258,7 @@ export function EditAppointmentDialog({
   slotPatch,
 }: Props) {
   const toast = useFeedbackToast();
+  const isCompanyAdmin = useAtomValue(companyAtom)?.role === "admin";
 
   const originalStart = React.useMemo(
     () => (appointment ? new Date(appointment.startsAt) : null),
@@ -443,7 +451,13 @@ export function EditAppointmentDialog({
     if (!slotPatch || !open) return;
     setNewDate(slotPatch.date);
     setNewTime(slotPatch.time);
-    if (slotPatch.instructorId) setInstructorId(slotPatch.instructorId);
+    // Su una guida conclusa il clic sulla griglia sposta solo data/ora: la
+    // colonna di un altro istruttore non deve cambiarne l'istruttore di nascosto
+    // (l'istruttore lì si cambia solo dal selettore, se il titolare può).
+    const concluded = ["completed", "no_show", "cancelled"].includes(
+      (appointment?.status ?? "").toLowerCase(),
+    );
+    if (slotPatch.instructorId && !concluded) setInstructorId(slotPatch.instructorId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slotPatch?.nonce]);
 
@@ -465,6 +479,17 @@ export function EditAppointmentDialog({
   const durationAffectsAvailability = durationChanged && !originalInPast && !isConcluded;
 
   const instructorChanged = instructorId !== originalInstructorId && instructorId !== "";
+  // Guida conclusa (completata/assente): il titolare ne corregge l'istruttore
+  // entro 30 giorni (sostituto "al volo"). Il BE ripete la regola e sul
+  // passato non verifica la disponibilità: qui niente badge per l'istruttore.
+  const canChangeConcludedInstructor =
+    isCompanyAdmin &&
+    appointment?.type !== "esame" &&
+    isConcludedForInstructorChange(normalizedStatus) &&
+    !!originalStart &&
+    isWithinConcludedInstructorChangeWindow(originalStart);
+  const instructorLocked = isConcluded && !canChangeConcludedInstructor;
+  const instructorAffectsAvailability = instructorChanged && !isConcluded;
 
   const sortedTypesKey = (t: string[]) => [...t].sort().join(",");
   const typesChanged = sortedTypesKey(lessonTypes) !== sortedTypesKey(originalLessonTypes);
@@ -503,14 +528,18 @@ export function EditAppointmentDialog({
     if (!open || !appointment || !effectiveStart || !effectiveEnd) return;
     // La durata più lunga può creare sovrapposizioni: rivalidiamo anche quando
     // cambia solo la durata (l'endsAt esteso viene già passato all'endpoint).
-    if (!instructorChanged && !dateTimeChanged && !durationAffectsAvailability) {
+    if (!instructorAffectsAvailability && !dateTimeChanged && !durationAffectsAvailability) {
       setAvailability({ status: "idle" });
       return;
     }
     // We always validate the instructor that's going to own the lesson:
     // if the user only moved the slot, we check the CURRENT instructor;
     // if the user picked a different one, we check that one.
-    const targetInstructorId = instructorId || originalInstructorId;
+    // Guida conclusa: lo spostamento lo valida il BE sull'istruttore attuale
+    // (il cambio istruttore arriva dopo e sul passato non si verifica).
+    const targetInstructorId = isConcluded
+      ? originalInstructorId
+      : instructorId || originalInstructorId;
     if (!targetInstructorId) {
       setAvailability({ status: "idle" });
       return;
@@ -574,7 +603,8 @@ export function EditAppointmentDialog({
     effectiveEnd,
     instructorId,
     originalInstructorId,
-    instructorChanged,
+    instructorAffectsAvailability,
+    isConcluded,
     dateTimeChanged,
     durationAffectsAvailability,
   ]);
@@ -588,7 +618,7 @@ export function EditAppointmentDialog({
   // be verified or is known to conflict. The availability badge already
   // explains the reason in plain language.
   const isAvailabilityBlockingSave =
-    (instructorChanged || dateTimeChanged || durationAffectsAvailability) &&
+    (instructorAffectsAvailability || dateTimeChanged || durationAffectsAvailability) &&
     (availability.status === "checking" ||
       availability.status === "unavailable" ||
       availability.status === "error");
@@ -836,7 +866,7 @@ export function EditAppointmentDialog({
   // different value than the original — both routes change the conflict
   // calculus and the titolare needs visual confirmation before saving.
   const AvailabilityBadge: React.FC = () => {
-    if (!instructorChanged && !dateTimeChanged) return null;
+    if (!instructorAffectsAvailability && !dateTimeChanged) return null;
     if (availability.status === "checking") {
       return (
         <div className="mt-2 flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
@@ -977,7 +1007,7 @@ export function EditAppointmentDialog({
             <Select
               value={instructorId || undefined}
               onValueChange={(v) => setInstructorId(v)}
-              disabled={pending || isConcluded}
+              disabled={pending || instructorLocked}
             >
               <SelectTrigger id="edit-instructor" className="h-10 cursor-pointer">
                 <SelectValue placeholder="Seleziona istruttore" />
@@ -992,7 +1022,11 @@ export function EditAppointmentDialog({
             </Select>
             {isConcluded && (
               <p className="text-[11px] text-muted-foreground">
-                L&apos;istruttore non si può cambiare su una guida già conclusa.
+                {canChangeConcludedInstructor
+                  ? `Guida conclusa: puoi correggere l'istruttore (es. un sostituto) entro ${CONCLUDED_INSTRUCTOR_CHANGE_DAYS} giorni dalla guida.`
+                  : isCompanyAdmin && isConcludedForInstructorChange(normalizedStatus)
+                    ? `L'istruttore di una guida conclusa si può cambiare solo entro ${CONCLUDED_INSTRUCTOR_CHANGE_DAYS} giorni dalla guida.`
+                    : "L'istruttore non si può cambiare su una guida già conclusa o annullata."}
               </p>
             )}
           </div>
