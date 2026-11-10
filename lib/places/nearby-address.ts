@@ -14,3 +14,13 @@ export function pickStreetAddress(addresses: Array<string | undefined>): string 
     null
   );
 }
+
+/**
+ * Road novembre R3: dalla riga d'indirizzo il solo nome della via
+ * («Via Roma, 42, 20123 Milano…» → «Via Roma»); null se è solo la zona.
+ */
+export function streetFromAddress(address: string | null | undefined): string | null {
+  const first = address?.split(",")[0]?.trim();
+  if (!first || /^\d/.test(first)) return null;
+  return first.slice(0, 120);
+}

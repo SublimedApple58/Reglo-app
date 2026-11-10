@@ -29,6 +29,7 @@ import { finalizeRoadSession, loadRoadTrack, saveRoadCleanTrack } from "@/lib/au
 import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
 import { isBookingBlockActive } from "@/lib/autoscuole/booking-block";
 import { AUTOSCUOLE_CACHE_SEGMENTS, invalidateAutoscuoleCache } from "@/lib/autoscuole/cache";
+import { streetAt } from "@/lib/autoscuole/road/street-at";
 import { buildBriefing, rankSuggestions, type Briefing, type SuggestionCandidate } from "@/lib/autoscuole/road/suggestions";
 import {
   computePlanReached,
@@ -216,8 +217,11 @@ function markerDTO(m: {
   lng: number;
   street: string | null;
   sentiment: string | null;
+  shape: string | null;
+  radiusM: number | null;
   recordedAt: Date;
 }) {
+  const zone = markerZone(m.shape, m.radiusM);
   return {
     id: m.id,
     clientId: m.clientId,
@@ -228,6 +232,9 @@ function markerDTO(m: {
     lng: m.lng,
     street: m.street,
     sentiment: normalizeSentiment(m.sentiment),
+    // R7: punto preciso o zona (cerchio di `radiusM` metri attorno a lat/lng).
+    shape: zone ? ("zone" as const) : ("point" as const),
+    radiusM: zone,
     recordedAt: m.recordedAt.toISOString(),
   };
 }
@@ -241,8 +248,33 @@ const markerSelect = {
   lng: true,
   street: true,
   sentiment: true,
+  shape: true,
+  radiusM: true,
   recordedAt: true,
 } as const;
+
+/** R7: raggi ammessi per una segnalazione «zona», in metri. */
+export const ROAD_ZONE_RADII = [50, 100, 200] as const;
+
+/** Raggio della zona, o null se è un punto (anche dati sporchi = punto). */
+function markerZone(shape: string | null | undefined, radiusM: number | null | undefined): number | null {
+  if (shape !== "zone") return null;
+  return (ROAD_ZONE_RADII as readonly number[]).includes(Number(radiusM)) ? Number(radiusM) : null;
+}
+
+/** Colonne da scrivere per punto/zona: un punto si salva come null/null. */
+function markerShapeData(shape: string | null | undefined, radiusM: number | null | undefined) {
+  const zone = markerZone(shape, radiusM);
+  return zone ? { shape: "zone", radiusM: zone } : { shape: null, radiusM: null };
+}
+
+/**
+ * I punti critici sono in cache 10 minuti (REG-643): una segnalazione nuova,
+ * spostata, cambiata o tolta deve vedersi subito. Fuoco e dimentica.
+ */
+function invalidateRoadHotspots(companyId: string) {
+  invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.ROAD] }).catch(() => undefined);
+}
 
 /** REG-677: ripasso «Meglio / No» su un punto critico dell'allievo. */
 function hotspotCheckDTO(c: {
@@ -588,6 +620,9 @@ export async function addRoadMarker(
     street?: string | null;
     /** "good" | "bad"; assente = neutra (client vecchi). */
     sentiment?: string | null;
+    /** R7: "point" (default) | "zone" con `radiusM` 50 | 100 | 200. */
+    shape?: string | null;
+    radiusM?: number | null;
     recordedAt?: string;
   },
 ) {
@@ -627,10 +662,12 @@ export async function addRoadMarker(
         lng,
         street: typeof input?.street === "string" ? input.street.trim().slice(0, 120) || null : null,
         sentiment: normalizeSentiment(input?.sentiment),
+        ...markerShapeData(input?.shape, input?.radiusM),
         recordedAt: Number.isNaN(recordedAt.getTime()) ? new Date() : recordedAt,
       },
       select: markerSelect,
     });
+    invalidateRoadHotspots(ctx.companyId);
     return ok(markerDTO(marker));
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -648,12 +685,13 @@ export async function removeRoadMarker(sessionId: string, markerIdOrClientId: st
     const loaded = await loadOwnSession(ctx, sessionId);
     if ("error" in loaded) return loaded.error!;
     const isUuid = /^[0-9a-f-]{36}$/i.test(markerIdOrClientId);
-    await prisma.roadMarker.deleteMany({
+    const { count } = await prisma.roadMarker.deleteMany({
       where: {
         sessionId,
         OR: [{ clientId: markerIdOrClientId }, ...(isUuid ? [{ id: markerIdOrClientId }] : [])],
       },
     });
+    if (count) invalidateRoadHotspots(ctx.companyId);
     return ok({ removed: true });
   } catch (error) {
     return fail(formatError(error));
@@ -663,28 +701,47 @@ export async function removeRoadMarker(sessionId: string, markerIdOrClientId: st
 /**
  * REG-696: correggere una segnalazione (anche dopo i 5 s dell'«Annulla»):
  * giudizio («fatto bene» / «da migliorare») e posizione (il «qui / 10 s fa»
- * del toast). Per id o clientId; solo l'istruttore della guida, fino a 2 h
- * dopo la chiusura come le segnalazioni nuove.
+ * del toast). Per id o clientId.
+ *
+ * Road novembre R3/R7 (Tiziano 10/11/2026): istruttore della guida e titolare
+ * la modificano **sempre**, senza limite di tempo (prima: 2 h dopo la
+ * chiusura), anche dal web. Si cambiano anche tipo (`kind`, l'etichetta si
+ * ricalcola), punto/zona (`shape`, `radiusM`) e, se la posizione cambia, la
+ * via: quella mandata dall'app o, dal web, quella trovata con Places.
  */
 export async function updateRoadMarker(
   sessionId: string,
   markerIdOrClientId: string,
-  input: { sentiment?: string | null; lat?: number; lng?: number; recordedAt?: string; note?: string | null },
+  input: {
+    sentiment?: string | null;
+    lat?: number;
+    lng?: number;
+    street?: string | null;
+    recordedAt?: string;
+    note?: string | null;
+    kind?: string;
+    shape?: string | null;
+    radiusM?: number | null;
+  },
 ) {
   try {
     const ctx = await roadContext();
     const loaded = await loadOwnSession(ctx, sessionId);
     if ("error" in loaded) return loaded.error!;
-    const { session } = loaded;
-    if (session.status !== "active") {
-      const closedAt = session.endedAt?.getTime() ?? 0;
-      if (Date.now() - closedAt > 2 * 60 * 60 * 1000) return fail("La guida è chiusa.", "SESSION_CLOSED");
-    }
     const data: Prisma.RoadMarkerUpdateInput = {};
     if (input && "sentiment" in input) data.sentiment = normalizeSentiment(input.sentiment);
     if (input && "note" in input) {
       data.note = typeof input.note === "string" && input.note.trim() ? input.note.trim().slice(0, 500) : null;
     }
+    if (input?.kind != null) {
+      const kind = typeof input.kind === "string" ? input.kind.trim() : "";
+      const label = resolveMarkerLabel(kind, ctx.customMarkers, null);
+      if (!label) return fail("Tipo di segnalazione sconosciuto.");
+      data.kind = kind;
+      data.label = label;
+    }
+    if (input && "shape" in input) Object.assign(data, markerShapeData(input.shape, input.radiusM));
+    let moved: { lat: number; lng: number } | null = null;
     if (input?.lat != null || input?.lng != null) {
       const lat = Number(input.lat);
       const lng = Number(input.lng);
@@ -693,6 +750,7 @@ export async function updateRoadMarker(
       }
       data.lat = lat;
       data.lng = lng;
+      moved = { lat, lng };
     }
     if (input?.recordedAt) {
       const at = new Date(input.recordedAt);
@@ -701,10 +759,21 @@ export async function updateRoadMarker(
     const isUuid = /^[0-9a-f-]{36}$/i.test(markerIdOrClientId);
     const marker = await prisma.roadMarker.findFirst({
       where: { sessionId, OR: [{ clientId: markerIdOrClientId }, ...(isUuid ? [{ id: markerIdOrClientId }] : [])] },
-      select: { id: true },
+      select: { id: true, lat: true, lng: true },
     });
     if (!marker) return fail("Segnalazione non trovata.", "NOT_FOUND");
+    if (moved && (moved.lat !== marker.lat || moved.lng !== marker.lng)) {
+      if (typeof input?.street === "string") {
+        data.street = input.street.trim().slice(0, 120) || null;
+      } else if (input?.recordedAt == null) {
+        // Spostata a mano (mirino o web), non il «qui / 10 s fa» del toast.
+        data.street = await streetAt(moved.lat, moved.lng);
+      }
+    }
     const updated = await prisma.roadMarker.update({ where: { id: marker.id }, data, select: markerSelect });
+    if (data.lat != null || data.kind != null || data.sentiment !== undefined || "shape" in data) {
+      invalidateRoadHotspots(ctx.companyId);
+    }
     return ok(markerDTO(updated));
   } catch (error) {
     return fail(formatError(error));

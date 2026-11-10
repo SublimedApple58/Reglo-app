@@ -56,6 +56,9 @@ export type RoadMarker = {
   street: string | null;
   /** «fatto bene» / «da migliorare»; null = neutra (segnalazioni prima del segno). */
   sentiment: "good" | "bad" | null;
+  /** Road novembre R7: punto preciso o zona (cerchio di `radiusM` metri). Server vecchi: assente = punto. */
+  shape?: "point" | "zone";
+  radiusM?: number | null;
   recordedAt: string;
 };
 

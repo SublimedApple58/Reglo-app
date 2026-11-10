@@ -11,7 +11,7 @@ export async function DELETE(
   return NextResponse.json(res, { status: res.success ? 200 : 400 });
 }
 
-/** REG-696: correggere una segnalazione (giudizio, posizione, nota). */
+/** REG-696 + Road novembre R3/R7: modificare una segnalazione (giudizio, tipo, nota, posizione, punto/zona), sempre. */
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string; markerId: string }> },
