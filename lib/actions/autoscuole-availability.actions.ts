@@ -5024,6 +5024,10 @@ export async function broadcastWaitlistOffer({
         offerId: offer.id,
         slotId: slot.id,
         startsAt: slot.startsAt.toISOString(),
+        // Il foglio «Si è liberato un posto» mostra fine e conto alla rovescia
+        // anche quando l'offerta è già sparita dall'elenco.
+        endsAt: slot.endsAt.toISOString(),
+        expiresAt: offer.expiresAt.toISOString(),
       },
     },
   );
