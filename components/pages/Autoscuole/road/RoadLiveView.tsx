@@ -39,6 +39,7 @@ import {
   signalLostLabel,
   SymbolTile,
   ZoomControls,
+  roadSessionName,
 } from "./road-ui";
 
 const POLL_MS = 5000;
@@ -550,7 +551,7 @@ function SelectedCard({
         <b className="text-[13px] normal-case tracking-normal text-[#111111]">{minutesBetween(s.startedAt, now)} min</b>
       </div>
       <h3 className="mt-2 text-[21px] font-semibold tracking-[-0.4px] text-[#111111]">
-        {s.lesson.student?.name ?? "Allievo"}
+        {roadSessionName(s.lesson)}
       </h3>
       <div className="mt-0.5 text-[13.5px] text-[#6a6a6a]">
         {[`con ${s.lesson.instructor?.name ?? "istruttore"}`, vehicle, `${hhmm(s.lesson.startsAt)} – ${hhmm(s.lesson.endsAt)}`]

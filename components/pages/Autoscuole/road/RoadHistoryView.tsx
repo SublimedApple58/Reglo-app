@@ -18,6 +18,7 @@ import {
   km,
   MarkerPill,
   shortDay,
+  roadSessionName,
 } from "./road-ui";
 
 const PAGE = 20;
@@ -184,7 +185,7 @@ export function RoadHistoryView({ onOpen }: { onOpen: (sessionId: string, list: 
               </div>
               <div className="min-w-0">
                 <div className="truncate text-[15px] font-semibold tracking-[-0.2px] text-[#111111]" data-testid="road-history-student">
-                  {s.lesson.student?.name ?? "Allievo"}
+                  {roadSessionName(s.lesson)}
                 </div>
                 <div className="mt-px truncate text-[13.5px] text-[#444444]">
                   {[`con ${s.lesson.instructor?.name ?? "istruttore"}`, s.lesson.vehicle?.name].filter(Boolean).join(" · ")}

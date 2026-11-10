@@ -389,3 +389,12 @@ export function RoadMapFallback({ failed }: { failed: boolean }) {
     </div>
   );
 }
+
+/** Nome di una guida Road; R4: una sessione Road Exam non ha un allievo («Esame · 3 allievi»). */
+export function roadSessionName(lesson: { student?: { name?: string | null } | null; exam?: { studentCount?: number | null } | null } | null | undefined) {
+  if (lesson?.exam) {
+    const n = lesson.exam.studentCount ?? 0;
+    return n === 1 ? "Esame · 1 allievo" : n > 1 ? `Esame · ${n} allievi` : "Esame di guida";
+  }
+  return lesson?.student?.name ?? "Allievo";
+}

@@ -51,6 +51,7 @@ import {
   SentimentCounts,
   SymbolTile,
   ZoomControls,
+  roadSessionName,
 } from "./road-ui";
 import {
   hotspotHref,
@@ -362,7 +363,7 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
   }
 
   const lesson = detail?.lesson;
-  const student = lesson?.student?.name ?? "Allievo";
+  const student = roadSessionName(lesson);
   const instructor = lesson?.instructor?.name ?? "istruttore";
   const endIso = detail ? detail.endedAt ?? null : null;
   const minutes = detail
