@@ -17,6 +17,14 @@ import {
 } from "@/lib/autoscuole/payments";
 import { buildAvailabilityResolver } from "@/lib/actions/autoscuole-availability.actions";
 import {
+  canStudentUseBookingChannel,
+  studentFreeBookingUntil,
+} from "@/lib/autoscuole/student-booking-policy";
+import {
+  STUDENT_BOOKING_POLICY_MEMBER_SELECT,
+  studentBookingPolicyForMember,
+} from "@/lib/autoscuole/student-booking-policy-loader";
+import {
   resolveEffectiveSettingsForInstructor,
   buildCompanyBookingDefaults,
 } from "@/lib/autoscuole/instructor-clusters";
@@ -1682,7 +1690,11 @@ export const processEmptySlotNotifications = async ({
     // off is honoured, and vice versa.
     const studentMembers = await prisma.companyMember.findMany({
       where: { companyId, autoscuolaRole: "STUDENT" },
-      select: { userId: true, assignedInstructorId: true, licenseCategory: true, transmission: true },
+      select: {
+        ...STUDENT_BOOKING_POLICY_MEMBER_SELECT,
+        assignedInstructorId: true,
+        transmission: true,
+      },
     });
     if (!studentMembers.length) continue;
     const vehiclesEnabled = limits.vehiclesEnabled !== false;
@@ -1713,24 +1725,34 @@ export const processEmptySlotNotifications = async ({
 
     // Keep students whose effective settings enable the notification at this
     // tick and allow students to book, excluding manual_full clusters.
+    //
+    // Chi può prenotare lo decide la policy del SINGOLO allievo (percorso
+    // patente incluso, blocco e fase): modalità aperta → avviso «domani» come
+    // sempre; «solo eccezioni» con «ultimo minuto» → avviso solo se la sua
+    // finestra arriva dentro domani; «disattiva», bloccati, non in pratica → no.
     const candidates: {
       userId: string;
       target: "all" | "availability_matching";
       licenseCategory: string | null;
       transmission: string | null;
+      lastMinuteHours: number | null;
     }[] = [];
     for (const m of studentMembers) {
       const eff = effectiveFor(m.assignedInstructorId);
       if (!eff.emptySlotNotificationEnabled) continue;
       // Cron invocation (no companyId filter): only at the cluster's configured times.
       if (!filterCompanyId && !eff.emptySlotNotificationTimes.includes(currentTimeHHMM)) continue;
-      if (eff.appBookingActors !== "students" && eff.appBookingActors !== "both") continue;
       if (eff.instructorBookingMode === "manual_full") continue;
+      const policy = studentBookingPolicyForMember(companyDefaults, m, now);
+      if (!canStudentUseBookingChannel(policy, "free")) continue;
+      const until = studentFreeBookingUntil(policy, now);
+      if (until && until.getTime() <= rangeStart.getTime()) continue;
       candidates.push({
         userId: m.userId,
         target: eff.emptySlotNotificationTarget,
         licenseCategory: m.licenseCategory,
         transmission: m.transmission,
+        lastMinuteHours: until ? policy.exceptions.lastMinuteHours : null,
       });
     }
     if (!candidates.length) continue;
@@ -1807,22 +1829,37 @@ export const processEmptySlotNotifications = async ({
 
     if (!targetUserIds.length) continue;
 
-    // Send push notifications
-    try {
-      await sendAutoscuolaPushToUsers({
-        prisma,
-        companyId,
-        userIds: targetUserIds,
-        title: "Guide disponibili domani!",
-        body: "Ci sono posti liberi per domani. Apri Reglo per prenotare.",
-        data: {
-          kind: "available_slots",
-          date: tomorrowDateStr,
-        },
-      });
-      totalNotified += targetUserIds.length;
-    } catch (error) {
-      console.error(`Empty slot notification push error for company ${companyId}`, error);
+    // Send push notifications: testo «domani» per chi prenota liberamente,
+    // testo «ultimo minuto» (con la sua finestra) per chi è in «solo eccezioni».
+    const lastMinuteHoursById = new Map(
+      eligibleCandidates.map((c) => [c.userId, c.lastMinuteHours] as const),
+    );
+    const groups = new Map<number | null, string[]>();
+    for (const id of targetUserIds) {
+      const hours = lastMinuteHoursById.get(id) ?? null;
+      groups.set(hours, [...(groups.get(hours) ?? []), id]);
+    }
+    for (const [hours, userIds] of groups) {
+      try {
+        await sendAutoscuolaPushToUsers({
+          prisma,
+          companyId,
+          userIds,
+          title: hours === null ? "Guide disponibili domani!" : "Posti liberi a breve",
+          body:
+            hours === null
+              ? "Ci sono posti liberi per domani. Apri Reglo per prenotare."
+              : `Ci sono guide libere che puoi prenotare tu dall'app nelle prossime ${hours} ore. Apri Reglo per vederle.`,
+          data: {
+            kind: "available_slots",
+            date: tomorrowDateStr,
+            ...(hours === null ? {} : { lastMinute: true, lastMinuteHours: hours }),
+          },
+        });
+        totalNotified += userIds.length;
+      } catch (error) {
+        console.error(`Empty slot notification push error for company ${companyId}`, error);
+      }
     }
   }
 

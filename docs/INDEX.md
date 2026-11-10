@@ -12,6 +12,7 @@
 | Owner notifications (bell annullamenti allievi) | [owner-notifications.md](features/owner-notifications.md) | `AutoscuolaNotification` model, `lib/autoscuole/notifications.ts`, `api/autoscuole/owner-notifications/route.ts`, `OwnerNotificationsBell.tsx`, `autoscuole.actions.ts` (`createStudentCancellationNotification`) |
 | Availability (ruoli sulle scritture REG-717) | [availability.md](features/availability.md) | `autoscuole-availability.actions.ts`, `lib/autoscuole/availability-access.ts` |
 | Booking Engine | [booking-engine.md](features/booking-engine.md) | `slot-matcher.ts`, `booking-governance.ts` |
+| Prenotazione allievi «solo eccezioni» (attiva / solo eccezioni / disattiva + eccezioni per percorso: slot liberato, guide di gruppo, ultimo minuto) | [student-booking-exceptions.md](features/student-booking-exceptions.md) | `lib/autoscuole/student-booking-policy.ts`, `student-booking-policy-loader.ts`, `autoscuole-availability.actions.ts` (`ensureStudentCanBookFromApp`), `communications.ts` (job posti vuoti) |
 | Vehicles | [vehicles.md](features/vehicles.md) | `autoscuole.actions.ts` (vehicle CRUD), `fixed-vehicle.ts`, `slot-matcher.ts` |
 | Group lessons | [group-lessons.md](features/group-lessons.md) | `autoscuole.actions.ts` (group-lesson CRUD), `autoscuole-availability.actions.ts` (invites), `group-lessons/` API |
 | Payments & Credits | [payments.md](features/payments.md) | `payments.ts`, `stripe-connect.ts` |
@@ -33,7 +34,7 @@
 | Aspetto (pannello Impostazioni: criterio colore agenda durata/patente + colori istruttori + ordine colonne istruttore + veicolo nei blocchi REG-633) | [appearance-settings.md](features/appearance-settings.md) | `AspettoSettingsPane.tsx`, `lib/autoscuole/agenda-vehicle-label.ts` (REG-633), `lib/autoscuole/agenda-color-criterion.ts` (`LICENSE_COLOR_ENTRIES`), `lib/autoscuole/agenda-instructor-order.ts` (`agendaInstructorOrder`, REG-449), `autoscuole-settings.actions.ts` (`agendaColorCriterion`), `AutoscuoleAgendaPage.tsx` (`licenseColorEntryForTag`, legenda dinamica) |
 | Communications | [communications.md](features/communications.md) | `communications.ts`, `whatsapp-delivery.ts` (cancello unico), `whatsapp-sender.ts` (Telnyx), `whatsapp-templates.ts`, `whatsapp-consent.ts`, `delivery-log.ts` |
 | Cases & Deadlines | [cases-deadlines.md](features/cases-deadlines.md) | `autoscuole.actions.ts` |
-| Repositioning **(retired)** | [repositioning.md](features/repositioning.md) | `repositioning.ts` |
+| Repositioning **(rimosso, solo storico)** | [repositioning.md](features/repositioning.md) | — (codice cancellato il 2026-06-09; oggi `operational-cancellation.ts`) |
 | Penalties | [penalties.md](features/penalties.md) | `payments.ts`, `communications.ts` |
 | Voice AI | [voice-ai.md](features/voice-ai.md) | `voice.ts`, `voice-webhook.ts` |
 | Solo Segretaria (secretary-only) | [secretary-only.md](features/secretary-only.md) | `lib/services.ts` (`secretaryOnly`, `isSecretaryOnly`), `AutoscuoleNav.tsx`, `AutoscuoleTabsPage.tsx`, `AutoscuoleResourcesPage.tsx`, `AutoscuoleShell.tsx`, `BackofficeCompaniesPage.tsx` |

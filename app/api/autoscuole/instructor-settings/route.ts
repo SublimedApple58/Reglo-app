@@ -10,6 +10,11 @@ import {
 } from "@/lib/autoscuole/instructor-clusters";
 import { ensureInstructorInviteCode } from "@/lib/autoscuole/invite-codes";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
+import {
+  LAST_MINUTE_HOURS_MAX,
+  LAST_MINUTE_HOURS_MIN,
+  LEGACY_INSTRUCTORS_EXCEPTIONS,
+} from "@/lib/autoscuole/student-booking-policy";
 
 export async function GET() {
   try {
@@ -46,7 +51,11 @@ export async function GET() {
       }),
     ]);
     const limits = (service?.limits ?? {}) as Record<string, unknown>;
-    const companyDefaults = buildCompanyBookingDefaults(limits);
+    const companyDefaults = {
+      ...buildCompanyBookingDefaults(limits),
+    };
+    // L'app istruttore mostra «come l'autoscuola»: serve il valore efficace.
+    companyDefaults.studentBookingExceptions ??= LEGACY_INSTRUCTORS_EXCEPTIONS;
 
     if (!instructor) {
       return NextResponse.json({
@@ -159,6 +168,14 @@ export async function GET() {
   }
 }
 
+const studentBookingExceptionsPatch = z.object({
+  enabled: z.boolean(),
+  slotFill: z.boolean(),
+  groupSeats: z.boolean(),
+  lastMinute: z.boolean(),
+  lastMinuteHours: z.number().int().min(LAST_MINUTE_HOURS_MIN).max(LAST_MINUTE_HOURS_MAX),
+});
+
 const patchSchema = z.object({
   bookingSlotDurations: z.array(z.number().int().min(30).max(120)).optional(),
   roundedHoursOnly: z.boolean().optional(),
@@ -171,6 +188,17 @@ const patchSchema = z.object({
       moto: z.enum(["students", "instructors", "both"]).optional(),
       auto: z.enum(["students", "instructors", "both"]).optional(),
       pro: z.enum(["students", "instructors", "both"]).optional(),
+    })
+    .nullable()
+    .optional(),
+  // Prenotazione allievi «solo eccezioni» del gruppo. `null` = torna a
+  // ereditare dall'autoscuola.
+  studentBookingExceptions: studentBookingExceptionsPatch.nullable().optional(),
+  studentBookingExceptionsByPath: z
+    .object({
+      moto: studentBookingExceptionsPatch.optional(),
+      auto: studentBookingExceptionsPatch.optional(),
+      pro: studentBookingExceptionsPatch.optional(),
     })
     .nullable()
     .optional(),

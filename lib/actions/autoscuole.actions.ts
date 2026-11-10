@@ -65,10 +65,8 @@ import {
 } from "@/lib/autoscuole/agenda-occupancy";
 import { clampIntervals } from "@/lib/backoffice/agenda-saturation";
 import {
-  getBookingGovernanceForStudent,
   getBookingGovernanceForInstructor,
   isInstructorAppBookingEnabled,
-  isStudentAppBookingEnabled,
 } from "@/lib/autoscuole/booking-governance";
 import {
   operationallyCancelAppointment,
@@ -82,6 +80,11 @@ import {
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
 import { isInstructor, isOwner, isStudent } from "@/lib/autoscuole/roles";
+import {
+  CONCLUDED_INSTRUCTOR_CHANGE_DAYS,
+  isConcludedForInstructorChange,
+  isWithinConcludedInstructorChangeWindow,
+} from "@/lib/autoscuole/concluded-instructor-change";
 import { canManageLessonPayments } from "@/lib/autoscuole/lesson-payments";
 import {
   loadPaymentHistories,
@@ -395,6 +398,14 @@ const createVehicleSchema = z.object({
   followsInstructorAvailability: z.boolean().optional(),
 });
 
+const clusterStudentBookingExceptionsSchema = z.object({
+  enabled: z.boolean(),
+  slotFill: z.boolean(),
+  groupSeats: z.boolean(),
+  lastMinute: z.boolean(),
+  lastMinuteHours: z.number().int().min(1).max(168),
+});
+
 const instructorSettingsSchema = z.object({
   bookingSlotDurations: z.array(z.number().int().min(30).max(120)).optional(),
   roundedHoursOnly: z.boolean().optional(),
@@ -404,6 +415,14 @@ const instructorSettingsSchema = z.object({
     moto: z.enum(["students", "instructors", "both"]).optional(),
     auto: z.enum(["students", "instructors", "both"]).optional(),
     pro: z.enum(["students", "instructors", "both"]).optional(),
+  }).optional(),
+  // Prenotazione allievi «solo eccezioni» del gruppo (assente = eredita).
+  // Va nello schema: il web rimpiazza tutto il JSON e zod scarta le chiavi ignote.
+  studentBookingExceptions: clusterStudentBookingExceptionsSchema.optional(),
+  studentBookingExceptionsByPath: z.object({
+    moto: clusterStudentBookingExceptionsSchema.optional(),
+    auto: clusterStudentBookingExceptionsSchema.optional(),
+    pro: clusterStudentBookingExceptionsSchema.optional(),
   }).optional(),
   instructorBookingMode: z.enum(["manual_full", "manual_engine"]).optional(),
   studentBookingMode: z.enum(["engine", "free_choice"]).optional(),
@@ -3634,12 +3653,27 @@ export async function createAutoscuolaAppointment(
     let resolvedInstructorId = payload.instructorId;
     if (isStudentActor) {
       // Governance resolved with cascade cluster → company for this student.
-      const governance = await getBookingGovernanceForStudent(companyId, payload.studentId);
-      if (!isStudentAppBookingEnabled(governance)) {
+      // Prenotazione «solo eccezioni»: modalità aperta, oppure eccezione
+      // «ultimo minuto» con la guida che inizia dentro la finestra.
+      const { loadStudentBookingPolicies } = await import("@/lib/autoscuole/student-booking-policy-loader");
+      const {
+        canStudentUseBookingChannel,
+        studentFreeBookingDeniedMessage,
+        studentFreeBookingUntil,
+        studentLastMinuteOutOfWindowMessage,
+      } = await import("@/lib/autoscuole/student-booking-policy");
+      const studentPolicy = (await loadStudentBookingPolicies(companyId, [payload.studentId])).get(payload.studentId);
+      if (!studentPolicy || !canStudentUseBookingChannel({ ...studentPolicy, hold: null }, "free")) {
         return {
           success: false,
-          message: "La prenotazione da app è abilitata solo per istruttori.",
+          message: studentPolicy
+            ? studentFreeBookingDeniedMessage(studentPolicy)
+            : "Allievo non valido.",
         };
+      }
+      const lastMinuteUntil = studentFreeBookingUntil(studentPolicy);
+      if (lastMinuteUntil && new Date(payload.startsAt).getTime() >= lastMinuteUntil.getTime()) {
+        return { success: false, message: studentLastMinuteOutOfWindowMessage(studentPolicy) };
       }
       if (payload.studentId !== membership.userId) {
         return {
@@ -6601,33 +6635,63 @@ export async function updateAutoscuolaAppointmentDetails(
     // The vehicle stays attached (decision: vehicles are company resources,
     // not instructor-owned).
     if (payload.instructorId !== undefined && payload.instructorId !== appointment.instructorId) {
-      // Block on completed/cancelled appointments: it doesn't make sense to
-      // reassign a guida that's already happened or been called off.
+      // Annullate: mai. Concluse (completata/assente): solo il titolare/admin,
+      // entro 30 giorni, per correggere un sostituto "al volo" (Macchiavello).
+      // Gruppi ed esami si cambiano dal loro foglio, non posto per posto.
       const status = normalizeStatus(appointment.status);
-      if (["cancelled", "completed", "no_show"].includes(status)) {
+      const concluded = isConcludedForInstructorChange(status);
+      if (status === "cancelled") {
         return {
           success: false,
-          message: "Non puoi cambiare l'istruttore di una guida già conclusa o annullata.",
+          message: "Non puoi cambiare l'istruttore di una guida annullata.",
         };
       }
+      if (concluded) {
+        const canManage = membership.role === "admin" || isOwner(membership.autoscuolaRole);
+        if (!canManage || appointment.groupLessonId || normalizeLessonType(appointment.type) === "esame") {
+          return {
+            success: false,
+            message: "Non puoi cambiare l'istruttore di una guida già conclusa.",
+          };
+        }
+        if (!isWithinConcludedInstructorChangeWindow(appointment.startsAt)) {
+          return {
+            success: false,
+            message: `L'istruttore di una guida conclusa si può cambiare solo entro ${CONCLUDED_INSTRUCTOR_CHANGE_DAYS} giorni dalla guida.`,
+          };
+        }
+      }
 
-      const appointmentEndDate = computeAppointmentEnd({
-        startsAt: appointment.startsAt,
-        endsAt: appointment.endsAt,
-      });
-      const availability = await verifyInstructorAvailability({
-        companyId: membership.companyId,
-        instructorId: payload.instructorId,
-        startsAt: appointment.startsAt,
-        endsAt: appointmentEndDate,
-        excludeAppointmentId: appointment.id,
-      });
-      if (!availability.available) {
-        return {
-          success: false,
-          message: availability.detail,
-          code: "INSTRUCTOR_UNAVAILABLE" as const,
-        };
+      if (concluded) {
+        // Sul passato la disponibilità non ha senso (il sostituto era spesso di
+        // riposo o in permesso: è per questo che era libero). Resta il controllo
+        // che l'istruttore sia di questa autoscuola e attivo.
+        const instructor = await prisma.autoscuolaInstructor.findFirst({
+          where: { id: payload.instructorId, companyId: membership.companyId, status: { not: "inactive" } },
+          select: { id: true },
+        });
+        if (!instructor) {
+          return { success: false, message: "Istruttore non valido per questa autoscuola." };
+        }
+      } else {
+        const appointmentEndDate = computeAppointmentEnd({
+          startsAt: appointment.startsAt,
+          endsAt: appointment.endsAt,
+        });
+        const availability = await verifyInstructorAvailability({
+          companyId: membership.companyId,
+          instructorId: payload.instructorId,
+          startsAt: appointment.startsAt,
+          endsAt: appointmentEndDate,
+          excludeAppointmentId: appointment.id,
+        });
+        if (!availability.available) {
+          return {
+            success: false,
+            message: availability.detail,
+            code: "INSTRUCTOR_UNAVAILABLE" as const,
+          };
+        }
       }
 
       // Push notification to the student about the instructor swap is deferred:

@@ -1,9 +1,14 @@
-# Repositioning — RETIRED (2026-06-08)
+# Repositioning — REMOVED (codice cancellato il 2026-06-09)
 
-> **Status: retired.** Operational repositioning no longer generates replacement
-> "proposal" appointments. Cancelling a lesson now simply cancels it. This page
-> documents the retired behaviour and how the kill-switch works, since the legacy
-> code is kept (dead) behind a flag.
+> **Stato: rimosso.** Il motore di riposizionamento (`lib/autoscuole/repositioning.ts`)
+> e la route `/api/autoscuole/appointments/[id]/reposition` sono stati cancellati
+> nel commit `938b92a` (2026-06-09). Non esiste più il flag `REPOSITIONING_ENABLED`:
+> le sezioni qui sotto descrivono il comportamento storico, utile solo per capire
+> i dati vecchi (`status: "proposal"`, `AutoscuolaAppointmentRepositionTask`).
+> Le cancellazioni operative oggi stanno in `lib/autoscuole/operational-cancellation.ts`
+> (`operationallyCancelAppointment`, `operationallyCancelAppointmentsByResource`,
+> `annulFutureAppointment`). Per riempire i posti liberati vedi
+> `features/student-booking-exceptions.md` (slot liberato, ultimo minuto, guide di gruppo).
 
 ## Why it was retired
 The engine auto-rescheduled cancelled lessons onto a new slot as a `proposal`.
@@ -54,13 +59,12 @@ All callers therefore cancel only, for every reason
   cancelled the leftover live proposals + pending tasks on prod.
 
 ## Re-enabling
-Flip `REPOSITIONING_ENABLED` to `true` to restore the legacy engine (the matching
-code is intact below the flag). Note it would re-introduce the gate-bypass and the
-"reappearing lessons" behaviour described above.
+Non più possibile con un flag: il codice è stato cancellato. Riportarlo vorrebbe
+dire recuperarlo dalla storia git (prima di `938b92a`), con i problemi descritti sopra.
 
 ## Connected features
 - **Appointments** — cancellation entry points
 - **Payments** — credit refund on cancel (`refundLessonCreditIfEligible`)
 - **Notifications** — reason-specific cancellation push/email
-- **Booking Engine** — legacy slot matching (now dead behind the flag)
+- **Booking Engine** — (storico) usava lo slot matcher; codice rimosso
 - **Cache** — invalidates AGENDA / PAYMENTS

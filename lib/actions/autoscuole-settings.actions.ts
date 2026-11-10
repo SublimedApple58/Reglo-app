@@ -1,6 +1,15 @@
 "use server";
 
 import {
+  LAST_MINUTE_HOURS_MAX,
+  LAST_MINUTE_HOURS_MIN,
+  LEGACY_INSTRUCTORS_EXCEPTIONS,
+  parseStudentBookingExceptions,
+  parseStudentBookingExceptionsByPath,
+  type StudentBookingExceptions,
+  type StudentBookingExceptionsByPath,
+} from "@/lib/autoscuole/student-booking-policy";
+import {
   LOCATION_CHANGE_BUFFER_MAX_MINUTES,
   LOCATION_CHANGE_BUFFER_MIN_MINUTES,
   normalizeLocationChangeBufferMinutes,
@@ -282,6 +291,19 @@ const appBookingActorsByPathSchema = z.object({
   auto: appBookingActorsSchema.optional(),
   pro: appBookingActorsSchema.optional(),
 });
+// Prenotazione allievi «solo eccezioni» (vedi lib/autoscuole/student-booking-policy.ts).
+const studentBookingExceptionsSchema = z.object({
+  enabled: z.boolean(),
+  slotFill: z.boolean(),
+  groupSeats: z.boolean(),
+  lastMinute: z.boolean(),
+  lastMinuteHours: z.number().int().min(LAST_MINUTE_HOURS_MIN).max(LAST_MINUTE_HOURS_MAX),
+});
+const studentBookingExceptionsByPathSchema = z.object({
+  moto: studentBookingExceptionsSchema.optional(),
+  auto: studentBookingExceptionsSchema.optional(),
+  pro: studentBookingExceptionsSchema.optional(),
+});
 const instructorBookingModeSchema = z.enum(INSTRUCTOR_BOOKING_MODE_OPTIONS);
 const voiceAllowedActionSchema = z.enum(VOICE_ALLOWED_ACTIONS);
 const voiceOfficeHoursSchema = z
@@ -392,6 +414,8 @@ const autoscuolaSettingsPatchSchema = z
     instructorPreferenceEnabled: z.boolean().optional(),
     appBookingActors: appBookingActorsSchema.optional(),
     appBookingActorsByPath: appBookingActorsByPathSchema.optional(),
+    studentBookingExceptions: studentBookingExceptionsSchema.optional(),
+    studentBookingExceptionsByPath: studentBookingExceptionsByPathSchema.optional(),
     instructorBookingMode: instructorBookingModeSchema.optional(),
     voiceAssistantEnabled: z.boolean().optional(),
     voiceBookingEnabled: z.boolean().optional(),
@@ -648,6 +672,9 @@ export type AutoscuolaSettingsData = {
   roundedHoursOnly: boolean;
   appBookingActors: AppBookingActors;
   appBookingActorsByPath: AppBookingActorsByPath;
+  /** Eccezioni efficaci a livello autoscuola (mai salvate = valore storico). */
+  studentBookingExceptions: StudentBookingExceptions;
+  studentBookingExceptionsByPath: StudentBookingExceptionsByPath;
   instructorBookingMode: InstructorBookingMode;
   swapEnabled: boolean;
   swapNotifyMode: (typeof SWAP_NOTIFY_MODES)[number];
@@ -1060,6 +1087,12 @@ const resolveAutoscuolaSettingsData = async (
         : false,
     appBookingActors: bookingGovernance.appBookingActors,
     appBookingActorsByPath: parseAppBookingActorsByPath(limits.appBookingActorsByPath),
+    studentBookingExceptions:
+      parseStudentBookingExceptions(limits.studentBookingExceptions) ??
+      LEGACY_INSTRUCTORS_EXCEPTIONS,
+    studentBookingExceptionsByPath: parseStudentBookingExceptionsByPath(
+      limits.studentBookingExceptionsByPath,
+    ),
     instructorBookingMode: bookingGovernance.instructorBookingMode,
     swapEnabled,
     swapNotifyMode,
@@ -1569,6 +1602,19 @@ export async function updateAutoscuolaSettings(
     const nextAppBookingActorsByPath =
       payload.appBookingActorsByPath ??
       parseAppBookingActorsByPath((limits as Record<string, unknown>).appBookingActorsByPath);
+    // Eccezioni: salvate solo quando il titolare le manda (finché non lo fa
+    // resta il valore storico, vedi LEGACY_INSTRUCTORS_EXCEPTIONS). La mappa
+    // per percorso, se mandata, sostituisce tutta la mappa (come REG-426).
+    const storedStudentBookingExceptions = parseStudentBookingExceptions(
+      (limits as Record<string, unknown>).studentBookingExceptions,
+    );
+    const nextStudentBookingExceptions =
+      payload.studentBookingExceptions ?? storedStudentBookingExceptions;
+    const nextStudentBookingExceptionsByPath =
+      payload.studentBookingExceptionsByPath ??
+      parseStudentBookingExceptionsByPath(
+        (limits as Record<string, unknown>).studentBookingExceptionsByPath,
+      );
     const nextInstructorBookingMode =
       payload.instructorBookingMode ??
       (nextAppBookingActors === "instructors" || nextAppBookingActors === "both"
@@ -1808,6 +1854,10 @@ export async function updateAutoscuolaSettings(
       roundedHoursOnly: payload.roundedHoursOnly ?? (limits.roundedHoursOnly === true),
       appBookingActors: nextAppBookingActors,
       appBookingActorsByPath: nextAppBookingActorsByPath,
+      ...(nextStudentBookingExceptions
+        ? { studentBookingExceptions: nextStudentBookingExceptions }
+        : {}),
+      studentBookingExceptionsByPath: nextStudentBookingExceptionsByPath,
       instructorBookingMode: nextInstructorBookingMode,
       swapEnabled: nextSwapEnabled,
       swapNotifyMode: nextSwapNotifyMode,
@@ -2024,6 +2074,9 @@ export async function updateAutoscuolaSettings(
         roundedHoursOnly: nextLimits.roundedHoursOnly,
         appBookingActors: nextLimits.appBookingActors,
         appBookingActorsByPath: nextLimits.appBookingActorsByPath,
+        studentBookingExceptions:
+          nextStudentBookingExceptions ?? LEGACY_INSTRUCTORS_EXCEPTIONS,
+        studentBookingExceptionsByPath: nextStudentBookingExceptionsByPath,
         instructorBookingMode: nextLimits.instructorBookingMode,
         swapEnabled: nextLimits.swapEnabled,
         swapNotifyMode: nextLimits.swapNotifyMode,

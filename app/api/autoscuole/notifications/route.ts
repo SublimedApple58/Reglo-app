@@ -5,6 +5,9 @@ import { formatError } from "@/lib/utils";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 import { vehicleServesLicense } from "@/lib/autoscuole/license";
 import { getExamReadyNudgeForCompany, EXAM_READY_NUDGE_KIND } from "@/lib/autoscuole/exam-ready-nudge";
+import { getWaitlistOffers } from "@/lib/actions/autoscuole-availability.actions";
+import { canStudentUseBookingChannel } from "@/lib/autoscuole/student-booking-policy";
+import { loadStudentBookingPolicies } from "@/lib/autoscuole/student-booking-policy-loader";
 
 /**
  * Server-side notification aggregator.
@@ -41,8 +44,15 @@ export async function GET(request: Request) {
     const notifications: NotificationPayload[] = [];
 
     if (role === "STUDENT") {
+      // Prenotazione «solo eccezioni»: le offerte da prendere (scambi, slot
+      // liberati, posti nelle guide di gruppo, nuove disponibilità) si
+      // recuperano solo se l'allievo può davvero usarne il canale.
+      const bookingPolicy = (await loadStudentBookingPolicies(companyId, [userId])).get(userId);
+      const canUse = (channel: "free" | "slot_fill" | "group_seat" | "swap") =>
+        bookingPolicy ? canStudentUseBookingChannel(bookingPolicy, channel) : false;
+
       // 1. Active swap offers (broadcasted, not expired, not from this student)
-      const swapOffers = await prisma.autoscuolaSwapOffer.findMany({
+      const swapOffers = !canUse("swap") ? [] : await prisma.autoscuolaSwapOffer.findMany({
         where: {
           companyId,
           status: "broadcasted",
@@ -162,20 +172,16 @@ export async function GET(request: Request) {
         });
       }
 
-      // 6. Active waitlist offers (slot became available)
-      const waitlistOffers = await prisma.autoscuolaWaitlistOffer.findMany({
-        where: {
-          companyId,
-          status: "broadcasted",
-          expiresAt: { gt: new Date() },
-          createdAt: { gte: since },
-        },
-        include: {
-          slot: { select: { startsAt: true, endsAt: true, ownerId: true, ownerType: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: limit,
-      });
+      // 6. Active waitlist offers (slot became available). Solo le offerte che
+      // QUESTO allievo può prendere: stesso filtro dell'elenco offerte
+      // (disponibilità, sovrapposizioni, assegnabilità, eccezione «slot
+      // liberato»). Prima tornavano tutte le offerte attive dell'autoscuola.
+      const waitlistRes = canUse("slot_fill")
+        ? await getWaitlistOffers({ studentId: userId, limit: Math.min(20, limit) })
+        : null;
+      const waitlistOffers = waitlistRes?.success && Array.isArray(waitlistRes.data)
+        ? waitlistRes.data.filter((offer) => offer.createdAt >= since)
+        : [];
       for (const offer of waitlistOffers) {
         notifications.push({
           id: `waitlist_${offer.id}`,
@@ -200,7 +206,7 @@ export async function GET(request: Request) {
         where: { companyId, autoscuolaRole: "STUDENT", userId },
         select: { groupLessonsOptIn: true, licenseCategory: true, transmission: true },
       });
-      if (glMember?.groupLessonsOptIn) {
+      if (glMember?.groupLessonsOptIn && canUse("group_seat")) {
         const nowDate = new Date();
         const glService = await prisma.companyService.findFirst({
           where: { companyId, serviceKey: "AUTOSCUOLE" },
@@ -346,7 +352,8 @@ export async function GET(request: Request) {
         where: { companyId, userId, autoscuolaRole: "STUDENT" },
         select: { assignedInstructorId: true },
       });
-      if (studentMember?.assignedInstructorId) {
+      // «Nuove disponibilità» invita a prenotare liberamente: solo in modalità aperta.
+      if (studentMember?.assignedInstructorId && bookingPolicy?.mode === "open" && !bookingPolicy.hold) {
         const publishedWeeks = await prisma.autoscuolaInstructorPublishedWeek.findMany({
           where: {
             companyId,

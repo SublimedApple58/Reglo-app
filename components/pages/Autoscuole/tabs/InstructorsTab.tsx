@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  LEGACY_INSTRUCTORS_EXCEPTIONS,
+  parseStudentBookingExceptions,
+  parseStudentBookingExceptionsByPath,
+  resolveStudentBookingMode,
+  type StudentBookingExceptions,
+} from "@/lib/autoscuole/student-booking-policy";
+import { ExceptionsList, toExceptions } from "@/components/pages/Autoscuole/tabs/BookingsTab";
 import React from "react";
 import Image from "next/image";
 import { createPortal } from "react-dom";
@@ -1993,14 +2001,18 @@ const GOV_ROWS: Array<{ key: string; settingKey: string; title: string; sub: str
 
 const NOTIF_TIMES = ["08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00"];
 
-// REG-426: opzioni "chi prenota" a livello cluster (include l'ereditarietà
-// dall'autoscuola) e i tre bucket di percorso patente.
+// REG-426 + prenotazione «solo eccezioni»: opzioni a livello cluster (include
+// l'ereditarietà dall'autoscuola) e i tre bucket di percorso patente.
+// Sotto: appBookingActors (+ByPath) e studentBookingExceptions (+ByPath).
 const CLUSTER_ACTOR_OPTIONS: Array<{ v: string; l: string }> = [
   { v: "default", l: "Default autoscuola" },
-  { v: "students", l: "Solo allievi" },
-  { v: "instructors", l: "Solo istruttori" },
-  { v: "both", l: "Entrambi" },
+  { v: "students", l: "Attiva · solo allievi" },
+  { v: "both", l: "Attiva · anche istruttori" },
+  { v: "exceptions", l: "Solo eccezioni" },
+  { v: "closed", l: "Disattiva" },
 ];
+// Gruppi salvati prima delle eccezioni: «Solo istruttori» senza eccezioni proprie.
+const CLUSTER_INHERIT_EXCEPTIONS_OPTION = { v: "instructors", l: "Eccezioni dell'autoscuola" };
 
 // Didascalie dal modulo patenti: era la terza copia a mano della stessa lista
 // (le altre due in BookingsTab e in license.ts), e una patente nuova le avrebbe
@@ -2011,11 +2023,34 @@ const CLUSTER_PATH_BUCKETS = LICENSE_PATH_BUCKET_KEYS.map((key) => ({
   cats: LICENSE_PATH_BUCKET_CATEGORIES[key],
 }));
 
+type ClusterBucket = (typeof LICENSE_PATH_BUCKET_KEYS)[number];
+
+/** Valore del menu a partire da actors + eccezioni salvate sul gruppo. */
+const clusterOptionValue = (actors: string | undefined, ex: StudentBookingExceptions | undefined) => {
+  if (!actors) return "default";
+  if (actors !== "instructors") return actors;
+  if (!ex) return "instructors";
+  return resolveStudentBookingMode("instructors", ex) === "exceptions" ? "exceptions" : "closed";
+};
+
+/** Da scelta del menu ad actors + eccezioni (undefined = eredita). */
+const clusterOptionToSettings = (
+  v: string,
+  currentEx: StudentBookingExceptions | undefined,
+): { actors: string | undefined; ex: StudentBookingExceptions | undefined } => {
+  if (v === "default") return { actors: undefined, ex: undefined };
+  if (v === "students" || v === "both") return { actors: v, ex: currentEx };
+  if (v === "instructors") return { actors: "instructors", ex: undefined };
+  const base = currentEx ?? LEGACY_INSTRUCTORS_EXCEPTIONS;
+  return v === "exceptions"
+    ? { actors: "instructors", ex: toExceptions(base) }
+    : { actors: "instructors", ex: { ...base, enabled: false } };
+};
+
 /** "Chi prenota" del cluster: un solo controllo. Il dropdown ha una voce
  * "Differenzia per percorso…" che, quando scelta, espande il pannello con le
  * righe moto/auto/professionali. Ogni riga può ereditare («Default autoscuola»)
- * o forzare un valore. Lo storage è appBookingActors (default cluster, azzerato
- * in modalità differenzia) + appBookingActorsByPath (override per bucket). */
+ * o forzare un valore; con «Solo eccezioni» si aprono le eccezioni del gruppo. */
 function ClusterBookingActorsField({
   settings,
   saveMany,
@@ -2023,8 +2058,10 @@ function ClusterBookingActorsField({
   settings: Record<string, unknown>;
   saveMany: (patch: Record<string, unknown>) => void;
 }) {
-  const byPath = (settings.appBookingActorsByPath ?? {}) as { moto?: string; auto?: string; pro?: string };
-  const clusterDefault = (settings.appBookingActors as string) ?? "default";
+  const byPath = (settings.appBookingActorsByPath ?? {}) as Partial<Record<ClusterBucket, string>>;
+  const exByPath = parseStudentBookingExceptionsByPath(settings.studentBookingExceptionsByPath);
+  const clusterEx = parseStudentBookingExceptions(settings.studentBookingExceptions);
+  const clusterDefault = clusterOptionValue(settings.appBookingActors as string | undefined, clusterEx);
   const hasOverrides = Boolean(byPath.moto || byPath.auto || byPath.pro);
   const [perPathMode, setPerPathMode] = React.useState(hasOverrides);
   // Se gli override arrivano dal server dopo il mount, apri il pannello.
@@ -2032,18 +2069,21 @@ function ClusterBookingActorsField({
     if (hasOverrides) setPerPathMode(true);
   }, [hasOverrides]);
 
-  const cleanByPath = (next: { moto?: string; auto?: string; pro?: string }) => {
-    const out: Record<string, string> = {};
-    for (const key of ["moto", "auto", "pro"] as const) {
+  const clean = <T,>(next: Partial<Record<ClusterBucket, T | undefined>>) => {
+    const out: Partial<Record<ClusterBucket, T>> = {};
+    for (const key of LICENSE_PATH_BUCKET_KEYS) {
       if (next[key]) out[key] = next[key]!;
     }
     return Object.keys(out).length ? out : undefined;
   };
 
+  const optionsFor = (value: string) =>
+    value === "instructors" ? [...CLUSTER_ACTOR_OPTIONS, CLUSTER_INHERIT_EXCEPTIONS_OPTION] : CLUSTER_ACTOR_OPTIONS;
+
   return (
     <div className="border-t border-[#f0f0f0] py-5">
-      <div className="text-[15px] font-semibold text-[#222222]">Chi prenota</div>
-      <div className="mt-4 w-[240px]">
+      <div className="text-[15px] font-semibold text-[#222222]">Prenotazione degli allievi dall&apos;app</div>
+      <div className="mt-4 w-[260px]">
         <OptField
           value={perPathMode ? "per_path" : clusterDefault}
           onChange={(v) => {
@@ -2052,24 +2092,46 @@ function ClusterBookingActorsField({
               // 3 righe (se concreto) e azzera il default cluster, così le righe
               // «Default autoscuola» ereditano davvero dall'autoscuola.
               setPerPathMode(true);
-              if (clusterDefault !== "default") {
+              const actors = settings.appBookingActors as string | undefined;
+              if (actors) {
                 saveMany({
                   appBookingActors: undefined,
-                  appBookingActorsByPath: { moto: clusterDefault, auto: clusterDefault, pro: clusterDefault },
+                  studentBookingExceptions: undefined,
+                  appBookingActorsByPath: { moto: actors, auto: actors, pro: actors },
+                  studentBookingExceptionsByPath: clusterEx
+                    ? { moto: clusterEx, auto: clusterEx, pro: clusterEx }
+                    : undefined,
                 });
               }
             } else {
               setPerPathMode(false);
+              const next = clusterOptionToSettings(v, clusterEx);
               saveMany({
-                appBookingActors: v === "default" ? undefined : v,
+                appBookingActors: next.actors,
+                studentBookingExceptions: next.ex,
                 appBookingActorsByPath: undefined,
+                studentBookingExceptionsByPath: undefined,
               });
             }
           }}
-          options={[...CLUSTER_ACTOR_OPTIONS, { v: "per_path", l: "Differenzia per percorso…" }]}
+          options={[...optionsFor(clusterDefault), { v: "per_path", l: "Differenzia per percorso…" }]}
         />
       </div>
       <AnimatePresence initial={false}>
+        {!perPathMode && clusterDefault === "exceptions" && clusterEx ? (
+          <motion.div
+            key="cluster-exceptions"
+            initial={{ height: 0, opacity: 0, overflow: "hidden" }}
+            animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
+            exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+            transition={{ duration: 0.24, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            <ExceptionsList
+              value={clusterEx}
+              onChange={(nextEx) => saveMany({ studentBookingExceptions: nextEx })}
+            />
+          </motion.div>
+        ) : null}
         {perPathMode && (
           <motion.div
             key="cluster-per-path"
@@ -2079,34 +2141,53 @@ function ClusterBookingActorsField({
             transition={{ duration: 0.24, ease: [0.25, 0.1, 0.25, 1] }}
           >
             <div className="mt-3 rounded-[14px] border border-[#e2e2e2] bg-white">
-              {CLUSTER_PATH_BUCKETS.map((bucket, i) => (
-                <div
-                  key={bucket.key}
-                  className={cn(
-                    "flex items-center justify-between gap-4 px-4 py-3",
-                    i > 0 && "border-t border-[#f0f0f0]",
-                  )}
-                >
-                  <div className="min-w-0">
-                    <div className="text-[13.5px] font-semibold text-[#222222]">{bucket.label}</div>
-                    <div className="mt-0.5 text-[11.5px] font-medium text-[#a0a0a0]">{bucket.cats}</div>
+              {CLUSTER_PATH_BUCKETS.map((bucket, i) => {
+                const bucketEx = exByPath[bucket.key];
+                const value = clusterOptionValue(byPath[bucket.key], bucketEx);
+                return (
+                  <div key={bucket.key} className={cn(i > 0 && "border-t border-[#f0f0f0]")}>
+                    <div className="flex items-center justify-between gap-4 px-4 py-3">
+                      <div className="min-w-0">
+                        <div className="text-[13.5px] font-semibold text-[#222222]">{bucket.label}</div>
+                        <div className="mt-0.5 text-[11.5px] font-medium text-[#a0a0a0]">{bucket.cats}</div>
+                      </div>
+                      <div className="w-[210px] shrink-0">
+                        <OptField
+                          value={value}
+                          onChange={(v) => {
+                            const next = clusterOptionToSettings(v, bucketEx);
+                            saveMany({
+                              appBookingActorsByPath: clean({ ...byPath, [bucket.key]: next.actors }),
+                              studentBookingExceptionsByPath: clean({ ...exByPath, [bucket.key]: next.ex }),
+                            });
+                          }}
+                          options={optionsFor(value)}
+                        />
+                      </div>
+                    </div>
+                    <AnimatePresence initial={false}>
+                      {value === "exceptions" && bucketEx ? (
+                        <motion.div
+                          key="bucket-exceptions"
+                          initial={{ height: 0, opacity: 0, overflow: "hidden" }}
+                          animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
+                          exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+                          transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
+                          className="border-t border-[#f0f0f0] pb-2"
+                        >
+                          <ExceptionsList
+                            compact
+                            value={bucketEx}
+                            onChange={(nextEx) =>
+                              saveMany({ studentBookingExceptionsByPath: clean({ ...exByPath, [bucket.key]: nextEx }) })
+                            }
+                          />
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
                   </div>
-                  <div className="w-[190px] shrink-0">
-                    <OptField
-                      value={byPath[bucket.key] ?? "default"}
-                      onChange={(v) =>
-                        saveMany({
-                          appBookingActorsByPath: cleanByPath({
-                            ...byPath,
-                            [bucket.key]: v === "default" ? undefined : v,
-                          }),
-                        })
-                      }
-                      options={CLUSTER_ACTOR_OPTIONS}
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <div className="mt-2 text-[12px] font-medium leading-normal text-[#929292]">
               «Default autoscuola» eredita, per quel percorso, il valore impostato dall&apos;autoscuola.

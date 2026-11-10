@@ -26,6 +26,7 @@ import {
   SWAP_BLOCK_MESSAGES,
 } from "@/lib/autoscuole/swap-rules";
 import { isBookingBlockActive } from "@/lib/autoscuole/booking-block";
+import { filterStudentsByBookingChannel } from "@/lib/autoscuole/student-booking-policy-loader";
 import {
   isStudentInManualFullCluster,
   resolveEffectiveBookingSettings,
@@ -388,6 +389,16 @@ export async function createSwapOffer(
       eligibleStudents.map((s) => isStudentInManualFullCluster(membership.companyId, s.user.id)),
     );
     eligibleStudents = eligibleStudents.filter((_, i) => !manualFullFlags[i]);
+
+    // Niente richiesta a chi non potrebbe accettarla: allievi bloccati o non
+    // ancora in pratica. Gli scambi NON dipendono dalla prenotazione «solo
+    // eccezioni» (li governa solo swapEnabled).
+    const swapAllowed = await filterStudentsByBookingChannel(
+      membership.companyId,
+      eligibleStudents.map((s) => s.user.id),
+      "swap",
+    );
+    eligibleStudents = eligibleStudents.filter((s) => swapAllowed.has(s.user.id));
 
     if (!eligibleStudents.length) {
       return { success: true, data: offer };
