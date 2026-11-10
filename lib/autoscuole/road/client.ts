@@ -305,6 +305,20 @@ export const roadApi = {
     call<RoadStudentRoad>(`/students/${encodeURIComponent(studentId)}`, signal),
   session: (id: string, signal?: AbortSignal) =>
     call<RoadDetail>(`/sessions/${encodeURIComponent(id)}`, signal),
+  /** Road novembre R3: modifica di una segnalazione (titolare e istruttore della guida, sempre). */
+  updateMarker: (
+    sessionId: string,
+    markerId: string,
+    body: { kind?: string; sentiment?: "good" | "bad" | null; note?: string | null; lat?: number; lng?: number },
+  ) =>
+    call<RoadMarker>(`/sessions/${encodeURIComponent(sessionId)}/markers/${encodeURIComponent(markerId)}`, undefined, {
+      method: "PATCH",
+      body,
+    }),
+  removeMarker: (sessionId: string, markerId: string) =>
+    call<unknown>(`/sessions/${encodeURIComponent(sessionId)}/markers/${encodeURIComponent(markerId)}`, undefined, {
+      method: "DELETE",
+    }),
   track: (id: string, afterSeq: number, signal?: AbortSignal) =>
     call<{ lastSeq: number; points: RoadTrackPoint[] }>(
       `/sessions/${encodeURIComponent(id)}/track?afterSeq=${afterSeq}`,

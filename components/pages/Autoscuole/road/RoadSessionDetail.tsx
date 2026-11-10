@@ -11,6 +11,9 @@ import type { Marker as MlMarker } from "maplibre-gl";
 import { companyAtom } from "@/atoms/company.store";
 import { getServiceLimits } from "@/lib/services";
 import { roadApi, type RoadDetail, type RoadHotspot } from "@/lib/autoscuole/road/client";
+import { parseRoadCustomMarkers } from "@/lib/autoscuole/road/catalog";
+import { RoadMarkerEditor } from "./RoadMarkerEditor";
+import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -109,6 +112,23 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [goTo, prevId, nextId]);
+
+  // Road novembre R3: segnalazione in modifica e «Sposta sulla mappa» (un clic sulla mappa).
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [moving, setMoving] = React.useState(false);
+  const feedback = useFeedbackToast();
+  const customMarkers = React.useMemo(
+    () =>
+      parseRoadCustomMarkers(
+        (getServiceLimits(company?.services ?? null, "AUTOSCUOLE") as Record<string, unknown>).roadCustomMarkers,
+      ),
+    [company?.services],
+  );
+  const reloadDetail = React.useCallback(async () => {
+    const d = await roadApi.session(sessionId);
+    setDetail(d);
+  }, [sessionId]);
+  const editing = detail?.markers.find((m) => m.id === editingId) ?? null;
 
   const active = detail?.status === "active";
   React.useEffect(() => {
@@ -211,6 +231,30 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
   }, [handle, detail]);
 
   React.useEffect(() => () => markersRef.current.forEach((m) => m.remove()), []);
+
+  React.useEffect(() => {
+    if (!handle || !moving || !editing) return;
+    const { map } = handle;
+    const canvas = map.getCanvas();
+    canvas.style.cursor = "crosshair";
+    const onClick = async (e: { lngLat: { lat: number; lng: number } }) => {
+      setMoving(false);
+      try {
+        await roadApi.updateMarker(sessionId, editing.id, { lat: e.lngLat.lat, lng: e.lngLat.lng });
+        await reloadDetail();
+      } catch (err) {
+        feedback.error({ description: err instanceof Error ? err.message : "Segnalazione non spostata." });
+      }
+    };
+    map.once("click", onClick);
+    const onKey = (ev: KeyboardEvent) => ev.key === "Escape" && setMoving(false);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      map.off("click", onClick);
+      canvas.style.cursor = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [handle, moving, editing, sessionId, reloadDetail, feedback]);
 
   // ── «Usa come percorso d'esame» (REG-645): due maniglie scorrono sul tracciato ──
   const trimming = trim != null;
@@ -461,6 +505,21 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
           <div ref={containerRef} className="h-full w-full" />
         </div>
           {!handle ? <RoadMapFallback failed={failed} /> : null}
+          {moving && editing ? (
+            <div
+              data-testid="road-move-banner"
+              className="road-trim-card absolute left-1/2 top-3 z-[5] flex -translate-x-1/2 items-center gap-4 whitespace-nowrap rounded-2xl bg-[#111111] py-2.5 pl-[18px] pr-2.5 text-[14px] font-medium text-white shadow-[0_12px_24px_-10px_rgba(0,0,0,0.5)]"
+            >
+              Clicca sulla mappa dove va «{editing.label}»
+              <button
+                type="button"
+                onClick={() => setMoving(false)}
+                className="cursor-pointer rounded-xl bg-white/15 px-3 py-1.5 font-semibold transition-colors duration-200 hover:bg-white/25"
+              >
+                Annulla
+              </button>
+            </div>
+          ) : null}
           {handle ? (
             <div className={trimming ? "max-sm:hidden" : undefined}>
               <ZoomControls onIn={() => handle.map.zoomIn()} onOut={() => handle.map.zoomOut()} />
@@ -542,7 +601,7 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
                 <div
                   key={m.id}
                   className={cn(
-                    "grid grid-cols-[26px_40px_minmax(0,1fr)_auto] items-center gap-2.5 py-2.5",
+                    "grid grid-cols-[26px_40px_minmax(0,1fr)_auto_auto] items-center gap-2.5 py-2.5",
                     i > 0 && "border-t border-[#f2f2f2]",
                   )}
                 >
@@ -562,10 +621,42 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
                     </span>
                   </div>
                   <time className="text-[13.5px] tabular-nums text-[#6a6a6a]">{hhmm(m.recordedAt)}</time>
+                  <button
+                    type="button"
+                    aria-label={`Modifica ${m.label}`}
+                    aria-expanded={editingId === m.id}
+                    onClick={() => {
+                      setMoving(false);
+                      setEditingId((cur) => (cur === m.id ? null : m.id));
+                    }}
+                    className={cn(
+                      "grid size-[30px] cursor-pointer place-items-center rounded-full text-[#6a6a6a] transition-colors duration-200 hover:bg-[#f2f2f2] hover:text-[#111111]",
+                      editingId === m.id && "bg-white text-[#111111] shadow-[0_0_0_1px_rgba(17,17,17,0.08)]",
+                    )}
+                    data-testid="road-marker-edit"
+                  >
+                    <MoreHorizontal className="size-4" strokeWidth={2} />
+                  </button>
                 </div>
               ))}
             </div>
           </div>
+
+          {editing && detail ? (
+            <RoadMarkerEditor
+              key={editing.id}
+              sessionId={detail.id}
+              marker={editing}
+              custom={customMarkers}
+              moving={moving}
+              onMove={() => setMoving((v) => !v)}
+              onClose={() => {
+                setMoving(false);
+                setEditingId(null);
+              }}
+              onChanged={reloadDetail}
+            />
+          ) : null}
 
           {detail?.hotspotChecks?.length ? <RoadHotspotChecksBlock checks={detail.hotspotChecks} /> : null}
 
