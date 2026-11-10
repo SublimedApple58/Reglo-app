@@ -135,8 +135,17 @@ describe("parse e cascata", () => {
     expect(Object.keys(parsed)).toEqual(["moto"]);
   });
 
-  it("niente salvato da nessuna parte = valore storico (scelta in sospeso, una costante)", () => {
+  it("niente salvato da nessuna parte = valore storico", () => {
     expect(resolveStudentBookingExceptionsForBucket({ bucket: "auto" })).toBe(LEGACY_INSTRUCTORS_EXCEPTIONS);
+  });
+
+  it("autoscuole già su «Solo istruttori» che non hanno mai salvato: «Disattiva» (Tiziano, 10/11)", () => {
+    const policy = buildStudentBookingPolicy({
+      appBookingActors: "instructors",
+      exceptions: resolveStudentBookingExceptionsForBucket({ bucket: "auto" }),
+    });
+    expect(policy.mode).toBe("closed");
+    expect(allowedChannels(policy)).toEqual(["swap"]);
   });
 
   it("gruppo per percorso → gruppo → autoscuola per percorso → autoscuola", () => {

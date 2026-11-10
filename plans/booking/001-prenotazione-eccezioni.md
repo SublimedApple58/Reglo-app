@@ -20,7 +20,7 @@
 - Test: `tests/unit/autoscuole/student-booking-policy.test.ts` (matrice modalità × canale × blocco, cascata, parse). tsc e lint puliti; `notify-guard.test.ts` fallisce già su staging (admin-access.ts, non toccato).
 
 ### Emendamenti concordati (risposte di Tiziano)
-1. Autoscuole già su «instructors»: in sospeso. Migrazione = una costante (`LEGACY_INSTRUCTORS_EXCEPTIONS`, oggi slot liberato + guide di gruppo = comportamento di fatto). Query prod 10/11 (sola lettura, 90 giorni): 5 guide slot_fill in tutta Reglo; nelle 9 autoscuole con «instructors» (autoscuola, percorso o gruppo) solo Robatto 2, entrambe patente B su percorso auto = «both»; quindi 0 nei contesti «instructors».
+1. Autoscuole già su «instructors»: **DECISO 10/11 → «Disattiva»** (`LEGACY_INSTRUCTORS_EXCEPTIONS` = tutto spento). Prima era in sospeso. Migrazione = una costante (`LEGACY_INSTRUCTORS_EXCEPTIONS`, oggi slot liberato + guide di gruppo = comportamento di fatto). Query prod 10/11 (sola lettura, 90 giorni): 5 guide slot_fill in tutta Reglo; nelle 9 autoscuole con «instructors» (autoscuola, percorso o gruppo) solo Robatto 2, entrambe patente B su percorso auto = «both»; quindi 0 nei contesti «instructors».
 2. Scambi indipendenti: solo `swapEnabled`.
 3. Ultimo minuto: finestra in ORE configurabile (1–168, default 24). Gli avvisi push usano gli orari di «Guide libere per domani».
 4. Eccezioni DIVERSE per percorso (moto/auto/pro): `studentBookingExceptionsByPath`, a livello autoscuola e gruppo.

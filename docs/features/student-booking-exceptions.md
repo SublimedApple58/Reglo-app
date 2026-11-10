@@ -19,7 +19,7 @@ Tre stati visibili: **Attiva** (`students`/`both`), **Solo eccezioni** (`instruc
 - Autoscuola: `CompanyService.limits.studentBookingExceptions` `{enabled, slotFill, groupSeats, lastMinute, lastMinuteHours}` e `studentBookingExceptionsByPath` `{moto?, auto?, pro?}` (eccezioni diverse per percorso).
 - Gruppo autonomo: stesse chiavi in `AutoscuolaInstructor.settings` (assenti = eredita).
 - Cascata: gruppo per percorso → gruppo → autoscuola per percorso → autoscuola → `LEGACY_INSTRUCTORS_EXCEPTIONS`.
-- **Autoscuole che non hanno mai salvato**: valgono `LEGACY_INSTRUCTORS_EXCEPTIONS` (oggi slot liberato + guide di gruppo = comportamento di fatto prima della feature). Per renderle tutte «Disattiva» basta cambiare la costante.
+- **Autoscuole che non hanno mai salvato** (tutte quelle su «Solo istruttori» al rilascio): valgono `LEGACY_INSTRUCTORS_EXCEPTIONS` = **«Disattiva»** (decisione di Tiziano, 10/11/2026). Nessuna migrazione dati: conta finché il titolare non salva la riga.
 
 ## File
 - `lib/autoscuole/student-booking-policy.ts` — modulo puro: parse, cascata, modalità, `hold` (bloccato/AWAITING/TEORIA/percorso mancante), `canStudentUseBookingChannel`, `studentFreeBookingUntil`, messaggi.

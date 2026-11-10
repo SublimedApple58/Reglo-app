@@ -54,19 +54,13 @@ export const STUDENT_BOOKING_EXCEPTIONS_OFF: StudentBookingExceptions = {
 
 /**
  * Valore per chi è su «Solo istruttori» e non ha MAI salvato le eccezioni
- * (tutte le autoscuole esistenti al rilascio). Scelta in sospeso con Tiziano:
- *  - così com'è conserva il comportamento di fatto di oggi (slot liberato e
- *    posti nelle guide di gruppo si potevano già prendere) → «Solo eccezioni»;
- *  - sostituirlo con `STUDENT_BOOKING_EXCEPTIONS_OFF` rende tutti «Disattiva».
- * Nessuna migrazione dati: cambia solo questa costante. Appena il titolare
- * salva la riga, il valore esplicito prende il posto di questo.
+ * (tutte le autoscuole esistenti al rilascio): «Disattiva», deciso da Tiziano
+ * il 10/11/2026. Nessuna migrazione dati: vale finché il titolare non salva la
+ * riga, poi conta il valore esplicito. Passando a «Solo eccezioni» la UI web
+ * accende «Slot liberato» come punto di partenza (`toExceptions`).
  */
 export const LEGACY_INSTRUCTORS_EXCEPTIONS: StudentBookingExceptions = {
-  enabled: true,
-  slotFill: true,
-  groupSeats: true,
-  lastMinute: false,
-  lastMinuteHours: LAST_MINUTE_HOURS_DEFAULT,
+  ...STUDENT_BOOKING_EXCEPTIONS_OFF,
 };
 
 const clampHours = (value: unknown): number => {
