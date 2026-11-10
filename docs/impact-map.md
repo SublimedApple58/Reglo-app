@@ -67,6 +67,16 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Creazione**: solo web (`AutoscuoleAgendaPage` menu ＋ + popover veloce, `blockKind`), riusa `createInstructorBlock`
 - → **Mobile**: visualizza + crea (istruttore per sé); dot calendario indaco; `weeklyAgenda.ts` `BLOCK_PRESENTATION.theory`
 
+### Prenotazione allievi «solo eccezioni»
+- → **Booking Engine**: `ensureStudentCanBookFromApp({channel})` decide prenotazione libera e finestra «ultimo minuto» (`bookableUntil` filtra available-slots, date-availability, booking-requests).
+- → **Waitlist / slot liberato** (`autoscuole-availability.actions`): destinatari, elenco offerte, accettazione e recupero notifiche usano il canale `slot_fill`. Chi tocca il broadcast deve passare da `filterStudentsByBookingChannel`.
+- → **Group lessons**: inviti, elenco e accettazione col canale `group_seat`.
+- → **Swaps**: destinatari senza bloccati/non in pratica; la modalità NON conta (solo `swapEnabled`).
+- → **Communications**: job posti vuoti per allievo (percorso, blocco, fase, ultimo minuto).
+- → **Instructor Clusters**: eccezioni anche sul gruppo autonomo, stessa cascata di `appBookingActors`; lo schema web `instructorSettingsSchema` deve elencarle (il web rimpiazza tutto il JSON).
+- → **Notifications**: recupero allievo filtrato per canale; «Nuove disponibilità» solo in modalità aperta; testi cambio fase.
+- → **Mobile**: `booking-options.bookingPolicy` e push `available_slots` con `lastMinute`.
+
 ### Booking Engine
 - → **Availability**: reads weekly, daily overrides, published weeks, holidays
 - → **Appointments**: creates appointments when booking confirmed

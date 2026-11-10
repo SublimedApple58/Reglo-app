@@ -15,6 +15,13 @@ import {
   resolveAppBookingActorsForBucket,
 } from "@/lib/autoscuole/booking-governance";
 import { licensePathBucket } from "@/lib/autoscuole/license";
+import {
+  parseStudentBookingExceptions,
+  parseStudentBookingExceptionsByPath,
+  resolveStudentBookingExceptionsForBucket,
+  type StudentBookingExceptions,
+  type StudentBookingExceptionsByPath,
+} from "@/lib/autoscuole/student-booking-policy";
 
 export type InstructorSettings = {
   bookingSlotDurations?: number[];
@@ -23,6 +30,9 @@ export type InstructorSettings = {
   appBookingActors?: AppBookingActors;
   // REG-426: override "chi prenota" per percorso patente (moto/auto/pro).
   appBookingActorsByPath?: AppBookingActorsByPath;
+  // Prenotazione allievi «solo eccezioni» (assente = eredita dall'autoscuola).
+  studentBookingExceptions?: StudentBookingExceptions;
+  studentBookingExceptionsByPath?: StudentBookingExceptionsByPath;
   instructorBookingMode?: InstructorBookingMode;
   studentBookingMode?: "engine" | "free_choice";
   // Scambio guide
@@ -62,6 +72,9 @@ export type EffectiveBookingSettings = {
   isLockedToInstructor: boolean;
   // Governance prenotazione
   appBookingActors: AppBookingActors;
+  // Eccezioni efficaci per il percorso dell'allievo (contano solo se
+  // appBookingActors = "instructors").
+  studentBookingExceptions: StudentBookingExceptions;
   instructorBookingMode: InstructorBookingMode;
   // Scambio guide
   swapEnabled: boolean;
@@ -112,6 +125,10 @@ export function parseInstructorSettings(raw: unknown): InstructorSettings {
   // REG-426: per-path override map on the cluster.
   const byPath = parseAppBookingActorsByPath(obj.appBookingActorsByPath);
   if (Object.keys(byPath).length) result.appBookingActorsByPath = byPath;
+  const exceptions = parseStudentBookingExceptions(obj.studentBookingExceptions);
+  if (exceptions) result.studentBookingExceptions = exceptions;
+  const exceptionsByPath = parseStudentBookingExceptionsByPath(obj.studentBookingExceptionsByPath);
+  if (Object.keys(exceptionsByPath).length) result.studentBookingExceptionsByPath = exceptionsByPath;
   if (typeof obj.instructorBookingMode === "string" && (INSTRUCTOR_BOOKING_MODE_OPTIONS as readonly string[]).includes(obj.instructorBookingMode)) {
     result.instructorBookingMode = obj.instructorBookingMode as InstructorBookingMode;
   }
@@ -183,6 +200,9 @@ export type CompanyBookingDefaults = {
   appBookingActors: AppBookingActors;
   // REG-426: per-path override map at company level.
   appBookingActorsByPath?: AppBookingActorsByPath;
+  // Eccezioni a livello autoscuola (assenti = LEGACY_INSTRUCTORS_EXCEPTIONS).
+  studentBookingExceptions?: StudentBookingExceptions;
+  studentBookingExceptionsByPath?: StudentBookingExceptionsByPath;
   instructorBookingMode: InstructorBookingMode;
   swapEnabled: boolean;
   swapNotifyMode: "all" | "available_only";
@@ -207,6 +227,8 @@ export function buildCompanyBookingDefaults(limits: Record<string, unknown>): Co
     roundedHoursOnly: limits.roundedHoursOnly === true,
     appBookingActors: governance.appBookingActors,
     appBookingActorsByPath: parseAppBookingActorsByPath(limits.appBookingActorsByPath),
+    studentBookingExceptions: parseStudentBookingExceptions(limits.studentBookingExceptions),
+    studentBookingExceptionsByPath: parseStudentBookingExceptionsByPath(limits.studentBookingExceptionsByPath),
     instructorBookingMode: governance.instructorBookingMode,
     swapEnabled: limits.swapEnabled === true,
     swapNotifyMode: limits.swapNotifyMode === "available_only" ? "available_only" : "all",
@@ -261,6 +283,10 @@ export async function resolveEffectiveBookingSettings(
     assignedInstructorPhone: null,
     isLockedToInstructor: false,
     appBookingActors: defaults.appBookingActors,
+    studentBookingExceptions: resolveStudentBookingExceptionsForBucket({
+      bucket: "auto",
+      companyDefault: defaults.studentBookingExceptions,
+    }),
     instructorBookingMode: defaults.instructorBookingMode,
     swapEnabled: defaults.swapEnabled,
     swapNotifyMode: defaults.swapNotifyMode,
@@ -307,6 +333,11 @@ export async function resolveEffectiveBookingSettings(
     companyDefault: defaults.appBookingActors,
     companyByPath: defaults.appBookingActorsByPath,
   });
+  base.studentBookingExceptions = resolveStudentBookingExceptionsForBucket({
+    bucket,
+    companyDefault: defaults.studentBookingExceptions,
+    companyByPath: defaults.studentBookingExceptionsByPath,
+  });
 
   if (!member?.assignedInstructorId || !member.assignedInstructor) return base;
 
@@ -331,6 +362,13 @@ export async function resolveEffectiveBookingSettings(
     clusterByPath: settings.appBookingActorsByPath,
     companyDefault: defaults.appBookingActors,
     companyByPath: defaults.appBookingActorsByPath,
+  });
+  base.studentBookingExceptions = resolveStudentBookingExceptionsForBucket({
+    bucket,
+    clusterDefault: settings.studentBookingExceptions,
+    clusterByPath: settings.studentBookingExceptionsByPath,
+    companyDefault: defaults.studentBookingExceptions,
+    companyByPath: defaults.studentBookingExceptionsByPath,
   });
   if (settings.instructorBookingMode !== undefined) base.instructorBookingMode = settings.instructorBookingMode;
   if (typeof settings.swapEnabled === "boolean") base.swapEnabled = settings.swapEnabled;
@@ -362,10 +400,20 @@ export async function resolveEffectiveSettingsForInstructor(
     select: { autonomousMode: true, settings: true },
   });
 
-  if (!instructor?.autonomousMode) return { ...companyDefaults };
+  // Senza allievo non c'è percorso: eccezioni risolte sul solo default.
+  const companyExceptions = resolveStudentBookingExceptionsForBucket({
+    bucket: "auto",
+    companyDefault: companyDefaults.studentBookingExceptions,
+  });
+  if (!instructor?.autonomousMode) {
+    return { ...companyDefaults, studentBookingExceptions: companyExceptions };
+  }
 
   const settings = parseInstructorSettings(instructor.settings);
-  const result = { ...companyDefaults };
+  const result = {
+    ...companyDefaults,
+    studentBookingExceptions: settings.studentBookingExceptions ?? companyExceptions,
+  };
 
   if (settings.bookingSlotDurations?.length) result.bookingSlotDurations = settings.bookingSlotDurations;
   if (typeof settings.roundedHoursOnly === "boolean") result.roundedHoursOnly = settings.roundedHoursOnly;

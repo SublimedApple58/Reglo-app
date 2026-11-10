@@ -65,10 +65,8 @@ import {
 } from "@/lib/autoscuole/agenda-occupancy";
 import { clampIntervals } from "@/lib/backoffice/agenda-saturation";
 import {
-  getBookingGovernanceForStudent,
   getBookingGovernanceForInstructor,
   isInstructorAppBookingEnabled,
-  isStudentAppBookingEnabled,
 } from "@/lib/autoscuole/booking-governance";
 import {
   operationallyCancelAppointment,
@@ -395,6 +393,14 @@ const createVehicleSchema = z.object({
   followsInstructorAvailability: z.boolean().optional(),
 });
 
+const clusterStudentBookingExceptionsSchema = z.object({
+  enabled: z.boolean(),
+  slotFill: z.boolean(),
+  groupSeats: z.boolean(),
+  lastMinute: z.boolean(),
+  lastMinuteHours: z.number().int().min(1).max(168),
+});
+
 const instructorSettingsSchema = z.object({
   bookingSlotDurations: z.array(z.number().int().min(30).max(120)).optional(),
   roundedHoursOnly: z.boolean().optional(),
@@ -404,6 +410,14 @@ const instructorSettingsSchema = z.object({
     moto: z.enum(["students", "instructors", "both"]).optional(),
     auto: z.enum(["students", "instructors", "both"]).optional(),
     pro: z.enum(["students", "instructors", "both"]).optional(),
+  }).optional(),
+  // Prenotazione allievi «solo eccezioni» del gruppo (assente = eredita).
+  // Va nello schema: il web rimpiazza tutto il JSON e zod scarta le chiavi ignote.
+  studentBookingExceptions: clusterStudentBookingExceptionsSchema.optional(),
+  studentBookingExceptionsByPath: z.object({
+    moto: clusterStudentBookingExceptionsSchema.optional(),
+    auto: clusterStudentBookingExceptionsSchema.optional(),
+    pro: clusterStudentBookingExceptionsSchema.optional(),
   }).optional(),
   instructorBookingMode: z.enum(["manual_full", "manual_engine"]).optional(),
   studentBookingMode: z.enum(["engine", "free_choice"]).optional(),
@@ -3605,12 +3619,27 @@ export async function createAutoscuolaAppointment(
     let resolvedInstructorId = payload.instructorId;
     if (isStudentActor) {
       // Governance resolved with cascade cluster → company for this student.
-      const governance = await getBookingGovernanceForStudent(companyId, payload.studentId);
-      if (!isStudentAppBookingEnabled(governance)) {
+      // Prenotazione «solo eccezioni»: modalità aperta, oppure eccezione
+      // «ultimo minuto» con la guida che inizia dentro la finestra.
+      const { loadStudentBookingPolicies } = await import("@/lib/autoscuole/student-booking-policy-loader");
+      const {
+        canStudentUseBookingChannel,
+        studentFreeBookingDeniedMessage,
+        studentFreeBookingUntil,
+        studentLastMinuteOutOfWindowMessage,
+      } = await import("@/lib/autoscuole/student-booking-policy");
+      const studentPolicy = (await loadStudentBookingPolicies(companyId, [payload.studentId])).get(payload.studentId);
+      if (!studentPolicy || !canStudentUseBookingChannel({ ...studentPolicy, hold: null }, "free")) {
         return {
           success: false,
-          message: "La prenotazione da app è abilitata solo per istruttori.",
+          message: studentPolicy
+            ? studentFreeBookingDeniedMessage(studentPolicy)
+            : "Allievo non valido.",
         };
+      }
+      const lastMinuteUntil = studentFreeBookingUntil(studentPolicy);
+      if (lastMinuteUntil && new Date(payload.startsAt).getTime() >= lastMinuteUntil.getTime()) {
+        return { success: false, message: studentLastMinuteOutOfWindowMessage(studentPolicy) };
       }
       if (payload.studentId !== membership.userId) {
         return {

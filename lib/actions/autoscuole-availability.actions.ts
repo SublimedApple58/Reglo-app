@@ -80,6 +80,19 @@ import {
 } from "@/lib/autoscuole/booking-block";
 import { releaseExpiredManualBlocks } from "@/lib/autoscuole/booking-block-expiry";
 import {
+  buildStudentBookingPolicy,
+  canStudentUseBookingChannel,
+  resolveStudentBookingHold,
+  studentFreeBookingDeniedMessage,
+  studentFreeBookingUntil,
+  studentLastMinuteOutOfWindowMessage,
+  type StudentBookingChannel,
+} from "@/lib/autoscuole/student-booking-policy";
+import {
+  filterStudentsByBookingChannel,
+  loadStudentBookingPolicies,
+} from "@/lib/autoscuole/student-booking-policy-loader";
+import {
   resolveEffectiveBookingSettings,
   buildCompanyBookingDefaults,
 } from "@/lib/autoscuole/instructor-clusters";
@@ -646,13 +659,20 @@ const ensureStudentCanBookFromApp = async ({
   companyId,
   membership,
   studentId,
+  channel = "free",
 }: {
   companyId: string;
   membership: { role: string; autoscuolaRole: string | null; userId: string };
   studentId: string;
+  /**
+   * Canale con cui l'allievo prende la guida (prenotazione «solo eccezioni»):
+   * `free` = prenotazione libera (con l'eccezione «ultimo minuto» limitata a
+   * `bookableUntil`), `slot_fill` = offerta slot liberato.
+   */
+  channel?: Extract<StudentBookingChannel, "free" | "slot_fill">;
 }) => {
   if (membership.role === "admin" || isOwner(membership.autoscuolaRole)) {
-    return { allowed: true as const, settings: null, limits: null };
+    return { allowed: true as const, settings: null, limits: null, bookableUntil: null };
   }
   if (membership.autoscuolaRole !== "STUDENT") {
     return {
@@ -769,16 +789,26 @@ const ensureStudentCanBookFromApp = async ({
 
   // Resolve cluster-aware governance (instructor cluster override → company default).
   const effective = await resolveEffectiveBookingSettings(companyId, studentId, buildCompanyBookingDefaults(limits));
-  const effectiveActors = effective.appBookingActors;
-  if (effectiveActors === "instructors") {
+  // Prenotazione «solo eccezioni»: blocco e fase sono già stati controllati
+  // sopra, qui conta solo modalità + canale.
+  const policy = buildStudentBookingPolicy({
+    appBookingActors: effective.appBookingActors,
+    exceptions: effective.studentBookingExceptions,
+  });
+  if (!canStudentUseBookingChannel(policy, channel)) {
     return {
       allowed: false as const,
-      message: "La prenotazione da app è abilitata solo per istruttori.",
+      message:
+        channel === "slot_fill"
+          ? "Questo posto non si può prenotare dall'app: le guide le fissa la tua autoscuola."
+          : studentFreeBookingDeniedMessage(policy),
     };
   }
   // Return the resolved cluster settings AND limits so the caller can reuse
-  // them instead of fetching/resolving a second time.
-  return { allowed: true as const, settings: effective, limits };
+  // them instead of fetching/resolving a second time. `bookableUntil` ≠ null =
+  // eccezione «ultimo minuto»: solo slot che iniziano prima di quell'istante.
+  const bookableUntil = channel === "free" ? studentFreeBookingUntil(policy) : null;
+  return { allowed: true as const, settings: effective, limits, policy, bookableUntil };
 };
 
 export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>) {
@@ -1712,6 +1742,8 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     if (!bookingAccess.allowed) {
       return { success: false, message: bookingAccess.message };
     }
+    // Eccezione «ultimo minuto» (prenotazione «solo eccezioni»).
+    const lastMinuteUntil = bookingAccess.bookableUntil;
     const now = new Date();
     if (payload.durationMinutes < 30 || payload.durationMinutes > 120 || payload.durationMinutes % 15 !== 0) {
       return { success: false, message: "Durata non valida." };
@@ -1786,7 +1818,9 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
 
     // Booking cutoff: block if past the deadline (day before at cutoff time).
     // Uses cluster-resolved settings (cluster overrides company).
-    if (clusterBookingSettings.bookingCutoffEnabled) {
+    // L'eccezione «ultimo minuto» esiste proprio per riempire i posti a breve:
+    // la chiusura del giorno prima non vale per lei.
+    if (clusterBookingSettings.bookingCutoffEnabled && !lastMinuteUntil) {
       const cutoffTime = clusterBookingSettings.bookingCutoffTime;
       const [cutoffH, cutoffM] = cutoffTime.split(":").map(Number);
       const prevDate = new Date(Date.UTC(preferredDateParts.year, preferredDateParts.month - 1, preferredDateParts.day - 1));
@@ -2207,6 +2241,8 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         const endDate = getSlotEnd(startDate, payload.durationMinutes);
         const startMs = startDate.getTime();
         if (startMs < now.getTime()) continue;
+        // Eccezione «ultimo minuto»: solo guide che iniziano entro la finestra.
+        if (lastMinuteUntil && startMs >= lastMinuteUntil.getTime()) continue;
         if (excludedStartsSet.size && excludedStartsSet.has(startMs)) continue;
         if (startDate < rangeStart || endDate > rangeEnd) continue;
         if (overlaps(studentIntervals, startMs, endDate.getTime())) continue;
@@ -2417,6 +2453,9 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       }
       if (selectedStart.getTime() < now.getTime()) {
         return { success: false, message: "Non puoi prenotare una guida nel passato." };
+      }
+      if (lastMinuteUntil && bookingAccess.policy && selectedStart.getTime() >= lastMinuteUntil.getTime()) {
+        return { success: false, message: studentLastMinuteOutOfWindowMessage(bookingAccess.policy) };
       }
       const selectedStartParts = getZonedParts(selectedStart);
       const candidate = await findCandidateForDay(
@@ -2785,6 +2824,8 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
           bookingBlockReason: true,
           bookingBlockUntil: true,
           unpaidBlockClearedAtCount: true,
+          studentPhase: true,
+          selfRegistered: true,
         },
       }),
     ]);
@@ -2991,6 +3032,37 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
         examPriority: examPriorityInfo,
         blockedByExamPriority,
         bookingBlocked,
+        // Prenotazione «solo eccezioni»: l'app NON decide da sola, mostra
+        // questo. `mode` open/exceptions/closed; `hold` = motivo per cui ora non
+        // può prenotare niente; `lastMinuteUntil` = fine della finestra «ultimo
+        // minuto» (solo mode exceptions con l'eccezione accesa).
+        bookingPolicy: (() => {
+          const policy = buildStudentBookingPolicy({
+            appBookingActors: clusterSettings.appBookingActors,
+            exceptions: clusterSettings.studentBookingExceptions,
+            hold: resolveStudentBookingHold({
+              blocked: bookingBlocked,
+              studentPhase: blockState?.studentPhase ?? null,
+              selfRegistered: blockState?.selfRegistered ?? null,
+              licenseCategory: student.licenseCategory ?? null,
+            }),
+          });
+          const lastMinuteUntil =
+            policy.mode === "exceptions" && policy.exceptions.lastMinute
+              ? studentFreeBookingUntil(policy)
+              : null;
+          return {
+            mode: policy.mode,
+            hold: policy.hold,
+            exceptions: {
+              slotFill: policy.exceptions.slotFill,
+              groupSeats: policy.exceptions.groupSeats,
+              lastMinute: policy.exceptions.lastMinute,
+              lastMinuteHours: policy.exceptions.lastMinuteHours,
+            },
+            lastMinuteUntil: lastMinuteUntil?.toISOString() ?? null,
+          };
+        })(),
       },
     };
   } catch (error) {
@@ -3018,6 +3090,12 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     if (!bookingAccess.allowed) {
       return { success: false, message: bookingAccess.message };
     }
+    // Eccezione «ultimo minuto»: si vedono solo gli slot entro la finestra.
+    const lastMinuteUntil = bookingAccess.bookableUntil;
+    const withinLastMinute = <T extends { startsAt: string }>(slots: T[]) =>
+      lastMinuteUntil
+        ? slots.filter((slot) => new Date(slot.startsAt).getTime() < lastMinuteUntil.getTime())
+        : slots;
 
     // Redis cache check — after auth, before heavy computation
     const slotsCacheKey = await buildAutoscuoleCacheKey({
@@ -3034,7 +3112,12 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     });
     const cachedSlots = await readAutoscuoleCache<unknown>(slotsCacheKey);
     if (cachedSlots) {
-      return { success: true, data: cachedSlots };
+      return {
+        success: true,
+        data: Array.isArray(cachedSlots)
+          ? withinLastMinute(cachedSlots as Array<{ startsAt: string }>)
+          : cachedSlots,
+      };
     }
 
     const now = new Date();
@@ -3110,7 +3193,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
 
     // Booking cutoff: block if past the deadline (day before at cutoff time).
     // Uses cluster-resolved settings (cluster overrides company).
-    if (clusterSettings.bookingCutoffEnabled) {
+    if (clusterSettings.bookingCutoffEnabled && !lastMinuteUntil) {
       const cutoffTime = clusterSettings.bookingCutoffTime;
       const [cutoffH, cutoffM] = cutoffTime.split(":").map(Number);
       const prevDate = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day - 1));
@@ -3569,7 +3652,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     );
 
     await writeAutoscuoleCache(slotsCacheKey, data, 30); // 30s TTL
-    return { success: true, data };
+    return { success: true, data: withinLastMinute(data) };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -3595,6 +3678,8 @@ export async function getDateAvailabilityMap(
     if (!bookingAccess.allowed) {
       return { success: false, message: bookingAccess.message };
     }
+    // Eccezione «ultimo minuto»: giorni oltre la finestra non prenotabili.
+    const lastMinuteUntil = bookingAccess.bookableUntil;
 
     // Redis cache check — after auth, before heavy computation
     const dateMapCacheKey = await buildAutoscuoleCacheKey({
@@ -3639,7 +3724,7 @@ export async function getDateAvailabilityMap(
     );
 
     // Booking cutoff (cluster overrides company).
-    const cutoffEnabled = clusterSettings.bookingCutoffEnabled;
+    const cutoffEnabled = clusterSettings.bookingCutoffEnabled && !lastMinuteUntil;
     const cutoffTime = clusterSettings.bookingCutoffTime;
     const [cutoffH, cutoffM] = cutoffTime.split(":").map(Number);
 
@@ -3935,6 +4020,7 @@ export async function getDateAvailabilityMap(
 
       const isPast = dateStart < todayStart;
       const isBeforeMin = minDate !== null && dateStart < minDate;
+      const isBeyondLastMinute = lastMinuteUntil !== null && dateStart >= lastMinuteUntil;
       let isPastCutoff = false;
       if (cutoffEnabled && !isPast) {
         const prevDate = new Date(
@@ -3949,7 +4035,7 @@ export async function getDateAvailabilityMap(
         isPastCutoff = now >= cutoffDeadline;
       }
 
-      if (!isPast && !isBeforeMin && !isPastCutoff) {
+      if (!isPast && !isBeforeMin && !isPastCutoff && !isBeyondLastMinute) {
         // Build the union of admissible entry-point minutes across all active
         // instructors using anchor-aware packing on each instructor's free
         // intervals for the day. This ensures the date-availability map stays
@@ -4225,6 +4311,24 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
     const now = new Date();
     if (offer.status !== "broadcasted" || offer.expiresAt < now) {
       return { success: false, message: "Offerta non più valida." };
+    }
+
+    // Solo l'allievo stesso risponde all'offerta (prima chiunque nell'autoscuola
+    // poteva accettare a nome di un altro) e, per accettare, deve poter usare il
+    // canale «slot liberato»: blocco, fase e prenotazione «solo eccezioni».
+    if (membership.userId !== payload.studentId && !isOwner(membership.autoscuolaRole) && membership.role !== "admin") {
+      return { success: false, message: "Puoi rispondere solo alle offerte per il tuo profilo." };
+    }
+    if (payload.response === "accept") {
+      const bookingAccess = await ensureStudentCanBookFromApp({
+        companyId: membership.companyId,
+        membership,
+        studentId: payload.studentId,
+        channel: "slot_fill",
+      });
+      if (!bookingAccess.allowed) {
+        return { success: false, message: bookingAccess.message };
+      }
     }
 
     const [student, existingResponse, studentAvailabilityRaw, autoscuolaService] = await Promise.all([
@@ -4561,6 +4665,15 @@ export async function getWaitlistOffers(input: z.infer<typeof getWaitlistOffersS
     if (!student) {
       return { success: false, message: "Allievo non valido." };
     }
+    if (membership.userId !== payload.studentId && !isOwner(membership.autoscuolaRole) && membership.role !== "admin") {
+      return { success: false, message: "Puoi vedere solo le offerte per il tuo profilo." };
+    }
+    // Prenotazione «solo eccezioni»: chi non può usare il canale non vede offerte.
+    const offerPolicies = await loadStudentBookingPolicies(membership.companyId, [payload.studentId]);
+    const offerPolicy = offerPolicies.get(payload.studentId);
+    if (!offerPolicy || !canStudentUseBookingChannel(offerPolicy, "slot_fill")) {
+      return { success: true, data: [] };
+    }
 
     const [studentAvailabilityRaw, offers, appointments, autoscuolaService] = await Promise.all([
       prisma.autoscuolaWeeklyAvailability.findFirst({
@@ -4838,7 +4951,13 @@ export async function broadcastWaitlistOffer({
     studentIds: students.map((s) => s.user.id),
   });
 
+  // Prenotazione «solo eccezioni»: l'offerta va solo a chi può prenderla
+  // (modalità aperta o eccezione «slot liberato» accesa per il suo percorso;
+  // mai ad allievi bloccati o non ancora in pratica).
+  const slotFillAllowed = await filterStudentsByBookingChannel(companyId, studentIds, "slot_fill");
+
   const availableStudents = students.filter((student) => {
+    if (!slotFillAllowed.has(student.user.id)) return false;
     const availability = availabilityByStudent.get(student.user.id);
     if (!isAvailabilityCovering(availability, slot.startsAt, slot.endsAt)) {
       return false;
@@ -5073,10 +5192,15 @@ export async function broadcastGroupLessonInvite({
     appointmentsByStudent.set(appointment.studentId, list);
   }
 
+  // Prenotazione «solo eccezioni»: invito solo a chi può prendere il posto
+  // (modalità aperta o eccezione «posti nelle guide di gruppo» accesa).
+  const groupSeatAllowed = await filterStudentsByBookingChannel(companyId, candidateIds, "group_seat");
+
   const broadcastFleet: FleetVehicle[] = gl.fleetVehicles.map((f) => f.vehicle);
   const eligible = students.filter((student) => {
     const id = student.user.id;
     if (enrolled.has(id)) return false;
+    if (!groupSeatAllowed.has(id)) return false;
     // REG-420 — never nudge a student whose bookings are blocked (they can't
     // self-enrol anyway; the accept path and the in-app list both reject them).
     if (isBookingBlockActive(student)) return false;
@@ -5243,6 +5367,9 @@ export async function respondGroupLessonInvite(
     if (invite.status !== "broadcasted" || invite.expiresAt < now) {
       return { success: false as const, message: "Invito non più valido." };
     }
+    if (membership.userId !== payload.studentId && !isOwner(membership.autoscuolaRole) && membership.role !== "admin") {
+      return { success: false as const, message: "Puoi rispondere solo agli inviti per il tuo profilo." };
+    }
     const gl = invite.groupLesson;
     if (!gl || gl.status !== "scheduled" || !gl.endsAt) {
       return { success: false as const, message: "Guida di gruppo non più disponibile." };
@@ -5293,6 +5420,14 @@ export async function respondGroupLessonInvite(
       return {
         success: false as const,
         message: "Le tue prenotazioni sono temporaneamente sospese. Contatta la segreteria.",
+      };
+    }
+    // Prenotazione «solo eccezioni» (e fase): serve il canale «posti nelle guide di gruppo».
+    const seatPolicy = (await loadStudentBookingPolicies(companyId, [payload.studentId])).get(payload.studentId);
+    if (!seatPolicy || !canStudentUseBookingChannel(seatPolicy, "group_seat")) {
+      return {
+        success: false as const,
+        message: "Questo posto non si può prenotare dall'app: le guide le fissa la tua autoscuola.",
       };
     }
     const service = await prisma.companyService.findFirst({
@@ -5730,6 +5865,14 @@ export async function getGroupLessonInvites(
     // push broadcast still reject/skip a blocked student — REG-420 unchanged.
     const bookingBlocked = isBookingBlockActive(member);
     if (bookingBlocked && payload.countOnly) return { success: true as const, data: [] };
+    // Prenotazione «solo eccezioni»: se il canale è chiuso per motivi diversi
+    // dal blocco (modalità o fase), i posti non si mostrano proprio.
+    if (!bookingBlocked) {
+      const seatPolicy = (await loadStudentBookingPolicies(companyId, [payload.studentId])).get(payload.studentId);
+      if (!seatPolicy || !canStudentUseBookingChannel(seatPolicy, "group_seat")) {
+        return { success: true as const, data: [] };
+      }
+    }
 
     // Lesson-first discovery: surface EVERY scheduled, future, non-full group
     // lesson the opted-in student can still join — not just lessons that happen
@@ -6181,7 +6324,18 @@ export async function publishInstructorWeek(input: z.infer<typeof publishWeekSch
       select: { autonomousMode: true, name: true, assignedStudents: { select: { userId: true } } },
     });
     if (instructor?.autonomousMode && instructor.assignedStudents.length > 0) {
-      const studentUserIds = instructor.assignedStudents.map((s) => s.userId);
+      // «Nuove disponibilità» invita a prenotare liberamente: solo agli allievi
+      // in modalità aperta (non «solo eccezioni»/«disattiva», non bloccati).
+      const openPolicies = await loadStudentBookingPolicies(
+        companyId,
+        instructor.assignedStudents.map((s) => s.userId),
+      );
+      const studentUserIds = instructor.assignedStudents
+        .map((s) => s.userId)
+        .filter((id) => {
+          const policy = openPolicies.get(id);
+          return policy?.mode === "open" && !policy.hold;
+        });
       const weekLabel = weekStart.toLocaleDateString("it-IT", {
         day: "numeric",
         month: "long",

@@ -1,5 +1,28 @@
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import { notifyAutoscuolaUser, PUSH_ONLY } from "@/lib/autoscuole/notify";
+import type { StudentBookingMode } from "@/lib/autoscuole/student-booking-policy";
+import { loadStudentBookingPolicies } from "@/lib/autoscuole/student-booking-policy-loader";
+
+/**
+ * Frase «puoi prenotare» coerente con la prenotazione «solo eccezioni»: mai
+ * promettere la prenotazione libera a chi non può farla.
+ */
+const bookingSentence = (mode: StudentBookingMode, open: string) => {
+  if (mode === "open") return open;
+  if (mode === "exceptions") {
+    return "Le guide te le fissa l'autoscuola: quando si libera un posto puoi prenderlo tu dall'app.";
+  }
+  return "Le guide te le fissa l'autoscuola.";
+};
+
+const bookingModeFor = async (companyId: string, studentUserId: string): Promise<StudentBookingMode> => {
+  try {
+    const policies = await loadStudentBookingPolicies(companyId, [studentUserId]);
+    return policies.get(studentUserId)?.mode ?? "open";
+  } catch {
+    return "open";
+  }
+};
 
 export type StudentPhase = "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
 
@@ -16,7 +39,11 @@ type Copy = {
  * The copy uses leading emojis on the title so the OS-level banner is
  * immediately readable as a celebration.
  */
-function copyFor(fromPhase: StudentPhase, toPhase: StudentPhase): Copy | null {
+function copyFor(
+  fromPhase: StudentPhase,
+  toPhase: StudentPhase,
+  bookingMode: StudentBookingMode = "open",
+): Copy | null {
   if (fromPhase === toPhase) return null;
 
   // Forward, celebratory transitions
@@ -30,7 +57,7 @@ function copyFor(fromPhase: StudentPhase, toPhase: StudentPhase): Copy | null {
   if (toPhase === "PRATICA") {
     return {
       title: "🚗 Hai il foglio rosa!",
-      body: "Ora puoi prenotare le tue prime guide. Buona strada!",
+      body: `${bookingSentence(bookingMode, "Ora puoi prenotare le tue prime guide.")} Buona strada!`,
     };
   }
   if (toPhase === "PATENTATO") {
@@ -63,7 +90,8 @@ export async function notifyStudentPhaseChange({
   fromPhase: StudentPhase;
   toPhase: StudentPhase;
 }): Promise<void> {
-  const copy = copyFor(fromPhase, toPhase);
+  if (!copyFor(fromPhase, toPhase)) return;
+  const copy = copyFor(fromPhase, toPhase, await bookingModeFor(companyId, studentUserId));
   if (!copy) return;
 
   await notifyAutoscuolaUser({
@@ -103,7 +131,10 @@ export async function notifyNewLicensePath({
     recipient: { userId: studentUserId },
     supports: PUSH_ONLY,
     title: `🚗 Nuovo percorso: patente ${licenseCategory}`,
-    body: "L'autoscuola ha avviato il tuo nuovo percorso. Puoi prenotare le guide.",
+    body: `L'autoscuola ha avviato il tuo nuovo percorso. ${bookingSentence(
+      await bookingModeFor(companyId, studentUserId),
+      "Puoi prenotare le guide.",
+    )}`,
     data: { licenseCategory },
   });
 }

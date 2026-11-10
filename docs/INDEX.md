@@ -12,6 +12,7 @@
 | Owner notifications (bell annullamenti allievi) | [owner-notifications.md](features/owner-notifications.md) | `AutoscuolaNotification` model, `lib/autoscuole/notifications.ts`, `api/autoscuole/owner-notifications/route.ts`, `OwnerNotificationsBell.tsx`, `autoscuole.actions.ts` (`createStudentCancellationNotification`) |
 | Availability (ruoli sulle scritture REG-717) | [availability.md](features/availability.md) | `autoscuole-availability.actions.ts`, `lib/autoscuole/availability-access.ts` |
 | Booking Engine | [booking-engine.md](features/booking-engine.md) | `slot-matcher.ts`, `booking-governance.ts` |
+| Prenotazione allievi «solo eccezioni» (attiva / solo eccezioni / disattiva + eccezioni per percorso: slot liberato, guide di gruppo, ultimo minuto) | [student-booking-exceptions.md](features/student-booking-exceptions.md) | `lib/autoscuole/student-booking-policy.ts`, `student-booking-policy-loader.ts`, `autoscuole-availability.actions.ts` (`ensureStudentCanBookFromApp`), `communications.ts` (job posti vuoti) |
 | Vehicles | [vehicles.md](features/vehicles.md) | `autoscuole.actions.ts` (vehicle CRUD), `fixed-vehicle.ts`, `slot-matcher.ts` |
 | Group lessons | [group-lessons.md](features/group-lessons.md) | `autoscuole.actions.ts` (group-lesson CRUD), `autoscuole-availability.actions.ts` (invites), `group-lessons/` API |
 | Payments & Credits | [payments.md](features/payments.md) | `payments.ts`, `stripe-connect.ts` |
