@@ -197,6 +197,12 @@ export type RoadExamRoute = {
   lengthMeters: number;
   sourceSessionId: string | null;
   archivedAt: string | null;
+  /** R4: esaminatori (vuoto = «Senza esaminatore»); assenti con server vecchi. */
+  examiners?: string[];
+  /** R4: "exam" = registrato con Road Exam, "drawn" = disegnato. */
+  origin?: "drawn" | "exam";
+  examAt?: string | null;
+  createdAt?: string;
 };
 
 export type RoadExamRouteInput = {
@@ -206,6 +212,8 @@ export type RoadExamRouteInput = {
   waypoints: Array<[number, number]>;
   path: Array<[number, number]>;
   sourceSessionId?: string | null;
+  /** R4: il titolare assegna gli esaminatori. */
+  examiners?: string[];
 };
 
 /** Bozza ricavata da una guida Road (scorciatoia «Usa come percorso d'esame»). */

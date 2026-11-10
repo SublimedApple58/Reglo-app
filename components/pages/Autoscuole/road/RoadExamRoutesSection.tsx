@@ -3,9 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import { useLocale } from "next-intl";
-import { Archive, Pencil, Plus, RotateCcw } from "lucide-react";
+import { Archive, Pencil, Plus, RotateCcw, UserRound } from "lucide-react";
 
+import { useAtomValue } from "jotai";
+
+import { companyAtom } from "@/atoms/company.store";
 import { roadApi, type RoadExamRoute } from "@/lib/autoscuole/road/client";
+import { groupExamRoutesByExaminer, NO_EXAMINER_KEY } from "@/lib/autoscuole/road/road-exam";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -49,7 +53,20 @@ export function RoadExamRoutesSection() {
     return () => ctrl.abort();
   }, [load]);
 
-  const active = routes?.filter((r) => !r.archivedAt) ?? [];
+  const active = React.useMemo(() => routes?.filter((r) => !r.archivedAt) ?? [], [routes]);
+  // R4 (anteprima approvata il 10/11/2026): raggruppati per esaminatore; un
+  // percorso con due esaminatori sta sotto entrambi, «Senza esaminatore» in fondo.
+  const groups = React.useMemo(
+    () =>
+      groupExamRoutesByExaminer(
+        active.map((r) => ({ ...r, examiners: r.examiners ?? [], examAt: r.examAt ?? null, createdAt: r.createdAt ?? "" })),
+      ),
+    [active],
+  );
+  const knownExaminers = React.useMemo(() => groups.filter((g) => g.name).map((g) => g.name!), [groups]);
+  const company = useAtomValue(companyAtom);
+  const isOwner = company?.role === "admin";
+  const [assigning, setAssigning] = React.useState<string | null>(null);
   const archived = routes?.filter((r) => r.archivedAt) ?? [];
 
   const act = async (r: RoadExamRoute, kind: "archive" | "restore") => {
@@ -96,8 +113,55 @@ export function RoadExamRoutesSection() {
             </div>
           </div>
         ) : null}
-        {active.map((r, i) => (
-          <Row key={r.id} route={r} first={i === 0}>
+        {groups.map((g, gi) => (
+          <div key={g.key || "none"} className={cn(gi > 0 && "border-t border-[#ebebeb]")} data-testid="road-exam-group">
+            <div className="flex items-center justify-between gap-3 px-[18px] pb-1.5 pt-4">
+              <span className="flex min-w-0 items-center gap-2.5">
+                <span className="grid size-[30px] shrink-0 place-items-center rounded-full bg-[#f1f1f1] text-[12px] font-semibold text-[#111111] shadow-[0_0_0_1px_rgba(17,17,17,0.05)]">
+                  {g.name ? initials(g.name) : <UserRound className="size-4 text-[#8e8e8e]" strokeWidth={1.8} />}
+                </span>
+                <b className="truncate text-[15.5px] font-semibold tracking-[-0.2px] text-[#111111]">
+                  {g.name ?? "Senza esaminatore"}
+                </b>
+              </span>
+              <span className="shrink-0 text-[13px] text-[#6a6a6a]">
+                {[
+                  g.routes.length === 1 ? "1 percorso" : `${g.routes.length} percorsi`,
+                  g.name && g.lastExamAt ? `ultimo esame ${dayLabel(g.lastExamAt)}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </div>
+            {g.routes.map((r, i) => (
+              <Row key={`${g.key}:${r.id}`} route={r} first={i === 0}>
+                {isOwner && g.key === NO_EXAMINER_KEY ? (
+                  <span className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setAssigning((cur) => (cur === r.id ? null : r.id))}
+                      aria-expanded={assigning === r.id}
+                      className={cn(
+                        "h-[34px] cursor-pointer rounded-[10px] px-2.5 text-[13.5px] font-semibold text-[#111111] transition-colors duration-200 hover:bg-[#f2f2f2]",
+                        assigning === r.id && "bg-[#f2f2f2]",
+                      )}
+                      data-testid="road-exam-assign"
+                    >
+                      Assegna
+                    </button>
+                    {assigning === r.id ? (
+                      <AssignExaminers
+                        route={r}
+                        known={knownExaminers}
+                        onClose={() => setAssigning(null)}
+                        onSaved={async () => {
+                          setAssigning(null);
+                          await load();
+                        }}
+                      />
+                    ) : null}
+                  </span>
+                ) : null}
             <Link
               href={`${editorBase}/${r.id}`}
               aria-label={`Modifica ${r.name}`}
@@ -115,6 +179,8 @@ export function RoadExamRoutesSection() {
               {busy === r.id ? <LoadingDots /> : <Archive className="size-4" strokeWidth={1.8} />}
             </button>
           </Row>
+            ))}
+          </div>
         ))}
         {routes ? (
           <div
@@ -178,6 +244,7 @@ function Row({
   children: React.ReactNode;
 }) {
   const meta = [
+    route.origin === "exam" ? "Registrato con Road Exam" : null,
     route.examSite,
     route.licenseCategories.length ? `Patente\u00a0${route.licenseCategories.join(", ")}` : "Tutte le patenti",
     `${km(route.lengthMeters)}\u00a0km`,
@@ -197,6 +264,123 @@ function Row({
         <span className="line-clamp-2 block text-[13px] leading-[1.4] text-[#6a6a6a]">{meta}</span>
       </div>
       <div className="flex shrink-0 gap-1.5">{children}</div>
+    </div>
+  );
+}
+
+const MONTHS = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
+function dayLabel(iso: string) {
+  const d = new Date(iso);
+  if (d.toDateString() === new Date().toDateString()) return "oggi";
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+function initials(name: string) {
+  const words = name.replace(/^(ing|dott|dr|sig|arch|geom)\.?\s+/i, "").split(/\s+/).filter(Boolean);
+  return (words.slice(0, 2).map((w) => w[0]!.toUpperCase()).join("") || name.slice(0, 2)).toUpperCase();
+}
+
+/**
+ * R4: il titolare assegna gli esaminatori a un percorso che non li ha (i
+ * percorsi disegnati, o registrati con un esame senza esaminatori scritti).
+ * Nomi liberi come sull'esame (REG-640) più quelli già usati.
+ */
+function AssignExaminers({
+  route,
+  known,
+  onClose,
+  onSaved,
+}: {
+  route: RoadExamRoute;
+  known: string[];
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const toast = useFeedbackToast();
+  const ref = React.useRef<HTMLDivElement>(null);
+  const [picked, setPicked] = React.useState<string[]>(route.examiners ?? []);
+  const [typed, setTyped] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  React.useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+  const toggle = (n: string) => setPicked((cur) => (cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]));
+  const save = async () => {
+    const names = [...picked, ...(typed.trim() ? [typed.trim()] : [])];
+    if (!names.length || saving) return;
+    setSaving(true);
+    try {
+      await roadApi.updateExamRoute(route.id, { examiners: names });
+      await onSaved();
+    } catch (e) {
+      toast.error({ description: e instanceof Error ? e.message : "Esaminatori non salvati." });
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label="Esaminatori del percorso"
+      className="er-pop absolute right-0 top-[40px] z-20 w-[320px] rounded-[18px] bg-white p-4 text-left shadow-[0_0_0_1px_rgba(17,17,17,0.06),0_24px_48px_-12px_rgba(17,17,17,0.28)]"
+      data-testid="road-exam-assign-panel"
+    >
+      <style>{`.er-pop{animation:er-pop-in 200ms ${EASE} backwards}@keyframes er-pop-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}`}</style>
+      <b className="block text-[15.5px] font-semibold text-[#111111]">Esaminatori del percorso</b>
+      <span className="block truncate text-[13px] text-[#6a6a6a]">{route.name}</span>
+      <input
+        value={typed}
+        onChange={(e) => setTyped(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && void save()}
+        maxLength={80}
+        placeholder="Scrivi un nome…"
+        className="mt-3 h-[42px] w-full rounded-xl border border-[#dcdcdc] px-3 text-[14px] text-[#111111] outline-none transition-colors duration-200 placeholder:text-[#9a9a9a] focus:border-[#111111]"
+      />
+      {known.length ? (
+        <>
+          <span className="mt-3 block text-[12.5px] font-semibold text-[#6a6a6a]">Già usati</span>
+          <div className="mt-1">
+            {known.map((n, i) => {
+              const on = picked.includes(n);
+              return (
+                <label
+                  key={n}
+                  className={cn("flex cursor-pointer items-center gap-2.5 py-2.5 text-[14.5px] text-[#222222]", i > 0 && "border-t border-[#f0f0f0]")}
+                >
+                  <input type="checkbox" checked={on} onChange={() => toggle(n)} className="size-[18px] cursor-pointer accent-[#111111]" />
+                  {n}
+                </label>
+              );
+            })}
+          </div>
+        </>
+      ) : null}
+      <div className="mt-3 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="h-[34px] cursor-pointer rounded-[17px] px-3.5 text-[13.5px] font-semibold text-[#111111] shadow-[0_0_0_1px_#e3e3e3] transition-colors duration-200 hover:bg-[#f6f6f6]"
+        >
+          Annulla
+        </button>
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={saving || (!picked.length && !typed.trim())}
+          className="flex h-[34px] min-w-[64px] cursor-pointer items-center justify-center rounded-[17px] bg-[#111111] px-3.5 text-[13.5px] font-semibold text-white transition-colors duration-200 hover:bg-[#2a2a2a] disabled:cursor-default disabled:opacity-50"
+        >
+          {saving ? <LoadingDots /> : "Salva"}
+        </button>
+      </div>
     </div>
   );
 }
