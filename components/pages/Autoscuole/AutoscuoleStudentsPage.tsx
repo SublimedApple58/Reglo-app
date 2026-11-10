@@ -494,6 +494,72 @@ const formatPathDate = (iso: string): string => {
   return d.toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
 };
 
+const EXAM_WEEKDAYS = ["Domenica", "Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato"];
+const EXAM_MONTHS = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
+
+/**
+ * R6 (Road novembre): l'esame di guida prenotato in cima al riepilogo
+ * dell'allievo, nel viola della card esame dell'agenda (`#F5F0FF`).
+ * Un esame senza orario (REG-604) ha `endsAt` null: niente ora.
+ */
+function NextExamCard({
+  exam,
+  onOpenAgenda,
+}: {
+  exam: NonNullable<StudentRegister["nextExam"]>;
+  onOpenAgenda: () => void;
+}) {
+  const d = new Date(exam.startsAt);
+  const now = new Date();
+  const dayMs = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((dayMs(d) - dayMs(now)) / 86_400_000);
+  const countdown = days <= 0 ? "oggi" : days === 1 ? "domani" : `tra ${days} giorni`;
+  const year = d.getFullYear() !== now.getFullYear() ? ` ${d.getFullYear()}` : "";
+  const day = `${EXAM_WEEKDAYS[d.getDay()]} ${d.getDate()} ${EXAM_MONTHS[d.getMonth()]}${year}`;
+  const time = exam.endsAt
+    ? `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+    : null;
+  const rows = [
+    exam.place ? ["Luogo", exam.place] : null,
+    exam.examiners.length ? [exam.examiners.length === 1 ? "Esaminatore" : "Esaminatori", exam.examiners.join(", ")] : null,
+    exam.instructorName ? ["Istruttore", exam.instructorName] : null,
+  ].filter((r): r is string[] => r !== null);
+  return (
+    <div
+      className="mt-1 flex items-start gap-4 rounded-2xl border border-[#E4D9FB] bg-[#F5F0FF] px-5 py-[18px] shadow-[0_8px_20px_-12px_rgba(139,92,246,0.35)]"
+      data-testid="student-next-exam"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/images/3d/esame-3d.png" alt="" width={48} height={48} className="shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[12.5px] font-semibold text-[#6D28D9]">Esame di guida · {countdown}</p>
+        <p className="mt-0.5 text-[19px] font-semibold tracking-[-0.3px] text-[#2E1065]">
+          {day}
+          {time ? `, ${time}` : ""}
+        </p>
+        {!time ? <p className="text-[13px] font-medium text-[#4C1D95]">Orario da definire</p> : null}
+        {rows.length ? (
+          <div className="mt-3 grid grid-cols-[auto_1fr] gap-x-[18px] gap-y-1.5 text-[13.5px]">
+            {rows.map(([label, value]) => (
+              <React.Fragment key={label}>
+                <span className="font-medium text-[#7C5BB8]">{label}</span>
+                <span className="font-medium text-[#2E1065]">{value}</span>
+              </React.Fragment>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        onClick={onOpenAgenda}
+        className="shrink-0 whitespace-nowrap text-[13px] font-semibold text-[#5B21B6] underline underline-offset-2 hover:text-[#4C1D95]"
+      >
+        Apri in agenda
+      </button>
+    </div>
+  );
+}
+
 type StudentRegister = {
   student: StudentProfile;
   bookingBlocked?: boolean;
@@ -511,6 +577,15 @@ type StudentRegister = {
   groupLessonsOptIn?: boolean;
   quizSeatGrantedAt?: string | null;
   theoryExamAt?: string | null;
+  /** R6 (Road novembre): prossimo esame di guida prenotato. */
+  nextExam?: {
+    appointmentId: string;
+    startsAt: string;
+    endsAt: string | null;
+    place: string | null;
+    examiners: string[];
+    instructorName: string | null;
+  } | null;
   activeCase: {
     id: string;
     status: string;
@@ -2762,10 +2837,24 @@ export function AutoscuoleStudentsPage({
   const renderPanelSummary = () => {
     if (!register) return null;
     const phaseBadge = PHASE_BADGES[register.studentPhase ?? "PRATICA"];
+    const nextExam = register.nextExam ?? null;
     return (
       <>
+        {/* R6 (Road novembre): esame prenotato in cima, nel viola dell'esame
+            dell'agenda (Tiziano 10/11/2026). */}
+        {nextExam ? (
+          <NextExamCard
+            exam={nextExam}
+            onOpenAgenda={() => {
+              const d = new Date(nextExam.startsAt);
+              const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+              roadRouter.push(`${roadPathname}?tab=agenda&date=${ymd}`);
+            }}
+          />
+        ) : null}
+
         {/* Anagrafica */}
-        <section className="border-b border-[#f2f2f2] pb-7">
+        <section className={cn("border-b border-[#f2f2f2] pb-7", nextExam && "pt-7")}>
           <p className={sectionLabelClass}>Anagrafica</p>
           <div className="grid grid-cols-2 gap-x-6 gap-y-3.5">
             <div>

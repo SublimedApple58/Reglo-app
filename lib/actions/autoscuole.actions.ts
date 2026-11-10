@@ -2668,6 +2668,9 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
           notes: true,
           createdAt: true,
           groupLessonId: true,
+          // R6 (Road novembre): esame prenotato in cima alla scheda.
+          examiners: true,
+          location: { select: { name: true } },
           instructor: { select: { name: true } },
           vehicle: { select: { name: true } },
           // Pagellino (REG-443): serve allo storico guide per mostrare tutte le
@@ -2801,6 +2804,32 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
         quizSeatGrantedAt: studentMembership.quizSeatGrantedAt
           ? studentMembership.quizSeatGrantedAt.toISOString()
           : null,
+        // R6 (Road novembre): il prossimo esame di guida prenotato (riga
+        // `type: esame` non annullata e non ancora finita). Un esame senza
+        // orario (REG-604) ha startsAt a mezzanotte ed endsAt null: vale
+        // fino a fine giornata.
+        nextExam: (() => {
+          const now = Date.now();
+          const next = lessons
+            .filter(
+              (l) =>
+                l.type === "esame" &&
+                l.status !== "cancelled" &&
+                !l.cancelledAt &&
+                (l.endsAt ? l.endsAt.getTime() : l.startsAt.getTime() + 24 * 60 * 60 * 1000) > now,
+            )
+            .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())[0];
+          return next
+            ? {
+                appointmentId: next.id,
+                startsAt: next.startsAt.toISOString(),
+                endsAt: next.endsAt ? next.endsAt.toISOString() : null,
+                place: next.location?.name ?? null,
+                examiners: next.examiners ?? [],
+                instructorName: next.instructor?.name ?? null,
+              }
+            : null;
+        })(),
         theoryExamAt: latestCaseTheoryExamAt
           ? latestCaseTheoryExamAt.toISOString()
           : null,

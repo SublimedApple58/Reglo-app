@@ -45,3 +45,9 @@ Auto-clear: `updateStudentPhase` azzera `examReady/At/By` quando l'allievo esce 
 - **Exam creation** (`AutoscuoleAgendaPage` web, `exam/route.ts`) — la creazione esame NON è vincolata dal flag.
 - **Mobile** — vedi `reglo-mobile/docs/features/exam-ready.md`. Contratto: `examReady`/`examReadyAt`/`studentPhase` su `AutoscuolaStudent` e nell'array `students` di `getInstructorSettings`.
 - **Notifiche** ([notifications.md](notifications.md)) — il nudge titolare `exam_ready_nudge` riusa `sendAutoscuolaPushToUsers` + il recovery endpoint; mobile lo gestisce in `NotificationOverlay` (handler owner) + `NotificationInboxScreen`.
+
+## Esame prenotato in cima alla scheda allievo (Road novembre R6, 10/11/2026)
+
+- `getAutoscuolaStudentDrivingRegister` restituisce `nextExam` (`{ appointmentId, startsAt, endsAt, place, examiners, instructorName }`): la prima riga `type: "esame"` dell'allievo non annullata e non ancora finita (senza orario = vale fino a fine giornata, REG-604). Alla select delle guide si aggiungono `examiners` e `location.name`.
+- `AutoscuoleStudentsPage` › `NextExamCard`: card nel **viola dell'esame dell'agenda** (`#F5F0FF`, bordo `#E4D9FB`, testi `#6D28D9`/`#2E1065`) in testa al Riepilogo, prima di «Anagrafica»; icona `public/images/3d/esame-3d.png` (la stessa dell'app, `assets/vita/esame@3x.png`); «Apri in agenda» → `?tab=agenda&date=YYYY-MM-DD`.
+- Stessa card nell'app (scheda allievo istruttore/titolare): `reglo-mobile/docs/features/dettaglio-allievo.md`.
