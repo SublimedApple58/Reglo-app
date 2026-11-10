@@ -1814,7 +1814,10 @@ async function roadTabExtras(
 
   const briefings = Object.fromEntries(await loadBriefings(ctx.companyId, suggestions.map((s) => s.id)));
 
-  // Ultima guida da chiudere: mia, finita da poco, pagellino acceso e incompleto.
+  // Ultima guida da chiudere: mia, finita da poco, pagellino acceso e ancora
+  // vuoto. Road novembre (R1): basta UNA voce votata per considerarlo chiuso —
+  // le voci non toccate restano «non valutate» di proposito (REG-727), quindi
+  // «tutte le voci» lo faceva richiedere di nuovo alla guida dopo.
   let toClose = null;
   const last = mySessions[0];
   if (
@@ -1829,7 +1832,7 @@ async function roadTabExtras(
         where: { appointmentId: last.appointmentId, OR: [{ score: { not: null } }, { notApplicable: true }] },
       }),
     ]);
-    if (total > 0 && scored < total) {
+    if (total > 0 && scored === 0) {
       toClose = { sessionId: last.id, appointmentId: last.appointmentId, evalTotal: total, evalDone: scored };
     }
   }
