@@ -62,4 +62,10 @@ Anteprime: `/tmp/hiro-anteprime/road-novembre/` — ogni parte di UI passa prima
 - `PUT /road/sessions/[id]/plan` per caricare un percorso d'esame a guida in corso (tappa `source:"exam"`, copertura via `planReached`).
 
 ## Avanzamento
-- [ ] R1 · [ ] R6 · [ ] R5 · [ ] R2 · [ ] R3 · [ ] R7 · [ ] R4a · [ ] R4b · [ ] R4c
+- [x] R1 — verificato sul simulatore contro DB staging (web 3d4b0ae, mobile 6208dd1)
+- [x] R6 — viola dell'esame, app A + web approvati (mobile fef61c6, web de78a26)
+- [x] R5 — scheda completa dentro Road, fogli registrati in /road + `studentSheetHref`, `dayOnly` (mobile abf7e86) — da verificare sul simulatore
+- [x] R2 — variante B oro tenue; backend `previous`, livello web/mobile (web c2ae72d, mobile b775437) — da verificare sul simulatore
+- [~] R3 — backend + coda offline fatti (web ddfbabc, mobile 6294d7a); grafica in attesa di anteprime
+- [~] R7 — migrazione `20261113090000_road_marker_zone` (NON applicata), backend + tipi fatti; grafica in attesa di anteprime
+- [ ] R4a · [ ] R4b · [ ] R4c
