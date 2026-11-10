@@ -2848,6 +2848,11 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
       });
     }
     let bookingBlocked = blockState ? isBookingBlockActive(blockState) : false;
+    // Per la home allievo: perché è bloccato e, se per debito, quante guide.
+    let bookingBlockReason: "manual" | "unpaid_threshold" | null = bookingBlocked
+      ? ((blockState?.bookingBlockReason as "manual" | "unpaid_threshold" | null) ?? "manual")
+      : null;
+    let unpaidLessonCount: number | null = null;
     if (blockState) {
       const autoBlockSettings = readAutoBlockSettings(limits);
       if (autoBlockSettings.enabled) {
@@ -2873,6 +2878,10 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
           settings: autoBlockSettings,
         });
         bookingBlocked = reconciled.bookingBlocked;
+        bookingBlockReason = reconciled.bookingBlocked
+          ? (reconciled.bookingBlockReason as "manual" | "unpaid_threshold" | null) ?? "manual"
+          : null;
+        unpaidLessonCount = unpaidCount;
       }
     }
     const policy = parseLessonPolicyFromLimits(limits);
@@ -3032,6 +3041,9 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
         examPriority: examPriorityInfo,
         blockedByExamPriority,
         bookingBlocked,
+        bookingBlockReason,
+        // Solo con il blocco automatico per debito acceso (altrimenti null).
+        unpaidLessonCount,
         // Prenotazione «solo eccezioni»: l'app NON decide da sola, mostra
         // questo. `mode` open/exceptions/closed; `hold` = motivo per cui ora non
         // può prenotare niente; `lastMinuteUntil` = fine della finestra «ultimo
