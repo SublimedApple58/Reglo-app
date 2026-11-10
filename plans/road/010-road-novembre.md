@@ -66,6 +66,10 @@ Anteprime: `/tmp/hiro-anteprime/road-novembre/` — ogni parte di UI passa prima
 - [x] R6 — viola dell'esame, app A + web approvati (mobile fef61c6, web de78a26)
 - [x] R5 — scheda completa dentro Road, fogli registrati in /road + `studentSheetHref`, `dayOnly` (mobile abf7e86) — verificato sul simulatore contro staging il 10/11 (scheda, Pagamenti, Impostazioni, Road allievo, percorso, mappa, dettagli guida; guida sotto continua)
 - [x] R2 — variante B oro tenue; backend `previous`, livello web/mobile (web c2ae72d, mobile b775437) — verificato sul simulatore il 10/11 (oro tenue, sovrascrittura «Prima era», salvata solo la voce votata, livello «oggi»); vista allievo non provata (gate cellulare)
-- [~] R3 — backend + coda offline fatti (web ddfbabc, mobile 6294d7a); grafica: anteprime r3-pin.png + r3-r7-web.png inviate 10/11, in attesa di ok
-- [~] R7 — migrazione `20261113090000_road_marker_zone` (NON applicata), backend + tipi fatti; anteprime r7-zona.png + r3-r7-web.png inviate 10/11, in attesa di ok
+- [x] R3 — approvato 10/11; mobile 0d663f7 (foglio «Segnalazione», mirino «Sposta»), web ddd4c8e (pannello nel dettaglio guida). Manca solo «Dove» (arriva con R7). Da verificare sul simulatore.
+- [~] R7 — Tiziano 10/11: NON il cerchio ma un TRATTO della strada percorsa, centrato sul punto, 50/100/200 m. Proposta di modello (anteprime r7-tratto-app/web inviate):
+  - `RoadMarker.extentM Int?` (50|100|200, null = punto) al posto di `shape`/`radiusM` (migrazione R7 da riscrivere, mai applicata);
+  - `RoadMarker.extent Json?` = polilinea del tratto, ricavata dalla traccia della guida: ancora = punto della traccia più vicino NEL TEMPO a `recordedAt` (una strada fatta due volte non confonde); spostata a mano = punto della traccia più vicino nello spazio entro 30 m, altrimenti resta un punto;
+  - dal vivo il telefono la disegna dalla sua traccia (la metà davanti si allunga mentre si guida); il server la salva a fine guida con la traccia pulita e la ricalcola se si cambia lunghezza o posizione;
+  - punti critici: contano il centro (lat/lng) come oggi; nel dettaglio del punto critico si vedono i tratti di ogni guida.
 - [~] R4a · [~] R4b · [~] R4c — backend fatto (web 7e5a7ab, migrazione `20261114090000_road_exam` NON applicata); anteprime r4-app-esame, r4-app-percorsi, r4-web-percorsi inviate 10/11, in attesa di ok. Il percorso nasce solo con «Termina registrazione»: una sessione d'esame chiusa dal job come abbandonata non lo crea (job Trigger non toccato).
