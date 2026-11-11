@@ -13,8 +13,11 @@ import {
  * Nessun accesso al DB: `lesson-plan-service.ts` carica i dati e chiama qui.
  *
  * - Punti critici dell'allievo: i SUOI errori ripetuti (stesso tipo entro
- *   ~60 m, in almeno 2 guide diverse). Servono alla tappa 1 e alla mappa in
- *   Road (REG-652); mai quelli dell'autoscuola.
+ *   ~60 m, o entro ~25 m dal tratto di una zona, in almeno 2 guide diverse).
+ *   Servono alla tappa 1 e alla mappa in Road (REG-652); mai quelli
+ *   dell'autoscuola. In guida (`computeLessonPlan`) arrivano anche TUTTI gli
+ *   errori dell'ultima guida con l'allievo, pure se segnati una volta
+ *   (`repeated: false`): si vedono e avvisano, ma non diventano tappe.
  * - Tappe (max 3), per priorità: 1) punti critici dell'allievo; 2) punto
  *   critico dell'autoscuola per il suo errore più frequente; 3) percorso
  *   d'esame meno coperto dalle sue guide.
@@ -34,6 +37,8 @@ export const PLAN_SPEED_KMH = 25;
 export const PLAN_STOP_MINUTES = 5;
 /** Un punto dell'allievo è «ripetuto» se torna in almeno tante guide. */
 export const STUDENT_HOTSPOT_MIN_SESSIONS = 2;
+/** Una segnalazione entro tanti metri dal tratto di una zona dello stesso tipo è lo stesso punto. */
+export const STUDENT_HOTSPOT_ZONE_M = 25;
 /** Un tratto di percorso d'esame è «fatto» se una guida ci è passata entro tanti metri. */
 export const COVERAGE_RADIUS_M = 30;
 /** Passo di campionamento del percorso per la copertura. */
@@ -83,6 +88,13 @@ export type StudentHotspot = {
   checks: { better: number; worse: number };
   lastCheck: { outcome: HotspotCheckOutcome; at: string } | null;
   status: HotspotStatus;
+  /** Ripetuto in almeno 2 guide (false = solo dall'ultima guida: niente tappa). */
+  repeated: boolean;
+  /** Ci sono segnalazioni dell'ultima guida con l'allievo (sempre false fuori dalla guida). */
+  lastGuide: boolean;
+  /** Zona: lunghezza e tratto della zona più recente del punto (null = punto). */
+  extentM: number | null;
+  extent: Array<[number, number]> | null;
 };
 
 function mostFrequent(values: Array<string | null>): string | null {
@@ -131,10 +143,19 @@ export function assignChecks<P extends { kind: string; lat: number; lng: number 
 /**
  * Le segnalazioni «da migliorare» di UN allievo → i suoi punti ripetuti, i più
  * frequenti prima. `checks` (REG-677, facoltativi) = i suoi ripassi «Meglio / No».
+ * `lastSessionId` (solo per la guida): tiene anche i punti con almeno una
+ * segnalazione di quella guida, pure se segnati una volta sola.
  */
-export function buildStudentHotspots(markers: HotspotMarker[], checks: HotspotCheck[] = []): StudentHotspot[] {
-  const clusters = clusterMarkers(markers).filter(
-    (c) => new Set(c.markers.map((m) => m.sessionId)).size >= STUDENT_HOTSPOT_MIN_SESSIONS,
+export function buildStudentHotspots(
+  markers: HotspotMarker[],
+  checks: HotspotCheck[] = [],
+  opts: { lastSessionId?: string | null } = {},
+): StudentHotspot[] {
+  const lastSession = opts.lastSessionId ?? null;
+  const clusters = clusterMarkers(markers, HOTSPOT_RADIUS_M, { zoneM: STUDENT_HOTSPOT_ZONE_M }).filter(
+    (c) =>
+      new Set(c.markers.map((m) => m.sessionId)).size >= STUDENT_HOTSPOT_MIN_SESSIONS ||
+      (lastSession != null && c.markers.some((m) => m.sessionId === lastSession)),
   );
   const byCluster = assignChecks(clusters, checks);
   const out: StudentHotspot[] = [];
@@ -147,6 +168,8 @@ export function buildStudentHotspots(markers: HotspotMarker[], checks: HotspotCh
     // `clusterMarkers` tiene le segnalazioni in ordine di tempo: la nota più recente è in fondo.
     let note: string | null = null;
     for (let i = c.markers.length - 1; i >= 0 && !note; i--) note = c.markers[i].note?.trim() || null;
+    let zone: HotspotMarker | null = null;
+    for (let i = c.markers.length - 1; i >= 0 && !zone; i--) if (c.markers[i].extentM) zone = c.markers[i];
     out.push({
       key: hotspotKey(c.kind, c.lat, c.lng),
       kind: c.kind,
@@ -167,6 +190,10 @@ export function buildStudentHotspots(markers: HotspotMarker[], checks: HotspotCh
         ...c.markers.map((m) => ({ at: m.recordedAt.getTime(), type: "error" as const })),
         ...mine.map((k) => ({ at: k.recordedAt.getTime(), type: k.outcome === "better" ? ("better" as const) : ("error" as const) })),
       ]),
+      repeated: sessions >= STUDENT_HOTSPOT_MIN_SESSIONS,
+      lastGuide: lastSession != null && c.markers.some((m) => m.sessionId === lastSession),
+      extentM: zone?.extentM ?? null,
+      extent: zone?.extent?.length ? zone.extent : null,
     });
   }
   return out.sort((a, b) => b.errors - a.errors || b.sessions - a.sessions || b.lastAt.localeCompare(a.lastAt));
@@ -367,14 +394,16 @@ function examCandidate(r: PlanExamRoute): Candidate {
 
 /** Le candidate in ordine di priorità (la prima è la più importante). */
 export function planCandidates(input: LessonPlanInput): Candidate[] {
+  // Solo i punti ripetuti fanno il giro (quelli della sola ultima guida si vedono in Road, niente tappa).
+  const repeated = input.studentHotspots.filter((h) => h.repeated !== false);
   // REG-677: un punto superato (due «Meglio» di fila) non è più una tappa.
-  const student = input.studentHotspots.filter((h) => h.status !== "overcome").map(studentCandidate);
+  const student = repeated.filter((h) => h.status !== "overcome").map(studentCandidate);
 
   let school: Candidate | null = null;
   for (const kind of input.studentKinds) {
     const h = input.schoolHotspots
       // Anche un punto superato dell'allievo esclude quello dell'autoscuola lì: non lo si ripropone da un'altra parte.
-      .filter((x) => x.kind === kind && !input.studentHotspots.some((s) => s.kind === kind && near(s, x)))
+      .filter((x) => x.kind === kind && !repeated.some((s) => s.kind === kind && near(s, x)))
       .sort((a, b) => b.errors - a.errors || b.students - a.students)[0];
     if (h) {
       school = schoolCandidate(h);

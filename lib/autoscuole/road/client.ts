@@ -101,6 +101,9 @@ export type RoadStudentHotspot = {
   note: string | null;
   checks: { better: number; worse: number };
   status: string;
+  /** Zona: lunghezza e tratto (null = punto). */
+  extentM?: number | null;
+  extent?: Array<[number, number]> | null;
 };
 
 export type RoadStudentRoad = { items: RoadStudentItem[]; hotspots?: RoadStudentHotspot[] };

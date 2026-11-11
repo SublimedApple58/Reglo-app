@@ -33,7 +33,13 @@ export type HotspotMarker = {
   recordedAt: Date;
   /** REG-677: la nota dell'istruttore (letta solo per i punti dell'allievo). */
   note?: string | null;
-  /** Road novembre R7: il tratto della segnalazione «zona» (solo per il disegno; il conteggio usa lat/lng). */
+  /** Road novembre R7: lunghezza della «zona» (50 | 100 | 200), null = punto. */
+  extentM?: number | null;
+  /**
+   * Road novembre R7: il tratto della segnalazione «zona». Il centro del gruppo
+   * usa lat/lng; per i punti dell'allievo il tratto serve anche a raggruppare
+   * (`clusterMarkers` con `zoneM`) e arriva fino alla guida.
+   */
   extent?: Array<[number, number]> | null;
 };
 
@@ -56,6 +62,16 @@ export type Hotspot = {
 
 type Cluster = { kind: string; lat: number; lng: number; markers: HotspotMarker[] };
 
+/** Distanza fra una segnalazione e un gruppo che ha (o porta) un tratto: punto↔tratto, nei due sensi. */
+function zoneGapMeters(c: Cluster, m: HotspotMarker): number {
+  let best = Infinity;
+  for (const o of c.markers) {
+    if (o.extent?.length) best = Math.min(best, distanceToPathMeters(m.lat, m.lng, o.extent));
+    if (m.extent?.length) best = Math.min(best, distanceToPathMeters(o.lat, o.lng, m.extent));
+  }
+  return best;
+}
+
 export const hotspotKey = (kind: string, lat: number, lng: number) =>
   `${kind}~${lat.toFixed(4)}~${lng.toFixed(4)}`;
 
@@ -72,8 +88,18 @@ export function parseHotspotKey(key: string): { kind: string; lat: number; lng: 
  * Raggruppamento goloso e deterministico: segnalazioni in ordine di tempo (poi
  * id), ognuna va nel gruppo dello stesso tipo col centro più vicino entro il
  * raggio, altrimenti ne apre uno nuovo; il centro è la media dei punti.
+ *
+ * `zoneM` (punti dell'allievo, fix road-fix-allievo): le zone si raggruppano
+ * anche sul tratto — una segnalazione entro `zoneM` dal tratto di una zona del
+ * gruppo (o una zona il cui tratto passa entro `zoneM` da un punto del gruppo)
+ * ci entra anche se i centri sono più lontani del raggio. Due zone da 200 m
+ * sulla stessa strada, segnate in punti diversi, sono lo stesso errore.
  */
-export function clusterMarkers(markers: HotspotMarker[], radiusM = HOTSPOT_RADIUS_M): Cluster[] {
+export function clusterMarkers(
+  markers: HotspotMarker[],
+  radiusM = HOTSPOT_RADIUS_M,
+  opts: { zoneM?: number } = {},
+): Cluster[] {
   const sorted = [...markers].sort(
     (a, b) => a.recordedAt.getTime() - b.recordedAt.getTime() || a.id.localeCompare(b.id),
   );
@@ -88,6 +114,15 @@ export function clusterMarkers(markers: HotspotMarker[], radiusM = HOTSPOT_RADIU
       if (d <= radiusM && d < bestD) {
         best = c;
         bestD = d;
+      }
+    }
+    if (!best && opts.zoneM != null) {
+      for (const c of list) {
+        const d = zoneGapMeters(c, m);
+        if (d <= opts.zoneM && d < bestD) {
+          best = c;
+          bestD = d;
+        }
       }
     }
     if (best) {

@@ -10,6 +10,7 @@ import type { LatLng } from "@/lib/autoscuole/road/exam-routes";
 import type { RoadPoint } from "@/lib/autoscuole/road/geo";
 import type { HotspotMarker } from "@/lib/autoscuole/road/hotspots";
 import { companyHotspots } from "@/lib/autoscuole/road/hotspots-service";
+import { storedExtent } from "@/lib/autoscuole/road/marker-extent";
 import {
   buildLessonPlan,
   buildStudentHotspots,
@@ -56,10 +57,29 @@ async function loadStudentMarkers(companyId: string, studentId: string, now: Dat
       lat: true,
       lng: true,
       street: true,
+      extentM: true,
+      extent: true,
       recordedAt: true,
     },
   });
-  return rows.map((r) => ({ ...r, studentId }));
+  return rows.map(({ extent, ...r }) => ({
+    ...r,
+    studentId,
+    extent: r.extentM ? storedExtent(extent) : null,
+  }));
+}
+
+/**
+ * L'ultima guida dell'allievo già chiusa (quella in corso no): in guida se ne
+ * vedono tutti gli errori, anche quelli segnati una volta sola.
+ */
+async function loadLastSessionId(companyId: string, studentId: string, now: Date): Promise<string | null> {
+  const row = await prisma.roadSession.findFirst({
+    where: { companyId, studentId, status: { not: "active" }, startedAt: { gte: retentionStart(now) } },
+    orderBy: { startedAt: "desc" },
+    select: { id: true },
+  });
+  return row?.id ?? null;
 }
 
 /** REG-677: i ripassi «Meglio / No» dell'allievo sui suoi punti (stessa conservazione delle segnalazioni). */
@@ -153,13 +173,14 @@ export async function computeLessonPlan(input: {
   now?: Date;
 }): Promise<LessonPlanResult> {
   const now = input.now ?? new Date();
-  const [markers, checks, schoolHotspots, examRoutes] = await Promise.all([
+  const [markers, checks, schoolHotspots, examRoutes, lastSessionId] = await Promise.all([
     loadStudentMarkers(input.companyId, input.studentId, now),
     loadStudentChecks(input.companyId, input.studentId, now),
     companyHotspots(input.companyId),
     loadExamRoutesWithCoverage(input.companyId, input.studentId, now),
+    loadLastSessionId(input.companyId, input.studentId, now),
   ]);
-  const studentHotspots = buildStudentHotspots(markers, checks);
+  const studentHotspots = buildStudentHotspots(markers, checks, { lastSessionId });
   const plan = buildLessonPlan({
     durationMin: input.durationMin,
     start: input.start,

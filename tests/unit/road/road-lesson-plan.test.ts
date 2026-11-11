@@ -32,6 +32,8 @@ function m(over: Partial<HotspotMarker> & { dLat?: number; session?: string }): 
     street: over.street === undefined ? "Via Roma" : over.street,
     recordedAt: over.recordedAt ?? new Date(Date.UTC(2026, 9, 1, 10, 0, seq)),
     note: over.note ?? null,
+    extentM: over.extentM ?? null,
+    extent: over.extent ?? null,
   };
 }
 
@@ -49,6 +51,10 @@ const sh = (over: Partial<StudentHotspot> & { dLat?: number }): StudentHotspot =
   checks: { better: 0, worse: 0 },
   lastCheck: null,
   status: "open",
+  repeated: true,
+  lastGuide: false,
+  extentM: null,
+  extent: null,
   ...over,
 });
 
@@ -104,6 +110,50 @@ describe("Reglo Road — giro: punti critici dell'allievo", () => {
     ]);
     expect(hs).toHaveLength(1);
     expect(hs[0]).toMatchObject({ kind: "precedenza", errors: 2, sessions: 2 });
+  });
+
+  it("in guida tiene anche tutti gli errori dell'ultima guida, pure se segnati una volta", () => {
+    const markers = [
+      m({ session: "s1" }),
+      m({ session: "s2", dLat: 0.0003 }), // ripetuto in 2 guide
+      m({ session: "s3", dLat: 0.01, kind: "stop", label: "Stop" }), // una volta, nell'ultima guida
+      m({ session: "s1", dLat: 0.02, kind: "rotonda", label: "Rotonda" }), // una volta, guida vecchia
+    ];
+    // Fuori dalla guida (scheda allievo): solo i ripetuti.
+    expect(buildStudentHotspots(markers).map((h) => h.kind)).toEqual(["precedenza"]);
+    const hs = buildStudentHotspots(markers, [], { lastSessionId: "s3" });
+    expect(hs.map((h) => h.kind)).toEqual(["precedenza", "stop"]);
+    expect(hs[0]).toMatchObject({ repeated: true, lastGuide: false });
+    expect(hs[1]).toMatchObject({ repeated: false, lastGuide: true, errors: 1, sessions: 1 });
+  });
+
+  it("le zone si raggruppano sul tratto (~25 m), anche con i centri lontani", () => {
+    // Zona da 200 m lungo la stessa via (nord-sud), centro in BASE.
+    const tratto: Array<[number, number]> = [
+      [BASE.lat - 0.0009, BASE.lng],
+      [BASE.lat + 0.0009, BASE.lng],
+    ];
+    const zona = m({ session: "s1", extentM: 200, extent: tratto });
+    // Seconda guida: punto a ~78 m dal centro (oltre i 60 m) ma sul tratto.
+    const sulTratto = m({ session: "s2", dLat: 0.0007 });
+    const hs = buildStudentHotspots([zona, sulTratto]);
+    expect(hs).toHaveLength(1);
+    expect(hs[0]).toMatchObject({ errors: 2, sessions: 2, extentM: 200, extent: tratto });
+    // A ~40 m di lato dal tratto (e a ~95 m dal centro) resta un altro punto.
+    const fuori = m({ session: "s2", dLat: 0.0008, lng: BASE.lng + 0.0005 });
+    expect(buildStudentHotspots([zona, fuori])).toEqual([]);
+    // Un punto senza zone: extent null.
+    expect(buildStudentHotspots([m({ session: "s1" }), m({ session: "s2" })])[0]).toMatchObject({ extentM: null, extent: null });
+  });
+
+  it("i punti della sola ultima guida non diventano tappe del giro", () => {
+    const c = planCandidates(
+      input({
+        studentHotspots: [sh({ key: "nuovo", repeated: false, lastGuide: true }), sh({ key: "ripetuto", dLat: 0.01 })],
+        studentKinds: ["precedenza"],
+      }),
+    );
+    expect(c.filter((x) => x.source === "student").map((x) => x.key)).toEqual(["ripetuto"]);
   });
 
   it("tipi di errore dal più frequente", () => {
