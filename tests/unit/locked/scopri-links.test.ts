@@ -22,16 +22,11 @@ const lockedSources = fs
   .filter((name) => name.endsWith(".tsx"))
   .map((name) => ({ name, code: read(path.join(LOCKED_DIR, name)) }));
 
-const teaser = {
-  name: "AutoscuoleRinnoviTeaser.tsx",
-  code: read(path.join(ROOT, "components/pages/Autoscuole/AutoscuoleRinnoviTeaser.tsx")),
-};
-
 const features = read(path.join(LOCKED_DIR, "locked-features.tsx"));
 
 describe("destinazioni dei link del sito", () => {
   it("nessun cartello punta più alla homepage nuda", () => {
-    for (const { name, code } of [...lockedSources, teaser]) {
+    for (const { name, code } of lockedSources) {
       expect({ name, hit: /href="https:\/\/reglo\.it"/.test(code) }).toEqual({
         name,
         hit: false,
@@ -51,7 +46,7 @@ describe("destinazioni dei link del sito", () => {
 
   it("le pagine del sito usano tutte il dominio canonico con www", () => {
     const urls = [...features.matchAll(/`\$\{SITO\}(\/[a-z-]+)`/g)].map((m) => m[1]);
-    expect(urls.length).toBeGreaterThanOrEqual(6);
+    expect(urls.length).toBeGreaterThanOrEqual(5);
     expect(features).toContain('const SITO = "https://www.reglo.it"');
   });
 

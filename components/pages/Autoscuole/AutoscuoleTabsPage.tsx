@@ -16,7 +16,6 @@ import {
 import { LockedSection, LOCKED_SECTIONS } from "./locked/LockedSection";
 import { AffiliateAgendaPage } from "./locked/AffiliateAgendaPage";
 import { AllieviLockedCard } from "./locked/SectionLockedCards";
-import { AutoscuoleRinnoviTeaser } from "./AutoscuoleRinnoviTeaser";
 
 const AutoscuoleStudentsPage = dynamic(
   () =>
@@ -63,13 +62,13 @@ const ConsorzioBillingPage = dynamic(
 
 // Redesign 2026-07: la Dashboard è stata ritirata — l'Agenda è la landing
 // (nessun ?tab). Configurazione/Pagamenti vivono nel menu hamburger della
-// shell; "rinnovi" è il teaser della feature in arrivo.
+// shell. Il tab "Rinnovi" (teaser) è stato tolto: ?tab=rinnovi dei vecchi
+// link torna all'Agenda.
 type AutoscuoleTabKey =
   | "students"
   | "agenda"
   | "settings"
   | "payments"
-  | "rinnovi"
   | "scuole"
   | "fatturazione";
 
@@ -78,15 +77,14 @@ const TAB_KEYS: AutoscuoleTabKey[] = [
   "agenda",
   "settings",
   "payments",
-  "rinnovi",
   "scuole",
   "fatturazione",
 ];
 
 // Tab esclusive di una modalità: "scuole"/"fatturazione" esistono solo per il
-// consorzio; allievi/segretaria/rinnovi non esistono per il consorzio.
+// consorzio; allievi/segretaria non esistono per il consorzio.
 const CONSORTIUM_ONLY_TABS: AutoscuoleTabKey[] = ["scuole", "fatturazione"];
-const AUTOSCUOLA_ONLY_TABS: AutoscuoleTabKey[] = ["students", "payments", "rinnovi"];
+const AUTOSCUOLA_ONLY_TABS: AutoscuoleTabKey[] = ["students", "payments"];
 
 function normalizeTab(value: string | null): AutoscuoleTabKey {
   if (!value) return "agenda";
@@ -131,6 +129,15 @@ export function AutoscuoleTabsPage() {
     setActiveTab(tab);
   }, [searchParams]);
 
+  // ?tab= sconosciuto (es. "rinnovi" da un vecchio link): pulisce l'URL così
+  // la nav evidenzia l'Agenda, che è quella mostrata.
+  React.useEffect(() => {
+    const raw = searchParams.get("tab");
+    if (raw && raw !== "disponibilita" && !(TAB_KEYS as string[]).includes(raw)) {
+      router.replace(`/${locale}/user/autoscuole`);
+    }
+  }, [searchParams, router, locale]);
+
   // La card degli Allievi si vede una volta per visita: dopo "Prova" si resta
   // sulle anagrafiche finché si cambia tab.
   const [allieviProvato, setAllieviProvato] = React.useState(false);
@@ -167,7 +174,6 @@ export function AutoscuoleTabsPage() {
       ],
       settings: [() => import("./AutoscuoleAgendaPage")],
       payments: [() => import("./AutoscuoleAgendaPage")],
-      rinnovi: [() => import("./AutoscuoleAgendaPage")],
       scuole: [() => import("./AutoscuoleAgendaPage")],
       fatturazione: [() => import("./AutoscuoleAgendaPage")],
     };
@@ -250,7 +256,6 @@ export function AutoscuoleTabsPage() {
       ) : null}
       {activeTab === "settings" ? <AutoscuoleResourcesPage tabs={null} /> : null}
       {activeTab === "payments" ? <AutoscuolePaymentsPage tabs={null} /> : null}
-      {activeTab === "rinnovi" ? <AutoscuoleRinnoviTeaser /> : null}
       {activeTab === "scuole" && consortium ? <ConsorzioSchoolsPage /> : null}
       {activeTab === "fatturazione" && consortium ? <ConsorzioBillingPage /> : null}
     </div>

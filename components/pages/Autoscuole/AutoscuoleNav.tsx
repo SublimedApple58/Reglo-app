@@ -22,7 +22,6 @@ const navItems = [
   // Reglo Road (REG-638): solo se il modulo è acceso dal backoffice.
   { label: "Road", tab: "road", icon: "/images/nav/road-3d.png" },
   { label: "Segretaria", tab: "voice", icon: "/images/nav/segretaria-3d.png" },
-  { label: "Rinnovi", tab: "rinnovi", icon: "/images/nav/rinnovi-3d.png" },
 ] as const;
 
 // Modalità consorzio: stessa shell, tab dedicate (l'agenda è identica).

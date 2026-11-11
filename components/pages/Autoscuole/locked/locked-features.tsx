@@ -44,7 +44,6 @@ export const SITE_URLS = {
   segretaria: `${SITO}/segretaria-virtuale`,
   istruttori: `${SITO}/istruttori`,
   novita: `${SITO}/novita`,
-  rinnovi: `${SITO}/rinnovi-automatici`,
 } as const;
 
 /**

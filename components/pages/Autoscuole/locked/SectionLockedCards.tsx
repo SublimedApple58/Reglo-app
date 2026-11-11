@@ -8,9 +8,6 @@
  * carattere** dal prototipo (`viewBox`, coordinate, colori, puntini grigi
  * lungo l'arco, posizione del sole). Se vanno ritoccati, si ritoccano lì e si
  * riestraggono: non si ridisegnano a occhio.
- *
- * Rinnovi non è qui: il teaser che l'app ha già è identico a quello del
- * prototipo, quindi resta com'è.
  */
 
 import { ATTIVA_REGLO_URL, SITE_URLS } from "./locked-features";
