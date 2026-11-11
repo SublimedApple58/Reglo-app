@@ -94,4 +94,5 @@
 | Environments (dev/staging/prod) + `APP_ENV` send kill-switch | [environments.md](architecture/environments.md) |
 | **Git flow & ambienti** (branch, `ship:staging`, rilascio prod) | [git-flow.md](architecture/git-flow.md) |
 | API Routes | [api-routes.md](architecture/api-routes.md) |
+| **Unire account doppi** (stesso allievo registrato due volte: spostare i dati e cancellare il doppione, procedura SQL su prod) | [merge-duplicate-accounts.md](architecture/merge-duplicate-accounts.md) |
 | **Performance Playbook** — diagnose & fix slow screens (DB indexing, Redis cache, call schema/batching, per-request overhead, mobile skeletons, TanStack Query, dev-mode) | [performance-playbook.md](architecture/performance-playbook.md) |
