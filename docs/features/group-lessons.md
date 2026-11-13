@@ -172,6 +172,7 @@ Follow-up UI di REG-419/420, **due comportamenti distinti** nella lista mobile "
 - **Student withdrawal**: YES. The student frees their seat → it's **re-broadcast** to eligible students. Instructor gets a push.
 - **Check-in**: none. The instructor may **remove** a participant any time — even close to the lesson and **even after** it happened — and the removal flows into late cancellations like a normal lesson.
 - **Payment (decision A)**: reuse the **same normal-lesson cancellation + late-cancellation logic** — early cancel = seat freed, no charge; late cancel / removal = stays "da pagare" and surfaces in the *cancellazioni tardive* inbox (owner charges/dismisses). The old "always zero the charge" behaviour of `removeGroupLessonParticipant` is gone.
+  - **L'addebito di una cancellazione tardiva su un posto di gruppo non usa mai crediti** (dal 2026-11-14): `applyLessonCreditToExistingAppointment` (`lib/autoscuole/payments.ts`) esclude `group_lesson` come gli esami. «Addebita» nell'inbox lascia quindi il posto «da pagare», anche con crediti attivi ma non obbligatori (es. Robatto), invece di scalare un credito all'allievo. Test: `tests/unit/autoscuole/apply-lesson-credit.test.ts`.
 
 ## Open items / decisions pending from product owner
 - Mobile instructor agenda (hour-grid + day-detail) collapses participants into one card per lesson and surfaces empty lessons via the shared bootstrap `gl-empty:` rows (counted as 0). Both `weeklyAgenda.ts` and `IstruttoreHomeScreen` `timelineItems` exclude `gl-empty:`-id rows from the participant count.
