@@ -1042,7 +1042,15 @@ export async function applyLessonCreditToExistingAppointment({
     },
   });
 
-  if (!appointment || appointment.creditApplied || appointment.type === "esame") {
+  // Esami e posti di gruppo non consumano mai un credito: il posto di gruppo è
+  // un «da pagare» a sé (vedi `getGroupLessonPrice`), anche quando il titolare
+  // addebita una cancellazione tardiva.
+  if (
+    !appointment ||
+    appointment.creditApplied ||
+    appointment.type === "esame" ||
+    appointment.type === "group_lesson"
+  ) {
     return { applied: false };
   }
 
