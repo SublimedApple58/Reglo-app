@@ -8,6 +8,7 @@ import { getExamReadyNudgeForCompany, EXAM_READY_NUDGE_KIND } from "@/lib/autosc
 import { getWaitlistOffers } from "@/lib/actions/autoscuole-availability.actions";
 import { canStudentUseBookingChannel } from "@/lib/autoscuole/student-booking-policy";
 import { loadStudentBookingPolicies } from "@/lib/autoscuole/student-booking-policy-loader";
+import { groupCreationNoticeBatches } from "@/lib/autoscuole/creation-notice";
 
 /**
  * Server-side notification aggregator.
@@ -345,6 +346,42 @@ export async function GET(request: Request) {
           },
           createdAt: exam.createdAt.toISOString(),
         });
+      }
+
+      // 7-ter. REG-758: guide fissate dallo staff. Solo per le app che lo
+      // dichiarano (`?supports=appointment_created`): una build vecchia non
+      // conosce il kind e lo mostrerebbe come una riga vuota, non letta.
+      // Il raggruppamento ricalca la coda: guide dello stesso allievo create a
+      // non più di 3 minuti l'una dall'altra, al massimo 15 dalla prima. L'id è
+      // quello della push (`created_<prima guida per orario>`), così la stessa
+      // notizia non compare due volte.
+      if (searchParams.getAll("supports").includes("appointment_created")) {
+        const announced = await prisma.autoscuolaAppointment.findMany({
+          where: {
+            companyId,
+            studentId: userId,
+            creationNotice: "sent",
+            createdAt: { gte: since },
+          },
+          orderBy: { createdAt: "asc" },
+          select: { id: true, type: true, startsAt: true, createdAt: true },
+        });
+        for (const batch of groupCreationNoticeBatches(announced)) {
+          const first = [...batch].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())[0];
+          const newest = batch[batch.length - 1];
+          notifications.push({
+            id: `created_${first.id}`,
+            kind: "appointment_created",
+            data: {
+              appointmentId: first.id,
+              appointmentIds: batch.map((appt) => appt.id),
+              startsAt: first.startsAt.toISOString(),
+              count: batch.length,
+              isGroupLesson: first.type === "group_lesson",
+            },
+            createdAt: newest.createdAt.toISOString(),
+          });
+        }
       }
 
       // 8. Published availability weeks from assigned instructor

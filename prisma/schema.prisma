@@ -668,6 +668,13 @@ model AutoscuolaAppointment {
   /// uno. Come `notes`, replicati su ogni riga dello stesso esame (una riga per
   /// allievo). Regole in lib/autoscuole/exam-examiners.ts.
   examiners                    String[]  @default([])
+  /// REG-758: avviso «guida fissata» all'allievo. "pending" = guida fissata
+  /// dallo staff (o dall'assistente vocale) in attesa dell'avviso raggruppato;
+  /// "sent" = avviso partito; "skipped" = non serve più (annullata, già
+  /// iniziata, funzione spenta). Null = nessun avviso previsto (prenotata
+  /// dall'allievo, esame, guida nel passato, funzione spenta alla creazione).
+  /// Regole in lib/autoscuole/creation-notice.ts.
+  creationNotice               String?
   createdAt                    DateTime  @default(now()) @db.Timestamp(6)
   updatedAt                    DateTime  @updatedAt
 
@@ -709,6 +716,7 @@ model AutoscuolaAppointment {
   @@index([paymentRequired, paymentStatus])
   @@index([penaltyCutoffAt])
   @@index([companyId, startsAt])
+  @@index([creationNotice])
   @@index([companyId, status, startsAt])
   @@index([companyId, instructorId, startsAt])
   @@index([companyId, studentId, startsAt])

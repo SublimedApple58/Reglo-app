@@ -87,6 +87,7 @@ l'inbox mobile ricostruisce il sottotitolo da lì, non dal testo del push.
 - `autoscuole-swap.actions.ts` — swap offers, swap accepted
 - `autoscuole-holidays.actions.ts` — holiday cancellations
 - `communications.ts` — all reminders (appointment, morning, case deadline, payment)
+- `creation-notice-queue.ts` — «guida fissata» raggruppata (REG-758, via job `autoscuole-reminders`)
 - `exam-ready-nudge.ts` — nudge titolare `exam_ready_nudge` (cron lunedì 09:00 via `trigger/autoscuole-reminders.ts`)
 
 ## Recovery queries (notification kind → DB query)
@@ -104,6 +105,7 @@ l'inbox mobile ricostruisce il sottotitolo da lì, non dal testo del push.
 | `weekly_absence` | `AutoscuolaStudentWeeklyAbsence` where `createdAt >= since` |
 | `exam_ready_nudge` | `getExamReadyNudgeForCompany()` — `CompanyMember` PRATICA `examReady` da >14gg MENO chi ha esame futuro (solo ruoli owner) |
 | `exam_scheduled` | `AutoscuolaAppointment` `type='esame'` futuri con `createdAt >= since` (REG-604) |
+| `appointment_created` | `AutoscuolaAppointment` `creationNotice='sent'`, `createdAt >= since`, raggruppate come la coda (REG-758). **Solo se il client manda `?supports=appointment_created`** |
 
 ## Web settings (pane "Promemoria e notifiche")
 
@@ -133,6 +135,7 @@ l'inbox mobile ricostruisce il sottotitolo da lì, non dal testo del push.
 | `availability_published` | Student | publishedAt >= since |
 | `appointment_reminder_*` | Both | time-based, no recovery |
 | `broadcast` / `test_push` | Various | fire-and-forget |
+| `appointment_created` | Student | `creationNotice='sent'`, id stabile `created_{prima guida}` — vedi [appointment-creation-notice.md](appointment-creation-notice.md) |
 | `exam_ready_nudge` | Owner (OWNER + INSTRUCTOR_OWNER) | `getExamReadyNudgeForCompany()`, id stabile `exam_ready_nudge_{companyId}` |
 
 ## Connected features

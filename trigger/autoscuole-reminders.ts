@@ -17,6 +17,7 @@ import {
 import { cleanupAutoscuolaVoiceRetention } from "@/lib/autoscuole/voice";
 import { processAutoscuolaTheoryReminders } from "@/lib/autoscuole/theory-reminders";
 import { processExamReadyNudge } from "@/lib/autoscuole/exam-ready-nudge";
+import { processAutoscuolaCreationNotices } from "@/lib/autoscuole/creation-notice-queue";
 
 export const autoscuoleReminders = schedules.task({
   id: "autoscuole-reminders",
@@ -45,6 +46,8 @@ export const autoscuoleReminders = schedules.task({
     await safe("morningReminders", () => processAutoscuolaMorningReminders({ prisma, now }));
     await safe("dayBeforeReminders", () => processAutoscuolaDayBeforeReminders({ prisma, now }));
     await safe("appointmentReminders", () => processAutoscuolaAppointmentReminders({ prisma }));
+    // REG-758: «guida fissata», raggruppata per allievo.
+    await safe("creationNotices", () => processAutoscuolaCreationNotices({ prisma, now }));
     await safe("caseDeadlines", () => processAutoscuolaCaseDeadlines({ prisma }));
     await safe("theoryReminders", () => processAutoscuolaTheoryReminders({ prisma, now }));
     await safe("examReadyNudge", () => processExamReadyNudge({ prisma, now }));

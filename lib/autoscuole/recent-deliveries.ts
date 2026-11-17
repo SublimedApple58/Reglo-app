@@ -40,6 +40,7 @@ const KIND_LABELS: Record<string, string> = {
   appointment_rescheduled: "Guida spostata",
   appointment_location_changed: "Cambio luogo",
   exam_scheduled: "Esame fissato",
+  appointment_created: "Guida fissata",
   case_deadline: "Scadenza documento",
 };
 

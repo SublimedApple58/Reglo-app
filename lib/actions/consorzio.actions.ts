@@ -35,6 +35,7 @@ import {
 } from "@/lib/consorzio/pricing-change";
 import { displayEmail } from "@/lib/users/placeholder-email";
 import { formatError } from "@/lib/utils";
+import { creationNoticeFor } from "@/lib/autoscuole/creation-notice-queue";
 
 // Server actions della sezione consorzio (autoscuole consorziate, codici
 // contabili). Ogni action apre con requireConsortium(): company AUTOSCUOLE
@@ -764,6 +765,8 @@ export async function acceptConsorzioGuideRequest(
     }
 
     const moved = startsAt.getTime() !== request.requestedStartsAt.getTime();
+    // REG-758: la guida accettata dal consorzio è fissata dallo staff.
+    const creationNotice = await creationNoticeFor({ companyId, type: "guida", startsAt });
 
     const appointment = await prisma.$transaction(async (tx) => {
       const created = await tx.autoscuolaAppointment.create({
@@ -777,6 +780,7 @@ export async function acceptConsorzioGuideRequest(
           instructorId: instructor.id,
           vehicleId,
           bookingSource: "consortium_request",
+          creationNotice,
         },
       });
       await tx.consorzioGuideRequest.update({

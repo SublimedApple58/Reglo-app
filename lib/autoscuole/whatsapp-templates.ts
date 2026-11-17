@@ -209,6 +209,22 @@ export const WHATSAPP_TEMPLATES = {
       "Ciao {{1}}, il tuo esame di guida è fissato: {{2}}. " +
       "Il luogo ti verrà comunicato dall'autoscuola. In bocca al lupo!",
   },
+  /* REG-758 (17/11): «guida fissata». Lo staff o l'assistente vocale fissa una
+   * o più guide all'allievo; un messaggio raccoglie tutte quelle fissate di
+   * fila (vedi `creation-notice.ts`). `guide` è «la guida di giovedì 20
+   * novembre alle 15:00» oppure «3 guide: giovedì 20/11 alle 15:00, …». Niente
+   * istruttore (decisione di Tiziano): resta in push ed email. Nato già col
+   * piè di pagina STOP, quindi non ha una versione precedente: finché Meta
+   * non approva, la cascata passa all'email. */
+  appointment_created: {
+    name: "guida_fissata_allievo_v1",
+    category: "utility",
+    approval: "pending",
+    variables: ["nome", "guide"],
+    body:
+      "Ciao {{1}}, l'autoscuola ha fissato per te {{2}}. " +
+      "Per modifiche o disdette contatta l'autoscuola.",
+  },
   case_deadline: {
     name: "scadenza_documento_allievo_v3",
     category: "utility",

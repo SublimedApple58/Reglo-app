@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { prisma as defaultPrisma } from "@/db/prisma";
+import { creationNoticeFor } from "@/lib/autoscuole/creation-notice-queue";
 import { getTwilioClient } from "@/lib/twilio";
 import { TELNYX_WEBHOOK_BASE_URL } from "@/lib/telnyx";
 import { getAutoscuolaSettingsForCompany } from "@/lib/actions/autoscuole-settings.actions";
@@ -729,11 +730,16 @@ export async function createVoiceAppointment({
   const startsAt = romeLocalToUtc(date, hh, mm);
   const endsAt = new Date(startsAt.getTime() + durationMinutes * 60000);
 
+  // REG-758: anche la guida prenotata al telefono riceve «guida fissata»
+  // (decisione di Tiziano del 17/11).
+  const creationNotice = await creationNoticeFor({ companyId, type: "urbano", startsAt });
+
   const appointment = await prisma.autoscuolaAppointment.create({
     data: {
       companyId,
       studentId,
       bookingSource: BOOKING_SOURCE.voice,
+      creationNotice,
       type: "urbano",
       startsAt,
       endsAt,

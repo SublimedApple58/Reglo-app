@@ -8,6 +8,7 @@ import {
   Check,
   ChevronDown,
   ClipboardList,
+  CalendarCheck,
   Coffee,
   MapPin,
   Moon,
@@ -127,6 +128,8 @@ export type SettingsTabProps = {
   studentReminderMorningTime: string;
   studentReminderDayBeforeEnabled: boolean;
   studentReminderDayBeforeTime: string;
+  /** REG-758: avviso «guida fissata» all'allievo. */
+  studentCreationNoticeEnabled: boolean;
   instructorReminderMinutes: string;
   instructorReminderEnabled: boolean;
   slotFillChannels: ChannelValue[];
@@ -146,6 +149,7 @@ export type SettingsTabProps = {
     studentReminderMorningTime?: string;
     studentReminderDayBeforeEnabled?: boolean;
     studentReminderDayBeforeTime?: string;
+    studentCreationNoticeEnabled?: boolean;
     slotFillChannels?: ChannelValue[];
     studentReminderChannels?: ChannelValue[];
     instructorReminderChannels?: ChannelValue[];
@@ -295,11 +299,12 @@ function ReminderBanner({
   description: string;
   checked: boolean;
   onToggle: () => void;
-  timeValue: string;
+  /** Senza orario (REG-758, «guida fissata»): la riga è solo l'interruttore. */
+  timeValue?: string;
   /** Limiti opzionali: senza, il picker naviga tutte le 24 ore. */
   minTime?: string;
   maxTime?: string;
-  onTimeChange: (v: string) => void;
+  onTimeChange?: (v: string) => void;
 }) {
   return (
     <div className="border-b border-[#ebebeb] py-[18px]">
@@ -313,7 +318,7 @@ function ReminderBanner({
         </div>
         <InlineToggle checked={checked} onChange={onToggle} size="lg" />
       </div>
-      {checked && (
+      {checked && timeValue !== undefined && onTimeChange && (
         <div className="mt-3 flex items-center justify-between gap-3">
           <span className="text-[13px] font-medium text-[#555555]">Orario di invio</span>
           <TimePickerInput
@@ -512,6 +517,7 @@ function SettingsTab({
   studentReminderMorningTime,
   studentReminderDayBeforeEnabled,
   studentReminderDayBeforeTime,
+  studentCreationNoticeEnabled,
   instructorReminderMinutes,
   instructorReminderEnabled,
   studentReminderChannels,
@@ -638,6 +644,18 @@ function SettingsTab({
                 timeValue={studentReminderDayBeforeTime}
                 onTimeChange={(value) =>
                   updateReminderSettings({ studentReminderDayBeforeTime: value })
+                }
+              />
+              {/* REG-758: avviso alla creazione, raggruppato (vedi creation-notice.ts). */}
+              <ReminderBanner
+                icon={CalendarCheck}
+                title="Avviso guida fissata"
+                description="Avvisa l'allievo quando la segreteria, un istruttore o l'assistente vocale gli fissa una guida. Più guide fissate di fila arrivano in un messaggio solo."
+                checked={studentCreationNoticeEnabled}
+                onToggle={() =>
+                  updateReminderSettings({
+                    studentCreationNoticeEnabled: !studentCreationNoticeEnabled,
+                  })
                 }
               />
             </div>
