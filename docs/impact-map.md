@@ -306,6 +306,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Repositioning**: processes reposition queue
 - → **Appointments**: auto-checkin, auto-complete, pending review transitions
 - → **Cases & Deadlines**: processes deadline reminders
+- → **Avviso guida fissata (REG-758)**: la coda `creationNotice` si svuota nel job ogni minuto; ogni NUOVO punto di creazione guida non avviato dall'allievo deve chiamare `creationNoticeFor()` (vedi `features/appointment-creation-notice.md`). `notifyAutoscuolaUser` tace annullamento/spostamento/cambio luogo di una guida ancora in coda
 
 ### Cases & Deadlines
 - → **Appointments**: appointments track lesson count per case

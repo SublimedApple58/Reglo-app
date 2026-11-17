@@ -43,6 +43,8 @@ Message templates, reminder rules, appointment reminders, case deadline notifica
 - `processAutoscuolaCaseDeadlines()` — pink sheet/medical expiry alerts
 - `processAutoscuolaPendingRepositions()` → delegates to repositioning.ts
 
+- `processAutoscuolaCreationNotices()` (`creation-notice-queue.ts`) — REG-758 «guida fissata», raggruppata per allievo. Vedi [appointment-creation-notice.md](appointment-creation-notice.md)
+
 ## Template tokens
 `{{student.firstName}}`, `{{student.lastName}}`, `{{appointment.date}}`, `{{case.deadlineLabel}}`, etc.
 
