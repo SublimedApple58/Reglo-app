@@ -196,12 +196,13 @@ function StudentSearchResults({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.2, ease: EASE_OUT, delay: Math.min(index, 6) * 0.025 }}
+                  className="border-b border-[#f2f2f2] py-1"
                 >
                   <button
                     type="button"
                     onClick={() => onOpen(student)}
                     data-testid="consorzio-student-result"
-                    className="group flex w-full cursor-pointer items-center gap-3 rounded-[10px] border-b border-[#f2f2f2] px-4 py-3 text-left transition-colors duration-200 hover:bg-[#fafafa] focus-visible:bg-[#fafafa] focus-visible:outline-none"
+                    className="group flex w-full cursor-pointer items-center gap-3 rounded-[12px] px-4 py-2.5 text-left transition-colors duration-200 hover:bg-[#fafafa] focus-visible:bg-[#fafafa] focus-visible:outline-none"
                   >
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#111111] text-[11.5px] font-bold text-white">
                       {storedNameInitials(student.name, nameOrder)}
