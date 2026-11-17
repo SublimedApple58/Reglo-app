@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
 import { DatePickerInput } from "@/components/ui/date-picker";
+import { DurationField } from "@/components/pages/Autoscuole/DurationField";
 import { TimePickerInput } from "@/components/ui/time-picker";
 import {
   Select,
@@ -28,7 +29,6 @@ import { cn } from "@/lib/utils";
  */
 
 const DIALOG_WIDTH = 480;
-const BASE_DURATIONS = [30, 45, 60, 90, 120];
 
 type Props = {
   open: boolean;
@@ -79,12 +79,10 @@ export function ProposeSlotDialog({
 
   if (!mounted) return null;
 
-  // Durate del prototipo + l'eventuale durata fuori scala della richiesta.
-  const durations = BASE_DURATIONS.includes(durationMinutes)
-    ? BASE_DURATIONS
-    : [...BASE_DURATIONS, durationMinutes].sort((a, b) => a - b);
-
-  const left = Math.max(12, (window.innerWidth - DIALOG_WIDTH) / 2);
+  // Su schermi stretti il dialog prende la larghezza disponibile (12px di
+  // margine per lato) invece di uscire dal bordo.
+  const width = Math.min(DIALOG_WIDTH, window.innerWidth - 24);
+  const left = Math.max(12, (window.innerWidth - width) / 2);
   const top = Math.max(76, Math.min(180, window.innerHeight - 560));
 
   return createPortal(
@@ -96,8 +94,8 @@ export function ProposeSlotDialog({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.97 }}
           transition={{ duration: 0.18, ease: "easeOut" }}
-          className="fixed z-50 rounded-[22px] bg-white px-[30px] pb-[25px] pt-[26px] text-left shadow-[0_26px_70px_rgba(10,20,30,0.3),0_0_0_1px_rgba(0,0,0,0.04)] [line-height:normal]"
-          style={{ width: DIALOG_WIDTH, left, top }}
+          className="fixed z-50 max-h-[calc(100dvh-24px)] overflow-y-auto rounded-[22px] bg-white px-5 pb-[25px] pt-[26px] sm:px-[30px] text-left shadow-[0_26px_70px_rgba(10,20,30,0.3),0_0_0_1px_rgba(0,0,0,0.04)] [line-height:normal]"
+          style={{ width, left, top }}
         >
           <button
             type="button"
@@ -116,7 +114,7 @@ export function ProposeSlotDialog({
             L&apos;autoscuola riceve la proposta e conferma.
           </p>
 
-          <div className="mt-[19px] grid grid-cols-[244px_1fr] gap-x-3.5">
+          <div className="mt-[19px] grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-x-3.5">
             <div>
               <div className="mb-[7px] text-[13px] font-semibold text-[#222222]">Giorno</div>
               <DatePickerInput
@@ -136,28 +134,14 @@ export function ProposeSlotDialog({
             </div>
           </div>
 
+          {/* REG-757: lo stesso campo degli esami — fino a 4 ore, o fine libera. */}
           <div className="mt-[18px]">
-            <div className="text-[13px] font-semibold text-[#222222]">Durata</div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {durations.map((minutes) => {
-                const active = minutes === durationMinutes;
-                return (
-                  <button
-                    key={minutes}
-                    type="button"
-                    onClick={() => onChange({ durationMinutes: minutes })}
-                    className={cn(
-                      "cursor-pointer rounded-full border px-[18px] py-[10px] text-[13.5px] font-semibold transition-colors",
-                      active
-                        ? "border-[#111111] bg-[#111111] text-white"
-                        : "border-[#e2e2e2] bg-white text-[#6a6a6a] hover:border-[#c9c9c9]",
-                    )}
-                  >
-                    {minutes} min
-                  </button>
-                );
-              })}
-            </div>
+            <DurationField
+              startTime={time || "09:00"}
+              durationMin={durationMinutes}
+              onDurationChange={(minutes) => onChange({ durationMinutes: minutes })}
+              labelClassName="mb-0.5 text-[#222222]"
+            />
           </div>
 
           <div className="mt-4">

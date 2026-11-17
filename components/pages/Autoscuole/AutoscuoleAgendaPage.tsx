@@ -82,6 +82,7 @@ import { FadeIn } from "@/components/ui/fade-in";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import { DatePickerInput } from "@/components/ui/date-picker";
 import { TimePickerInput } from "@/components/ui/time-picker";
+import { DurationField } from "@/components/pages/Autoscuole/DurationField";
 import { CreateEventPopover } from "@/components/pages/Autoscuole/dialogs/CreateEventPopover";
 import { CancelledLessonBlock } from "@/components/pages/Autoscuole/CancelledLessonBlock";
 import { findCancelledLessonBlocks, type CancelledByRole } from "@/lib/autoscuole/cancelled-lesson-blocks";
@@ -527,7 +528,6 @@ const instructorLine = (appointment: {
 const DAY_START_HOUR = 0;
 const DAY_END_HOUR = 24;
 const SLOT_MINUTES = 30;
-const SLOT_OPTIONS = ["30", "45", "60", "90", "120"];
 
 /**
  * Tinta del blocco tratteggiato in anteprima, per durata — le stesse fasce di
@@ -545,88 +545,6 @@ const ghostTint = (durMin: number) => ({
   dotClass:
     durMin <= 30 ? "bg-[#3b82f6]" : durMin <= 45 ? "bg-[#84cc16]" : durMin <= 60 ? "bg-[#f59e0b]" : durMin <= 90 ? "bg-[#d946ef]" : "bg-[#f43f5e]",
 });
-// Chip durata rapide per gli esami; per durate fuori standard c'è il TimePicker "fine".
-const EXAM_DURATION_CHIPS = [30, 45, 60, 90, 120, 180, 240];
-const fmtExamDuration = (min: number) => {
-  if (min < 60) return `${min}m`;
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return m === 0 ? `${h}h` : `${h}h${m}`;
-};
-const examTimeToMin = (t: string) => {
-  const [h, m] = t.split(":").map(Number);
-  return (h || 0) * 60 + (m || 0);
-};
-const examMinToTime = (min: number) => {
-  const capped = Math.min(Math.max(min, 0), 1440);
-  return `${String(Math.floor(capped / 60)).padStart(2, "0")}:${String(capped % 60).padStart(2, "0")}`;
-};
-
-/**
- * Imposta la durata con DUE modalità intercambiabili: chip di durata rapide
- * OPPURE l'orario di fine (TimePicker). Entrambe aggiornano `durationMin`.
- * Condiviso da esame (creazione + gestione) e blocca-slot; `chips` personalizza
- * le durate rapide per il contesto.
- */
-function DurationField({
-  startTime,
-  durationMin,
-  onDurationChange,
-  chips = EXAM_DURATION_CHIPS,
-}: {
-  startTime: string;
-  durationMin: number;
-  onDurationChange: (min: number) => void;
-  chips?: number[];
-}) {
-  const startMin = examTimeToMin(startTime);
-  const endTime = examMinToTime(startMin + durationMin);
-  // Durata "custom" = impostata dal picker fine, nessuna chip corrisponde.
-  const customDuration = !chips.includes(durationMin);
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="text-[13px] font-semibold text-[#6a6a6a]">Durata</div>
-      {/* Una riga sola: chip durata + divisore + picker "fine", stessa cornice →
-          i due modi di impostare la fine collaborano in un unico controllo compatto. */}
-      <div className="flex items-center gap-1 rounded-[12px] border-[1.5px] border-[#e6e6e8] p-1">
-        {chips.map((m) => {
-          const active = durationMin === m;
-          return (
-            <button
-              key={m}
-              type="button"
-              onClick={() => onDurationChange(m)}
-              className={cn(
-                "min-w-0 flex-1 cursor-pointer rounded-[8px] py-[7px] text-[12.5px] font-semibold transition-colors",
-                active
-                  ? "bg-[#222222] text-white"
-                  : "text-[#8a8a8f] hover:bg-[#f5f5f5] hover:text-[#222222]",
-              )}
-            >
-              {fmtExamDuration(m)}
-            </button>
-          );
-        })}
-        <div className="mx-0.5 h-5 w-px shrink-0 bg-[#e6e6e8]" />
-        <TimePickerInput
-          freeInput
-          value={endTime}
-          minTime={examMinToTime(Math.min(startMin + 15, 1440))}
-          maxTime="24:00"
-          minuteStep={15}
-          className={cn(
-            "shrink-0 gap-1.5 border-0 px-2 py-[7px] text-[12.5px] font-semibold hover:bg-[#f5f5f5]",
-            customDuration ? "bg-[#f2f2f4]" : "bg-transparent",
-          )}
-          onChange={(t) => {
-            const d = examTimeToMin(t) - startMin;
-            if (d > 0) onDurationChange(d);
-          }}
-        />
-      </div>
-    </div>
-  );
-}
 // Scala base della griglia (px per minuto) = altezza riga oraria / 60. 1.2 ⇒ 72px/h,
 // densità stile Google Calendar (prima era 1.6 ⇒ 96px/h, agenda troppo estesa in
 // verticale). Il componente ombreggia questa costante col fattore di zoom scelto
@@ -6499,20 +6417,13 @@ export function AutoscuoleAgendaPage({
                   <TimePickerInput freeInput value={form.time} onChange={(value) => setForm((prev) => ({ ...prev, time: value }))} />
                 </div>
               </div>
-              <div>
-                <p className="mb-1.5 text-xs font-semibold text-[#555555]">Durata</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {SLOT_OPTIONS.map((option) => {
-                    const active = form.duration === option;
-                    return (
-                      <button key={option} type="button" onClick={() => setForm((prev) => ({ ...prev, duration: option }))}
-                        className={cn("cursor-pointer rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors", active ? "border-[#222222] bg-[#222222] text-white" : "border-[#dddddd] bg-white text-[#555555] hover:border-[#929292]")}>
-                        {option} min
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              {/* REG-757: lo stesso campo degli esami — fino a 4 ore, o fine libera. */}
+              <DurationField
+                startTime={form.time || "09:00"}
+                durationMin={parseInt(form.duration, 10) || 30}
+                onDurationChange={(m) => setForm((prev) => ({ ...prev, duration: String(m) }))}
+                labelClassName="text-xs text-[#555555]"
+              />
             </>
           )}
 
@@ -6554,16 +6465,14 @@ export function AutoscuoleAgendaPage({
                       </button>
                     ) : null}
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5 pl-7">
-                    {SLOT_OPTIONS.map((option) => {
-                      const active = entry.duration === option;
-                      return (
-                        <button key={option} type="button" onClick={() => updateEntry(entry.id, { duration: option })}
-                          className={cn("cursor-pointer rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors", active ? "border-[#222222] bg-[#222222] text-white" : "border-[#dddddd] bg-white text-[#555555] hover:border-[#929292]")}>
-                          {option} min
-                        </button>
-                      );
-                    })}
+                  <div className="mt-2 pl-7">
+                    <DurationField
+                      size="sm"
+                      label={null}
+                      startTime={entry.time || "09:00"}
+                      durationMin={parseInt(entry.duration, 10) || 30}
+                      onDurationChange={(m) => updateEntry(entry.id, { duration: String(m) })}
+                    />
                   </div>
                   <div className="relative mt-2 pl-7">
                     <NotebookPen
