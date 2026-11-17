@@ -113,6 +113,8 @@ const pushOnlyKinds = new Set<string>(PUSH_ONLY_KINDS);
  * di cui non sa ancora niente. Finché l'avviso «guida fissata» è in coda
  * (`creationNotice = "pending"`), annullarla o spostarla resta muto: se è
  * annullata l'avviso non parte proprio, se è spostata parte col nuovo orario.
+ * Lo stesso vale se la coda l'ha scartata (`skipped`): non è mai stata
+ * annunciata. Il recupero dell'inbox applica la stessa regola.
  */
 const SILENT_WHILE_CREATION_PENDING = new Set([
   "appointment_cancelled",
@@ -127,7 +129,9 @@ async function creationNoticeStillQueued(input: NotifyInput): Promise<boolean> {
     where: { id: input.appointmentId },
     select: { creationNotice: true },
   });
-  return appointment?.creationNotice === "pending";
+  // `skipped` = la coda l'ha scartata senza annunciarla (annullata, già
+  // iniziata, funzione spenta): l'allievo non la conosce neanche lui.
+  return appointment?.creationNotice === "pending" || appointment?.creationNotice === "skipped";
 }
 
 /**

@@ -29,6 +29,11 @@ l'esame (`exam_scheduled`). Piano e decisioni:
 3. Finché l'avviso è in coda, `notifyAutoscuolaUser` **tace** annullamento,
    spostamento e cambio luogo di quella guida (l'allievo non la conosce ancora):
    se è annullata l'avviso non parte, se è spostata parte col nuovo orario.
+   Vale anche per le guide che la coda ha scartato (`skipped`), e il recupero
+   dell'inbox (`notifications/route.ts`) applica la stessa regola agli
+   annullamenti e agli spostamenti: solo guide con `creationNotice` `null` o
+   `sent` (QA staging del 17/11: senza, l'inbox ricostruiva «Guida annullata»
+   per una guida mai annunciata).
 
 > ⚠️ Il job non gira su staging (Trigger.dev esiste solo in prod). Su staging
 > la coda si svuota a mano: `scripts/reg-758-flush-creation-notices.ts`.

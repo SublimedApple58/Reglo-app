@@ -44,6 +44,17 @@ export async function GET(request: Request) {
 
     const notifications: NotificationPayload[] = [];
 
+    /**
+     * REG-758: solo le guide che l'allievo conosce. Una guida fissata dallo
+     * staff e annullata o spostata prima che partisse l'avviso «guida fissata»
+     * (`creationNotice` pending/skipped) non è mai stata annunciata: la push
+     * dell'annullamento è già muta (`notify.ts`), qui non deve ricomparire.
+     * `null` = guida senza avviso previsto (prenotata dall'allievo, o di prima).
+     */
+    const announcedToStudent = {
+      OR: [{ creationNotice: null }, { creationNotice: "sent" }],
+    };
+
     if (role === "STUDENT") {
       // Prenotazione «solo eccezioni»: le offerte da prendere (scambi, slot
       // liberati, posti nelle guide di gruppo, nuove disponibilità) si
@@ -95,6 +106,7 @@ export async function GET(request: Request) {
           status: "cancelled",
           cancellationReason: "instructor_sick",
           cancelledAt: { gte: since },
+          AND: [announcedToStudent],
         },
         include: {
           instructor: { select: { name: true } },
@@ -124,6 +136,7 @@ export async function GET(request: Request) {
           cancelledAt: { gte: since },
           cancellationReason: { not: "instructor_sick" },
           cancelledByUserId: { not: userId },
+          AND: [announcedToStudent],
         },
         include: {
           instructor: { select: { name: true } },
@@ -298,6 +311,7 @@ export async function GET(request: Request) {
           companyId,
           studentId: userId,
           rescheduledAt: { gte: since },
+          AND: [announcedToStudent],
         },
         orderBy: { rescheduledAt: "desc" },
         take: limit,
