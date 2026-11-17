@@ -47,9 +47,13 @@ export function CreateEventPopover({
 
   // Ridimensionamento col mouse dal grip in basso a destra: il contenuto è
   // fluido (input w-full, chips flex-wrap) quindi si riadatta da solo.
-  const [size, setSize] = React.useState<{ w: number; h: number | null }>({ w: width, h: null });
+  // Su schermi stretti (telefono) la card non supera lo schermo: 16px per lato.
+  const fitWidth = () =>
+    typeof window === "undefined" ? width : Math.min(width, window.innerWidth - 32);
+  const [size, setSize] = React.useState<{ w: number; h: number | null }>(() => ({ w: fitWidth(), h: null }));
   React.useEffect(() => {
-    if (open) setSize({ w: width, h: null });
+    if (open) setSize({ w: fitWidth(), h: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, width]);
   const startResize = (event: React.PointerEvent) => {
     event.preventDefault();
@@ -135,7 +139,8 @@ export function CreateEventPopover({
   // dove c'è più spazio, senza mai coprirla. Senza colonna (es. apertura dal
   // "+") si affianca al punto di apertura stesso.
   const gap = 20;
-  let left = vw - width - 48;
+  const cardWidth = Math.min(width, vw - margin * 2);
+  let left = vw - cardWidth - 48;
   if (anchor) {
     const columns = Array.from(document.querySelectorAll<HTMLElement>("[data-agenda-col-day]"));
     const columnRect = columns
@@ -146,9 +151,10 @@ export function CreateEventPopover({
     const spaceRight = vw - zone.right;
     left =
       spaceLeft >= spaceRight
-        ? Math.max(margin, zone.left - gap - width)
-        : Math.min(vw - width - margin, zone.right + gap);
+        ? Math.max(margin, zone.left - gap - cardWidth)
+        : Math.min(vw - cardWidth - margin, zone.right + gap);
   }
+  left = Math.max(margin, left);
   const top = 250;
   const maxHeight = vh - top - margin;
 
@@ -168,7 +174,7 @@ export function CreateEventPopover({
           dragElastic={0}
           dragConstraints={{
             left: -(left - margin),
-            right: vw - margin - width - left,
+            right: vw - margin - cardWidth - left,
             top: -(top - margin),
             bottom: vh - 72 - top,
           }}
