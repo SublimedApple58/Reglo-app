@@ -5112,7 +5112,7 @@ export async function broadcastGroupLessonInvite({
   companyId: string;
   groupLessonId: string;
   expiresAt: Date;
-}): Promise<{ invite: { id: string }; recipients: number } | null> {
+}): Promise<{ invite: { id: string }; recipients: number; closedChannelCount: number } | null> {
   // Discovery spenta → niente inviti broadcast: gli allievi non potrebbero
   // comunque vedere/iscriversi ai gruppi dalla lista. Coerente con il gate in
   // getGroupLessonInvites (setting groupLessonsDiscoveryEnabled, default ON).
@@ -5183,7 +5183,7 @@ export async function broadcastGroupLessonInvite({
   const candidateIds = students
     .map((s) => s.user.id)
     .filter((id) => !enrolled.has(id));
-  if (!candidateIds.length) return { invite, recipients: 0 };
+  if (!candidateIds.length) return { invite, recipients: 0, closedChannelCount: 0 };
 
   // A group lesson is a fixed-time event the school offers, NOT a student-driven
   // booking — so we do NOT require the student to have declared a weekly
@@ -5210,13 +5210,14 @@ export async function broadcastGroupLessonInvite({
 
   // Prenotazione «solo eccezioni»: invito solo a chi può prendere il posto
   // (modalità aperta o eccezione «posti nelle guide di gruppo» accesa).
-  const groupSeatAllowed = await filterStudentsByBookingChannel(companyId, candidateIds, "group_seat");
+  const seatPolicies = await loadStudentBookingPolicies(companyId, candidateIds);
 
   const broadcastFleet: FleetVehicle[] = gl.fleetVehicles.map((f) => f.vehicle);
-  const eligible = students.filter((student) => {
+  // Idonei per tutto TRANNE il canale: servono a dire all'ufficio perché
+  // nessuno è stato avvisato quando il percorso ha le prenotazioni chiuse.
+  const fitStudents = students.filter((student) => {
     const id = student.user.id;
     if (enrolled.has(id)) return false;
-    if (!groupSeatAllowed.has(id)) return false;
     // REG-420 — never nudge a student whose bookings are blocked (they can't
     // self-enrol anyway; the accept path and the in-app list both reject them).
     if (isBookingBlockActive(student)) return false;
@@ -5241,7 +5242,15 @@ export async function broadcastGroupLessonInvite({
     if (hasAppointmentConflict(booked, gl.startsAt, gl.endsAt!)) return false;
     return true;
   });
-  if (!eligible.length) return { invite, recipients: 0 };
+  const eligible: typeof fitStudents = [];
+  let closedChannelCount = 0;
+  for (const student of fitStudents) {
+    const policy = seatPolicies.get(student.user.id);
+    if (policy && canStudentUseBookingChannel(policy, "group_seat")) eligible.push(student);
+    // Fermato solo dalla modalità (non da blocco o fase della pratica).
+    else if (policy && !policy.hold) closedChannelCount += 1;
+  }
+  if (!eligible.length) return { invite, recipients: 0, closedChannelCount };
 
   // REG-500: le offerte escono solo come push, a prescindere da
   // `slotFillChannels` (vedi `OFFER_CHANNELS`).
@@ -5283,7 +5292,7 @@ export async function broadcastGroupLessonInvite({
     }),
   );
 
-  return { invite, recipients: recipients.length };
+  return { invite, recipients: recipients.length, closedChannelCount };
 }
 
 /** Owner/instructor-triggered broadcast of a group-lesson invite. */
@@ -5336,7 +5345,14 @@ export async function inviteToGroupLesson(input: z.infer<typeof inviteToGroupLes
     // far capire che l'invito è partito davvero (REG-617).
     return {
       success: true as const,
-      data: { inviteId: broadcast.invite.id, invitedCount: broadcast.recipients },
+      data: {
+        inviteId: broadcast.invite.id,
+        invitedCount: broadcast.recipients,
+        // Allievi che sarebbero idonei ma non possono iscriversi da soli
+        // (percorso su «Solo istruttori» senza i posti di gruppo): la UI web
+        // lo spiega invece di dire «nessun allievo idoneo».
+        closedChannelCount: broadcast.closedChannelCount,
+      },
     };
   } catch (error) {
     return { success: false as const, message: formatError(error) };

@@ -50,11 +50,36 @@ describe("studentBookingPolicyForMember", () => {
     expect(canStudentUseBookingChannel(p, "free")).toBe(true);
   });
 
-  it("autoscuola su «Solo istruttori» che non ha mai salvato le eccezioni: «Disattiva»", () => {
+  it("autoscuola su «Solo istruttori» che non ha mai salvato le eccezioni: solo i posti di gruppo", () => {
     const defaults = buildCompanyBookingDefaults({ appBookingActors: "instructors" });
     const p = studentBookingPolicyForMember(defaults, member(), NOW);
-    expect(p.mode).toBe("closed");
+    expect(p.mode).toBe("exceptions");
+    expect(canStudentUseBookingChannel(p, "group_seat")).toBe(true);
     expect(canStudentUseBookingChannel(p, "slot_fill")).toBe(false);
+    expect(canStudentUseBookingChannel(p, "free")).toBe(false);
+  });
+
+  it("caso Robatto: moto su «Solo istruttori» per percorso, eccezioni mai salvate", () => {
+    const defaults = buildCompanyBookingDefaults({
+      appBookingActors: "both",
+      appBookingActorsByPath: { moto: "instructors", auto: "both", pro: "both" },
+    });
+    const moto = studentBookingPolicyForMember(defaults, member({ licenseCategory: "A2" }), NOW);
+    expect(moto.mode).toBe("exceptions");
+    expect(canStudentUseBookingChannel(moto, "group_seat")).toBe(true);
+    expect(canStudentUseBookingChannel(moto, "free")).toBe(false);
+    const auto = studentBookingPolicyForMember(defaults, member({ licenseCategory: "B" }), NOW);
+    expect(auto.mode).toBe("open");
+  });
+
+  it("«Disattiva» salvato esplicitamente resta chiuso anche per i posti di gruppo", () => {
+    const defaults = buildCompanyBookingDefaults({
+      appBookingActors: "instructors",
+      studentBookingExceptions: exceptions({ enabled: false }),
+    });
+    const p = studentBookingPolicyForMember(defaults, member(), NOW);
+    expect(p.mode).toBe("closed");
+    expect(canStudentUseBookingChannel(p, "group_seat")).toBe(false);
   });
 
   it("eccezioni diverse per percorso: la moto prende le sue, l'auto quelle di default", () => {

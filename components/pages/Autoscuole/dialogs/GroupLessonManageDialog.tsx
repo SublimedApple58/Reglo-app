@@ -518,10 +518,13 @@ export function GroupLessonManageDialog({
         return;
       }
       const n = res.data?.invitedCount ?? 0;
+      const closed = res.data?.closedChannelCount ?? 0;
       toast.success({
         description: n
           ? `Invito inviato a ${n} ${n === 1 ? "allievo" : "allievi"}.`
-          : "Invito aperto, ma non c'è nessun allievo idoneo da avvisare.",
+          : closed
+            ? `Nessun allievo avvisato: ${closed === 1 ? "l'allievo adatto" : `i ${closed} allievi adatti`} a questa guida non ${closed === 1 ? "può" : "possono"} iscriversi da soli, perché le prenotazioni dall'app sono chiuse per il loro percorso. Puoi aggiungerli tu, o aprire i posti di gruppo in Impostazioni → Prenotazioni.`
+            : "Invito aperto, ma non c'è nessun allievo idoneo da avvisare.",
       });
       onChanged();
     } catch (e) {

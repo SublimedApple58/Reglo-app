@@ -139,13 +139,43 @@ describe("parse e cascata", () => {
     expect(resolveStudentBookingExceptionsForBucket({ bucket: "auto" })).toBe(LEGACY_INSTRUCTORS_EXCEPTIONS);
   });
 
-  it("autoscuole già su «Solo istruttori» che non hanno mai salvato: «Disattiva» (Tiziano, 10/11)", () => {
+  it("«Solo istruttori» mai salvato: aperti SOLO i posti nelle guide di gruppo (come prima del 10/11)", () => {
+    expect(LEGACY_INSTRUCTORS_EXCEPTIONS).toEqual({
+      ...STUDENT_BOOKING_EXCEPTIONS_OFF,
+      enabled: true,
+      groupSeats: true,
+    });
     const policy = buildStudentBookingPolicy({
       appBookingActors: "instructors",
-      exceptions: resolveStudentBookingExceptionsForBucket({ bucket: "auto" }),
+      exceptions: resolveStudentBookingExceptionsForBucket({ bucket: "moto" }),
     });
-    expect(policy.mode).toBe("closed");
-    expect(allowedChannels(policy)).toEqual(["swap"]);
+    expect(policy.mode).toBe("exceptions");
+    expect(allowedChannels(policy)).toEqual(["group_seat", "swap"]);
+  });
+
+  it("eccezioni salvate esplicitamente: valgono loro, il default non le tocca", () => {
+    const disattiva = { ...STUDENT_BOOKING_EXCEPTIONS_OFF };
+    const soloSlot = ex({ slotFill: true });
+    const savedOff = buildStudentBookingPolicy({
+      appBookingActors: "instructors",
+      exceptions: resolveStudentBookingExceptionsForBucket({ bucket: "moto", companyDefault: disattiva }),
+    });
+    expect(savedOff.mode).toBe("closed");
+    expect(allowedChannels(savedOff)).toEqual(["swap"]);
+    const savedSlot = buildStudentBookingPolicy({
+      appBookingActors: "instructors",
+      exceptions: resolveStudentBookingExceptionsForBucket({ bucket: "moto", companyByPath: { moto: soloSlot } }),
+    });
+    expect(allowedChannels(savedSlot)).toEqual(["slot_fill", "swap"]);
+  });
+
+  it("il default non apre nulla a chi è bloccato o in teoria", () => {
+    const blocked = buildStudentBookingPolicy({
+      appBookingActors: "instructors",
+      exceptions: LEGACY_INSTRUCTORS_EXCEPTIONS,
+      hold: "blocked",
+    });
+    expect(allowedChannels(blocked)).toEqual([]);
   });
 
   it("gruppo per percorso → gruppo → autoscuola per percorso → autoscuola", () => {

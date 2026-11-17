@@ -19,7 +19,7 @@ Tre stati visibili: **Attiva** (`students`/`both`), **Solo eccezioni** (`instruc
 - Autoscuola: `CompanyService.limits.studentBookingExceptions` `{enabled, slotFill, groupSeats, lastMinute, lastMinuteHours}` e `studentBookingExceptionsByPath` `{moto?, auto?, pro?}` (eccezioni diverse per percorso).
 - Gruppo autonomo: stesse chiavi in `AutoscuolaInstructor.settings` (assenti = eredita).
 - Cascata: gruppo per percorso → gruppo → autoscuola per percorso → autoscuola → `LEGACY_INSTRUCTORS_EXCEPTIONS`.
-- **Autoscuole che non hanno mai salvato** (tutte quelle su «Solo istruttori» al rilascio): valgono `LEGACY_INSTRUCTORS_EXCEPTIONS` = **«Disattiva»** (decisione di Tiziano, 10/11/2026). Nessuna migrazione dati: conta finché il titolare non salva la riga.
+- **Autoscuole che non hanno mai salvato** (tutte quelle su «Solo istruttori» al rilascio): valgono `LEGACY_INSTRUCTORS_EXCEPTIONS` = **«Solo eccezioni» con acceso solo «Posti liberi nelle guide di gruppo»** (dal 17/11/2026). Dal 10/11 al 17/11 il default era «Disattiva», che aveva chiuso le guide di gruppo a tutti: Robatto, percorso moto, zero iscrizioni fatte dagli allievi. Prima del 10/11 gli inviti ai gruppi non guardavano «Chi prenota dall'app». Le guide singole restano chiuse. Le eccezioni salvate esplicitamente, compreso «Disattiva», non cambiano. Nessuna migrazione dati: conta finché il titolare non salva la riga, e Impostazioni → Prenotazioni lo mostra già così.
 
 ## File
 - `lib/autoscuole/student-booking-policy.ts` — modulo puro: parse, cascata, modalità, `hold` (bloccato/AWAITING/TEORIA/percorso mancante), `canStudentUseBookingChannel`, `studentFreeBookingUntil`, messaggi.
@@ -31,7 +31,7 @@ Tre stati visibili: **Attiva** (`students`/`both`), **Solo eccezioni** (`instruc
 - `lib/autoscuole/student-phase-notifications.ts` — testi coerenti con la modalità.
 - `app/api/autoscuole/notifications/route.ts` — recupero filtrato per allievo e canale.
 - `lib/actions/autoscuole-settings.actions.ts`, `app/api/autoscuole/instructor-settings/route.ts`, `lib/actions/autoscuole.actions.ts` (`instructorSettingsSchema`) — salvataggio.
-- Test: `tests/unit/autoscuole/student-booking-policy.test.ts` (matrice modalità × canale × blocco, cascata, default «Disattiva») e `tests/unit/autoscuole/student-booking-policy-loader.test.ts` (policy dalla riga del membro: gruppo autonomo attivo/inattivo, eccezioni per percorso, blocco a tempo, fase).
+- Test: `tests/unit/autoscuole/student-booking-policy.test.ts` (matrice modalità × canale × blocco, cascata, default «solo posti di gruppo», eccezioni salvate che restano invariate) e `tests/unit/autoscuole/student-booking-policy-loader.test.ts` (policy dalla riga del membro: gruppo autonomo attivo/inattivo, eccezioni per percorso, blocco a tempo, fase).
 
 ## Contratto per il mobile
 `GET /api/autoscuole/booking-options` → `bookingPolicy: { mode: "open"|"exceptions"|"closed", hold: null|"blocked"|"awaiting"|"theory"|"license_missing", exceptions: {slotFill, groupSeats, lastMinute, lastMinuteHours}, lastMinuteUntil: ISO|null }`.

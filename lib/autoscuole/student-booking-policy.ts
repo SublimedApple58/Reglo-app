@@ -54,13 +54,18 @@ export const STUDENT_BOOKING_EXCEPTIONS_OFF: StudentBookingExceptions = {
 
 /**
  * Valore per chi è su «Solo istruttori» e non ha MAI salvato le eccezioni
- * (tutte le autoscuole esistenti al rilascio): «Disattiva», deciso da Tiziano
- * il 10/11/2026. Nessuna migrazione dati: vale finché il titolare non salva la
- * riga, poi conta il valore esplicito. Passando a «Solo eccezioni» la UI web
- * accende «Slot liberato» come punto di partenza (`toExceptions`).
+ * (tutte le autoscuole esistenti al rilascio): «Solo eccezioni» con acceso
+ * SOLO «Posti liberi nelle guide di gruppo». Prima del 10/11/2026 gli inviti
+ * alle guide di gruppo non guardavano «Chi prenota dall'app»; il default
+ * «Disattiva» del 10/11 li aveva chiusi a tutti (Robatto, percorso moto: zero
+ * iscrizioni dagli allievi). Dal 17/11 si torna a quel comportamento per i
+ * gruppi, mentre le guide singole restano chiuse. Nessuna migrazione dati:
+ * vale finché il titolare non salva la riga, poi conta il valore esplicito.
  */
 export const LEGACY_INSTRUCTORS_EXCEPTIONS: StudentBookingExceptions = {
   ...STUDENT_BOOKING_EXCEPTIONS_OFF,
+  enabled: true,
+  groupSeats: true,
 };
 
 const clampHours = (value: unknown): number => {
