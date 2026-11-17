@@ -177,6 +177,7 @@ const releaseSlotsForAppointment = async (
 
 const notifyOperationalCancellation = async ({
   companyId,
+  appointmentId,
   studentId,
   startsAt,
   endsAt,
@@ -185,6 +186,8 @@ const notifyOperationalCancellation = async ({
   instructorId,
 }: {
   companyId: string;
+  /** REG-758: serve a `notifyAutoscuolaUser` per tacere su una guida ancora da annunciare. */
+  appointmentId: string;
   // Null only for studentless exam placeholders — nobody to notify.
   studentId: string | null;
   startsAt: Date;
@@ -234,6 +237,7 @@ const notifyOperationalCancellation = async ({
     audience: "student",
     supports: EVENT_CHANNELS_WITH_WHATSAPP,
     recipient: { userId: studentId, email: studentUser?.email, phone: studentUser?.phone },
+    appointmentId,
     whatsapp: {
       values: {
         nome: firstNameFor(studentUser ?? {}),
@@ -338,6 +342,7 @@ export async function operationallyCancelAppointment({
   if (notify) {
     await notifyOperationalCancellation({
       companyId,
+      appointmentId: appointment.id,
       studentId: appointment.studentId,
       startsAt: appointment.startsAt,
       endsAt: appointment.endsAt,
@@ -657,6 +662,7 @@ export async function annulFutureAppointment({
 
   await notifyOperationalCancellation({
     companyId,
+    appointmentId: appointment.id,
     studentId: appointment.studentId,
     startsAt: appointment.startsAt,
     endsAt: appointment.endsAt,

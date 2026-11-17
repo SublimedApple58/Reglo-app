@@ -32,6 +32,7 @@ import { sendDynamicEmail } from "@/email";
 import type { ChannelAudience } from "@/lib/autoscuole/reminder-channels";
 import { resolveChannels } from "@/lib/autoscuole/reminder-channels";
 import { deliverByCascade } from "@/lib/autoscuole/channel-cascade";
+import { prisma } from "@/db/prisma";
 
 /** I canali tecnicamente possibili oggi per un messaggio-evento. */
 export const EVENT_CHANNELS = ["push", "email"] as const;
@@ -108,11 +109,34 @@ export type NotifyInput = {
 const pushOnlyKinds = new Set<string>(PUSH_ONLY_KINDS);
 
 /**
+ * REG-758: i cambi di programma che l'allievo non deve ricevere su una guida
+ * di cui non sa ancora niente. Finché l'avviso «guida fissata» è in coda
+ * (`creationNotice = "pending"`), annullarla o spostarla resta muto: se è
+ * annullata l'avviso non parte proprio, se è spostata parte col nuovo orario.
+ */
+const SILENT_WHILE_CREATION_PENDING = new Set([
+  "appointment_cancelled",
+  "appointment_rescheduled",
+  "appointment_location_changed",
+]);
+
+async function creationNoticeStillQueued(input: NotifyInput): Promise<boolean> {
+  if (input.audience !== "student" || !input.appointmentId) return false;
+  if (!SILENT_WHILE_CREATION_PENDING.has(input.kind)) return false;
+  const appointment = await prisma.autoscuolaAppointment.findUnique({
+    where: { id: input.appointmentId },
+    select: { creationNotice: true },
+  });
+  return appointment?.creationNotice === "pending";
+}
+
+/**
  * Manda il messaggio sul primo canale attivo che consegna (App → WhatsApp →
  * Email, vedi `channel-cascade.ts`). **Non lancia mai**: un canale caduto
  * non deve fermare gli altri né l'operazione che l'ha generato.
  */
 export async function notifyAutoscuolaUser(input: NotifyInput): Promise<void> {
+  if (await creationNoticeStillQueued(input)) return;
   const supports = input.supports ?? EVENT_CHANNELS;
   const channels = input.channels
     ? supports.filter((channel) => input.channels!.includes(channel))

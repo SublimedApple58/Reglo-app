@@ -330,6 +330,8 @@ const autoscuolaSettingsPatchSchema = z
     studentReminderMorningTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     studentReminderDayBeforeEnabled: z.boolean().optional(),
     studentReminderDayBeforeTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    /** REG-758: avviso «guida fissata» all'allievo. Spento di default. */
+    studentCreationNoticeEnabled: z.boolean().optional(),
     instructorReminderMinutes: reminderMinutesSchema.optional(),
     instructorReminderEnabled: z.boolean().optional(),
     slotFillChannels: channelListSchema.optional(),
@@ -639,6 +641,7 @@ export type AutoscuolaSettingsData = {
   studentReminderMorningTime: string;
   studentReminderDayBeforeEnabled: boolean;
   studentReminderDayBeforeTime: string;
+  studentCreationNoticeEnabled: boolean;
   instructorReminderMinutes: number;
   instructorReminderEnabled: boolean;
   slotFillChannels: string[];
@@ -814,6 +817,7 @@ const resolveAutoscuolaSettingsData = async (
     typeof limits.studentReminderDayBeforeTime === "string" && /^\d{2}:\d{2}$/.test(limits.studentReminderDayBeforeTime)
       ? limits.studentReminderDayBeforeTime
       : "19:00";
+  const studentCreationNoticeEnabled = limits.studentCreationNoticeEnabled === true;
   const instructorReminderMinutes =
     typeof limits.instructorReminderMinutes === "number"
       ? limits.instructorReminderMinutes
@@ -1060,6 +1064,7 @@ const resolveAutoscuolaSettingsData = async (
     studentReminderMorningTime,
     studentReminderDayBeforeEnabled,
     studentReminderDayBeforeTime,
+    studentCreationNoticeEnabled,
     instructorReminderMinutes,
     instructorReminderEnabled,
     slotFillChannels,
@@ -1280,6 +1285,7 @@ export async function getRecentDeliveriesAction(limit = 20) {
       "appointment_rescheduled",
       "appointment_location_changed",
       "exam_scheduled",
+      "appointment_created",
       "case_deadline",
     ].filter((kind) => deliveryKindLabel(kind) !== "Avviso");
     const rows = await prisma.autoscuolaMessageLog.findMany({
@@ -1827,6 +1833,8 @@ export async function updateAutoscuolaSettings(
         payload.studentReminderDayBeforeEnabled ?? (limits.studentReminderDayBeforeEnabled === true),
       studentReminderDayBeforeTime:
         payload.studentReminderDayBeforeTime ?? (typeof limits.studentReminderDayBeforeTime === "string" ? limits.studentReminderDayBeforeTime : "19:00"),
+      studentCreationNoticeEnabled:
+        payload.studentCreationNoticeEnabled ?? (limits.studentCreationNoticeEnabled === true),
       instructorReminderMinutes:
         payload.instructorReminderMinutes ?? previousInstructorReminderMinutes,
       instructorReminderEnabled:
@@ -2052,6 +2060,7 @@ export async function updateAutoscuolaSettings(
         studentReminderMorningTime: nextLimits.studentReminderMorningTime,
         studentReminderDayBeforeEnabled: nextLimits.studentReminderDayBeforeEnabled,
         studentReminderDayBeforeTime: nextLimits.studentReminderDayBeforeTime,
+        studentCreationNoticeEnabled: nextLimits.studentCreationNoticeEnabled,
         instructorReminderMinutes: nextLimits.instructorReminderMinutes,
         instructorReminderEnabled: nextLimits.instructorReminderEnabled,
         slotFillChannels: nextLimits.slotFillChannels,

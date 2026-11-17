@@ -15,6 +15,7 @@ import { clampEvaluationScore } from "@/lib/autoscuole/evaluation-sheet";
 import { requireServiceAccess } from "@/lib/service-access";
 import { notifyAutoscuolaCaseStatusChange } from "@/lib/autoscuole/communications";
 import { BOOKING_SOURCE, staffBookingSource } from "@/lib/autoscuole/booking-source";
+import { creationNoticeFor } from "@/lib/autoscuole/creation-notice-queue";
 import { broadcastWaitlistOffer, buildAvailabilityResolver, getStudentBookingBlockStatus, cancelGroupLessonParticipantAppointment } from "@/lib/actions/autoscuole-availability.actions";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 // REG-604: i testi di guide ed esami e l'unico punto di invio multicanale.
@@ -4170,6 +4171,10 @@ export async function createAutoscuolaAppointment(
     }
 
     const appointmentId = randomUUID();
+    // REG-758: l'avviso «guida fissata» va solo a chi non se l'è prenotata da sé.
+    const creationNotice = isStudentActor
+      ? null
+      : await creationNoticeFor({ companyId, type: resolvedTypes[0], startsAt: slotTime });
     const appointment = await prisma.$transaction(async (tx) => {
       const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
         prisma: tx as never,
@@ -4186,7 +4191,12 @@ export async function createAutoscuolaAppointment(
             id: appointmentId,
             companyId,
             studentId: payload.studentId,
-            bookingSource: staffBookingSource(isInstructorActor),
+            // L'allievo può prenotare anche da questa action (rotta
+            // appointments, solo per sé): allora la fonte è la sua.
+            bookingSource: isStudentActor
+              ? BOOKING_SOURCE.studentSelf
+              : staffBookingSource(isInstructorActor),
+            creationNotice,
             caseId: payload.caseId || null,
             type: resolvedTypes[0],
             types: resolvedTypes,
@@ -4801,6 +4811,13 @@ export async function createAutoscuolaAppointmentBatch(
 
     // ── Atomic creation via transaction ──
     const entryIds = parsedEntries.map(() => randomUUID());
+    // REG-758: la prenotazione multipla è sempre dello staff. Le date finiscono
+    // in coda insieme e partono in un messaggio solo.
+    const creationNotices = await Promise.all(
+      parsedEntries.map((entry) =>
+        creationNoticeFor({ companyId, type: resolvedTypes[0], startsAt: entry.startsAt }),
+      ),
+    );
 
     const appointments = await prisma.$transaction(async (tx) => {
       // Prepare payment snapshot once (same student/vehicle/instructor)
@@ -4823,6 +4840,7 @@ export async function createAutoscuolaAppointmentBatch(
             companyId,
             studentId: payload.studentId,
             bookingSource: staffBookingSource(isInstructorActor),
+            creationNotice: creationNotices[i],
             type: resolvedTypes[0],
             types: resolvedTypes,
             startsAt: entry.startsAt,
@@ -11205,6 +11223,8 @@ export async function createGroupLesson(
 
     const startsAt = new Date(payload.startsAt);
     const endsAt = new Date(payload.endsAt);
+    // REG-758: gli allievi messi nel gruppo dallo staff ricevono «guida fissata».
+    const creationNotice = await creationNoticeFor({ companyId, type: "group_lesson", startsAt });
     if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
       return { success: false as const, message: "Data non valida." };
     }
@@ -11408,6 +11428,7 @@ export async function createGroupLesson(
               companyId,
               studentId: a.studentId,
               bookingSource: BOOKING_SOURCE.groupLesson,
+              creationNotice,
               type: "group_lesson",
               startsAt,
               endsAt,
@@ -11533,6 +11554,7 @@ export async function createGroupLesson(
             companyId,
             studentId,
             bookingSource: BOOKING_SOURCE.groupLesson,
+            creationNotice,
             type: "group_lesson",
             startsAt,
             endsAt,
@@ -11630,6 +11652,12 @@ export async function addGroupLessonParticipant(
       return { success: false as const, message: "Posti esauriti." };
     }
     const isMoto = gl.kind === "moto";
+    // REG-758: aggiunto dallo staff → «guida fissata» (chi entra da un invito no).
+    const creationNotice = await creationNoticeFor({
+      companyId,
+      type: "group_lesson",
+      startsAt: gl.startsAt,
+    });
 
     const studentErr = await validateGroupLessonStudents({
       companyId,
@@ -11729,6 +11757,7 @@ export async function addGroupLessonParticipant(
             companyId,
             studentId: payload.studentId,
             bookingSource: BOOKING_SOURCE.groupLesson,
+            creationNotice,
             type: "group_lesson",
             startsAt: gl.startsAt,
             endsAt: gl.endsAt,
