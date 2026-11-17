@@ -25,6 +25,7 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { CreateEventPopover } from "@/components/pages/Autoscuole/dialogs/CreateEventPopover";
 import { TimePickerInput } from "@/components/ui/time-picker";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { DurationField } from "@/components/pages/Autoscuole/DurationField";
 import { isMotoLicenseCategory, vehicleServesLicense, LICENSE_CATEGORY_LABELS, TRANSMISSION_LABELS, type LicenseCategory, type Transmission } from "@/lib/autoscuole/license";
 import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, asMotoLessonType, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
 import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
@@ -203,19 +204,6 @@ function StarRatingInput({
     </div>
   );
 }
-
-// Stesse durate del form di creazione (SLOT_OPTIONS in AutoscuoleAgendaPage).
-// La durata attuale della guida viene comunque aggiunta all'elenco a runtime,
-// così esami/guide più lunghe restano visibili e selezionabili.
-const DURATION_OPTIONS = [30, 45, 60, 90, 120];
-
-const formatDuration = (min: number) => {
-  if (min < 60) return `${min} min`;
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  if (m === 0) return h === 1 ? "1 ora" : `${h} ore`;
-  return `${h}h ${m}′`;
-};
 
 const pad = (n: number) => n.toString().padStart(2, "0");
 const toDateStr = (d: Date) =>
@@ -969,28 +957,14 @@ export function EditAppointmentDialog({
               <Clock className="size-3.5 text-slate-500" aria-hidden />
               Durata
             </label>
-            <div className="flex flex-wrap gap-2">
-              {Array.from(new Set([...DURATION_OPTIONS, originalDurationMin, durationMin]))
-                .sort((a, b) => a - b)
-                .map((min) => {
-                  const active = durationMin === min;
-                  return (
-                    <button
-                      key={min}
-                      type="button"
-                      disabled={pending}
-                      onClick={() => setDurationMin(min)}
-                      className={`cursor-pointer rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
-                        active
-                          ? "border-slate-900 bg-slate-900 text-white"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
-                      }`}
-                    >
-                      {formatDuration(min)}
-                    </button>
-                  );
-                })}
-            </div>
+            {/* REG-757: lo stesso campo degli esami — fino a 4 ore, o fine libera. */}
+            <DurationField
+              label={null}
+              startTime={newTime || "09:00"}
+              durationMin={durationMin}
+              onDurationChange={setDurationMin}
+              disabled={pending}
+            />
           </div>
 
           {isNewSlotInPast && (

@@ -92,6 +92,7 @@ import {
   type PaymentHistoryEvent,
 } from "@/lib/autoscuole/payment-history";
 import { LICENSE_CATEGORIES, TRANSMISSIONS, isMotoLicenseCategory, vehicleServesLicense } from "@/lib/autoscuole/license";
+import { exceedsMaxLessonDuration, LESSON_TOO_LONG_MESSAGE } from "@/lib/autoscuole/lesson-duration";
 import {
   EXAM_OUTCOMES,
   canRecordExamOutcome,
@@ -3946,6 +3947,9 @@ export async function createAutoscuolaAppointment(
         message: "Orario di fine non valido.",
       };
     }
+    if (exceedsMaxLessonDuration(slotTime, slotEnd)) {
+      return { success: false, message: LESSON_TOO_LONG_MESSAGE };
+    }
     const warnings: string[] = [];
     // Qui ci arriva solo chi il blocco non ferma (l'allievo bloccato è già
     // tornato indietro sopra): istruttore compreso, dal REG-499 — prenota, ma
@@ -4364,6 +4368,9 @@ export async function checkAutoscuolaAppointmentBatch(
     ) {
       return { success: false as const, message: "Uno o più intervalli orari non validi." };
     }
+    if (parsed.some((e) => exceedsMaxLessonDuration(e.startsAt, e.endsAt))) {
+      return { success: false as const, message: LESSON_TOO_LONG_MESSAGE };
+    }
 
     const conflicts = await scanEntryConflicts({
       companyId,
@@ -4631,6 +4638,9 @@ export async function createAutoscuolaAppointmentBatch(
       const end = new Date(entry.endsAt);
       if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
         return { success: false, message: "Uno o più intervalli orari non validi." };
+      }
+      if (exceedsMaxLessonDuration(start, end)) {
+        return { success: false, message: LESSON_TOO_LONG_MESSAGE };
       }
       if (!payload.allowPast && start.getTime() < Date.now()) {
         return { success: false, message: "Non puoi prenotare una guida nel passato." };

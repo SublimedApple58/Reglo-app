@@ -145,6 +145,14 @@ Il toggle **"Prenotazione multipla"** nel popover *Nuovo appuntamento* (`Autoscu
 - **Sovrapposizioni dentro il gruppo**: `overlappingEntryIds` le segna **mentre compili** (riga rossa + nota) e blocca la CTA. Capita da sé allungando la durata di una guida sopra quella dopo; prima lo diceva solo il server, al salvataggio, a form già pieno.
 - In multipla `draftGhost` torna `null`: giorno e ora del form non vogliono più dire niente, e lasciarlo acceso dipingeva un ghost fantasma in più.
 
+## Durata delle guide fino a 4 ore, o fine libera (REG-757, 2026-11-17)
+
+Richiesta del consorzio (guide CQC di mezza giornata), decisa per **tutte** le autoscuole. Le guide usano lo stesso campo «Durata» di esami e blocchi: `components/pages/Autoscuole/DurationField.tsx` (scelte rapide 30m · 45m · 1h · 1h30 · 2h · 3h · 4h + orario di **fine** libero a passi di 15', mai oltre le 24:00). Prima le guide erano ferme a 30–120 min, scritte in tre posti.
+
+- **Dove**: form «Nuovo appuntamento» in agenda (anche ogni riga della prenotazione multipla, variante `size="sm"`), `EditAppointmentDialog`, `ProposeSlotDialog` del consorzio (che ora sta dentro lo schermo anche a 390px).
+- **Tetto server**: 10 ore (`MAX_LESSON_DURATION_MINUTES` in `lib/autoscuole/lesson-duration.ts`), controllato da `createAutoscuolaAppointment`, dalla verifica e dalla creazione della prenotazione multipla. Lo stesso tetto c'era già sulla modifica (`durationMin` ≤ 600) e sulle richieste di guida del consorzio.
+- **Fuori**: le durate prenotabili dall'app (`BOOKING_SLOT_DURATION_OPTIONS`, 30–120) e l'app mobile (agenda proporzionale alla durata, modifica 30–120 + durata attuale): invariati. **Crediti e prezzo non guardano la durata**: 1 credito per guida e prezzo da 60' per ogni guida da 60' in su (`payments.ts`) — limite noto, task a parte. Le fatture consorzio orarie sono proporzionali (`lib/consorzio/pricing.ts`).
+
 ## Auto al seguito occupata: scelta dell'auto sostitutiva per data (REG-608, 2026-10-13)
 
 Nella multipla moto l'auto al seguito era **una sola per tutte le date**: bastava che fosse occupata una volta perché non nascesse **nessuna** guida, con un messaggio che non diceva nemmeno quale auto fosse (segnalazione Mara Macchiavello, 12/10/2026). Ora il tutto-o-niente resta, ma prima di arrendersi si passa da una schermata di riparazione: **il punto è trovare un'altra auto, non un'altra data**.
