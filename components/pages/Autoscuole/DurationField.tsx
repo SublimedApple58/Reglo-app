@@ -60,16 +60,18 @@ export function DurationField({
         <div className={cn("text-[13px] font-semibold text-[#6a6a6a]", labelClassName)}>{label}</div>
       ) : null}
       {/* Una cornice sola: chip + divisore + picker "fine" collaborano in un
-          unico controllo. Sotto i ~360px le chip vanno a capo invece di
-          schiacciarsi. */}
+          unico controllo. Si adatta alla larghezza DEL CAMPO (container query,
+          non dello schermo): sotto i 440px la fine scende su una riga sua,
+          separata da una linea sottile, invece di schiacciare le chip. */}
       <div
         className={cn(
-          "flex flex-wrap items-center gap-1 rounded-[12px] border-[1.5px] border-[#e6e6e8] bg-white p-1",
+          "@container rounded-[12px] border-[1.5px] border-[#e6e6e8] bg-white p-1",
           sm && "rounded-[10px] border p-[3px]",
         )}
         data-testid="duration-field"
       >
-        <div className="flex min-w-0 flex-[1_1_260px] items-center gap-0.5">
+       <div className="flex flex-col @[440px]:flex-row @[440px]:items-center @[440px]:gap-1">
+        <div className="flex min-w-0 flex-1 items-center gap-0.5">
           {chips.map((m) => {
             const active = durationMin === m;
             return (
@@ -97,9 +99,9 @@ export function DurationField({
             );
           })}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <div className="mx-0.5 h-5 w-px shrink-0 bg-[#e6e6e8]" />
-          <span className={cn("pl-1 font-medium text-[#a0a0a5]", sm ? "text-[11px]" : "text-[12px]")}>
+        <div className="mt-1 flex shrink-0 items-center justify-between gap-1 border-t border-[#efeff1] pt-1 @[440px]:mt-0 @[440px]:justify-start @[440px]:border-t-0 @[440px]:pt-0">
+          <div className="mx-0.5 hidden h-5 w-px shrink-0 bg-[#e6e6e8] @[440px]:block" />
+          <span className={cn("pl-2 font-medium text-[#a0a0a5] @[440px]:pl-1", sm ? "text-[11px]" : "text-[12px]")}>
             fine
           </span>
           <TimePickerInput
@@ -119,6 +121,7 @@ export function DurationField({
             }}
           />
         </div>
+       </div>
       </div>
     </div>
   );
