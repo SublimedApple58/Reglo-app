@@ -487,6 +487,7 @@ export function AutoscuoleResourcesPage({
   const [studentReminderMorningTime, setStudentReminderMorningTime] = React.useState("08:00");
   const [studentReminderDayBeforeEnabled, setStudentReminderDayBeforeEnabled] = React.useState(false);
   const [studentReminderDayBeforeTime, setStudentReminderDayBeforeTime] = React.useState("19:00");
+  const [studentCreationNoticeEnabled, setStudentCreationNoticeEnabled] = React.useState(false);
   const [instructorReminderMinutes, setInstructorReminderMinutes] = React.useState("60");
   const [instructorReminderEnabled, setInstructorReminderEnabled] = React.useState(true);
   const [slotFillChannels, setSlotFillChannels] = React.useState<ChannelValue[]>([
@@ -762,6 +763,7 @@ export function AutoscuoleResourcesPage({
     setStudentReminderMorningTime(res.data.studentReminderMorningTime ?? "08:00");
     setStudentReminderDayBeforeEnabled(res.data.studentReminderDayBeforeEnabled ?? false);
     setStudentReminderDayBeforeTime(res.data.studentReminderDayBeforeTime ?? "19:00");
+    setStudentCreationNoticeEnabled(res.data.studentCreationNoticeEnabled ?? false);
     setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
     setInstructorReminderEnabled(res.data.instructorReminderEnabled !== false);
     setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
@@ -1193,6 +1195,7 @@ export function AutoscuoleResourcesPage({
     studentReminderMorningTime?: string;
     studentReminderDayBeforeEnabled?: boolean;
     studentReminderDayBeforeTime?: string;
+    studentCreationNoticeEnabled?: boolean;
     slotFillChannels?: ChannelValue[];
     studentReminderChannels?: ChannelValue[];
     instructorReminderChannels?: ChannelValue[];
@@ -1213,6 +1216,7 @@ export function AutoscuoleResourcesPage({
       studentReminderMorningTime,
       studentReminderDayBeforeEnabled,
       studentReminderDayBeforeTime,
+      studentCreationNoticeEnabled,
       slotFillChannels,
       studentReminderChannels,
       instructorReminderChannels,
@@ -1231,6 +1235,8 @@ export function AutoscuoleResourcesPage({
       setStudentReminderDayBeforeEnabled(patch.studentReminderDayBeforeEnabled);
     if (patch.studentReminderDayBeforeTime !== undefined)
       setStudentReminderDayBeforeTime(patch.studentReminderDayBeforeTime);
+    if (patch.studentCreationNoticeEnabled !== undefined)
+      setStudentCreationNoticeEnabled(patch.studentCreationNoticeEnabled);
     if (patch.slotFillChannels !== undefined) setSlotFillChannels(patch.slotFillChannels);
     if (patch.studentReminderChannels !== undefined)
       setStudentReminderChannels(patch.studentReminderChannels);
@@ -1259,6 +1265,9 @@ export function AutoscuoleResourcesPage({
       ...(patch.studentReminderDayBeforeTime !== undefined
         ? { studentReminderDayBeforeTime: patch.studentReminderDayBeforeTime }
         : {}),
+      ...(patch.studentCreationNoticeEnabled !== undefined
+        ? { studentCreationNoticeEnabled: patch.studentCreationNoticeEnabled }
+        : {}),
       ...(patch.slotFillChannels !== undefined ? { slotFillChannels: patch.slotFillChannels } : {}),
       ...(patch.studentReminderChannels !== undefined
         ? { studentReminderChannels: patch.studentReminderChannels }
@@ -1275,6 +1284,7 @@ export function AutoscuoleResourcesPage({
       setStudentReminderMorningTime(prev.studentReminderMorningTime);
       setStudentReminderDayBeforeEnabled(prev.studentReminderDayBeforeEnabled);
       setStudentReminderDayBeforeTime(prev.studentReminderDayBeforeTime);
+      setStudentCreationNoticeEnabled(prev.studentCreationNoticeEnabled);
       setSlotFillChannels(prev.slotFillChannels);
       setStudentReminderChannels(prev.studentReminderChannels);
       setInstructorReminderChannels(prev.instructorReminderChannels);
@@ -2273,6 +2283,7 @@ export function AutoscuoleResourcesPage({
             studentReminderMorningTime={studentReminderMorningTime}
             studentReminderDayBeforeEnabled={studentReminderDayBeforeEnabled}
             studentReminderDayBeforeTime={studentReminderDayBeforeTime}
+            studentCreationNoticeEnabled={studentCreationNoticeEnabled}
             instructorReminderMinutes={instructorReminderMinutes}
             instructorReminderEnabled={instructorReminderEnabled}
             slotFillChannels={slotFillChannels}
