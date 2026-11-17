@@ -153,6 +153,13 @@ export type ConsorzioSchoolListItem = {
   accountingCode: string | null;
 };
 
+/** REG-756: allievo per la ricerca inversa nome → autoscuola. */
+export type ConsorzioSchoolStudentRef = {
+  userId: string;
+  name: string;
+  schoolId: string;
+};
+
 export async function listConsorzioSchools() {
   try {
     const { membership } = await requireConsortium();
@@ -171,7 +178,7 @@ export async function listConsorzioSchools() {
         autoscuolaRole: "STUDENT",
         consorzioSchoolId: { not: null },
       },
-      select: { userId: true, consorzioSchoolId: true },
+      select: { userId: true, consorzioSchoolId: true, user: { select: { name: true } } },
     });
     const schoolByStudent = new Map(
       members.map((m) => [m.userId, m.consorzioSchoolId as string]),
@@ -247,7 +254,19 @@ export async function listConsorzioSchools() {
 
     const totalStudents = members.length;
 
-    return { success: true as const, data: { schools: items, totalStudents } };
+    // REG-756: i nomi viaggiano con la lista, così la ricerca della pagina
+    // risale da un allievo alla sua autoscuola senza un'altra chiamata. Solo
+    // gli allievi delle autoscuole in elenco (le rimosse non si vedono).
+    const listedSchoolIds = new Set(items.map((item) => item.id));
+    const students: ConsorzioSchoolStudentRef[] = members
+      .filter((m) => listedSchoolIds.has(m.consorzioSchoolId as string) && m.user?.name?.trim())
+      .map((m) => ({
+        userId: m.userId,
+        name: (m.user?.name ?? "").trim(),
+        schoolId: m.consorzioSchoolId as string,
+      }));
+
+    return { success: true as const, data: { schools: items, totalStudents, students } };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }

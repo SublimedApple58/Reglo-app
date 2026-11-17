@@ -3,7 +3,8 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
-import { Plus, Search } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { ArrowRight, ChevronRight, Plus, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -24,7 +25,11 @@ import {
   createConsorzioSchool,
   listConsorzioSchools,
   type ConsorzioSchoolListItem,
+  type ConsorzioSchoolStudentRef,
 } from "@/lib/actions/consorzio.actions";
+import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
+import { formatStoredName, storedNameInitials } from "@/lib/autoscuole/student-name-order";
+import { searchStudents } from "@/lib/consorzio/student-search";
 
 /**
  * Sezione "Autoscuole" del consorzio (?tab=scuole): tabella delle autoscuole
@@ -135,6 +140,115 @@ import { affiliateInviteTargets } from "@/lib/consorzio/affiliate-invite-targets
 import { AffiliateBulkInviteDialog } from "@/components/pages/Backoffice/AffiliateBulkInviteDialog";
 import { AccessBadge, matchesAccessFilter, type AccessFilter } from "./school-access";
 
+/** Quanti allievi mostra la ricerca prima di "Mostra tutti". */
+const STUDENT_RESULTS_CAP = 6;
+const EASE_OUT = [0.22, 1, 0.36, 1] as const;
+
+/**
+ * REG-756 — ricerca inversa: dal nome dell'allievo alla sua autoscuola.
+ * Compare sopra la tabella solo quando la ricerca trova allievi; il clic apre
+ * la scheda dell'autoscuola con il dettaglio dell'allievo già aperto.
+ */
+function StudentSearchResults({
+  results,
+  schoolsById,
+  onOpen,
+}: {
+  results: ConsorzioSchoolStudentRef[];
+  schoolsById: Map<string, ConsorzioSchoolListItem>;
+  onOpen: (student: ConsorzioSchoolStudentRef) => void;
+}) {
+  const nameOrder = useStudentNameOrder();
+  const [expanded, setExpanded] = React.useState(false);
+  // Una ricerca nuova riparte compatta.
+  React.useEffect(() => setExpanded(false), [results]);
+  const shown = expanded ? results : results.slice(0, STUDENT_RESULTS_CAP);
+  const hidden = results.length - shown.length;
+
+  return (
+    <motion.section
+      key="student-results"
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: 0.24, ease: EASE_OUT }}
+      className="overflow-hidden"
+      aria-label="Allievi trovati"
+    >
+      <div className="pb-6">
+        <div className="flex items-baseline justify-between border-b border-[#ebebeb] px-4 pb-2.5">
+          <div className="text-[11px] font-bold uppercase tracking-[0.7px] text-[#929292]">
+            Allievi
+          </div>
+          <div className="text-[12px] font-medium text-[#929292]">
+            {results.length === 1 ? "1 trovato" : `${results.length} trovati`}
+          </div>
+        </div>
+        <ul>
+          <AnimatePresence initial={false}>
+            {shown.map((student, index) => {
+              const school = schoolsById.get(student.schoolId);
+              return (
+                <motion.li
+                  key={student.userId}
+                  layout="position"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2, ease: EASE_OUT, delay: Math.min(index, 6) * 0.025 }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onOpen(student)}
+                    data-testid="consorzio-student-result"
+                    className="group flex w-full cursor-pointer items-center gap-3 rounded-[10px] border-b border-[#f2f2f2] px-4 py-3 text-left transition-colors duration-200 hover:bg-[#fafafa] focus-visible:bg-[#fafafa] focus-visible:outline-none"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#111111] text-[11.5px] font-bold text-white">
+                      {storedNameInitials(student.name, nameOrder)}
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2.5">
+                      <span className="truncate text-[14px] font-semibold text-[#222222]">
+                        {formatStoredName(student.name, nameOrder)}
+                      </span>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <ArrowRight
+                          aria-hidden
+                          className="h-3.5 w-3.5 shrink-0 text-[#b0b0b0] transition-transform duration-200 ease-out group-hover:translate-x-0.5"
+                        />
+                        <span className="truncate text-[13.5px] font-medium text-[#444444]">
+                          {school?.name ?? "Autoscuola"}
+                        </span>
+                        {school?.city ? (
+                          <span className="hidden truncate text-[12.5px] font-medium text-[#a0a0a0] sm:inline">
+                            {school.city}
+                          </span>
+                        ) : null}
+                      </span>
+                    </div>
+                    <ChevronRight
+                      aria-hidden
+                      className="h-4 w-4 shrink-0 text-[#c4c4c4] transition-all duration-200 ease-out group-hover:translate-x-0.5 group-hover:text-[#222222]"
+                    />
+                  </button>
+                </motion.li>
+              );
+            })}
+          </AnimatePresence>
+        </ul>
+        {hidden > 0 && (
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="mt-2 cursor-pointer px-4 py-1.5 text-[13px] font-semibold text-[#222222] underline decoration-[#d0d0d0] underline-offset-4 transition-colors duration-200 hover:decoration-[#222222]"
+          >
+            Mostra tutti ({results.length})
+          </button>
+        )}
+      </div>
+    </motion.section>
+  );
+}
+
 export function ConsorzioSchoolsPage() {
   const router = useRouter();
   const locale = useLocale();
@@ -143,6 +257,7 @@ export function ConsorzioSchoolsPage() {
   const [loading, setLoading] = React.useState(true);
   const [schools, setSchools] = React.useState<ConsorzioSchoolListItem[]>([]);
   const [totalStudents, setTotalStudents] = React.useState(0);
+  const [students, setStudents] = React.useState<ConsorzioSchoolStudentRef[]>([]);
   const [search, setSearch] = React.useState("");
 
   const [access, setAccess] = React.useState<Map<string, AffiliateSchoolRow>>(new Map());
@@ -163,6 +278,7 @@ export function ConsorzioSchoolsPage() {
     if (res.success) {
       setSchools(res.data.schools);
       setTotalStudents(res.data.totalStudents);
+      setStudents(res.data.students);
     } else {
       toast.error({ description: res.message });
     }
@@ -194,6 +310,26 @@ export function ConsorzioSchoolsPage() {
       ),
     [filtered, accessFilter, access],
   );
+
+  const schoolsById = React.useMemo(
+    () => new Map(schools.map((school) => [school.id, school])),
+    [schools],
+  );
+
+  // REG-756: gli allievi che la ricerca trova, rispettando il filtro di
+  // accesso (se guardo solo "Accedono", non mi propone allievi delle altre).
+  const studentResults = React.useMemo(
+    () =>
+      searchStudents(students, search).filter((student) =>
+        matchesAccessFilter(accessFilter, access.get(student.schoolId)?.access),
+      ),
+    [students, search, accessFilter, access],
+  );
+
+  const openStudent = (student: ConsorzioSchoolStudentRef) =>
+    router.push(
+      `/${locale}/user/autoscuole/scuole/${student.schoolId}?allievo=${encodeURIComponent(student.userId)}`,
+    );
 
   const accessCounts = React.useMemo(() => {
     let active = 0;
@@ -245,13 +381,14 @@ export function ConsorzioSchoolsPage() {
             {totalStudents} allievi in guida superiore nelle autoscuole associate
           </p>
         </div>
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-10 w-[300px] items-center gap-2 rounded-[50px] border border-[#e2e2e2] bg-white px-3.5">
+        <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto">
+          <div className="flex h-10 w-full items-center sm:w-[320px] gap-2 rounded-[50px] border border-[#e2e2e2] bg-white px-3.5">
             <Search className="h-[15px] w-[15px] shrink-0 text-[#a0a0a0]" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cerca autoscuola, titolare o codice"
+              placeholder="Cerca autoscuola, titolare, codice o allievo"
+              aria-label="Cerca autoscuola, titolare, codice o allievo"
               className="w-full border-0 bg-transparent p-0 text-[15px] font-medium text-[#222222] outline-none placeholder:text-[#a0a0a0]"
             />
           </div>
@@ -290,14 +427,24 @@ export function ConsorzioSchoolsPage() {
       )}
 
       <div className="mt-[22px]">
+        <AnimatePresence initial={false}>
+          {!loading && studentResults.length > 0 && (
+            <StudentSearchResults
+              key="student-results"
+              results={studentResults}
+              schoolsById={schoolsById}
+              onOpen={openStudent}
+            />
+          )}
+        </AnimatePresence>
         {loading ? (
           <SchoolListSkeleton />
-        ) : visible.length === 0 ? (
+        ) : visible.length === 0 && studentResults.length > 0 ? null : visible.length === 0 ? (
           <FadeIn>
           <div className="rounded-3xl border border-dashed border-neutral-200 bg-white/60 p-12 text-center text-sm font-medium text-neutral-500">
             {schools.length === 0
               ? "Nessuna autoscuola consorziata ancora. Aggiungi la prima."
-              : "Nessuna autoscuola corrisponde alla ricerca."}
+              : "Nessuna autoscuola o allievo corrisponde alla ricerca."}
           </div>
           </FadeIn>
         ) : (

@@ -217,6 +217,18 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
   // Drawer laterale dettaglio allievo (click sulla riga, come nel prototipo).
   const [drawerUserId, setDrawerUserId] = React.useState<string | null>(null);
 
+  // REG-756: dalla ricerca della pagina Autoscuole si arriva con ?allievo=<id>
+  // e il dettaglio dell'allievo si apre da sé. Il parametro si toglie subito
+  // dall'indirizzo, così chiudere il drawer (o ricaricare) non lo riapre.
+  React.useEffect(() => {
+    const url = new URL(window.location.href);
+    const fromSearch = url.searchParams.get("allievo");
+    if (!fromSearch) return;
+    setDrawerUserId(fromSearch);
+    url.searchParams.delete("allievo");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, []);
+
   // Filtro fase percorso: patentati vs percorso ancora in corso.
   const [phaseFilter, setPhaseFilter] = React.useState<PhaseFilter>("all");
 

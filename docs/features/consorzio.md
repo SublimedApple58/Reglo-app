@@ -34,6 +34,14 @@ Gli allievi del consorzio sono tutti nella stessa company: con decine di consorz
 
 Le opzioni sono ricavate dagli allievi stessi (nessuna fetch in più): compaiono le autoscuole che hanno almeno un allievo, più "Senza autoscuola" se qualche allievo non è taggato. Il select appare solo con `isConsortium` e più di una autoscuola → per le autoscuole normali non cambia nulla.
 
+## Ricerca inversa allievo → autoscuola (REG-756)
+
+Con decine di consorziate, dato un nome il consorzio deve sapere da quale sede arriva l'allievo. La ricerca della pagina **Autoscuole** (`ConsorzioSchoolsPage`, «Cerca autoscuola, titolare, codice o allievo») trova anche gli allievi: sopra la tabella compare il gruppo **Allievi** con righe «Mario Rossi → Autoscuola X» (max 6, poi «Mostra tutti»), che rispetta il filtro Accedono/Da invitare. Il clic porta a `scuole/[schoolId]?allievo=<userId>`: `ConsorzioSchoolDetailPage` apre da sé il drawer dell'allievo e toglie il parametro dall'indirizzo.
+
+- **Dati**: `listConsorzioSchools` restituisce anche `students` (`userId`, `name`, `schoolId`) — li leggeva già per i conteggi, nessuna query nuova. Solo allievi di autoscuole in elenco (le rimosse no).
+- **Regola di confronto**: `lib/consorzio/student-search.ts` — ogni parola della query deve essere l'inizio di una parola del nome, in qualunque ordine («Rossi Mario» trova «Mario Rossi»), senza maiuscole né accenti. Test: `tests/unit/consorzio/student-search.test.ts`.
+- Il nome si mostra nell'ordine scelto in Aspetto (`formatStoredName`).
+
 ## Preavviso minimo richieste di guida
 
 `limits.consorzioPricing.guideRequestMinLeadHours` (default **8 ore**, configurabile in Impostazioni → Prenotazioni e allievi → **Prezzi**, prima sezione "Richieste di guida": 0 = regola disattivata, 2/4/6/8/12/24/48). Regola pura e testata in `lib/consorzio/guide-request-lead.ts` (`guideRequestLeadTimeError`, unit test `tests/unit/consorzio/guide-request-lead.test.ts`).
