@@ -1,6 +1,17 @@
 # REG-758 · Avviso «guida fissata» all'allievo: piano di prodotto (fase 1)
 
-**Stato:** piano approvato da Tiziano il 2026-11-17, sviluppo in corso (fino a staging, mai prod).
+**Stato:** su STAGING dal 2026-11-17 (web + backend + migrazione). Mobile solo in locale (commit sul branch del worktree `reg-758-mobile`, non pushato). Produzione NON toccata.
+
+## Cosa è stato fatto
+- **Backend**: colonna `AutoscuolaAppointment.creationNotice` (migrazione `20261117120000_appointment_creation_notice`, applicata su staging); `creation-notice.ts` (regole e testi) + `creation-notice-queue.ts` (coda); agganci in guida singola (solo se non prenota l'allievo), multipla, guida di gruppo creata dallo staff e allievo aggiunto, richiesta guida accettata dal consorzio, assistente vocale; job `autoscuole-reminders` svuota la coda; kind `appointment_created`, template `guida_fissata_allievo_v1` nel registro (pending).
+- **Silenzio**: annullamento/spostamento/cambio luogo di una guida mai annunciata (`pending`/`skipped`) non partono, né in push né nel recupero dell'inbox (difetto trovato in QA su staging e corretto).
+- **Web**: interruttore «Avviso guida fissata» in Impostazioni → Promemoria e notifiche (spento di default), etichetta «Guida fissata» in «Ultimi invii».
+- **Mobile**: kind nell'inbox («Guida fissata» / «N guide fissate», «La prima: …»), id stabile `created_<id>`, `getNotifications` dichiara `supports=appointment_created`.
+- **Meta**: `guida_fissata_allievo_v1` sottomesso via Telnyx il 17/11 (template_id 4420418908269594, PENDING). Quando passa: `approval: "approved"` nel registro + deploy web e job.
+- **Correzione a margine**: `createAutoscuolaAppointment` salva `bookingSource = student_self` quando prenota l'allievo stesso.
+- **QA staging** (Autoscuola Reglo demo, allievo `allievo2@reglo.it`): 2 singole + multipla da 2 → un messaggio «📅 4 guide fissate»; guida passata non in coda; guida annullata in coda → `skipped` e nessun «Guida annullata»; recupero inbox solo con `supports`.
+- **Per il rilascio in prod (non fatto)**: `migrate:prod`, `trigger:deploy:prod` (il job serve alla coda), OTA mobile; poi accendere l'interruttore per il consorzio.
+
 
 ## Decisioni di Tiziano (2026-11-17)
 1. **Spento di default**, interruttore in Impostazioni → Promemoria e notifiche.
