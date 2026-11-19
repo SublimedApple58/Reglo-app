@@ -26,6 +26,19 @@ export const formatDurationChip = (min: number) => {
   return m === 0 ? `${h}h` : `${h}h${m}`;
 };
 
+/**
+ * Durata di una guida da leggere in una riga (REG-760, storico guide):
+ * «45 min», «1 h», «1 h 30», «2 h 30». Le scelte rapide restano compatte
+ * (`formatDurationChip`). Gemella di `formatLessonDuration` in
+ * reglo-mobile/src/utils/date.ts: stesso formato sull'app.
+ */
+export const formatLessonDuration = (min: number) => {
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m === 0 ? `${h} h` : `${h} h ${String(m).padStart(2, "0")}`;
+};
+
 export const timeToMinutes = (t: string) => {
   const [h, m] = (t || "").split(":").map(Number);
   return (h || 0) * 60 + (m || 0);

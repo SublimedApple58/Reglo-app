@@ -2324,6 +2324,8 @@ const buildDrivingRegisterData = ({
           30,
           Math.round((end.getTime() - lesson.startsAt.getTime()) / 60000),
         ),
+        // REG-760: senza orario di fine (esame da fissare) la durata non è vera.
+        durationKnown: lesson.endsAt != null,
         instructorName: lesson.instructor?.name ?? null,
         vehicleName: lesson.vehicle?.name ?? null,
       };

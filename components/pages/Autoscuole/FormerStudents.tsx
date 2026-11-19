@@ -23,6 +23,7 @@ import {
   type FormerStudentReason,
 } from "@/lib/autoscuole/former-students";
 import { TRANSMISSION_LABELS, type Transmission } from "@/lib/autoscuole/license";
+import { formatLessonDuration } from "@/lib/autoscuole/lesson-duration";
 
 /**
  * REG-629 — «Ex allievi» della pagina Allievi: chi ha lasciato l'autoscuola
@@ -249,6 +250,8 @@ function LessonRow({
   const start = new Date(lesson.startsAt);
   const end = new Date(lesson.endsAt);
   const time = (d: Date) => d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+  // REG-760: senza fine vera (endsAt = startsAt) niente durata.
+  const minutes = Math.round((end.getTime() - start.getTime()) / 60000);
   const automatic = lesson.paymentRequired && lesson.manualPaymentStatus == null;
   const penalty = ["cancelled", "no_show"].includes(lesson.status) && lesson.lateCancellationAction === "charged";
   const paid = lesson.manualPaymentStatus === "paid";
@@ -263,6 +266,12 @@ function LessonRow({
         <div className="mb-1 flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold text-foreground">
             {time(start)} – {time(end)}
+            {minutes > 0 ? (
+              <span className="font-normal text-[#6a6a6a]">
+                {" · "}
+                {formatLessonDuration(minutes)}
+              </span>
+            ) : null}
           </span>
           <span className="rounded-[4px] bg-[#f2f2f2] px-2 py-0.5 text-[12px] font-semibold text-[#3f3f3f]">
             {penalty ? "Penale annullamento" : type}

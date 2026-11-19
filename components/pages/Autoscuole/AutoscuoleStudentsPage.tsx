@@ -158,6 +158,7 @@ import { LoadingDots } from "@/components/ui/loading-dots";
 import { AutoscuoleLateCancellationsPanel } from "./AutoscuoleLateCancellationsPanel";
 import { NeverAccessedListMark } from "./NeverAccessedNudge";
 import { isLessonUnpaid } from "@/lib/autoscuole/lesson-unpaid";
+import { formatLessonDuration } from "@/lib/autoscuole/lesson-duration";
 import { useAtomValue as useAtomValueRoad } from "jotai";
 import { companyAtom as companyAtomRoad } from "@/atoms/company.store";
 import { isRoadEnabled } from "@/lib/services";
@@ -463,6 +464,8 @@ type LessonEntry = {
   status: string;
   startsAt: string | Date;
   durationMinutes: number;
+  /** REG-760: false se la guida non ha un orario di fine (esame da fissare). */
+  durationKnown?: boolean;
   instructorName: string | null;
   vehicleName: string | null;
   cancelledAt: string | Date | null;
@@ -3803,6 +3806,12 @@ export function AutoscuoleStudentsPage({
                     {startDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
                     {" – "}
                     {endDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                    {lesson.durationKnown ? (
+                      <span className="font-normal text-[#6a6a6a]">
+                        {" · "}
+                        {formatLessonDuration(lesson.durationMinutes)}
+                      </span>
+                    ) : null}
                   </span>
                   {lesson.group ? (
                     <span
@@ -3832,7 +3841,7 @@ export function AutoscuoleStudentsPage({
                   )}
                 </div>
                 <p className="mb-2 text-[13px] font-medium text-[#6a6a6a]">
-                  {lesson.durationMinutes} min · {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
+                  {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
                 </p>
                 <div className="flex flex-wrap items-center gap-1.5">
                   <Pill tone={isCompleted || isCheckedIn ? "green" : isCancelled || isNoShow ? "red" : "gray"}>
@@ -3979,6 +3988,12 @@ export function AutoscuoleStudentsPage({
                     {startDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
                     {" – "}
                     {endDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                    {lesson.durationKnown ? (
+                      <span className="font-normal text-[#6a6a6a]">
+                        {" · "}
+                        {formatLessonDuration(lesson.durationMinutes)}
+                      </span>
+                    ) : null}
                   </span>
                   {lesson.group ? (
                     <span

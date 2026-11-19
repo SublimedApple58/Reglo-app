@@ -530,6 +530,10 @@ autoscuole-reminders.ts → communications.ts →
   processCaseDeadlines (pink sheet, medical expiry alerts)
 ```
 
+### Scheda allievo / storico guide
+- → **Appointments**: le righe dello storico (tab Guide/Note di `AutoscuoleStudentsPage`, `FormerStudents`) leggono la durata con `formatLessonDuration` (REG-760); il campo `durationKnown` arriva dalla stessa action dello storico.
+- → **Durata guide (REG-757)**: `formatLessonDuration` vive in `lib/autoscuole/lesson-duration.ts` accanto alle scelte rapide (`formatDurationChip`): formato da riga «1 h 30», da chip «1h30».
+- → **Mobile**: stesso formato nell'app (`reglo-mobile/src/utils/date.ts`, storico istruttore e «Le tue guide» allievo): se cambia qui, cambia anche lì.
 ### Pausa tra le guide (REG-484)
 - → **Appointments**: nasce a ogni creazione di guida (4 flussi), mai su esami/guide di gruppo
 - → **Availability / Booking Engine**: nessuna modifica ai motori — la pausa è un normale blocco istruttore, quindi lista slot, mappa giorni, slot-matcher, waitlist e guard di creazione la vedono già
