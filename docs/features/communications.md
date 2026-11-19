@@ -103,6 +103,11 @@ spuntati, mentre la UI prometteva «una volta sola».
 - Una push conta come consegnata solo se `sent > 0` (`pushReachedADevice`):
   `deliverAndLog` registra `skipped`/`failed` una push senza dispositivi, e la
   cascata passa al gradino dopo.
+- Lo stesso per l'email verso un indirizzo non consegnabile (segnaposto
+  `@no-app.reglo.local` degli allievi senza email, account anonimizzati;
+  `isUndeliverableEmail`): `deliverAndLog` registra `skipped` «nessuna email
+  reale» senza provare l'invio. Prima finiva `sent` perché `sendDynamicEmail`
+  scarta quei destinatari senza lanciare (consorzio, 17-19/11).
 - **Offerte** (posto libero, invito guida di gruppo, sostituzione) = solo push
   (`OFFER_CHANNELS`). `slotFillChannels` non viene più letta.
 - **Una scelta per tutti**: la UI scrive `studentReminderChannels` **e**
