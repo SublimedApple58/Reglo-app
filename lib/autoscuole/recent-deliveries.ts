@@ -63,7 +63,9 @@ export function friendlyReason(channel: string, error: string | null): string | 
     return null;
   }
   if (channel === "email") {
-    if (text.includes("destinatario mancante")) return "nessuna email in anagrafica";
+    if (text.includes("destinatario mancante") || text.includes("nessuna email reale")) {
+      return "nessuna email in anagrafica";
+    }
     return null;
   }
   return null;

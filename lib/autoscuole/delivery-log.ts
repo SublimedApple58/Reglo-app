@@ -14,6 +14,7 @@
  */
 import { prisma } from "@/db/prisma";
 import { pushReachedADevice } from "@/lib/autoscuole/channel-cascade";
+import { isUndeliverableEmail } from "@/lib/users/placeholder-email";
 
 export type DeliveryChannel = "push" | "whatsapp" | "email";
 
@@ -79,6 +80,14 @@ export async function deliverAndLog(
 ): Promise<boolean> {
   if (!attempt.recipient) {
     await write(attempt, "skipped", { error: "destinatario mancante" });
+    return false;
+  }
+  // Gli allievi creati senza email hanno un segnaposto `@no-app.reglo.local`:
+  // `sendDynamicEmail` lo scarta senza lanciare, e qui finiva a registro come
+  // `sent`. La cascata si fermava su un falso «inviato» e l'allievo non
+  // riceveva niente (consorzio, 17-19/11: WhatsApp bloccato, email finte).
+  if (attempt.channel === "email" && isUndeliverableEmail(attempt.recipient)) {
+    await write(attempt, "skipped", { error: "nessuna email reale" });
     return false;
   }
   try {
