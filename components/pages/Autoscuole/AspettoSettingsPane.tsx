@@ -594,14 +594,19 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
           {criterion === "patente" ? (
             <div className="mt-3 flex flex-col gap-2.5" data-testid="license-color-groups">
               {LICENSE_COLOR_GROUPS.map((group) => (
-                <div key={group.label} className="flex flex-wrap items-center gap-2">
-                  <span className="w-[104px] shrink-0 text-[12px] font-semibold text-[#929292]">
+                <div key={group.label} className="flex items-start gap-2">
+                  {/* Stesso py-1.5 delle voci: l'etichetta sta in riga con la
+                      prima fila, e le voci che vanno a capo restano nella loro
+                      colonna invece di finire sotto l'etichetta. */}
+                  <span className="w-[104px] shrink-0 py-1.5 text-[12px] font-semibold text-[#929292]">
                     {group.label}
                   </span>
-                  {group.keys.map((key) => {
-                    const entry = entriesByKey.get(key);
-                    return entry ? renderColorChip(entry) : null;
-                  })}
+                  <div className="flex min-w-0 flex-1 flex-wrap gap-2">
+                    {group.keys.map((key) => {
+                      const entry = entriesByKey.get(key);
+                      return entry ? renderColorChip(entry) : null;
+                    })}
+                  </div>
                 </div>
               ))}
               <p className="mt-1 text-[12px] font-medium leading-normal text-[#a8a8a8]">
