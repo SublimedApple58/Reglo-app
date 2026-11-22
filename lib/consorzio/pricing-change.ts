@@ -1,4 +1,7 @@
-import { CONSORTIUM_LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
+import {
+  CONSORTIUM_LICENSE_CATEGORIES,
+  licenseCategoryShort,
+} from "@/lib/autoscuole/license";
 import type { ConsorzioPricing } from "@/lib/consorzio/pricing";
 
 /**
@@ -55,14 +58,14 @@ export function diffConsorzioPricing(
   for (const category of CONSORTIUM_LICENSE_CATEGORIES) {
     push(
       `hourly:${category}`,
-      `Tariffa oraria · ${category}`,
+      `Tariffa oraria · ${licenseCategoryShort(category)}`,
       num(prev.hourlyByCategory[category]),
       num(next.hourlyByCategory[category]),
       "eur",
     );
     push(
       `course:${category}`,
-      `Prezzo percorso · ${category}`,
+      `Prezzo percorso · ${licenseCategoryShort(category)}`,
       num(prev.courseByCategory[category]),
       num(next.courseByCategory[category]),
       "eur",

@@ -60,6 +60,8 @@ import {
   LICENSE_PATH_BUCKETS as LICENSE_PATH_BUCKET_KEYS,
   LICENSE_PATH_BUCKET_CATEGORIES,
   LICENSE_PATH_BUCKET_LABELS,
+  licenseCategoryShort,
+  licensePathPhrase,
 } from "@/lib/autoscuole/license";
 import { CodiceTab } from "@/components/pages/Autoscuole/instructor-qr/CodiceTab";
 import {
@@ -2657,7 +2659,7 @@ function AutonomaTab({
                           </span>
                         ) : s.licenseCategory ? (
                           <span className="shrink-0 rounded-md bg-[#f0f0f0] px-[7px] py-0.5 text-[11px] font-bold text-[#888888]">
-                            {s.licenseCategory}
+                            {licenseCategoryShort(s.licenseCategory)}
                           </span>
                         ) : null}
                       </button>
@@ -2937,7 +2939,7 @@ function ParcoAllievi({
                 {detail.firstName} {detail.lastName}
               </div>
               <div className="mt-0.5 text-[13px] font-medium text-[#929292]">
-                {detail.licenseCategory ? `Patente ${detail.licenseCategory} · ` : ""}
+                {detail.licenseCategory ? `${licensePathPhrase(detail.licenseCategory)} · ` : ""}
                 {assignedIds.includes(detail.id) ? "Assegnato" : "Non assegnato"}
               </div>
             </div>
@@ -3000,7 +3002,7 @@ function ParcoAllievi({
                   </span>
                   {s.licenseCategory ? (
                     <span className="shrink-0 rounded-md bg-[#f0f0f0] px-[7px] py-0.5 text-[11px] font-bold text-[#888888]">
-                      {s.licenseCategory}
+                      {licenseCategoryShort(s.licenseCategory)}
                     </span>
                   ) : null}
                   <Plus className="size-3.5 shrink-0 text-navy-900" strokeWidth={2} />

@@ -110,6 +110,7 @@ import {
   isQualification,
   openPath,
   pathForDate,
+  pathLabel,
   currentPath,
   lessonsPathFilterId,
   ALL_LESSON_PATHS,
@@ -139,6 +140,8 @@ import {
   LICENSE_CATEGORY_LABELS,
   TRANSMISSIONS,
   TRANSMISSION_LABELS,
+  licenseCategoryShort,
+  licensePathPhrase,
   type Transmission,
 } from "@/lib/autoscuole/license";
 import { createCompanyUser } from "@/lib/actions/user.actions";
@@ -2767,9 +2770,7 @@ export function AutoscuoleStudentsPage({
           </div>
         )}
         {visible.map((student) => {
-          const licenseLabel = student.licenseCategory
-            ? `${student.licenseCategory} · ${TRANSMISSION_LABELS[student.transmission as Transmission] ?? student.transmission ?? "—"}`
-            : null;
+          const licenseLabel = student.licenseCategory ? pathLabel(student) : null;
           const instructorLabel = student.assignedInstructorId
             ? instructorMap.get(student.assignedInstructorId) ?? null
             : null;
@@ -2955,11 +2956,7 @@ export function AutoscuoleStudentsPage({
               <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Percorso patente</p>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-medium text-foreground">
-                  {register.licenseCategory
-                    ? `${register.licenseCategory} · ${
-                        TRANSMISSION_LABELS[register.transmission as Transmission] ?? register.transmission ?? "—"
-                      }`
-                    : "—"}
+                  {pathLabel(register)}
                 </p>
                 {activeLicensePath && <Pill tone="blue">In corso</Pill>}
               </div>
@@ -3418,7 +3415,7 @@ export function AutoscuoleStudentsPage({
                     )}
                   >
                     <Pill tone={conseguita ? "green" : "gray"}>
-                      {path.licenseCategory ?? "—"}
+                      {licenseCategoryShort(path.licenseCategory) || "—"}
                     </Pill>
                     <div className="min-w-0 flex-1">
                       <p className="text-[13.5px] font-medium text-foreground">
@@ -3688,7 +3685,7 @@ export function AutoscuoleStudentsPage({
                 <>
                   Solo le guide del percorso{" "}
                   <span className="font-semibold">
-                    {filteredPath.licenseCategory ?? "—"}
+                    {licenseCategoryShort(filteredPath.licenseCategory) || "—"}
                   </span>
                 </>
               ) : (
@@ -3708,7 +3705,7 @@ export function AutoscuoleStudentsPage({
             >
               {filteredPath
                 ? "Mostra tutte"
-                : `Solo il percorso ${currentLicensePath?.licenseCategory ?? "attuale"}`}
+                : `Solo il percorso ${licenseCategoryShort(currentLicensePath?.licenseCategory) || "attuale"}`}
             </button>
           </div>
         )}
@@ -4802,7 +4799,7 @@ export function AutoscuoleStudentsPage({
             studentId: student.id,
             name: formatStudentName(student, studentNameOrder),
             subtitle: register?.licenseCategory
-              ? `Patente ${register.licenseCategory}${register.transmission === "automatic" ? " · autom." : ""}`
+              ? licensePathPhrase(register.licenseCategory, register.transmission)
               : null,
             initials: studentInitials(student, studentNameOrder),
             examReady: Boolean(register?.examReady),

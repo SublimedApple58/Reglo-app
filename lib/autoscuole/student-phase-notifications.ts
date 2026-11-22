@@ -2,6 +2,7 @@ import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import { notifyAutoscuolaUser, PUSH_ONLY } from "@/lib/autoscuole/notify";
 import type { StudentBookingMode } from "@/lib/autoscuole/student-booking-policy";
 import { loadStudentBookingPolicies } from "@/lib/autoscuole/student-booking-policy-loader";
+import { pathNoun } from "@/lib/autoscuole/license-paths";
 
 /**
  * Frase «puoi prenotare» coerente con la prenotazione «solo eccezioni»: mai
@@ -130,7 +131,7 @@ export async function notifyNewLicensePath({
     audience: "student",
     recipient: { userId: studentUserId },
     supports: PUSH_ONLY,
-    title: `🚗 Nuovo percorso: patente ${licenseCategory}`,
+    title: `🚗 Nuovo percorso: ${pathNoun(licenseCategory)}`,
     body: `L'autoscuola ha avviato il tuo nuovo percorso. ${bookingSentence(
       await bookingModeFor(companyId, studentUserId),
       "Puoi prenotare le guide.",

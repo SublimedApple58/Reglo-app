@@ -53,7 +53,7 @@ export type LessonLicense = {
  * Qualificazioni che non sono patenti (consorzi): per loro il cambio non ha
  * senso, la UI non lo chiede e il resolver lo ignora.
  */
-export const TRANSMISSIONLESS_CATEGORIES: readonly string[] = ["CQC", "ADR"];
+export const TRANSMISSIONLESS_CATEGORIES: readonly string[] = ["CQC", "CQCP", "ADR"];
 
 function normalizeCategory(value: string | null | undefined): string | null {
   const v = value?.trim().toUpperCase();

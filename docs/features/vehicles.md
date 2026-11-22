@@ -97,9 +97,26 @@ Second brick of the Vehicles module. Each vehicle serves **one** license categor
 > **Stessa famiglia di errore, stessa correzione: CQC e ADR.** Non sono classi di
 > veicolo ma abilitazioni che si aggiungono a una patente — un corso CQC si fa su
 > un camion. Il registro dei colori lo diceva già (la CQC ha `parent` C). Su
-> staging questo lasciava 18 allievi senza un solo veicolo prenotabile. Nota: la
-> CQC esiste anche nella variante *persone*, che si farebbe su un autobus; oggi
-> vale la scelta del consorzio (camion).
+> staging questo lasciava 18 allievi senza un solo veicolo prenotabile.
+>
+> **REG-766 (22/11/2026): CQC merci e CQC persone.** Il consorzio aveva un
+> autobus D e nessun allievo che potesse usarlo. Ora:
+> - `CQC` = **CQC merci**, su camion **C o C1**. La sigla è rimasta quella di
+>   prima: tutte le CQC registrate prima erano merci, e così non si è toccato
+>   nessun dato.
+> - `CQCP` = **CQC persone**, su autobus **D o minibus D1**.
+> - ADR sempre e solo su **C**.
+>
+> La mappa è `QUALIFICATION_BASE_VEHICLES` (più mezzi per qualifica). La sigla
+> non va mai a schermo: `licenseCategoryShort` («CQC merci», «CQC persone»),
+> `licensePathPhrase` («Patente B · autom.» / «CQC persone»), `licenseBlockTag`
+> (tag dei blocchi agenda) e `pathNoun` in `license-paths.ts` («patente C» /
+> «CQC persone» dentro le frasi). Il mobile ha lo stesso specchio in
+> `src/utils/license.ts`.
+>
+> ⚠️ `vehicleServesLicense` confronta ancora il cambio anche sulle
+> qualificazioni: un allievo CQC registrato «manuale» non vede i camion
+> automatici. Si sistema dalla scheda allievo; il codice non è cambiato.
 
 - **Taxonomy**: `lib/autoscuole/license.ts` — `LICENSE_CATEGORIES = ['B','BE','AMQ','B1','C','CE','D','DE','AM','A1','A2','A']`, `TRANSMISSIONS = ['manual','automatic']`, IT labels (BE "auto + rimorchio", C "camion", CE "camion + rimorchio", D "autobus", DE "autobus + rimorchio"), and `vehicleServesLicense(vehicle, student)` (moto hierarchy + trailer hierarchy; null on either side is permissive). Zod enums + all web/mobile pickers derive from this list. New non-moto categories fall in the "Auto" bucket of every Auto/Moto mode split (`isMotoLicenseCategory` is an explicit A-family list).
 - **Data model**:

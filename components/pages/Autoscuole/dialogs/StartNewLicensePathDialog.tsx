@@ -30,6 +30,7 @@ import {
   TRANSMISSION_LABELS,
   type LicenseCategory,
   type Transmission,
+  licenseCategoryShort,
 } from "@/lib/autoscuole/license";
 import { isQualification, pathLabel } from "@/lib/autoscuole/license-paths";
 
@@ -207,7 +208,7 @@ export function StartNewLicensePathDialog({
               </p>
               <DialogTitle>
                 {currentLabel
-                  ? `Com'è finito il percorso ${currentPath?.licenseCategory}?`
+                  ? `Com'è finito il percorso ${licenseCategoryShort(currentPath?.licenseCategory)}?`
                   : "Nessun percorso in corso"}
               </DialogTitle>
               <DialogDescription>
@@ -357,7 +358,7 @@ export function StartNewLicensePathDialog({
                 <p className="mb-1.5 text-[12.5px] font-semibold">Cosa si porta dietro</p>
                 <p className="text-[12px] leading-[1.55] text-[#6a6a6a]">
                   Le <strong>guide e le valutazioni</strong>
-                  {currentPath?.licenseCategory ? ` della ${currentPath.licenseCategory}` : ""}{" "}
+                  {currentPath?.licenseCategory ? ` della ${licenseCategoryShort(currentPath.licenseCategory)}` : ""}{" "}
                   restano nello storico e non contano per il nuovo percorso — l&apos;obbligo
                   riparte da 0/6. <strong>Crediti e pagamenti</strong> restano
                   dell&apos;allievo, il portafoglio è uno solo. «Pronto per l&apos;esame» si
@@ -384,7 +385,7 @@ export function StartNewLicensePathDialog({
                 disabled={saving}
                 className="cursor-pointer"
               >
-                {saving ? <LoadingDots /> : `Avvia percorso ${licenseCategory}`}
+                {saving ? <LoadingDots /> : `Avvia percorso ${licenseCategoryShort(licenseCategory)}`}
               </Button>
             </DialogFooter>
           </>

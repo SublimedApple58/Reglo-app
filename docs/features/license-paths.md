@@ -116,8 +116,11 @@ action lo dice invece di fallire più avanti.
   è un percorso caldo.
 - **Storico**: sezione «Patenti conseguite» nel riepilogo, visibile solo con
   almeno un percorso chiuso. Su account consorzio diventa «Percorsi conclusi»
-  appena nel mazzo c'è una CQC o una ADR — non sono patenti, sono qualificazioni.
-- **Push**: `license_path_started` («🚗 Nuovo percorso: patente A»). NON si
+  appena nel mazzo c'è una CQC (merci o persone) o una ADR — non sono patenti,
+  sono qualificazioni. Le due CQC si leggono col nome, mai con la sigla
+  (`pathLabel` → «CQC persone»; REG-766).
+- **Push**: `license_path_started` («🚗 Nuovo percorso: patente A», o «… CQC
+  persone» via `pathNoun`). NON si
   riusa `notifyStudentPhaseChange`, che su una transizione verso PRATICA direbbe
   «Hai il foglio rosa! prenota le tue **prime** guide» a chi la patente ce l'ha.
 

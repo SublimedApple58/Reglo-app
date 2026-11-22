@@ -17,7 +17,11 @@
  * `lib/actions/autoscuole-license-paths.actions.ts`.
  */
 
-import { TRANSMISSION_LABELS, type Transmission } from "@/lib/autoscuole/license";
+import {
+  TRANSMISSION_LABELS,
+  licenseCategoryShort,
+  type Transmission,
+} from "@/lib/autoscuole/license";
 
 export const LICENSE_PATH_STATUSES = ["active", "obtained", "abandoned"] as const;
 export type LicensePathStatus = (typeof LICENSE_PATH_STATUSES)[number];
@@ -65,22 +69,32 @@ export const isPathOpen = (path: LicensePathLike): boolean =>
  * veicoli e tariffe — scelta che resta valida — ma quando si scrivono le parole
  * la differenza conta: "Patenti conseguite" su un corso CQC e' sbagliato.
  */
-const QUALIFICATION_CATEGORIES = new Set<string>(["CQC", "ADR"]);
+const QUALIFICATION_CATEGORIES = new Set<string>(["CQC", "CQCP", "ADR"]);
 
 export function isQualification(category: unknown): boolean {
   return typeof category === "string" && QUALIFICATION_CATEGORIES.has(category);
 }
 
-/** «B · Manuale», «CQC», «—» se non si sa ancora niente. */
+/** «B · Manuale», «CQC persone», «—» se non si sa ancora niente. */
 export function pathLabel(path: LicensePathLike): string {
   const category = path.licenseCategory?.trim();
   if (!category) return "—";
   const transmission = path.transmission?.trim();
   // Sulle qualificazioni il cambio non vuol dire niente: la CQC non e' "manuale".
-  if (!transmission || isQualification(category)) return category;
+  if (!transmission || isQualification(category)) return licenseCategoryShort(category);
   const label =
     TRANSMISSION_LABELS[transmission as Transmission] ?? transmission;
   return `${category} · ${label}`;
+}
+
+/**
+ * Il percorso dentro una frase: «patente C», «CQC persone». Sulle qualificazioni
+ * «patente» sarebbe falso (vedi `isQualification`).
+ */
+export function pathNoun(category: string): string {
+  return isQualification(category)
+    ? licenseCategoryShort(category)
+    : `patente ${category}`;
 }
 
 /**

@@ -144,7 +144,7 @@ etichetta della home istruttore mobile).
   A1 smeraldo, A2 arancio, A rosa, C ambra, D fucsia, ADR ardesia, patente non
   impostata grigio. **REG-461**: una voce per OGNI patente gestita (anche
   CE/C1/C1E, DE/D1/D1E, CQC, ADR): le sotto-categorie hanno `parent` (C o D;
-  la CQC ha C) ed ereditano colore standard E override della madre finché non
+  la CQC merci ha C, la CQC persone — REG-766 — ha D) ed ereditano colore standard E override della madre finché non
   vengono personalizzate (`resolveColorOverride`). Nel pannello le chip sono
   raggruppate (`LICENSE_COLOR_GROUPS`: Auto, Moto, Camion, Autobus,
   Qualificazioni, Altro); la legenda agenda fonde nella riga della madre le

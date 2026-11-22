@@ -42,6 +42,7 @@ import {
 } from "@/lib/actions/consorzio.actions";
 import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
 import { formatStoredName, storedNameInitials } from "@/lib/autoscuole/student-name-order";
+import { licenseCategoryShort } from "@/lib/autoscuole/license";
 import { SegmentedPill } from "@/components/ui/segmented-pill";
 import {
   matchesPhaseFilter,
@@ -535,7 +536,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
                       className="inline-flex items-center whitespace-nowrap px-2.5 py-1 text-[12px] font-bold leading-[1.4]"
                       style={{ background: "#EEF4FF", color: "#2A6FDB", borderRadius: 20 }}
                     >
-                      {student.licenseCategory}
+                      {licenseCategoryShort(student.licenseCategory)}
                     </span>
                   ) : (
                     "—"

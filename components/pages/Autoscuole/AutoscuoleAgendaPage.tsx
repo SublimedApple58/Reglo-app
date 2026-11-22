@@ -104,8 +104,8 @@ import {
   type ConflictStepState,
 } from "@/components/pages/Autoscuole/dialogs/FollowCarConflictPane";
 import { FieldGroup } from "@/components/ui/field-group";
-import { TRANSMISSION_LABELS, isMotoLicenseCategory, vehicleServesLicense, type Transmission } from "@/lib/autoscuole/license";
-import { pathForDate } from "@/lib/autoscuole/license-paths";
+import { TRANSMISSION_LABELS, isMotoLicenseCategory, licenseBlockTag, licenseCategoryShort, licensePathPhrase, vehicleServesLicense, type Transmission } from "@/lib/autoscuole/license";
+import { isQualification, pathForDate } from "@/lib/autoscuole/license-paths";
 import { lessonLicense, resolvePrefilledLocation } from "@/lib/autoscuole/location-for-license";
 import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, motoLessonTypeLabel, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
 import { instructorTintStyles } from "@/lib/autoscuole/instructor-colors";
@@ -896,7 +896,7 @@ export function StudentSearchSelect({
                     </span>
                     {s.licenseCategory ? (
                       <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground/70">
-                        {s.licenseCategory}
+                        {licenseCategoryShort(s.licenseCategory)}
                       </span>
                     ) : null}
                   </button>
@@ -3781,7 +3781,7 @@ export function AutoscuoleAgendaPage({
     const map = new Map<string, string>();
     for (const s of students) {
       if (!s.licenseCategory) continue;
-      map.set(s.id, `${s.licenseCategory}${s.transmission === "automatic" ? " autom." : ""}`);
+      map.set(s.id, licenseBlockTag(s.licenseCategory, s.transmission));
     }
     return map;
   }, [students]);
@@ -3805,7 +3805,7 @@ export function AutoscuoleAgendaPage({
       if (history) {
         const path = pathForDate(history, item.startsAt);
         if (path?.licenseCategory) {
-          return `${path.licenseCategory}${path.transmission === "automatic" ? " autom." : ""}`;
+          return licenseBlockTag(path.licenseCategory, path.transmission);
         }
       }
       return studentLicenseById.get(item.student.id) ?? null;
@@ -4143,7 +4143,7 @@ export function AutoscuoleAgendaPage({
         const licenseByStudentId = new Map(studentLicenseById);
         for (const st of data.students ?? []) {
           if (!st.licenseCategory) continue;
-          licenseByStudentId.set(st.id, `${st.licenseCategory}${st.transmission === "automatic" ? " autom." : ""}`);
+          licenseByStudentId.set(st.id, licenseBlockTag(st.licenseCategory, st.transmission));
         }
         return buildExamPrintDays(data.appointments ?? [], {
           licenseByStudentId,
@@ -7152,7 +7152,7 @@ export function AutoscuoleAgendaPage({
                 studentId: a.student.id,
                 name: formatStudentName(a.student, studentNameOrder),
                 subtitle: a.student.licenseCategory
-                  ? `Patente ${a.student.licenseCategory}${a.student.transmission === "automatic" ? " · autom." : ""}`
+                  ? licensePathPhrase(a.student.licenseCategory, a.student.transmission)
                   : null,
                 initials: examStudentInitials(a.student, studentNameOrder),
                 examReady: Boolean(a.student.examReady),
@@ -7375,7 +7375,7 @@ export function AutoscuoleAgendaPage({
                               </span>
                               {s.licenseCategory ? (
                                 <span className="truncate text-[12px] font-medium text-[#929292]">
-                                  Patente {s.licenseCategory}{s.transmission === "automatic" ? " · autom." : ""}
+                                  {licensePathPhrase(s.licenseCategory, s.transmission)}
                                 </span>
                               ) : null}
                             </span>
@@ -7567,7 +7567,7 @@ export function AutoscuoleAgendaPage({
                                   </span>
                                   {s.licenseCategory ? (
                                     <span className="truncate text-[11.5px] font-medium text-[#929292]">
-                                      Patente {s.licenseCategory}{s.transmission === "automatic" ? " · autom." : ""}
+                                      {licensePathPhrase(s.licenseCategory, s.transmission)}
                                     </span>
                                   ) : null}
                                 </span>
@@ -7685,7 +7685,7 @@ export function AutoscuoleAgendaPage({
                           </span>
                           {st.licenseCategory ? (
                             <span className="truncate text-[11.5px] font-medium text-[#929292]">
-                              Patente {st.licenseCategory}{st.transmission === "automatic" ? " · autom." : ""}
+                              {licensePathPhrase(st.licenseCategory, st.transmission)}
                             </span>
                           ) : null}
                         </span>
@@ -7837,7 +7837,7 @@ export function AutoscuoleAgendaPage({
                     >
                       {formatStudentName(s, studentNameOrder)}
                       {s.licenseCategory ? (
-                        <span className="font-medium text-[#929292]">· {s.licenseCategory}{s.transmission === "automatic" ? " aut." : ""}</span>
+                        <span className="font-medium text-[#929292]">· {licenseCategoryShort(s.licenseCategory)}{s.transmission === "automatic" && !isQualification(s.licenseCategory) ? " aut." : ""}</span>
                       ) : null}
                       <span className="text-[#929292]">&times;</span>
                     </button>

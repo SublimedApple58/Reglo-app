@@ -7,6 +7,7 @@ import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { isOwner } from "@/lib/autoscuole/roles";
 import { LICENSE_CATEGORIES, TRANSMISSIONS } from "@/lib/autoscuole/license";
+import { pathNoun } from "@/lib/autoscuole/license-paths";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
@@ -214,7 +215,7 @@ export async function startNewLicensePath(
         transmission: payload.next.transmission,
         studentPhase: payload.next.startPhase,
       },
-      message: `Nuovo percorso avviato: patente ${payload.next.licenseCategory}.`,
+      message: `Nuovo percorso avviato: ${pathNoun(payload.next.licenseCategory)}.`,
     };
   } catch (error) {
     return { success: false as const, message: formatError(error) };

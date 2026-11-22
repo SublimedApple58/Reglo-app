@@ -35,6 +35,17 @@ describe("colori per patente (REG-461)", () => {
     expect(resolveColorOverride(licenseColorEntryForTag("ADR"), { c: "#AA0000" })).toBeNull();
   });
 
+  it("il tag «CQC persone» dei blocchi prende il colore della D, non della C", () => {
+    expect(licenseColorEntryForTag("CQC persone").key).toBe("cqcp");
+    expect(licenseColorEntryForTag("CQC merci").key).toBe("cqc");
+    // La sigla da sola continua a funzionare (tag scritti prima di REG-766).
+    expect(licenseColorEntryForTag("CQC").key).toBe("cqc");
+    expect(licenseColorEntryForTag("CQCP").key).toBe("cqcp");
+    expect(resolveColorOverride(licenseColorEntryForTag("CQC persone"), { d: "#AA0000" })).toBe(
+      "#AA0000",
+    );
+  });
+
   it("gli override delle nuove voci passano la validazione", () => {
     expect(asAgendaColorOverrides({ patente: { cqc: "#123456", zz: "#123456" } })).toEqual({
       patente: { cqc: "#123456" },
@@ -44,11 +55,15 @@ describe("colori per patente (REG-461)", () => {
   it("legenda: sotto-patenti con lo stesso colore fuse nella riga della madre", () => {
     const rows = licenseLegendEntries(undefined);
     const c = rows.find((r) => r.entry.key === "c");
-    expect(c?.label).toBe("Patente C · CE · C1 · C1E · CQC");
+    expect(c?.label).toBe("Patente C · CE · C1 · C1E · CQC merci");
+    // REG-766: la CQC persone sta con gli autobus, non coi camion.
+    expect(rows.find((r) => r.entry.key === "d")?.label).toBe(
+      "Patente D · DE · D1 · D1E · CQC persone",
+    );
     expect(rows.some((r) => r.entry.key === "ce")).toBe(false);
 
     const custom = licenseLegendEntries({ ce: "#00AA00" });
     expect(custom.find((r) => r.entry.key === "ce")?.overrideHex).toBe("#00AA00");
-    expect(custom.find((r) => r.entry.key === "c")?.label).toBe("Patente C · C1 · C1E · CQC");
+    expect(custom.find((r) => r.entry.key === "c")?.label).toBe("Patente C · C1 · C1E · CQC merci");
   });
 });

@@ -2,7 +2,10 @@ import {
   isLicenseCategory,
   isTransmission,
   isMotoLicenseCategory,
+  licenseBlockTag,
   licenseCategoryEligible,
+  licenseCategoryShort,
+  licensePathPhrase,
   vehicleServesLicense,
   LICENSE_CATEGORIES,
   LICENSE_CATEGORY_LABELS,
@@ -123,6 +126,34 @@ describe("licenseCategoryEligible (moto hierarchy AM < A1 < A2 < A)", () => {
     expect(licenseCategoryEligible("ADR", "C")).toBe(false);
   });
 
+  // REG-766: la CQC merci si fa su camion C o C1, la CQC persone su autobus D
+  // o minibus D1. Prima c'era una CQC sola, sempre sul camion: il consorzio
+  // aveva un autobus e nessun allievo che potesse usarlo.
+  it("CQC merci runs on C and C1 trucks", () => {
+    expect(licenseCategoryEligible("C", "CQC")).toBe(true);
+    expect(licenseCategoryEligible("C1", "CQC")).toBe(true);
+    expect(licenseCategoryEligible("CE", "CQC")).toBe(false);
+    expect(licenseCategoryEligible("D1", "CQC")).toBe(false);
+  });
+
+  it("CQC persone runs on D buses and D1 minibuses, never on a truck", () => {
+    expect(licenseCategoryEligible("D", "CQCP")).toBe(true);
+    expect(licenseCategoryEligible("D1", "CQCP")).toBe(true);
+    expect(licenseCategoryEligible("CQCP", "CQCP")).toBe(true);
+    expect(licenseCategoryEligible("C", "CQCP")).toBe(false);
+    expect(licenseCategoryEligible("C1", "CQCP")).toBe(false);
+    expect(licenseCategoryEligible("DE", "CQCP")).toBe(false);
+    // Le due CQC non si scambiano il mezzo marcato con l'altra.
+    expect(licenseCategoryEligible("CQC", "CQCP")).toBe(false);
+    expect(licenseCategoryEligible("CQCP", "CQC")).toBe(false);
+    // Senso unico: un allievo D non prende il mezzo marcato CQC persone.
+    expect(licenseCategoryEligible("CQCP", "D")).toBe(false);
+  });
+
+  it("the ADR stays on the C truck only", () => {
+    expect(licenseCategoryEligible("C1", "ADR")).toBe(false);
+  });
+
   it("does not open the door to unrelated categories", () => {
     // The tolerance is the motrice, not "anything big".
     expect(licenseCategoryEligible("D", "CE")).toBe(false);
@@ -223,5 +254,32 @@ describe("labels (sanity)", () => {
   it("has a label for every category and transmission", () => {
     for (const c of LICENSE_CATEGORIES) expect(LICENSE_CATEGORY_LABELS[c]).toBeTruthy();
     for (const t of TRANSMISSIONS) expect(TRANSMISSION_LABELS[t]).toBeTruthy();
+  });
+});
+
+describe("nomi delle due CQC (REG-766)", () => {
+  it("la sigla non va mai a schermo: le CQC hanno il nome, le patenti la sigla", () => {
+    expect(licenseCategoryShort("CQC")).toBe("CQC merci");
+    expect(licenseCategoryShort("CQCP")).toBe("CQC persone");
+    expect(licenseCategoryShort("CE")).toBe("CE");
+    expect(licenseCategoryShort(null)).toBe("");
+  });
+
+  it("«Patente» e cambio solo sulle patenti vere", () => {
+    expect(licensePathPhrase("B", "automatic")).toBe("Patente B · autom.");
+    expect(licensePathPhrase("CQCP", "automatic")).toBe("CQC persone");
+    expect(licensePathPhrase("ADR", "manual")).toBe("ADR");
+    expect(licensePathPhrase(null)).toBe("");
+  });
+
+  it("etichetta dei blocchi in agenda", () => {
+    expect(licenseBlockTag("B", "automatic")).toBe("B autom.");
+    expect(licenseBlockTag("CQC", "automatic")).toBe("CQC merci");
+    expect(licenseBlockTag("CQCP", "manual")).toBe("CQC persone");
+  });
+
+  it("ogni categoria ha la sua etichetta nei selettori", () => {
+    expect(LICENSE_CATEGORY_LABELS.CQC).toBe("CQC merci (camion)");
+    expect(LICENSE_CATEGORY_LABELS.CQCP).toBe("CQC persone (autobus)");
   });
 });

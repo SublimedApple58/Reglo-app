@@ -22,6 +22,7 @@ export const LICENSE_CATEGORIES = [
   "D1E",
   "DE",
   "CQC",
+  "CQCP",
   "ADR",
   "AMQ",
   "B1",
@@ -83,7 +84,8 @@ export const LICENSE_CATEGORY_LABELS: Record<LicenseCategory, string> = {
   D1: "D1 (minibus)",
   D1E: "D1E (D1 + rimorchio)",
   DE: "DE (autobus + rimorchio)",
-  CQC: "CQC (qualificazione)",
+  CQC: "CQC merci (camion)",
+  CQCP: "CQC persone (autobus)",
   ADR: "ADR (merci pericolose)",
   AMQ: "AM quadriciclo (microcar)",
   B1: "B1 (quadriciclo pesante)",
@@ -112,6 +114,7 @@ export const CONSORTIUM_LICENSE_CATEGORIES = [
   "C1",
   "D1",
   "CQC",
+  "CQCP",
   "ADR",
 ] as const satisfies readonly LicenseCategory[];
 export type ConsortiumLicenseCategory =
@@ -129,7 +132,8 @@ export const CONSORTIUM_LICENSE_INFO: Record<
   DE: { title: "Autobus con rimorchio", description: "Autobus con rimorchio oltre 750 kg." },
   C1: { title: "Autocarro fino a 7,5 t", description: "Veicoli merci tra 3,5 e 7,5 tonnellate." },
   D1: { title: "Minibus fino a 16 posti", description: "Trasporto persone fino a 16 passeggeri." },
-  CQC: { title: "Carta di qualificazione", description: "Corsi CQC merci e persone." },
+  CQC: { title: "Qualificazione merci", description: "Carta di qualificazione merci, su camion C o C1." },
+  CQCP: { title: "Qualificazione persone", description: "Carta di qualificazione persone, su autobus D o D1." },
   ADR: { title: "Trasporto merci pericolose", description: "Abilitazione ADR, base e specializzazioni." },
 };
 
@@ -187,7 +191,7 @@ const LICENSE_CATEGORY_GROUP_DEFS: Array<{
   { label: "Moto", categories: ["AM", "A1", "A2", "A"] },
   { label: "Camion", categories: ["C", "CE", "C1", "C1E"] },
   { label: "Autobus", categories: ["D", "DE", "D1", "D1E"] },
-  { label: "Qualificazioni", categories: ["CQC", "ADR"] },
+  { label: "Qualificazioni", categories: ["CQC", "CQCP", "ADR"] },
 ];
 
 export function licenseCategoryGroupsForMode(
@@ -271,6 +275,7 @@ const PRO_LICENSE_CATEGORIES = new Set<string>([
   "D1E",
   "DE",
   "CQC",
+  "CQCP",
   "ADR",
 ]);
 
@@ -313,7 +318,7 @@ const TRAILER_CATEGORY_MOTRICE: Record<string, string> = {
 };
 
 /**
- * Veicolo su cui si svolge una **qualificazione** — REG-507.
+ * Veicoli su cui si svolge una **qualificazione** — REG-507, REG-766.
  *
  * CQC e ADR non sono classi di veicolo: sono abilitazioni che si aggiungono a
  * una patente. Un corso CQC si fa su un camion, non su un fantomatico "veicolo
@@ -322,18 +327,63 @@ const TRAILER_CATEGORY_MOTRICE: Record<string, string> = {
  * stesso errore del rimorchio: su staging lasciava 18 allievi senza un solo
  * veicolo prenotabile.
  *
- * Il registro dei colori dell'agenda lo diceva già: la CQC ha **C** come
- * categoria madre.
+ * Dal REG-766 la CQC è divisa in due, come lo è per legge:
+ * - `CQC` = **CQC merci**, su camion C o C1. La sigla è rimasta quella di
+ *   prima apposta: tutte le CQC registrate prima del 22/11/2026 erano merci
+ *   (il consorzio la faceva solo sul camion), e così non è servito toccare un
+ *   solo dato.
+ * - `CQCP` = **CQC persone**, su autobus D o minibus D1.
+ * L'ADR resta sul camion C.
  *
- * Nota per chi ci tornerà: la CQC esiste anche nella variante *persone*, che si
- * farebbe su un autobus (D). Qui vale la scelta del consorzio — camion — e se
- * un giorno servisse distinguerle andranno separate le due pseudo-categorie,
- * non allargata questa mappa a tutto.
+ * La sigla non va mai a schermo così com'è: `licenseCategoryShort` dà il nome.
  */
-const QUALIFICATION_BASE_VEHICLE: Record<string, string> = {
-  CQC: "C",
-  ADR: "C",
+const QUALIFICATION_BASE_VEHICLES: Record<string, readonly string[]> = {
+  CQC: ["C", "C1"],
+  CQCP: ["D", "D1"],
+  ADR: ["C"],
 };
+
+/**
+ * Nome breve di una categoria per lo schermo. Le patenti restano la loro sigla
+ * («B», «CE»); le due CQC hanno bisogno del nome, perché «CQCP» non lo legge
+ * nessuno e «CQC» da sola non dice più quale delle due.
+ */
+const LICENSE_CATEGORY_SHORT: Partial<Record<string, string>> = {
+  CQC: "CQC merci",
+  CQCP: "CQC persone",
+};
+
+export function licenseCategoryShort(value: string | null | undefined): string {
+  if (!value) return "";
+  return LICENSE_CATEGORY_SHORT[value] ?? value;
+}
+
+/**
+ * Riga «Patente C · autom.» per allievi e guide. Sulle qualificazioni la parola
+ * «Patente» sarebbe falsa e il cambio non vuol dire niente: resta il nome
+ * («CQC persone»). Stringa vuota se la categoria non c'è.
+ */
+export function licensePathPhrase(
+  category: string | null | undefined,
+  transmission?: string | null,
+): string {
+  if (!category) return "";
+  if (category in QUALIFICATION_BASE_VEHICLES) return licenseCategoryShort(category);
+  return `Patente ${category}${transmission === "automatic" ? " · autom." : ""}`;
+}
+
+/**
+ * Etichetta corta sui blocchi dell'agenda («B», «B autom.», «CQC persone»).
+ * `licenseColorEntryForTag` la riconverte nella voce colore.
+ */
+export function licenseBlockTag(
+  category: string | null | undefined,
+  transmission?: string | null,
+): string {
+  if (!category) return "";
+  if (category in QUALIFICATION_BASE_VEHICLES) return licenseCategoryShort(category);
+  return `${category}${transmission === "automatic" ? " autom." : ""}`;
+}
 
 /**
  * True when a vehicle of `vehicleCategory` is eligible for a student pursuing
@@ -341,13 +391,13 @@ const QUALIFICATION_BASE_VEHICLE: Record<string, string> = {
  *
  *   MOTO:    AM < A1 < A2 < A
  *   TRAILER: B < BE · C1 < C1E · C < CE · D1 < D1E · D < DE
- *   QUALIF.: CQC e ADR si svolgono su un camion C
+ *   QUALIF.: CQC merci su C o C1 · CQC persone su D o D1 · ADR su C
  *
  * A moto student may train on any moto of category ≤ their own (an A2 student →
  * A2, A1, AM — but NOT A). A trailer student may train on the corresponding
  * motrice (a CE student → a C truck) or on a vehicle already marked with the
- * trailer category. A CQC/ADR student trains on the truck the qualification is
- * actually taught on.
+ * trailer category. A CQC/ADR student trains on the vehicles the qualification
+ * is actually taught on (truck for CQC merci and ADR, bus for CQC persone).
  *
  * Both hierarchies run **one way only**: a C student may NOT use a CE-marked
  * vehicle, because driving a combination requires the CE licence. Only the
@@ -370,21 +420,12 @@ export function licenseCategoryEligible(
   }
   // Trailer course on its motrice: CE → C, DE → D, BE → B, …
   if (TRAILER_CATEGORY_MOTRICE[studentCategory] === vehicleCategory) return true;
-  // Qualification on the vehicle it is actually taught on: CQC → C, ADR → C.
-  if (QUALIFICATION_BASE_VEHICLE[studentCategory] === vehicleCategory) return true;
+  // Qualification on the vehicles it is actually taught on: CQC → C/C1,
+  // CQCP → D/D1, ADR → C.
+  if (QUALIFICATION_BASE_VEHICLES[studentCategory]?.includes(vehicleCategory)) return true;
   // Different classes (moto vs non-moto), or two unrelated non-moto categories
   // (e.g. B vs C, or a C student on a CE vehicle) — never eligible.
   return false;
-}
-
-/**
- * The vehicle category a course can ALSO run on, beyond its own: the motrice of
- * a trailer category, or the vehicle a qualification is taught on.
- */
-export function motriceCategoryFor(category: string): string | null {
-  return (
-    TRAILER_CATEGORY_MOTRICE[category] ?? QUALIFICATION_BASE_VEHICLE[category] ?? null
-  );
 }
 
 /**

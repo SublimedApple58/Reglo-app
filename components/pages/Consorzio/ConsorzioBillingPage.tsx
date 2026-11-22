@@ -29,6 +29,7 @@ import {
 } from "@/lib/actions/consorzio.actions";
 import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
 import { formatStoredName } from "@/lib/autoscuole/student-name-order";
+import { licenseCategoryShort } from "@/lib/autoscuole/license";
 
 /**
  * Sezione "Fatturazione" del consorzio (?tab=fatturazione) — riproduzione 1:1
@@ -482,7 +483,7 @@ export function ConsorzioBillingPage() {
                             className="inline-flex shrink-0 px-2 py-[3px] text-[11.5px] font-bold"
                             style={{ background: "#F0F0F0", color: "#111111", borderRadius: 6 }}
                           >
-                            {lesson.licenseCategory}
+                            {licenseCategoryShort(lesson.licenseCategory)}
                           </span>
                         ) : (
                           <span className="w-8 shrink-0" />

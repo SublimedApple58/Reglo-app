@@ -87,8 +87,9 @@ const D_SHADOW = "rgba(217,70,239,0.22)";
 /**
  * Una voce per OGNI patente gestita da Reglo (REG-461), speciali comprese
  * (C1/C1E/D1/D1E, qualificazioni CQC e ADR). Le sotto-categorie ereditano il
- * colore della madre finché non vengono personalizzate (`parent`), la CQC
- * pure (prima finiva nella C); l'ADR, che prima non aveva colore, ha il suo.
+ * colore della madre finché non vengono personalizzate (`parent`), le CQC
+ * pure: la CQC merci dalla C, la CQC persone (REG-766) dalla D. L'ADR, che
+ * prima non aveva colore, ha il suo.
  */
 export const LICENSE_COLOR_ENTRIES: AgendaColorEntry[] = [
   ENTRY("b", "Patente B", "B", "#E3EEFF", "rgba(59,130,246,0.22)"),
@@ -107,12 +108,16 @@ export const LICENSE_COLOR_ENTRIES: AgendaColorEntry[] = [
   ENTRY("de", "Patente DE", "DE", D_BG, D_SHADOW, "d"),
   ENTRY("d1", "Patente D1", "D1", D_BG, D_SHADOW, "d"),
   ENTRY("d1e", "Patente D1E", "D1E", D_BG, D_SHADOW, "d"),
-  ENTRY("cqc", "CQC (carta di qualificazione)", "CQC", C_BG, C_SHADOW, "c"),
+  ENTRY("cqc", "CQC merci", "CQC merci", C_BG, C_SHADOW, "c"),
+  ENTRY("cqcp", "CQC persone", "CQC persone", D_BG, D_SHADOW, "d"),
   ENTRY("adr", "ADR (merci pericolose)", "ADR", "#E4E8EE", "rgba(71,85,105,0.2)"),
   ENTRY("none", "Patente non impostata", "Nessuna", "#F3F4F8", "rgba(100,116,139,0.16)"),
 ];
 
 const licenseEntryByKey = new Map(LICENSE_COLOR_ENTRIES.map((e) => [e.key, e]));
+const licenseEntryByShort = new Map(
+  LICENSE_COLOR_ENTRIES.filter((e) => e.key !== "none").map((e) => [e.short.toUpperCase(), e]),
+);
 
 /** Gruppi del pannello "Personalizza i colori" (criterio patente). */
 export const LICENSE_COLOR_GROUPS: Array<{ label: string; keys: string[] }> = [
@@ -121,7 +126,7 @@ export const LICENSE_COLOR_GROUPS: Array<{ label: string; keys: string[] }> = [
   { label: "Moto", keys: ["am", "a1", "a2", "a"] },
   { label: "Camion", keys: ["c", "ce", "c1", "c1e"] },
   { label: "Autobus", keys: ["d", "de", "d1", "d1e"] },
-  { label: "Qualificazioni", keys: ["cqc", "adr"] },
+  { label: "Qualificazioni", keys: ["cqc", "cqcp", "adr"] },
   { label: "Altro", keys: ["none"] },
 ];
 
@@ -158,6 +163,10 @@ export function licenseColorEntryForTag(
   if (!tag) return none;
   const t = tag.trim().toUpperCase();
   if (!t) return none;
+  // Le CQC arrivano col nome («CQC persone», da `licenseBlockTag`), non con la
+  // sigla: il primo pezzo da solo («CQC») le confonderebbe.
+  const named = licenseEntryByShort.get(t);
+  if (named) return named;
   const category = t.split(/\s+/)[0];
   const exact = licenseEntryByKey.get(category.toLowerCase());
   if (exact && exact.key !== "none") return exact;

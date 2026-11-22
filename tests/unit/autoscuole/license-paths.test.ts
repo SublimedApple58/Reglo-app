@@ -58,6 +58,7 @@ describe("stato del percorso", () => {
 describe("qualificazioni", () => {
   it("CQC e ADR non sono patenti", () => {
     expect(isQualification("CQC")).toBe(true);
+    expect(isQualification("CQCP")).toBe(true);
     expect(isQualification("ADR")).toBe(true);
   });
 
@@ -79,7 +80,12 @@ describe("etichetta del percorso", () => {
   });
 
   it("su una qualificazione il cambio non si scrive: la CQC non e' 'manuale'", () => {
-    expect(pathLabel(percorso({ licenseCategory: "CQC", transmission: "manual" }))).toBe("CQC");
+    expect(pathLabel(percorso({ licenseCategory: "CQC", transmission: "manual" }))).toBe(
+      "CQC merci",
+    );
+    expect(pathLabel(percorso({ licenseCategory: "CQCP", transmission: "automatic" }))).toBe(
+      "CQC persone",
+    );
     expect(pathLabel(percorso({ licenseCategory: "ADR", transmission: "manual" }))).toBe("ADR");
   });
 

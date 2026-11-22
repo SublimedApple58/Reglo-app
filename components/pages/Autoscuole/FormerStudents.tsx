@@ -22,7 +22,7 @@ import {
   FORMER_STUDENT_REASON_LABELS,
   type FormerStudentReason,
 } from "@/lib/autoscuole/former-students";
-import { TRANSMISSION_LABELS, type Transmission } from "@/lib/autoscuole/license";
+import { pathLabel } from "@/lib/autoscuole/license-paths";
 import { formatLessonDuration } from "@/lib/autoscuole/lesson-duration";
 
 /**
@@ -42,9 +42,7 @@ const shortDate = (iso: string | null) =>
     : "—";
 
 const licenseLabel = (row: Pick<FormerStudentRow, "licenseCategory" | "transmission">) =>
-  row.licenseCategory
-    ? `${row.licenseCategory} · ${TRANSMISSION_LABELS[row.transmission as Transmission] ?? row.transmission ?? "—"}`
-    : null;
+  row.licenseCategory ? pathLabel(row) : null;
 
 const initialsOf = (name: string) =>
   name

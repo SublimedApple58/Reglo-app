@@ -13,6 +13,7 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   CONSORTIUM_LICENSE_CATEGORIES,
   CONSORTIUM_LICENSE_INFO,
+  licenseCategoryShort,
   type ConsortiumLicenseCategory,
 } from "@/lib/autoscuole/license";
 import {
@@ -495,7 +496,9 @@ export function ConsorzioPrezziPane() {
                   className="flex h-[30px] min-w-[54px] shrink-0 items-center justify-center rounded-[9px] px-2.5 text-[13px] font-bold"
                   style={{ background: "#F0F0F0", border: "1px solid #DEDEDE", color: "#111111" }}
                 >
-                  {category}
+                  {/* Le due CQC hanno la stessa sigla nel riquadro: le
+                      distingue il titolo accanto («Qualificazione persone»). */}
+                  {category === "CQCP" ? "CQC" : category}
                 </span>
                 <div className="min-w-[180px] flex-1">
                   <div className="text-[15px] font-semibold text-[#222222]">{info.title}</div>
@@ -508,7 +511,7 @@ export function ConsorzioPrezziPane() {
                 <div className="ml-auto flex shrink-0 items-center gap-2.5">
                   <div
                     role="radiogroup"
-                    aria-label={`Criterio di fatturazione ${category}`}
+                    aria-label={`Criterio di fatturazione ${licenseCategoryShort(category)}`}
                     className="flex h-[46px] items-center gap-1 rounded-[12px] bg-[#f0f0f2] p-1"
                   >
                     {MODE_OPTIONS.map((option) => {
@@ -538,8 +541,8 @@ export function ConsorzioPrezziPane() {
                       inputMode="decimal"
                       aria-label={
                         mode === "course"
-                          ? `Prezzo percorso ${category}`
-                          : `Tariffa oraria ${category}`
+                          ? `Prezzo percorso ${licenseCategoryShort(category)}`
+                          : `Tariffa oraria ${licenseCategoryShort(category)}`
                       }
                       data-testid={`tariff-amount-${category}`}
                       value={drafts[key] ?? ""}

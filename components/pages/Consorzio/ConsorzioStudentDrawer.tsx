@@ -26,7 +26,12 @@ import {
   splitFullName,
 } from "@/components/pages/Autoscuole/student-detail-ui";
 import { updateStudentPhone } from "@/lib/actions/autoscuole.actions";
-import { TRANSMISSION_LABELS, type Transmission } from "@/lib/autoscuole/license";
+import {
+  TRANSMISSION_LABELS,
+  licenseCategoryShort,
+  licensePathPhrase,
+  type Transmission,
+} from "@/lib/autoscuole/license";
 import {
   ALL_LESSON_PATHS,
   closedPathsNewestFirst,
@@ -36,6 +41,7 @@ import {
   lessonsPathFilterId,
   openPath,
   pathForDate,
+  pathLabel,
 } from "@/lib/autoscuole/license-paths";
 import { StartNewLicensePathDialog } from "@/components/pages/Autoscuole/dialogs/StartNewLicensePathDialog";
 import { cn } from "@/lib/utils";
@@ -309,13 +315,7 @@ export function ConsorzioStudentDrawer({
           <Field label="Percorso patente">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-medium text-foreground">
-                {data.licenseCategory
-                  ? `${data.licenseCategory} · ${
-                      TRANSMISSION_LABELS[data.transmission as Transmission] ??
-                      data.transmission ??
-                      "—"
-                    }`
-                  : "—"}
+                {pathLabel(data)}
               </p>
               {activePath && <Pill tone="blue">In corso</Pill>}
               <button
@@ -377,7 +377,7 @@ export function ConsorzioStudentDrawer({
                   )}
                 >
                   <Pill tone={conseguita ? "green" : "gray"}>
-                    {path.licenseCategory ?? "—"}
+                    {licenseCategoryShort(path.licenseCategory) || "—"}
                   </Pill>
                   <div className="min-w-0 flex-1">
                     <p className="text-[13.5px] font-medium text-foreground">
@@ -551,7 +551,7 @@ export function ConsorzioStudentDrawer({
           {filteredPath ? (
             <>
               Solo le guide del percorso{" "}
-              <span className="font-semibold">{filteredPath.licenseCategory ?? "—"}</span>
+              <span className="font-semibold">{licenseCategoryShort(filteredPath.licenseCategory) || "—"}</span>
             </>
           ) : (
             "Tutte le guide, di tutti i percorsi"
@@ -568,7 +568,7 @@ export function ConsorzioStudentDrawer({
         >
           {filteredPath
             ? "Mostra tutte"
-            : `Solo il percorso ${thisPath?.licenseCategory ?? "attuale"}`}
+            : `Solo il percorso ${licenseCategoryShort(thisPath?.licenseCategory) || "attuale"}`}
         </button>
       </div>
     ) : null;
@@ -786,7 +786,7 @@ export function ConsorzioStudentDrawer({
                   </p>
                   <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
                     {detail.schoolName && <Pill tone="gray">{detail.schoolName}</Pill>}
-                    {detail.licenseCategory && <Pill tone="blue">{detail.licenseCategory}</Pill>}
+                    {detail.licenseCategory && <Pill tone="blue">{licenseCategoryShort(detail.licenseCategory)}</Pill>}
                     <Pill tone={STUDENT_PHASE_PILL_TONE[detail.studentPhase]}>
                       {studentPhaseLabel(detail.studentPhase)}
                     </Pill>
@@ -885,7 +885,7 @@ export function ConsorzioStudentDrawer({
             appointmentId: exam.appointmentId,
             studentId: detail.userId,
             name: formatStoredName(detail.name, nameOrder),
-            subtitle: detail.licenseCategory ? `Patente ${detail.licenseCategory}` : null,
+            subtitle: detail.licenseCategory ? licensePathPhrase(detail.licenseCategory) : null,
             initials: storedNameInitials(detail.name, nameOrder),
             outcome: asExamOutcome(exam.outcome),
           },
