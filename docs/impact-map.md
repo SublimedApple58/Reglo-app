@@ -307,6 +307,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Appointments**: auto-checkin, auto-complete, pending review transitions
 - → **Cases & Deadlines**: processes deadline reminders
 - → **Avviso guida fissata (REG-758)**: la coda `creationNotice` si svuota nel job ogni minuto; ogni NUOVO punto di creazione guida non avviato dall'allievo deve chiamare `creationNoticeFor()` (vedi `features/appointment-creation-notice.md`). `notifyAutoscuolaUser` tace annullamento/spostamento/cambio luogo di una guida ancora in coda
+- → **Scrivi su WhatsApp (REG-767)**: NON passa dalla cascata — è un link `wa.me` aperto da chi scrive. Testo in `limits.studentWelcomeWhatsappTemplate`, numero con `normalizeToE164`; tasto in scheda allievo (autoscuola e consorzio). Vedi `features/whatsapp-welcome.md`
 
 ### Cases & Deadlines
 - → **Appointments**: appointments track lesson count per case

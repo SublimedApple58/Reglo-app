@@ -33,6 +33,11 @@ import { isAutoscuolaStripeConnectReady } from "@/lib/autoscuole/stripe-connect"
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 import { LICENSE_CATEGORIES, TRANSMISSIONS } from "@/lib/autoscuole/license";
 import {
+  WELCOME_TEMPLATE_MAX_LENGTH,
+  resolveWelcomeTemplate,
+  staffFirstName,
+} from "@/lib/autoscuole/whatsapp-welcome";
+import {
   NATIONAL_HOLIDAY_IDS,
   parseNationalHolidaySettings,
 } from "@/lib/autoscuole/national-holidays";
@@ -332,6 +337,12 @@ const autoscuolaSettingsPatchSchema = z
     studentReminderDayBeforeTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     /** REG-758: avviso «guida fissata» all'allievo. Spento di default. */
     studentCreationNoticeEnabled: z.boolean().optional(),
+    /** REG-767: testo di presa in carico per WhatsApp. Null o vuoto = default. */
+    studentWelcomeWhatsappTemplate: z
+      .string()
+      .max(WELCOME_TEMPLATE_MAX_LENGTH, "Il messaggio è troppo lungo.")
+      .nullable()
+      .optional(),
     instructorReminderMinutes: reminderMinutesSchema.optional(),
     instructorReminderEnabled: z.boolean().optional(),
     slotFillChannels: channelListSchema.optional(),
@@ -642,6 +653,8 @@ export type AutoscuolaSettingsData = {
   studentReminderDayBeforeEnabled: boolean;
   studentReminderDayBeforeTime: string;
   studentCreationNoticeEnabled: boolean;
+  /** REG-767: già risolto (il default quando l'azienda non l'ha cambiato). */
+  studentWelcomeWhatsappTemplate: string;
   instructorReminderMinutes: number;
   instructorReminderEnabled: boolean;
   slotFillChannels: string[];
@@ -818,6 +831,9 @@ const resolveAutoscuolaSettingsData = async (
       ? limits.studentReminderDayBeforeTime
       : "19:00";
   const studentCreationNoticeEnabled = limits.studentCreationNoticeEnabled === true;
+  const studentWelcomeWhatsappTemplate = resolveWelcomeTemplate(
+    limits.studentWelcomeWhatsappTemplate,
+  );
   const instructorReminderMinutes =
     typeof limits.instructorReminderMinutes === "number"
       ? limits.instructorReminderMinutes
@@ -1065,6 +1081,7 @@ const resolveAutoscuolaSettingsData = async (
     studentReminderDayBeforeEnabled,
     studentReminderDayBeforeTime,
     studentCreationNoticeEnabled,
+    studentWelcomeWhatsappTemplate,
     instructorReminderMinutes,
     instructorReminderEnabled,
     slotFillChannels,
@@ -1216,6 +1233,39 @@ export async function getAutoscuolaSettings() {
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
+  }
+}
+
+/**
+ * REG-767: cosa serve al tasto «Scrivi su WhatsApp» della scheda allievo — il
+ * testo dell'azienda, il nome di chi scrive e quello dell'azienda. Solo titolare
+ * e segreteria (gli stessi che cambiano le impostazioni): per gli altri
+ * `allowed: false` e il tasto non c'è.
+ */
+export async function getWhatsAppWelcomeContext() {
+  try {
+    const { membership, company } = await requireServiceAccess("AUTOSCUOLE");
+    if (!canManageSettings(membership.role, membership.autoscuolaRole)) {
+      return { success: true as const, data: { allowed: false as const } };
+    }
+    const [limits, user] = await Promise.all([
+      getCachedCompanyServiceLimits(membership.companyId),
+      prisma.user.findUnique({
+        where: { id: membership.userId },
+        select: { name: true },
+      }),
+    ]);
+    return {
+      success: true as const,
+      data: {
+        allowed: true as const,
+        template: resolveWelcomeTemplate(limits.studentWelcomeWhatsappTemplate),
+        staffName: staffFirstName(user?.name),
+        companyName: company.name,
+      },
+    };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
   }
 }
 
@@ -1835,6 +1885,13 @@ export async function updateAutoscuolaSettings(
         payload.studentReminderDayBeforeTime ?? (typeof limits.studentReminderDayBeforeTime === "string" ? limits.studentReminderDayBeforeTime : "19:00"),
       studentCreationNoticeEnabled:
         payload.studentCreationNoticeEnabled ?? (limits.studentCreationNoticeEnabled === true),
+      // Vuoto = torna al default: si salva null invece di una stringa vuota.
+      studentWelcomeWhatsappTemplate:
+        payload.studentWelcomeWhatsappTemplate !== undefined
+          ? payload.studentWelcomeWhatsappTemplate?.trim() || null
+          : typeof limits.studentWelcomeWhatsappTemplate === "string"
+            ? limits.studentWelcomeWhatsappTemplate
+            : null,
       instructorReminderMinutes:
         payload.instructorReminderMinutes ?? previousInstructorReminderMinutes,
       instructorReminderEnabled:
@@ -2061,6 +2118,9 @@ export async function updateAutoscuolaSettings(
         studentReminderDayBeforeEnabled: nextLimits.studentReminderDayBeforeEnabled,
         studentReminderDayBeforeTime: nextLimits.studentReminderDayBeforeTime,
         studentCreationNoticeEnabled: nextLimits.studentCreationNoticeEnabled,
+        studentWelcomeWhatsappTemplate: resolveWelcomeTemplate(
+          nextLimits.studentWelcomeWhatsappTemplate,
+        ),
         instructorReminderMinutes: nextLimits.instructorReminderMinutes,
         instructorReminderEnabled: nextLimits.instructorReminderEnabled,
         slotFillChannels: nextLimits.slotFillChannels,

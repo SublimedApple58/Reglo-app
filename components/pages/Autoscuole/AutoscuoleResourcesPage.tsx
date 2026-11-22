@@ -7,6 +7,8 @@ import {
 } from "@/lib/autoscuole/student-booking-policy";
 import type { StudentBookingSettingsValue } from "@/components/pages/Autoscuole/tabs/BookingsTab";
 import React from "react";
+import { DEFAULT_WELCOME_TEMPLATE } from "@/lib/autoscuole/whatsapp-welcome";
+import { invalidateWhatsAppWelcomeContext } from "@/components/pages/Autoscuole/StudentWhatsAppButton";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
@@ -488,6 +490,8 @@ export function AutoscuoleResourcesPage({
   const [studentReminderDayBeforeEnabled, setStudentReminderDayBeforeEnabled] = React.useState(false);
   const [studentReminderDayBeforeTime, setStudentReminderDayBeforeTime] = React.useState("19:00");
   const [studentCreationNoticeEnabled, setStudentCreationNoticeEnabled] = React.useState(false);
+  const [studentWelcomeWhatsappTemplate, setStudentWelcomeWhatsappTemplate] =
+    React.useState(DEFAULT_WELCOME_TEMPLATE);
   const [instructorReminderMinutes, setInstructorReminderMinutes] = React.useState("60");
   const [instructorReminderEnabled, setInstructorReminderEnabled] = React.useState(true);
   const [slotFillChannels, setSlotFillChannels] = React.useState<ChannelValue[]>([
@@ -764,6 +768,9 @@ export function AutoscuoleResourcesPage({
     setStudentReminderDayBeforeEnabled(res.data.studentReminderDayBeforeEnabled ?? false);
     setStudentReminderDayBeforeTime(res.data.studentReminderDayBeforeTime ?? "19:00");
     setStudentCreationNoticeEnabled(res.data.studentCreationNoticeEnabled ?? false);
+    setStudentWelcomeWhatsappTemplate(
+      res.data.studentWelcomeWhatsappTemplate ?? DEFAULT_WELCOME_TEMPLATE,
+    );
     setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
     setInstructorReminderEnabled(res.data.instructorReminderEnabled !== false);
     setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
@@ -1292,6 +1299,20 @@ export function AutoscuoleResourcesPage({
         description: res.message ?? "Impossibile salvare le impostazioni promemoria.",
       });
     }
+  };
+
+  // REG-767: il testo si salva da solo, separato dal resto dei promemoria.
+  const saveStudentWelcomeWhatsappTemplate = async (next: string | null) => {
+    const res = await updateAutoscuolaSettings({ studentWelcomeWhatsappTemplate: next });
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile salvare il messaggio." });
+      return false;
+    }
+    setStudentWelcomeWhatsappTemplate(
+      res.data?.studentWelcomeWhatsappTemplate ?? DEFAULT_WELCOME_TEMPLATE,
+    );
+    invalidateWhatsAppWelcomeContext();
+    return true;
   };
 
   const toggleRequiredType = (type: LessonTypeValue) => {
@@ -2284,6 +2305,8 @@ export function AutoscuoleResourcesPage({
             studentReminderDayBeforeEnabled={studentReminderDayBeforeEnabled}
             studentReminderDayBeforeTime={studentReminderDayBeforeTime}
             studentCreationNoticeEnabled={studentCreationNoticeEnabled}
+            studentWelcomeWhatsappTemplate={studentWelcomeWhatsappTemplate}
+            saveStudentWelcomeWhatsappTemplate={saveStudentWelcomeWhatsappTemplate}
             instructorReminderMinutes={instructorReminderMinutes}
             instructorReminderEnabled={instructorReminderEnabled}
             slotFillChannels={slotFillChannels}

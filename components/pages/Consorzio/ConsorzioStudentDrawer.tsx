@@ -45,6 +45,9 @@ import {
 } from "@/lib/autoscuole/license-paths";
 import { StartNewLicensePathDialog } from "@/components/pages/Autoscuole/dialogs/StartNewLicensePathDialog";
 import { cn } from "@/lib/utils";
+import { useAtomValue } from "jotai";
+import { companyAtom } from "@/atoms/company.store";
+import { StudentWhatsAppButton } from "@/components/pages/Autoscuole/StudentWhatsAppButton";
 import {
   getConsorzioStudentDetail,
   setConsorzioMemberAccountingCodes,
@@ -150,6 +153,7 @@ export function ConsorzioStudentDrawer({
 }) {
   const toast = useFeedbackToast();
   const nameOrder = useStudentNameOrder();
+  const company = useAtomValue(companyAtom);
   const [detail, setDetail] = React.useState<ConsorzioStudentDetail | null>(null);
   const [tab, setTab] = React.useState<DrawerTab>("summary");
   /**
@@ -791,6 +795,21 @@ export function ConsorzioStudentDrawer({
                       {studentPhaseLabel(detail.studentPhase)}
                     </Pill>
                   </div>
+                  {/* REG-767: presa in carico su WhatsApp, solo titolare e segreteria. */}
+                  <StudentWhatsAppButton
+                    className="mt-3.5"
+                    canWrite={company?.role === "admin"}
+                    phone={detail.phone}
+                    firstName={nameParts.firstName}
+                    lastName={nameParts.lastName}
+                    licenseCategory={openPath(detail.licensePaths ?? [])?.licenseCategory ?? detail.licenseCategory}
+                    schoolName={detail.schoolName}
+                    onAddPhone={() => {
+                      setTab("summary");
+                      setPhoneDraft(detail.phone ?? "");
+                      setEditingPhone(true);
+                    }}
+                  />
                 </div>
               </div>
               <div className="flex items-stretch">

@@ -154,6 +154,7 @@ import {
 } from "@/lib/actions/affiliate.actions";
 import { useAtomValue } from "jotai";
 import { companyAtom } from "@/atoms/company.store";
+import { StudentWhatsAppButton } from "@/components/pages/Autoscuole/StudentWhatsAppButton";
 import { LicenseCategorySelectItems } from "./LicenseCategorySelectItems";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FadeIn } from "@/components/ui/fade-in";
@@ -4938,6 +4939,21 @@ export function AutoscuoleStudentsPage({
               <p className="mt-0.5 text-[13px] font-medium text-[#929292]">
                 {register?.student.email || register?.student.phone || selectedStudent?.email || ""}
               </p>
+              {/* REG-767: presa in carico su WhatsApp, solo titolare e segreteria. */}
+              {register && !affiliate ? (
+                <StudentWhatsAppButton
+                  className="mt-3.5"
+                  canWrite={company?.role === "admin"}
+                  phone={register.student.phone}
+                  firstName={register.student.firstName}
+                  lastName={register.student.lastName}
+                  licenseCategory={activeLicensePath?.licenseCategory ?? register.licenseCategory}
+                  onAddPhone={() => {
+                    setDrawerTab("summary");
+                    startEditPhone();
+                  }}
+                />
+              ) : null}
               {register?.bookingBlocked && (
                 <div className="mt-2 flex justify-center">
                   <Pill tone="red">Prenotazioni bloccate</Pill>

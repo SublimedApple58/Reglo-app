@@ -337,7 +337,7 @@ const TRAILER_CATEGORY_MOTRICE: Record<string, string> = {
  *
  * La sigla non va mai a schermo così com'è: `licenseCategoryShort` dà il nome.
  */
-const QUALIFICATION_BASE_VEHICLES: Record<string, readonly string[]> = {
+export const QUALIFICATION_BASE_VEHICLES: Record<string, readonly string[]> = {
   CQC: ["C", "C1"],
   CQCP: ["D", "D1"],
   ADR: ["C"],

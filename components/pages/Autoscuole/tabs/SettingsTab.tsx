@@ -40,6 +40,7 @@ import {
   type ChannelReach,
 } from "@/components/pages/Autoscuole/settings/ChannelCascade";
 import { RecentDeliveries } from "@/components/pages/Autoscuole/settings/RecentDeliveries";
+import { WhatsAppWelcomeSection } from "@/components/pages/Autoscuole/settings/WhatsAppWelcomeSection";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -130,6 +131,9 @@ export type SettingsTabProps = {
   studentReminderDayBeforeTime: string;
   /** REG-758: avviso «guida fissata» all'allievo. */
   studentCreationNoticeEnabled: boolean;
+  /** REG-767: testo di presa in carico per «Scrivi su WhatsApp» (già risolto). */
+  studentWelcomeWhatsappTemplate: string;
+  saveStudentWelcomeWhatsappTemplate: (next: string | null) => Promise<boolean>;
   instructorReminderMinutes: string;
   instructorReminderEnabled: boolean;
   slotFillChannels: ChannelValue[];
@@ -518,6 +522,8 @@ function SettingsTab({
   studentReminderDayBeforeEnabled,
   studentReminderDayBeforeTime,
   studentCreationNoticeEnabled,
+  studentWelcomeWhatsappTemplate,
+  saveStudentWelcomeWhatsappTemplate,
   instructorReminderMinutes,
   instructorReminderEnabled,
   studentReminderChannels,
@@ -683,6 +689,15 @@ function SettingsTab({
                 reach={channelReach}
               />
               <RecentDeliveries />
+            </div>
+
+            {/* REG-767: testo del tasto «Scrivi su WhatsApp» della scheda allievo. */}
+            <div className="mt-4">
+              <WhatsAppWelcomeSection
+                value={studentWelcomeWhatsappTemplate}
+                consortium={consortium}
+                onSave={saveStudentWelcomeWhatsappTemplate}
+              />
             </div>
 
             {/* Rimando a Invia comunicato (flat come nel proto, niente box) */}
