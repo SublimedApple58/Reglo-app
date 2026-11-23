@@ -762,6 +762,15 @@ function SettingsTab({
                   stackOnMobile
                   control={channelsFor("appointment_rescheduled_instructor")}
                 />
+                {/* REG-771: prima seguiva la riga «Guida annullata» degli allievi. */}
+                <SettingsRow
+                  title="Guida annullata"
+                  icon={CalendarX}
+                  dim={offRow("appointment_cancelled_instructor")}
+                  description="Quando un allievo si ritira da una sua guida di gruppo."
+                  stackOnMobile
+                  control={channelsFor("appointment_cancelled_instructor")}
+                />
                 <SettingsRow
                   title="Richieste di sostituzione"
                   icon={Repeat}

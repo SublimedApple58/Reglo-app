@@ -19,7 +19,12 @@ import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { deliverWhatsApp } from "@/lib/autoscuole/whatsapp-delivery";
 // REG-604: punto di invio unico. Le offerte conservano `slotFillChannels`.
-import { notifyAutoscuolaUser, notifyAutoscuolaUsers, PUSH_ONLY } from "@/lib/autoscuole/notify";
+import {
+  EVENT_CHANNELS,
+  notifyAutoscuolaUser,
+  notifyAutoscuolaUsers,
+  PUSH_ONLY,
+} from "@/lib/autoscuole/notify";
 import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
@@ -5758,12 +5763,19 @@ export async function cancelGroupLessonParticipantAppointment({
         where: { id: appt.studentId! },
         select: { name: true },
       });
+      const instructorUser = await prisma.user.findUnique({
+        where: { id: gl.instructor.userId },
+        select: { email: true },
+      });
+      // REG-771: la riga «Guida annullata» degli Istruttori, non quella degli
+      // allievi. `kind` resta `appointment_cancelled` per il mobile.
       await notifyAutoscuolaUser({
         companyId,
         kind: "appointment_cancelled",
+        channelKey: "appointment_cancelled_instructor",
         audience: "instructor",
-        recipient: { userId: gl.instructor.userId },
-        supports: PUSH_ONLY,
+        recipient: { userId: gl.instructor.userId, email: instructorUser?.email },
+        supports: EVENT_CHANNELS,
         title: "Ritiro guida di gruppo",
         body: `${student?.name ?? "Un allievo"} si è ritirato dalla guida di gruppo di ${dateLabel} alle ${timeLabel}.`,
         appointmentId: appt.id,

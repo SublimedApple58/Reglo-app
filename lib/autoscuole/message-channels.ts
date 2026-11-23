@@ -19,8 +19,10 @@
  * REG-771: una chiave può non coincidere col `kind`. Lo spostamento di una
  * guida avvisato all'istruttore ha `kind: "appointment_rescheduled"` (è quello
  * che legge il mobile) ma la sua riga, `appointment_rescheduled_instructor`:
- * prima seguiva di nascosto la riga «Guida spostata» degli allievi. Chi invia
- * passa `channelKey` a `notifyAutoscuolaUser`.
+ * prima seguiva di nascosto la riga «Guida spostata» degli allievi. Lo stesso
+ * per il ritiro di un allievo da una guida di gruppo, avvisato all'istruttore
+ * con `kind: "appointment_cancelled"` e riga `appointment_cancelled_instructor`.
+ * Chi invia passa `channelKey` a `notifyAutoscuolaUser`.
  */
 import type { DeliveryChannel } from "@/lib/autoscuole/delivery-log";
 import {
@@ -45,6 +47,7 @@ export const MESSAGE_CHANNEL_KEYS = [
   "exam_scheduled",
   "appointment_reminder_instructor",
   "appointment_rescheduled_instructor",
+  "appointment_cancelled_instructor",
 ] as const;
 
 export type MessageChannelKey = (typeof MESSAGE_CHANNEL_KEYS)[number];
@@ -64,6 +67,7 @@ export const MESSAGE_AUDIENCE: Record<MessageChannelKey, "student" | "instructor
   exam_scheduled: "student",
   appointment_reminder_instructor: "instructor",
   appointment_rescheduled_instructor: "instructor",
+  appointment_cancelled_instructor: "instructor",
 };
 
 /**
@@ -130,8 +134,8 @@ export function effectiveMessageChannels(
 
 /**
  * WhatsApp si può accendere su questa riga? Serve un modello Meta utility
- * approvato. Le righe senza modello nel registro (oggi «Guida spostata» degli
- * istruttori, REG-771) mostrano solo App ed Email.
+ * approvato. Le righe senza modello nel registro (oggi «Guida spostata» e
+ * «Guida annullata» degli istruttori, REG-771) mostrano solo App ed Email.
  */
 export function whatsappTemplateReady(key: MessageChannelKey): boolean {
   const template = (WHATSAPP_TEMPLATES as Record<string, WhatsAppTemplate>)[key];

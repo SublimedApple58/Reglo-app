@@ -118,9 +118,15 @@ REG-771 (23/11): niente righe «prese in prestito».
 - **Scambio guida tra allievi** (`instructorSwapAppointments`): segue la riga
   «Guida spostata» degli allievi con tutti i suoi canali, WhatsApp compreso
   (`guida_spostata_allievo_v3`). Prima usciva solo come push.
-- Resta da decidere: il ritiro di un allievo da una guida di gruppo avvisa
-  l'istruttore con `kind: "appointment_cancelled"`, quindi segue la riga
-  «Guida annullata» degli allievi (filtrata su App).
+- **Ritiro da una guida di gruppo** (l'allievo si toglie da solo, avviso al suo
+  istruttore in `autoscuole-availability.actions.ts`): riga sua,
+  `appointment_cancelled_instructor` («Guida annullata» tra gli Istruttori, App
+  ed Email). `kind` resta `appointment_cancelled`. È l'unico annullamento che
+  oggi avvisa l'istruttore: le altre cancellazioni non gli mandano niente.
+- Nessun avviso agli istruttori legge più una riga degli allievi. Restano fuori
+  dal catalogo, e seguono la vecchia scelta globale `instructorReminderChannels`
+  ∩ App: `swap_instructor_notify` («Richieste di sostituzione», solo app) e
+  `weekly_absence` (assenza settimanale dichiarata dall'allievo, non in pagina).
 
 > Storia: dal 22/10 (REG-500) `deliverByCascade` scendeva App → WhatsApp → Email
 > fermandosi al primo che consegnava. Tolta il 24/11 su decisione di Tiziano.
