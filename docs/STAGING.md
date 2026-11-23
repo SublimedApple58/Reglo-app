@@ -173,6 +173,16 @@ di `titolare@reglo.it`, dal 29/10/2026); «Reglo E2E» resta spento.
 - Gli e2e Road (`tests/e2e/reg64*-road-*.auth.spec.ts`) girano sul titolare; quello
   dei punti critici entra anche come istruttore (`istruttore@reglo.it`) con token
   mobile e header `x-reglo-company-id`, perché l'account è in due autoscuole.
+- **Le mappe in headless non partono** (REG-777). Chromium headless non ha WebGL:
+  le mappe MapLibre di Road mostrano «Mappa non disponibile in questo momento.»
+  e gli e2e **non provano niente** che dipenda dalla mappa (clic sui tracciati,
+  marker, pulizia della mappa all'uscita dalla pagina). Per provarle serve il
+  rendering software:
+  `chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] })`.
+  Su staging, prima di aprire la pagina, va segnata come vista la news
+  `reglo-news-seen:agenda-pausa-2026-07` (`markNewsSeen` in `tests/e2e/news-seen.ts`),
+  altrimenti il dialog copre tutto. Per cliccare un tracciato si passa il mouse
+  sul canvas finché `canvas.style.cursor === "pointer"`.
 
 In **produzione** Road si accende solo dal backoffice: oggi è acceso solo su
 «Autoscuola Maltese», il tenant di prova di Tiziano.
