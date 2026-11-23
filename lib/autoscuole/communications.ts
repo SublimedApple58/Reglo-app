@@ -9,6 +9,7 @@ import { effectiveMessageChannels } from "@/lib/autoscuole/message-channels";
 import { deliverAndLog } from "@/lib/autoscuole/delivery-log";
 import { deliverToEach } from "@/lib/autoscuole/channel-cascade";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
+import { companyNotClosedToEveryone, isAudienceSilenced } from "@/lib/autoscuole/maintenance-gate";
 import {
   processAutoscuolaInvoiceFinalization as processAutoscuolaInvoiceFinalizationJob,
   processAutoscuolaLessonSettlement as processAutoscuolaLessonSettlementJob,
@@ -253,6 +254,26 @@ export const sendAutoscuolaMessage = async ({
   const channel = rule.channel as "email" | "sms" | "whatsapp";
   const target = rule.target as "student" | "staff";
   const normalizedChannel = channel === "sms" ? "whatsapp" : channel;
+
+  // REG-773: in manutenzione si tace verso chi è bloccato (lo staff di una
+  // regola sono i titolari: vedi `resolveRecipients`).
+  if (await isAudienceSilenced(rule.companyId, target === "staff" ? "owner" : "student", prisma)) {
+    await prisma.autoscuolaMessageLog.create({
+      data: {
+        companyId: rule.companyId,
+        ruleId: rule.id,
+        templateId: template.id,
+        appointmentId: appointmentId ?? null,
+        studentId: studentId ?? null,
+        channel: normalizedChannel,
+        recipient: "-",
+        status: "skipped",
+        error: "Autoscuola in manutenzione.",
+        payload: { subject, body },
+      },
+    });
+    return;
+  }
 
   const recipients = await resolveRecipients({
     prisma,
@@ -672,8 +693,9 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
   prisma?: PrismaClientLike;
   now?: Date;
 }) => {
+  // REG-773: le autoscuole in manutenzione per tutti non ricevono promemoria.
   const services = await prisma.companyService.findMany({
-    where: { serviceKey: "AUTOSCUOLE", status: "ACTIVE" },
+    where: { serviceKey: "AUTOSCUOLE", status: "ACTIVE", company: companyNotClosedToEveryone },
     select: { companyId: true, limits: true },
   });
 
@@ -966,8 +988,9 @@ export const processAutoscuolaMorningReminders = async ({
   prisma?: PrismaClientLike;
   now?: Date;
 }) => {
+  // REG-773: le autoscuole in manutenzione per tutti non ricevono promemoria.
   const services = await prisma.companyService.findMany({
-    where: { serviceKey: "AUTOSCUOLE", status: "ACTIVE" },
+    where: { serviceKey: "AUTOSCUOLE", status: "ACTIVE", company: companyNotClosedToEveryone },
     select: { companyId: true, limits: true },
   });
 
@@ -1133,8 +1156,9 @@ export const processAutoscuolaDayBeforeReminders = async ({
   prisma?: PrismaClientLike;
   now?: Date;
 }) => {
+  // REG-773: le autoscuole in manutenzione per tutti non ricevono promemoria.
   const services = await prisma.companyService.findMany({
-    where: { serviceKey: "AUTOSCUOLE", status: "ACTIVE" },
+    where: { serviceKey: "AUTOSCUOLE", status: "ACTIVE", company: companyNotClosedToEveryone },
     select: { companyId: true, limits: true },
   });
 
@@ -1671,6 +1695,8 @@ export const processEmptySlotNotifications = async ({
     where: {
       serviceKey: "AUTOSCUOLE",
       status: "ACTIVE",
+      // REG-773: niente avvisi di posti liberi da un'autoscuola in manutenzione.
+      company: companyNotClosedToEveryone,
       ...(filterCompanyId ? { companyId: filterCompanyId } : {}),
     },
   });

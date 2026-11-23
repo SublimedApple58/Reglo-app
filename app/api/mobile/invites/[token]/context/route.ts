@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/db/prisma";
+import { isEntryClosedByMaintenance, MAINTENANCE_PUBLIC_MESSAGE } from "@/lib/maintenance";
 
 export async function GET(
   _request: Request,
@@ -37,6 +38,14 @@ export async function GET(
     return NextResponse.json(
       { success: false, message: "Invito scaduto." },
       { status: 400 },
+    );
+  }
+
+  // REG-773: autoscuola in manutenzione → l'invito aspetta lo sblocco.
+  if (isEntryClosedByMaintenance(invite.company.maintenanceScope, invite.role === "admin")) {
+    return NextResponse.json(
+      { success: false, message: MAINTENANCE_PUBLIC_MESSAGE },
+      { status: 403 },
     );
   }
 

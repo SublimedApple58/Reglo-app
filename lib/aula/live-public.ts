@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/db/prisma";
 import { getSignedAssetUrl } from "@/lib/storage/r2";
+import { isEntryClosedByMaintenance, MAINTENANCE_PUBLIC_MESSAGE } from "@/lib/maintenance";
 import {
   getAllAnswers,
   getAnswers,
@@ -303,6 +304,25 @@ async function buildExamSnapshot(
   };
 }
 
+/**
+ * REG-773: con l'autoscuola in manutenzione per tutti, l'Aula live non accetta
+ * ingressi né risposte (la sessione non si cancella: riprende allo sblocco).
+ */
+async function assertAulaOpen(lessonId: string) {
+  const lesson = await prisma.aulaLesson.findUnique({
+    where: { id: lessonId },
+    select: { companyId: true },
+  });
+  if (!lesson?.companyId) return;
+  const company = await prisma.company.findUnique({
+    where: { id: lesson.companyId },
+    select: { maintenanceScope: true },
+  });
+  if (isEntryClosedByMaintenance(company?.maintenanceScope)) {
+    throw new Error(MAINTENANCE_PUBLIC_MESSAGE);
+  }
+}
+
 export async function joinLive(input: {
   code: string;
   name: string;
@@ -310,6 +330,7 @@ export async function joinLive(input: {
 }) {
   const session = await getSession(input.code);
   if (!session || session.status === "ENDED") throw new Error("SESSION_NOT_FOUND");
+  await assertAulaOpen(session.lessonId);
   return joinParticipant(input);
 }
 
@@ -322,6 +343,7 @@ export async function submitLiveAnswer(input: {
 }) {
   const session = await getSession(input.code);
   if (!session) throw new Error("SESSION_NOT_FOUND");
+  await assertAulaOpen(session.lessonId);
 
   let questionId: string;
   if (session.mode === "EXAM") {

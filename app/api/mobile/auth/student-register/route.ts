@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/db/prisma";
+import { isEntryClosedByMaintenance, MAINTENANCE_PUBLIC_MESSAGE } from "@/lib/maintenance";
 import { toStoredPhone } from "@/lib/phone-e164";
 import { whatsAppConsentFields } from "@/lib/autoscuole/whatsapp-consent";
 import { studentRegisterSchema } from "@/lib/validators";
@@ -66,6 +67,14 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { success: false, message: "Codice di invito non valido" },
         { status: 404 },
+      );
+    }
+
+    // REG-773: autoscuola in manutenzione per tutti → niente iscrizioni nuove.
+    if (isEntryClosedByMaintenance(company.maintenanceScope)) {
+      return NextResponse.json(
+        { success: false, message: MAINTENANCE_PUBLIC_MESSAGE },
+        { status: 403 },
       );
     }
 

@@ -1,5 +1,6 @@
 import { prisma as defaultPrisma } from "@/db/prisma";
 import { externalSendsDisabled } from "@/lib/app-env";
+import { filterUsersReachableDuringMaintenance } from "@/lib/autoscuole/maintenance-gate";
 
 type PrismaClientLike = typeof defaultPrisma;
 
@@ -91,9 +92,27 @@ export async function sendAutoscuolaPushToUsers({
     } satisfies AutoscuolaPushSendResult;
   }
 
+  // REG-773: in manutenzione non si scrive a chi è bloccato (tutti, o solo i
+  // titolari). Rete di sicurezza per ogni push, anche fuori da notify.ts.
+  const reachableUserIds = await filterUsersReachableDuringMaintenance(
+    companyId,
+    userIds,
+    prisma,
+  );
+  if (!reachableUserIds.length) {
+    return {
+      sent: 0,
+      failed: 0,
+      skipped: userIds.length,
+      invalidated: 0,
+      errorCodes: [],
+      errorMessages: [],
+    } satisfies AutoscuolaPushSendResult;
+  }
+
   const devices = await prisma.mobilePushDevice.findMany({
     where: {
-      userId: { in: Array.from(new Set(userIds)) },
+      userId: { in: Array.from(new Set(reachableUserIds)) },
       disabledAt: null,
     },
     select: {

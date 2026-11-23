@@ -15,6 +15,12 @@ import { signImpersonationGrant } from "@/lib/impersonation-grant";
 import { normalizeCompanyServices, type ServiceKey } from "@/lib/services";
 import { getTwilioClient, VOICE_WEBHOOK_BASE_URL } from "@/lib/twilio";
 import { telnyxFetch, TELNYX_WEBHOOK_BASE_URL } from "@/lib/telnyx";
+import { getBackofficeIdentity } from "@/lib/backoffice-auth";
+import {
+  listCompanyMaintenanceEvents,
+  setCompanyMaintenance,
+} from "@/lib/autoscuole/maintenance";
+import { MAINTENANCE_SCOPES, type MaintenanceScope } from "@/lib/maintenance";
 
 const updateCompanyServiceSchema = z.object({
   companyId: z.string().min(1),
@@ -56,6 +62,9 @@ export type BackofficeCompany = {
   services: ReturnType<typeof normalizeCompanyServices>;
   androidStudents: number;
   iosStudents: number;
+  /** REG-773: null = account attivo. */
+  maintenanceScope: MaintenanceScope | null;
+  maintenanceSince: string | null;
 };
 
 export async function getBackofficeCompanies() {
@@ -93,6 +102,8 @@ export async function getBackofficeCompanies() {
           services: normalizeCompanyServices(company.services),
           androidStudents: counts.android,
           iosStudents: counts.ios,
+          maintenanceScope: company.maintenanceScope ?? null,
+          maintenanceSince: company.maintenanceSince?.toISOString() ?? null,
         };
       }) satisfies BackofficeCompany[],
     };
@@ -695,6 +706,50 @@ export async function impersonateCompany(companyId: string) {
     return { success: true as const };
   } catch (error) {
     if (isRedirectError(error)) throw error;
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+// ── REG-773 — Modalità manutenzione ────────────────────────────────────────
+
+const setMaintenanceSchema = z.object({
+  companyId: z.string().uuid(),
+  /** null = sblocca. */
+  scope: z.enum(MAINTENANCE_SCOPES as [MaintenanceScope, ...MaintenanceScope[]]).nullable(),
+});
+
+/**
+ * Accende, cambia ambito o SBLOCCA la manutenzione di un'autoscuola. Lo
+ * sblocco esiste solo qui: il titolare non può farlo.
+ */
+export async function setBackofficeCompanyMaintenance(
+  input: z.infer<typeof setMaintenanceSchema>,
+) {
+  try {
+    await requireGlobalAdmin();
+    const payload = setMaintenanceSchema.parse(input);
+    const identity = await getBackofficeIdentity();
+    const result = await setCompanyMaintenance({
+      companyId: payload.companyId,
+      scope: payload.scope,
+      actor: {
+        kind: "backoffice",
+        adminId: identity?.kind === "personal" ? identity.adminId : null,
+        label: identity?.name?.trim() || identity?.email || "Backoffice",
+      },
+    });
+    return { success: true as const, data: { changed: result.changed, ...result.state } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+export async function getBackofficeCompanyMaintenanceEvents(companyId: string) {
+  try {
+    await requireGlobalAdmin();
+    const id = z.string().uuid().parse(companyId);
+    return { success: true as const, data: await listCompanyMaintenanceEvents(id) };
+  } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
 }

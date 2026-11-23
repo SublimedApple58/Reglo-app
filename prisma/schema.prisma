@@ -24,6 +24,14 @@ enum CompanyServiceStatus {
   DISABLED
 }
 
+/// REG-773 — ambito della modalità manutenzione dell'account autoscuola.
+/// OWNER_ONLY: bloccati solo i titolari (OWNER, INSTRUCTOR_OWNER).
+/// EVERYONE: bloccati anche istruttori e allievi.
+enum CompanyMaintenanceScope {
+  OWNER_ONLY
+  EVERYONE
+}
+
 enum AutoscuolaRole {
   OWNER
   INSTRUCTOR_OWNER
@@ -220,12 +228,17 @@ model MobilePushDevice {
 }
 
 model Company {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name       String
-  logoKey    String?
-  createdAt  DateTime @default(now()) @db.Timestamp(6)
-  updatedAt  DateTime @updatedAt
-  inviteCode String?  @unique
+  id               String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String
+  logoKey          String?
+  createdAt        DateTime                 @default(now()) @db.Timestamp(6)
+  updatedAt        DateTime                 @updatedAt
+  inviteCode       String?                  @unique
+  /// REG-773 — modalità manutenzione: null = account attivo. La accende il
+  /// titolare (o il backoffice), la spegne SOLO il backoffice. Nessun dato si
+  /// tocca: blocca accesso e UI. Vedi docs/features/maintenance-mode.md.
+  maintenanceScope CompanyMaintenanceScope?
+  maintenanceSince DateTime?                @db.Timestamp(6)
 
   members                              CompanyMember[]
   activeUsers                          User[]                                 @relation("UserActiveCompany")
@@ -288,6 +301,7 @@ model Company {
   consorzioLessonBillings              ConsorzioLessonBilling[]               @relation("ConsorzioLessonBillings")
   consorzioCourseBillings              ConsorzioCourseBilling[]               @relation("ConsorzioCourseBillings")
   evaluationItems                      AutoscuolaEvaluationItem[]
+  maintenanceEvents                    CompanyMaintenanceEvent[]
 }
 
 /// In-app notifications shown to the autoscuola owner in the web bell/inbox.
@@ -749,37 +763,37 @@ model CompanyMemberLocation {
 }
 
 model AutoscuolaLocation {
-  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId         String    @db.Uuid
-  createdByUserId   String?   @db.Uuid
-  name              String
-  address           String?
-  latitude          Decimal?  @db.Decimal(10, 7)
-  longitude         Decimal?  @db.Decimal(10, 7)
-  placeId           String?
-  isDefault         Boolean   @default(false)
-  isPrecise         Boolean   @default(false)
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId            String    @db.Uuid
+  createdByUserId      String?   @db.Uuid
+  name                 String
+  address              String?
+  latitude             Decimal?  @db.Decimal(10, 7)
+  longitude            Decimal?  @db.Decimal(10, 7)
+  placeId              String?
+  isDefault            Boolean   @default(false)
+  isPrecise            Boolean   @default(false)
   /// Tipi di patente serviti da questo luogo (REG-409): creando una guida, il
   /// campo "Luogo" si precompila con un luogo compatibile con la patente della
   /// guida. Dal REG-725 la stessa categoria può stare in più luoghi.
-  licenseCategories String[]  @default([])
+  licenseCategories    String[]  @default([])
   /// REG-725: cambio per patente, `{ "B": "automatic" }` — "manual" |
   /// "automatic". Patente assente = entrambi i cambi. Scritta solo da
   /// `setLocationLicenseCategories`, che tiene le chiavi dentro `licenseCategories`.
-  licenseTransmissions Json @default("{}")
+  licenseTransmissions Json      @default("{}")
   /// Foto di copertina della SEDE (REG-639): chiave R2 caricata dal titolare
   /// da Impostazioni → Sede e luoghi. Solo la sede (`isDefault`) ne ha una:
   /// l'app istruttore la mostra in testa a Disponibilità (null = segnaposto).
-  coverPhotoKey     String?
+  coverPhotoKey        String?
   /// Codice di invito del luogo (REG-706, 6 caratteri, stesso alfabeto dei
   /// codici istruttore). Chi si registra con questo codice entra
   /// nell'autoscuola e riceve il luogo (tra i suoi luoghi + principale).
   /// Valido solo con «Disponibilità per luogo» accesa e luogo non archiviato.
   /// Unicità tra tabelle (autoscuola, istruttore, luogo) alla generazione.
-  inviteCode        String?   @unique
-  archivedAt        DateTime? @db.Timestamp(6)
-  createdAt         DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt         DateTime  @updatedAt
+  inviteCode           String?   @unique
+  archivedAt           DateTime? @db.Timestamp(6)
+  createdAt            DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt            DateTime  @updatedAt
 
   company           Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
   createdByUser     User?                   @relation("AutoscuolaLocationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
@@ -2002,6 +2016,27 @@ model InvestorKpiLink {
   @@index([revokedAt])
 }
 
+/// REG-773 — registro di chi accende, spegne o cambia la manutenzione.
+/// `action`: activate | unlock | change_scope. `actorKind`: owner | backoffice.
+/// L'attore è uno snapshot (id + etichetta), senza relazioni: il registro
+/// sopravvive a chi l'ha scritto.
+model CompanyMaintenanceEvent {
+  id                     String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId              String                   @db.Uuid
+  action                 String
+  scope                  CompanyMaintenanceScope?
+  previousScope          CompanyMaintenanceScope?
+  actorKind              String
+  actorUserId            String?                  @db.Uuid
+  actorBackofficeAdminId String?                  @db.Uuid
+  actorLabel             String
+  createdAt              DateTime                 @default(now()) @db.Timestamp(6)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+}
+
 model AccountDeletionAudit {
   id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   deletedUserId    String   @db.Uuid
@@ -2262,18 +2297,18 @@ model AutoscuolaAppointmentEvaluation {
 /// (o da `scripts/backoffice-admin.ts`); la password la sceglie la persona dal
 /// link di attivazione che riceve via email — nel codice non ce n'è nessuna.
 model BackofficeAdmin {
-  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email             String    @unique
-  name              String
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email            String    @unique
+  name             String
   /// `scrypt$<salt>$<hash>`; null finché la persona non ha attivato l'accesso.
-  passwordHash      String?
-  passwordSetAt     DateTime? @db.Timestamp(6)
+  passwordHash     String?
+  passwordSetAt    DateTime? @db.Timestamp(6)
   /// Tentativi sbagliati di fila: oltre la soglia l'accesso si blocca per un po'.
-  failedLoginCount  Int       @default(0)
-  lockedUntil       DateTime? @db.Timestamp(6)
-  lastLoginAt       DateTime? @db.Timestamp(6)
-  disabledAt        DateTime? @db.Timestamp(6)
-  createdAt         DateTime  @default(now()) @db.Timestamp(6)
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime? @db.Timestamp(6)
+  lastLoginAt      DateTime? @db.Timestamp(6)
+  disabledAt       DateTime? @db.Timestamp(6)
+  createdAt        DateTime  @default(now()) @db.Timestamp(6)
 
   tokens   BackofficeAdminToken[]
   sessions BackofficeSession[]
@@ -2430,8 +2465,8 @@ model SalesDeal {
   createdAt          DateTime  @default(now()) @db.Timestamp(6)
   updatedAt          DateTime  @updatedAt
 
-  company Company?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  agent   SalesAgent @relation(fields: [agentId], references: [id])
+  company Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  agent   SalesAgent    @relation(fields: [agentId], references: [id])
   payment FinanceEntry?
 
   @@index([closedOn])

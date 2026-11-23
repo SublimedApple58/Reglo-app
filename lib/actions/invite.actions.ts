@@ -20,6 +20,7 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { compare, hash } from '@/lib/encrypt';
 import { attachSiblingAffiliateInvites } from '@/lib/consorzio/affiliate-invites';
+import { isEntryClosedByMaintenance, MAINTENANCE_PUBLIC_MESSAGE } from '@/lib/maintenance';
 import { isRedirectError } from 'next/dist/client/components/redirect-error';
 
 const INVITE_TTL_DAYS = 7;
@@ -319,6 +320,11 @@ export async function getCompanyInviteContext(
       throw new Error('Invite has expired');
     }
 
+    // REG-773: autoscuola in manutenzione → l'invito aspetta lo sblocco.
+    if (isEntryClosedByMaintenance(invite.company.maintenanceScope, invite.role === 'admin')) {
+      throw new Error(MAINTENANCE_PUBLIC_MESSAGE);
+    }
+
     const user = await prisma.user.findFirst({
       where: { email: invite.email.toLowerCase() },
       select: { id: true },
@@ -377,6 +383,11 @@ export async function acceptCompanyInvite(
 
     if (invite.expiresAt < new Date()) {
       throw new Error('Invite has expired');
+    }
+
+    // REG-773: autoscuola in manutenzione → l'invito aspetta lo sblocco.
+    if (isEntryClosedByMaintenance(invite.company.maintenanceScope, invite.role === 'admin')) {
+      throw new Error(MAINTENANCE_PUBLIC_MESSAGE);
     }
 
     if (invite.email.toLowerCase() !== userEmail) {
@@ -463,6 +474,11 @@ export async function acceptCompanyInviteWithPassword(
 
     if (invite.expiresAt < new Date()) {
       throw new Error('Invite has expired');
+    }
+
+    // REG-773: autoscuola in manutenzione → l'invito aspetta lo sblocco.
+    if (isEntryClosedByMaintenance(invite.company.maintenanceScope, invite.role === 'admin')) {
+      throw new Error(MAINTENANCE_PUBLIC_MESSAGE);
     }
 
     const user = await prisma.user.findUnique({
@@ -561,6 +577,11 @@ export async function acceptCompanyInviteAndRegister(
 
     if (invite.expiresAt < new Date()) {
       throw new Error('Invite has expired');
+    }
+
+    // REG-773: autoscuola in manutenzione → l'invito aspetta lo sblocco.
+    if (isEntryClosedByMaintenance(invite.company.maintenanceScope, invite.role === 'admin')) {
+      throw new Error(MAINTENANCE_PUBLIC_MESSAGE);
     }
 
     // An orphaned account (deleted from the Directory, no memberships left)

@@ -3,13 +3,20 @@ import { auth } from "@/auth";
 import { headers } from "next/headers";
 import { prisma } from "@/db/prisma";
 import { getMobileToken, parseBearerToken } from "@/lib/mobile-auth";
+import { COMPANY_MAINTENANCE, isMemberBlockedByMaintenance } from "@/lib/maintenance";
 
 export const ACTIVE_COMPANY_REQUIRED = "ACTIVE_COMPANY_REQUIRED";
 export const NO_COMPANY_FOUND = "NO_COMPANY_FOUND";
 
 // React.cache() deduplicates calls within a single request — every server action
 // that calls requireServiceAccess -> getActiveCompanyContext hits the DB only once.
-export const getActiveCompanyContext = cache(async function getActiveCompanyContext() {
+//
+// "Unchecked" = senza il blocco della modalità manutenzione (REG-773). Lo usano
+// solo le poche strade che devono restare aperte a un account in manutenzione:
+// logout, stato dell'account (`/me`), disattivazione del token push, la
+// schermata di manutenzione stessa. Tutto il resto passa da
+// `getActiveCompanyContext`, qui sotto.
+export const getActiveCompanyContextUnchecked = cache(async function getActiveCompanyContextUnchecked() {
   const headerList = await headers();
   const authHeader = headerList.get("authorization");
   const bearer = parseBearerToken(authHeader);
@@ -98,4 +105,28 @@ export const getActiveCompanyContext = cache(async function getActiveCompanyCont
     activeCompanyId,
     memberships,
   };
+});
+
+/**
+ * Contesto della company attiva, con il blocco della modalità manutenzione
+ * (REG-773): se l'autoscuola è in manutenzione e il ruolo del membro rientra
+ * nell'ambito, lancia `COMPANY_MAINTENANCE`. Passandoci ogni server action e
+ * ogni route (web e mobile) il blocco vale per UI **e** API, ed è immediato: la
+ * company si legge fresca dal DB a ogni richiesta, senza cache.
+ *
+ * Il backoffice in impersonazione passa comunque: il supporto deve poter
+ * guardare dentro un account in manutenzione.
+ */
+export const getActiveCompanyContext = cache(async function getActiveCompanyContext() {
+  const context = await getActiveCompanyContextUnchecked();
+  if (
+    !context.session?.impersonation &&
+    isMemberBlockedByMaintenance(
+      context.company.maintenanceScope,
+      context.membership.autoscuolaRole,
+    )
+  ) {
+    throw new Error(COMPANY_MAINTENANCE);
+  }
+  return context;
 });

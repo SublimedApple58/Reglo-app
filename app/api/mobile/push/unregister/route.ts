@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/db/prisma";
-import { getActiveCompanyContext } from "@/lib/company-context";
+import { getActiveCompanyContextUnchecked } from "@/lib/company-context";
 import { formatError } from "@/lib/utils";
 
 const unregisterPushSchema = z.object({
@@ -12,7 +12,7 @@ const unregisterPushSchema = z.object({
 export async function POST(request: Request) {
   try {
     const payload = unregisterPushSchema.parse(await request.json().catch(() => ({})));
-    const { membership, activeCompanyId } = await getActiveCompanyContext();
+    const { membership, activeCompanyId } = await getActiveCompanyContextUnchecked();
     const now = new Date();
 
     const whereBase = {

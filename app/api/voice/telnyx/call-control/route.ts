@@ -10,6 +10,12 @@ import {
   verifyTelnyxSignature,
 } from "@/lib/autoscuole/voice";
 import { telnyxCallControl } from "@/lib/telnyx";
+import { getCompanyMaintenanceScope } from "@/lib/autoscuole/maintenance-gate";
+import { MAINTENANCE_VOICE_MESSAGE } from "@/lib/maintenance";
+
+// REG-773: le chiamate a un'autoscuola in manutenzione per tutti si
+// riconoscono lungo gli eventi da questo client_state (answer → speak → hangup).
+const MAINTENANCE_CLIENT_STATE = Buffer.from("reglo-maintenance").toString("base64");
 
 const json = (data: unknown, status = 200) =>
   NextResponse.json(data, { status });
@@ -51,6 +57,8 @@ export async function POST(request: Request) {
       return handleCallAnswered(payload);
     case "call.hangup":
       return handleCallHangup(payload);
+    case "call.speak.ended":
+      return handleSpeakEnded(payload);
     case "call.recording.saved":
       return handleRecordingSaved(payload);
     default:
@@ -87,6 +95,21 @@ async function handleCallInitiated(payload: Record<string, unknown>) {
       });
     } catch { /* best effort */ }
     return json({ success: true, rejected: true });
+  }
+
+  // REG-773: autoscuola in manutenzione per tutti → si risponde solo per dire
+  // il messaggio e chiudere (vedi call.answered e call.speak.ended).
+  if ((await getCompanyMaintenanceScope(lineContext.companyId)) === "EVERYONE") {
+    try {
+      await telnyxCallControl(callControlId, "answer", {
+        client_state: MAINTENANCE_CLIENT_STATE,
+      });
+    } catch {
+      try {
+        await telnyxCallControl(callControlId, "hangup", {});
+      } catch { /* best effort */ }
+    }
+    return json({ success: true, maintenance: true });
   }
 
   const voiceEnabled =
@@ -182,6 +205,22 @@ async function handleCallAnswered(payload: Record<string, unknown>) {
     return json({ success: false, message: "Missing call_control_id." }, 400);
   }
 
+  if (payload.client_state === MAINTENANCE_CLIENT_STATE) {
+    try {
+      await telnyxCallControl(callControlId, "speak", {
+        payload: MAINTENANCE_VOICE_MESSAGE,
+        voice: "female",
+        language: "it-IT",
+        client_state: MAINTENANCE_CLIENT_STATE,
+      });
+    } catch {
+      try {
+        await telnyxCallControl(callControlId, "hangup", {});
+      } catch { /* best effort */ }
+    }
+    return json({ success: true, maintenance: true });
+  }
+
   const lineContext = await resolveVoiceLineContextByNumber(to);
   if (!lineContext) {
     return json({ success: true, ignored: true });
@@ -226,6 +265,21 @@ async function handleCallAnswered(payload: Record<string, unknown>) {
     }
   }
 
+  return json({ success: true });
+}
+
+// ---------------------------------------------------------------------------
+// call.speak.ended — fine del messaggio di manutenzione (REG-773): si chiude
+// ---------------------------------------------------------------------------
+
+async function handleSpeakEnded(payload: Record<string, unknown>) {
+  const callControlId = payload.call_control_id as string | undefined;
+  if (!callControlId || payload.client_state !== MAINTENANCE_CLIENT_STATE) {
+    return json({ success: true, ignored: true });
+  }
+  try {
+    await telnyxCallControl(callControlId, "hangup", {});
+  } catch { /* best effort */ }
   return json({ success: true });
 }
 

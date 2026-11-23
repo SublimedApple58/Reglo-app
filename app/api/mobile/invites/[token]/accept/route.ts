@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/db/prisma";
+import { isEntryClosedByMaintenance, MAINTENANCE_PUBLIC_MESSAGE } from "@/lib/maintenance";
 import { compare, hash } from "@/lib/encrypt";
 import { getDefaultAutoscuolaRole, isInstructor, type AutoscuolaRole } from "@/lib/autoscuole/roles";
 import { formatError } from "@/lib/utils";
@@ -55,6 +56,14 @@ export async function POST(
       return NextResponse.json(
         { success: false, message: "Invito scaduto." },
         { status: 400 },
+      );
+    }
+
+    // REG-773: autoscuola in manutenzione → l'invito aspetta lo sblocco.
+    if (isEntryClosedByMaintenance(invite.company.maintenanceScope, invite.role === "admin")) {
+      return NextResponse.json(
+        { success: false, message: MAINTENANCE_PUBLIC_MESSAGE },
+        { status: 403 },
       );
     }
 

@@ -5,6 +5,7 @@ import { getSignedAssetUrl } from "@/lib/storage/r2";
 import { getOrCreateInstructorForUser } from "@/lib/autoscuole/instructors";
 import { isInstructor } from "@/lib/autoscuole/roles";
 import { resolveCoverPhotoUrls } from "@/lib/autoscuole/location-cover";
+import { describeMemberMaintenance } from "@/lib/maintenance";
 
 export async function GET(request: Request) {
   const token = parseBearerToken(request.headers.get("authorization"));
@@ -63,6 +64,10 @@ export async function GET(request: Request) {
         role: entry.role,
         autoscuolaRole: entry.autoscuolaRole,
         services: entry.company.services,
+        // REG-773: stato della manutenzione e se blocca QUESTO membro. `/me`
+        // resta aperto anche in manutenzione: è da qui che l'app sa di dover
+        // mostrare la schermata dedicata.
+        maintenance: describeMemberMaintenance(entry.company, entry.autoscuolaRole),
       };
     }),
   );
@@ -114,6 +119,8 @@ export async function GET(request: Request) {
       autoscuolaRole: activeMembership?.autoscuolaRole ?? null,
       instructorId,
       companies,
+      maintenance:
+        companies.find((entry) => entry.id === user.activeCompanyId)?.maintenance ?? null,
     },
   });
 }

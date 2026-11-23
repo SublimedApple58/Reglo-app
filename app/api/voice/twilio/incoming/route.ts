@@ -9,6 +9,8 @@ import {
   toStringMap,
   resolvePublicRequestUrl,
 } from "@/lib/autoscuole/voice-webhook";
+import { getCompanyMaintenanceScope } from "@/lib/autoscuole/maintenance-gate";
+import { MAINTENANCE_VOICE_MESSAGE } from "@/lib/maintenance";
 
 const xml = (body: string) =>
   new NextResponse(body, {
@@ -140,6 +142,12 @@ export async function POST(request: Request) {
           "Numero non configurato per la segreteria automatica. Contatta l'autoscuola.",
       }),
     );
+  }
+
+  // REG-773: autoscuola in manutenzione per tutti → messaggio e chiusura,
+  // senza segreteria né trasferimento.
+  if ((await getCompanyMaintenanceScope(lineContext.companyId)) === "EVERYONE") {
+    return xml(buildFallbackTwiml({ message: MAINTENANCE_VOICE_MESSAGE }));
   }
 
   const call = await upsertIncomingVoiceCall({

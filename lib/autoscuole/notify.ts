@@ -23,7 +23,7 @@
  * passare `whatsapp` — qui non cambia niente.
  */
 import type { DeliveryChannel } from "@/lib/autoscuole/delivery-log";
-import { deliverAndLog } from "@/lib/autoscuole/delivery-log";
+import { deliverAndLog, logSkipped } from "@/lib/autoscuole/delivery-log";
 import { deliverWhatsApp } from "@/lib/autoscuole/whatsapp-delivery";
 import { PUSH_ONLY_KINDS } from "@/lib/autoscuole/whatsapp-templates";
 import type { WhatsAppTemplateKind } from "@/lib/autoscuole/whatsapp-templates";
@@ -34,6 +34,7 @@ import { resolveChannels } from "@/lib/autoscuole/reminder-channels";
 import { deliverToEach } from "@/lib/autoscuole/channel-cascade";
 import type { MessageChannelKey } from "@/lib/autoscuole/message-channels";
 import { prisma } from "@/db/prisma";
+import { isAudienceSilenced } from "@/lib/autoscuole/maintenance-gate";
 
 /** I canali tecnicamente possibili oggi per un messaggio-evento. */
 export const EVENT_CHANNELS = ["push", "email"] as const;
@@ -149,6 +150,24 @@ async function creationNoticeStillQueued(input: NotifyInput): Promise<boolean> {
  */
 export async function notifyAutoscuolaUser(input: NotifyInput): Promise<void> {
   if (await creationNoticeStillQueued(input)) return;
+  // REG-773: autoscuola in manutenzione → niente messaggi a chi è bloccato.
+  // Resta una riga di registro: chi guarda «Ultimi invii» capisce il perché.
+  // Il messaggio non si recupera allo sblocco.
+  if (await isAudienceSilenced(input.companyId, input.audience)) {
+    await logSkipped(
+      {
+        companyId: input.companyId,
+        kind: input.kind,
+        channel: "push",
+        recipient: input.recipient.userId,
+        appointmentId: input.appointmentId ?? null,
+        studentId: input.audience === "student" ? input.recipient.userId : null,
+        body: input.body,
+      },
+      "autoscuola in manutenzione",
+    );
+    return;
+  }
   const supports = input.supports ?? EVENT_CHANNELS;
   const channels = input.channels
     ? supports.filter((channel) => input.channels!.includes(channel))

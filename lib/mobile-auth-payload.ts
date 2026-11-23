@@ -5,6 +5,7 @@ import { issueMobileToken } from "@/lib/mobile-auth";
 import { getSignedAssetUrl } from "@/lib/storage/r2";
 import { getOrCreateInstructorForUser } from "@/lib/autoscuole/instructors";
 import { isInstructor } from "@/lib/autoscuole/roles";
+import { describeMemberMaintenance } from "@/lib/maintenance";
 
 /**
  * Assembles the full mobile auth payload for a user: resolves memberships,
@@ -43,6 +44,9 @@ export async function buildMobileAuthPayload(user: User) {
         role: entry.role,
         autoscuolaRole: entry.autoscuolaRole,
         services: entry.company.services,
+        // REG-773: il login resta aperto; l'app mostra la schermata di
+        // manutenzione se `blocked`.
+        maintenance: describeMemberMaintenance(entry.company, entry.autoscuolaRole),
       };
     }),
   );

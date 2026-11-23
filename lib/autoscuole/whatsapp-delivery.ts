@@ -27,6 +27,7 @@ import {
   type DeliveryAttempt,
 } from "@/lib/autoscuole/delivery-log";
 import { findUserByPhone, recordWhatsAppOptOut } from "@/lib/autoscuole/whatsapp-consent";
+import { getCompanyMaintenanceScope } from "@/lib/autoscuole/maintenance-gate";
 import {
   isStagingTestRecipient,
   isWhatsAppChannelAvailable,
@@ -147,6 +148,13 @@ export async function deliverWhatsApp(
 ): Promise<boolean> {
   const logged: DeliveryAttempt = { ...attempt, channel: "whatsapp" };
   const wanted = input.templateKind ?? logged.kind;
+
+  // REG-773: con l'autoscuola in manutenzione per tutti, nessun WhatsApp. (Il
+  // caso «solo titolare» si decide a monte, dove il pubblico è noto.)
+  if ((await getCompanyMaintenanceScope(logged.companyId)) === "EVERYONE") {
+    await logSkipped(logged, "autoscuola in manutenzione");
+    return false;
+  }
 
   // La revoca si legge solo se serve davvero: se il canale è spento o il
   // template non c'è, la query al database è sprecata.

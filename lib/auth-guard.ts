@@ -2,11 +2,14 @@ import { UserRole } from '@/lib/constants';
 import { redirect } from 'next/navigation';
 import { ACTIVE_COMPANY_REQUIRED, getActiveCompanyContext } from '@/lib/company-context';
 import { validateBackofficeCookie } from '@/lib/backoffice-auth';
+import { COMPANY_MAINTENANCE } from '@/lib/maintenance';
 
 const buildSignInPath = (locale?: string) =>
   locale ? `/${locale}/sign-in` : '/sign-in';
 const buildSelectCompanyPath = (locale?: string) =>
   locale ? `/${locale}/select-company` : '/select-company';
+const buildMaintenancePath = (locale?: string) =>
+  locale ? `/${locale}/manutenzione` : '/manutenzione';
 
 export async function requireUserAndCompany(locale?: string) {
   try {
@@ -16,6 +19,10 @@ export async function requireUserAndCompany(locale?: string) {
     const message = error instanceof Error ? error.message : '';
     if (message === ACTIVE_COMPANY_REQUIRED) {
       redirect(buildSelectCompanyPath(locale));
+    }
+    // REG-773: autoscuola in manutenzione → schermata dedicata, non il login.
+    if (message === COMPANY_MAINTENANCE) {
+      redirect(buildMaintenancePath(locale));
     }
     redirect(buildSignInPath(locale));
   }

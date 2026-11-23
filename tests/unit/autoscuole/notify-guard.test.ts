@@ -31,6 +31,8 @@ const AMMESSI: Record<string, string> = {
   "lib/autoscuole/push.ts": "è l'implementazione della push",
   "lib/actions/support.actions.ts":
     "avvisi interni al team Reglo: non è l'autoscuola che parla ai suoi utenti",
+  "lib/autoscuole/maintenance.ts":
+    "REG-773: avviso interno al team Reglo (solo @reglo.it) quando un'autoscuola entra o esce dalla manutenzione",
   "lib/auth/password-reset.ts":
     "autenticazione: filtrarla impedirebbe di rientrare nel proprio account",
   "email/index.ts":
@@ -73,7 +75,7 @@ describe("nessun invio fuori dalla struttura comune", () => {
   it("la lista bianca non cresce di nascosto", () => {
     // Se questo numero cambia, qualcuno ha aggiunto un'eccezione: che sia una
     // scelta vista, non un effetto collaterale.
-    expect(Object.keys(AMMESSI)).toHaveLength(7);
+    expect(Object.keys(AMMESSI)).toHaveLength(8);
     for (const motivo of Object.values(AMMESSI)) {
       expect(motivo.length).toBeGreaterThan(20);
     }
