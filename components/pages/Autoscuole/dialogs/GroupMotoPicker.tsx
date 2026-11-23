@@ -88,7 +88,7 @@ export function GroupMotoTrigger({
           type="button"
           data-testid={`moto-trigger-${appointmentId}`}
           className={cn(
-            "group -ml-[7px] mt-[3px] inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-[1.5px] border-transparent py-[3px] pl-[7px] pr-2 text-[12.5px] font-medium transition-colors disabled:cursor-default disabled:opacity-60",
+            "group -ml-[7px] mt-[3px] inline-flex cursor-pointer items-center gap-1.5 rounded-full border-[1.5px] border-transparent py-[3px] pl-[7px] pr-2 text-[12.5px] font-medium transition-colors disabled:cursor-default disabled:opacity-60",
             onRotation
               ? "text-[#6a6a6a] hover:bg-[#f5f5f5] data-[state=open]:border-[#e5e5e5] data-[state=open]:bg-[#f5f5f5]"
               : "text-[#C2410C] hover:bg-[#FFF4EA] data-[state=open]:border-[#FCD9B8] data-[state=open]:bg-[#FFF4EA]",
@@ -281,14 +281,16 @@ export function GroupMotoSwapConfirm({
         >
           {cleanSwap ? "Scambia" : "Conferma"}
         </Button>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="bare"
           disabled={busy}
           onClick={onCancel}
-          className="cursor-pointer px-3 py-2 text-[13px] font-semibold text-foreground underline underline-offset-[3px] hover:decoration-2"
+          className="min-h-[34px] px-3 py-2 text-[13px] font-semibold"
         >
           Annulla
-        </button>
+        </Button>
       </div>
     </div>
   );

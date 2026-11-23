@@ -523,7 +523,7 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
               <button
                 type="button"
                 onClick={() => setMoving(false)}
-                className="cursor-pointer rounded-xl bg-white/15 px-3 py-1.5 font-semibold transition-colors duration-200 hover:bg-white/25"
+                className="cursor-pointer rounded-full bg-white/15 px-3 py-1.5 font-semibold transition-colors duration-200 hover:bg-white/25"
               >
                 Annulla
               </button>
@@ -553,13 +553,15 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
                 <span className="sm:hidden"> · Trascina Inizio e Fine.</span>
               </p>
               <div className="mt-3 grid grid-cols-2 gap-2.5">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="bare"
                   onClick={() => setTrim(null)}
-                  className="grid h-11 cursor-pointer place-items-center rounded-[22px] bg-[#f2f2f2] text-[14.5px] font-semibold text-[#111111] transition-colors duration-200 hover:bg-[#e8e8e8]"
+                  className="h-11 text-[14.5px] font-semibold"
                 >
                   Annulla
-                </button>
+                </Button>
                 <Button
                   type="button"
                   size="bare"

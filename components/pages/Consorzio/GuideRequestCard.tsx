@@ -166,23 +166,27 @@ export function GuideRequestCard({
             Accetta
           </Button>
 
-          <div className="mt-3.5 flex items-center justify-center gap-[26px]">
-            <button
+          <div className="mt-3.5 flex items-center justify-center gap-2">
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               disabled={responding}
               onClick={onReject}
-              className="cursor-pointer text-[13.5px] font-semibold text-[#6a6a6a] underline underline-offset-[3px] transition-colors hover:text-[#222222] disabled:opacity-50"
+              className="text-[13.5px] font-semibold text-[#6a6a6a] hover:text-[#222222]"
             >
               Rifiuta
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               disabled={responding}
               onClick={onMoveHint}
-              className="cursor-pointer text-[13.5px] font-semibold text-[#6a6a6a] underline underline-offset-[3px] transition-colors hover:text-[#222222] disabled:opacity-50"
+              className="text-[13.5px] font-semibold text-[#6a6a6a] hover:text-[#222222]"
             >
               Sposta
-            </button>
+            </Button>
           </div>
         </motion.div>
       )}

@@ -145,7 +145,7 @@ export function SchoolAccessCard({
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 autoFocus
-                className="w-[260px] rounded-lg border border-[#dddddd] px-2.5 py-1.5 text-right text-[14px] font-semibold text-[#222222] outline-none focus:border-[#222222]"
+                className="w-[260px] rounded-[14px] border-0 bg-white px-2.5 py-1.5 text-right text-[14px] font-semibold text-[#222222] shadow-clay-sink outline-none transition-shadow duration-200 focus:shadow-clay-focus"
               />
             ) : (
               <span>
@@ -185,14 +185,16 @@ export function SchoolAccessCard({
             {invited ? "Reinvia invito" : "Invita titolare"}
           </Button>
           {invited && (
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="bare"
               onClick={copyLink}
-              className="flex cursor-pointer items-center gap-2 rounded-[10px] border border-[#dddddd] bg-white px-[14px] py-[9px] text-[13.5px] font-semibold text-[#222222] transition-colors hover:bg-[#f7f7f7]"
+              className="gap-2 px-[14px] py-[10px] text-[13.5px]"
             >
               {copied ? <Check className="h-4 w-4 text-[#1a7f50]" /> : <Copy className="h-4 w-4" />}
               {copied ? "Copiato" : "Copia link"}
-            </button>
+            </Button>
           )}
           {row.access !== "active" && !editingEmail && (
             <button

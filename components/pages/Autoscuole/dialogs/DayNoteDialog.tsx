@@ -176,14 +176,16 @@ export function DayNoteDialog({
               <span />
             )}
             <div className="flex gap-2">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="bare"
                 onClick={onClose}
                 disabled={!!pending}
-                className="cursor-pointer rounded-[20px] border border-[#ddd] px-4 py-2 text-[13px] font-medium text-[#444]"
+                className="px-4 py-2 text-[13px]"
               >
                 Annulla
-              </button>
+              </Button>
               <Button
                 type="submit"
                 size="bare"

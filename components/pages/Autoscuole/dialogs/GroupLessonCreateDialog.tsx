@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { LoadingDots } from "@/components/ui/loading-dots";
+import { SELECTABLE_CARD, SELECTABLE_CARD_ON, SELECTABLE_CARD_OFF } from "@/components/ui/proto-styles";
 import { UserPhotoCircle } from "@/components/ui/user-photo";
 import {
   AlertDialog,
@@ -504,7 +504,7 @@ export function GroupLessonCreateDialog({
       <p className="mt-0.5 text-[12.5px] font-medium text-[#929292]">
         {selectedIds.length}/{CAPACITY} pre-inseriti · {addableCount} da aggiungere
       </p>
-      <div className="mt-3 flex items-center gap-2.5 rounded-lg border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+      <div className="mt-3 flex items-center gap-2.5 rounded-[14px] bg-white px-3.5 shadow-clay-sink transition-shadow duration-200 focus-within:shadow-clay-focus">
         <Search className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
         <input
           value={studentQuery}
@@ -590,15 +590,12 @@ export function GroupLessonCreateDialog({
                         if (opt.value !== "moto") setMotoLessonType(null);
                       }}
                       className={cn(
-                        "flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors cursor-pointer",
-                        active
-                          ? opt.value === "moto"
-                            ? "border-orange-300 bg-orange-50/70"
-                            : "border-teal-300 bg-teal-50/70"
-                          : "border-border/60 hover:bg-gray-50",
+                        SELECTABLE_CARD,
+                        "flex items-center gap-2 px-3 py-2.5",
+                        active ? SELECTABLE_CARD_ON : SELECTABLE_CARD_OFF,
                       )}
                     >
-                      <Icon className={cn("h-4 w-4 shrink-0", active ? (opt.value === "moto" ? "text-orange-600" : "text-teal-600") : "text-muted-foreground")} />
+                      <Icon className={cn("h-4 w-4 shrink-0", active ? "text-[#222222]" : "text-muted-foreground")} />
                       <span className="min-w-0">
                         <span className="block text-sm font-medium text-foreground">{opt.label}</span>
                         <span className="block text-[11px] text-muted-foreground">{opt.hint}</span>
@@ -797,13 +794,12 @@ export function GroupLessonCreateDialog({
                           type="button"
                           onClick={() => setMotoLessonType(active ? null : value)}
                           className={cn(
-                            "flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors",
-                            active
-                              ? "border-orange-300 bg-orange-50 text-orange-800"
-                              : "border-border/60 bg-white text-foreground hover:bg-gray-50",
+                            SELECTABLE_CARD,
+                            "flex items-center gap-2 px-3 py-2 text-foreground",
+                            active ? SELECTABLE_CARD_ON : SELECTABLE_CARD_OFF,
                           )}
                         >
-                          <Icon className={cn("h-4 w-4 shrink-0", active ? "text-orange-600" : "text-muted-foreground")} />
+                          <Icon className={cn("h-4 w-4 shrink-0", active ? "text-[#222222]" : "text-muted-foreground")} />
                           <span className="flex min-w-0 flex-col">
                             <span className="text-sm font-medium">{MOTO_LESSON_TYPE_LABELS[value]}</span>
                             <span className="truncate text-[10px] text-muted-foreground">{MOTO_LESSON_TYPE_HINTS[value]}</span>
@@ -960,18 +956,13 @@ export function GroupLessonCreateDialog({
             {/* CTA */}
             <Button
               type="button"
-              className="w-full cursor-pointer bg-[#222222] text-white hover:bg-black"
-              disabled={saving || locationMissing}
+              className="w-full"
+              disabled={locationMissing}
+              loading={saving}
               onClick={() => handleCreate()}
             >
-              {saving ? (
-                <LoadingDots />
-              ) : (
-                <>
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  Crea guida di gruppo
-                </>
-              )}
+              <Plus className="mr-1.5 h-4 w-4" />
+              Crea guida di gruppo
             </Button>
           </div>
         )}

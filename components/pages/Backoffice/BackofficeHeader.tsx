@@ -128,7 +128,7 @@ export function BackofficeHeader() {
             type="button"
             onClick={handleLogout}
             disabled={isPending}
-            className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground md:min-h-0 transition-colors hover:bg-gray-100 hover:text-foreground"
+            className="flex min-h-11 cursor-pointer items-center gap-2 rounded-full px-3 py-2 text-sm text-muted-foreground md:min-h-0 transition-colors hover:bg-gray-100 hover:text-foreground"
           >
             <LogOut className="h-4 w-4" />
             <span className="hidden sm:inline">Esci</span>

@@ -41,7 +41,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CreateEventPopover } from "@/components/pages/Autoscuole/dialogs/CreateEventPopover";
-import { LoadingDots } from "@/components/ui/loading-dots";
+import { Button } from "@/components/ui/button";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { DatePickerInput } from "@/components/ui/date-picker";
 import { TimePickerInput } from "@/components/ui/time-picker";
@@ -520,21 +520,17 @@ function GuideRequestDialog({
       width={520}
       footer={
         <>
-          <button
-            type="button"
-            onClick={onClose}
-            className="cursor-pointer text-[14px] font-semibold text-foreground underline underline-offset-2 decoration-1 transition-colors hover:text-black hover:decoration-2"
-          >
+          <Button type="button" variant="ghost" onClick={onClose}>
             Annulla
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            disabled={!canSend}
+            disabled={!canSend && !sending}
+            loading={sending}
             onClick={() => void send()}
-            className="cursor-pointer rounded-[32px] bg-[#111111] px-[22px] py-[11px] text-[14px] font-bold text-white transition-colors hover:bg-[#2b2b2b] disabled:cursor-default disabled:bg-[#ededed] disabled:text-[#a5a5a5]"
           >
-            {sending ? <LoadingDots /> : "Invia richiesta"}
-          </button>
+            Invia richiesta
+          </Button>
         </>
       }
     >
@@ -600,26 +596,29 @@ function GuideRequestDialog({
             onChange={(event) => setNewStudent((prev) => ({ ...prev, phone: event.target.value }))}
           />
           <div className="flex items-center justify-end gap-2">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setCreatingStudent(false)}
-              className="cursor-pointer text-[13px] font-semibold text-[#6a6a6a] underline underline-offset-2 decoration-1 transition-colors hover:text-foreground hover:decoration-2"
+              className="text-[13px] text-[#6a6a6a] hover:text-foreground"
             >
               Annulla
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              size="sm"
+              loading={savingStudent}
               disabled={
-                savingStudent ||
                 !newStudent.firstName.trim() ||
                 !newStudent.lastName.trim() ||
                 newStudent.phone.trim().length < 5
               }
               onClick={() => void submitStudent()}
-              className="cursor-pointer rounded-full bg-[#111111] px-4 py-2 text-[13px] font-bold text-white disabled:opacity-40"
+              className="text-[13px]"
             >
-              {savingStudent ? <LoadingDots /> : "Aggiungi"}
-            </button>
+              Aggiungi
+            </Button>
           </div>
         </div>
       ) : (
@@ -741,22 +740,23 @@ function ProposalDialog({
       </div>
 
       <DialogFooter className="justify-between sm:justify-between">
-        <button
+        <Button
           type="button"
-          disabled={busy !== null}
+          variant="ghost"
+          disabled={busy === "accept"}
+          loading={busy === "reject"}
           onClick={() => void respond(false)}
-          className="cursor-pointer text-[14px] font-semibold text-foreground underline underline-offset-2 decoration-1 transition-colors hover:text-black hover:decoration-2"
         >
-          {busy === "reject" ? <LoadingDots /> : "Rifiuta"}
-        </button>
-        <button
+          Rifiuta
+        </Button>
+        <Button
           type="button"
-          disabled={busy !== null}
+          disabled={busy === "reject"}
+          loading={busy === "accept"}
           onClick={() => void respond(true)}
-          className="cursor-pointer rounded-[32px] bg-[#111111] px-[22px] py-[11px] text-[14px] font-bold text-white transition-colors hover:bg-[#2b2b2b] disabled:opacity-50"
         >
-          {busy === "accept" ? <LoadingDots /> : "Accetta l'orario"}
-        </button>
+          Accetta l&apos;orario
+        </Button>
       </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -808,21 +808,12 @@ function CancelRequestDialog({
         ) : null}
       </div>
       <DialogFooter className="justify-between sm:justify-between">
-        <button
-          type="button"
-          onClick={onClose}
-          className="cursor-pointer text-[14px] font-semibold text-foreground underline underline-offset-2 decoration-1 transition-colors hover:text-black hover:decoration-2"
-        >
+        <Button type="button" variant="ghost" onClick={onClose}>
           Lasciala lì
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void cancel()}
-          className="cursor-pointer rounded-[32px] bg-[#111111] px-[22px] py-[11px] text-[14px] font-bold text-white transition-colors hover:bg-[#2b2b2b] disabled:opacity-50"
-        >
-          {busy ? <LoadingDots /> : "Annulla richiesta"}
-        </button>
+        </Button>
+        <Button type="button" loading={busy} onClick={() => void cancel()}>
+          Annulla richiesta
+        </Button>
       </DialogFooter>
       </DialogContent>
     </Dialog>

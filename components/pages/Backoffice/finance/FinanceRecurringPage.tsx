@@ -6,6 +6,7 @@ import { CalendarClock, Plus, Repeat } from "lucide-react";
 
 import type { RecurringExpenseRow } from "@/lib/finance/finance-data";
 import { CADENCE_LABEL, occurrencesBetween } from "@/lib/finance/finance-math";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import type { FinanceCategoryOption } from "./FinanceEntrySheet";
@@ -272,17 +273,19 @@ function RecurringRow({
           <Pill tone="dashed">mai registrato</Pill>
         )}
         {!muted ? (
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="bare"
             onClick={(ev) => {
               ev.stopPropagation();
               onPay(e);
             }}
             title="Registra pagamento"
-            className="flex h-7 cursor-pointer items-center rounded-lg border border-[#e9e9eb] bg-white px-2 text-[12px] font-semibold text-[#111111] hover:border-[#d4d4d8]"
+            className="h-7 px-3 text-[12px] text-[#111111]"
           >
             Paga
-          </button>
+          </Button>
         ) : null}
       </div>
     </div>

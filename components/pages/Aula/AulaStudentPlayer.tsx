@@ -70,7 +70,7 @@ function ChoiceButton({
     <button
       onClick={onClick}
       className={cn(
-        "reglo-focus-ring reglo-interactive flex-1 rounded-lg py-3 text-base font-semibold active:scale-[0.97]",
+        "reglo-focus-ring reglo-interactive flex-1 rounded-full py-3 text-base font-semibold active:scale-[0.97]",
         selected === undefined || selected ? filled : soft,
         className,
       )}

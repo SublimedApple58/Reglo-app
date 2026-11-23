@@ -3,6 +3,7 @@
 import React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { CalendarX2, Check, Lock, NotebookPen, UserPlus, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   cancellationNoticeLabel,
@@ -311,7 +312,7 @@ export function CancelledLessonBlock({
                     void saveNote();
                   }
                 }}
-                className="mt-1.5 block w-full resize-none rounded-[10px] border border-[#e2e2e2] bg-[#fafafa] px-3 py-2 text-[13px] leading-snug text-[#222222] outline-none transition-[border-color,background-color,box-shadow] placeholder:text-[#b0b0b0] hover:border-[#cfcfcf] focus:border-[#222222] focus:bg-white focus:shadow-[0_0_0_3px_rgba(0,0,0,0.06)]"
+                className="mt-1.5 block w-full resize-none rounded-[14px] border-0 bg-white px-3 py-2 text-[13px] leading-snug text-[#222222] shadow-clay-sink outline-none transition-shadow duration-200 placeholder:text-[#b0b0b0] focus:shadow-clay-focus"
               />
               <div className="mt-1.5 flex min-h-7 items-center justify-between gap-3">
                 <span className="text-[11px] leading-snug text-[#a0a0a0]">
@@ -323,22 +324,25 @@ export function CancelledLessonBlock({
                     Salvata
                   </span>
                 ) : dirty ? (
-                  <button
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="bare"
                     data-testid="cancelled-note-save"
-                    disabled={saving}
+                    loading={saving}
                     onClick={() => void saveNote()}
-                    className="shrink-0 cursor-pointer rounded-full border border-[#222222] px-3 py-1 text-[12px] font-semibold text-[#222222] transition-colors hover:bg-[#222222] hover:text-white disabled:cursor-default disabled:opacity-50"
+                    className="px-3 py-1 text-[12px]"
                   >
-                    {saving ? "Salvo…" : "Salva nota"}
-                  </button>
+                    Salva nota
+                  </Button>
                 ) : null}
               </div>
             </div>
           ) : null}
 
-          <button
+          <Button
             type="button"
+            size="bare"
             onClick={() => {
               const rect = blockRef.current?.getBoundingClientRect();
               handleOpenChange(false);
@@ -348,21 +352,23 @@ export function CancelledLessonBlock({
                   : { x: window.innerWidth / 2, y: 120 },
               );
             }}
-            className={cn(onSaveNote ? "mt-3" : "mt-4", "flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-[#222222] px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-black")}
+            className={cn(onSaveNote ? "mt-3" : "mt-4", "w-full px-4 py-2.5 text-[13.5px]")}
           >
             <UserPlus className="size-4" strokeWidth={2.2} />
             Assegna sostituto
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="ghost"
+            size="bare"
             onClick={() => {
               setOpen(false);
               onDismiss();
             }}
-            className="mt-1.5 w-full cursor-pointer rounded-[10px] px-4 py-2 text-[13px] font-semibold text-[#555555] transition-colors hover:bg-[#f5f5f5] hover:text-[#222222]"
+            className="mt-1.5 w-full px-4 py-2 text-[13px] font-semibold text-[#555555] hover:text-[#222222]"
           >
             Togli dall&apos;agenda
-          </button>
+          </Button>
           <p className="mt-1 text-center text-[11px] leading-snug text-[#a0a0a0]">
             Toglie solo il blocco: la guida resta annullata nello storico.
           </p>

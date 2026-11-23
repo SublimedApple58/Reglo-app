@@ -32,6 +32,7 @@ import {
   type StudentNameOrder,
 } from "@/lib/autoscuole/student-name-order";
 import { InlineToggle } from "@/components/ui/inline-toggle";
+import { SELECTABLE_CARD, SELECTABLE_CARD_OFF, SELECTABLE_CARD_ON } from "@/components/ui/proto-styles";
 import { INSTRUCTOR_COLOR_CHOICES } from "@/lib/autoscuole/instructor-colors";
 import { ColorSwatchPicker } from "@/components/ui/color-swatch-picker";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
@@ -509,10 +510,9 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
                 onClick={() => void saveCriterion(option.value)}
                 disabled={savingCriterion}
                 className={cn(
-                  "cursor-pointer rounded-2xl border-[1.5px] p-4 text-left transition-colors",
-                  active
-                    ? "border-[#222222] bg-[#fafafa]"
-                    : "border-[#dddddd] hover:border-[#b8b8b8]",
+                  SELECTABLE_CARD,
+                  "p-4",
+                  active ? SELECTABLE_CARD_ON : SELECTABLE_CARD_OFF,
                 )}
               >
                 <div className="flex items-center justify-between gap-3">
@@ -875,10 +875,9 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
                 onClick={() => void saveNameOrder(option.value)}
                 disabled={savingNameOrder}
                 className={cn(
-                  "cursor-pointer rounded-2xl border-[1.5px] p-4 text-left transition-colors",
-                  active
-                    ? "border-[#222222] bg-[#fafafa]"
-                    : "border-[#dddddd] hover:border-[#b8b8b8]",
+                  SELECTABLE_CARD,
+                  "p-4",
+                  active ? SELECTABLE_CARD_ON : SELECTABLE_CARD_OFF,
                 )}
               >
                 <div className="flex items-center justify-between gap-3">

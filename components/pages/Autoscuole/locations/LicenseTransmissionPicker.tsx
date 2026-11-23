@@ -123,7 +123,7 @@ export function LicenseTransmissionPicker({
                       aria-pressed={active}
                       data-testid={`location-license-${category}`}
                       className={cn(
-                        "flex h-[30px] min-w-10 cursor-pointer select-none items-center justify-center rounded-[8px] px-[11px] text-[12.5px] font-semibold transition-[background-color,color,box-shadow] duration-200",
+                        "flex h-[30px] min-w-10 cursor-pointer select-none items-center justify-center rounded-full px-[11px] text-[12.5px] font-semibold transition-[background-color,color,box-shadow] duration-200",
                         EASE,
                         active
                           ? "bg-[#111111] text-white shadow-[0_2px_6px_rgba(17,17,17,0.2)] hover:bg-[#2b2b2b]"
@@ -189,12 +189,12 @@ export function LicenseTransmissionPicker({
                         <div
                           role="radiogroup"
                           aria-label={`Cambio ${category}`}
-                          className="relative ml-[42px] grid w-[calc(100%-42px)] min-w-0 shrink-0 grid-cols-[repeat(3,minmax(0,1fr))] rounded-[9px] bg-[#efeff1] p-0.5 sm:ml-0 sm:w-[228px]"
+                          className="relative ml-[42px] grid w-[calc(100%-42px)] min-w-0 shrink-0 grid-cols-[repeat(3,minmax(0,1fr))] rounded-full bg-white p-0.5 shadow-clay-sink sm:ml-0 sm:w-[228px]"
                         >
                           <span
                             aria-hidden
                             className={cn(
-                              "absolute bottom-0.5 left-0.5 top-0.5 w-[calc((100%-4px)/3)] rounded-[7px] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.08),0_2px_6px_rgba(0,0,0,0.06)] transition-transform duration-[240ms]",
+                              "absolute bottom-0.5 left-0.5 top-0.5 w-[calc((100%-4px)/3)] rounded-full bg-[#1e1e1e] shadow-clay-ink-sm transition-transform duration-[240ms]",
                               EASE,
                             )}
                             style={{ transform: `translateX(${index * 100}%)` }}
@@ -211,7 +211,7 @@ export function LicenseTransmissionPicker({
                               className={cn(
                                 "relative z-[1] h-7 min-w-0 cursor-pointer whitespace-nowrap px-0.5 text-[11px] transition-colors duration-200 sm:text-[11.5px]",
                                 choice.value === value
-                                  ? "font-semibold text-foreground"
+                                  ? "font-semibold text-white"
                                   : "font-medium text-[#6a6a6a] hover:text-[#333333]",
                               )}
                             >

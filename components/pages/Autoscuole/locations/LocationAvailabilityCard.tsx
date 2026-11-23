@@ -172,7 +172,7 @@ export function LocationAvailabilityCard({
             <div className="flex shrink-0 items-center gap-3.5">
               <div
                 className={cn(
-                  "flex h-9 items-center rounded-[10px] bg-[#f7f7f7] transition-opacity duration-200",
+                  "flex h-9 items-center rounded-full bg-[#f7f7f7] transition-opacity duration-200",
                   !local.locationChangeBufferEnabled && "pointer-events-none opacity-35",
                 )}
               >
@@ -181,7 +181,7 @@ export function LocationAvailabilityCard({
                   aria-label="Meno minuti"
                   tabIndex={enabled ? 0 : -1}
                   onClick={() => stepMinutes(-LOCATION_CHANGE_BUFFER_STEP_MINUTES)}
-                  className="size-9 cursor-pointer rounded-[10px] text-[18px] font-medium text-foreground transition-colors duration-200 hover:bg-[#ececec]"
+                  className="size-9 cursor-pointer rounded-full text-[18px] font-medium text-foreground transition-colors duration-200 hover:bg-[#ececec]"
                 >
                   −
                 </button>
@@ -196,7 +196,7 @@ export function LocationAvailabilityCard({
                   aria-label="Più minuti"
                   tabIndex={enabled ? 0 : -1}
                   onClick={() => stepMinutes(LOCATION_CHANGE_BUFFER_STEP_MINUTES)}
-                  className="size-9 cursor-pointer rounded-[10px] text-[18px] font-medium text-foreground transition-colors duration-200 hover:bg-[#ececec]"
+                  className="size-9 cursor-pointer rounded-full text-[18px] font-medium text-foreground transition-colors duration-200 hover:bg-[#ececec]"
                 >
                   +
                 </button>

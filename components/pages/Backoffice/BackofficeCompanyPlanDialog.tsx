@@ -403,15 +403,20 @@ export function BackofficeCompanyPlanDialog({
                   variant="outline"
                   className="text-red-500 hover:bg-red-50 hover:text-red-600"
                   onClick={() => void remove()}
-                  disabled={removing || saving}
+                  loading={removing}
+                  disabled={saving}
                 >
-                  {removing ? <LoadingDots /> : "Rimuovi piano"}
+                  Rimuovi piano
                 </Button>
               ) : (
                 <span />
               )}
-              <Button onClick={() => void save()} disabled={!parsed.valid || saving || removing}>
-                {saving ? <LoadingDots /> : hasPlan ? "Salva piano" : "Assegna piano"}
+              <Button
+                onClick={() => void save()}
+                loading={saving}
+                disabled={!saving && (!parsed.valid || removing)}
+              >
+                {hasPlan ? "Salva piano" : "Assegna piano"}
               </Button>
             </div>
 
@@ -449,7 +454,7 @@ export function BackofficeCompanyPlanDialog({
                         onClick={() => void removePurchase(purchase.id)}
                         disabled={deletingPurchaseId === purchase.id}
                         title="Elimina acquisto"
-                        className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 disabled:pointer-events-none disabled:opacity-50"
+                        className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 disabled:pointer-events-none disabled:opacity-50"
                       >
                         {deletingPurchaseId === purchase.id ? (
                           <LoadingDots className="scale-[0.6]" />

@@ -108,7 +108,7 @@ test.describe("Autoscuole smoke", () => {
     }
 
     // Sotto-tab Cancellazioni tardive
-    await page.getByRole("button", { name: /Cancellazioni tardive/ }).click();
+    await page.getByRole("tab", { name: /Cancellazioni tardive/ }).click();
     await expect(
       page
         .getByText(/Nessuna cancellazione tardiva|Addebita/)

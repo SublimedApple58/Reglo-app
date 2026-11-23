@@ -5,9 +5,7 @@ import { X } from "lucide-react";
 import { SegmentedPill } from "@/components/ui/segmented-pill";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { LoadingDots } from "@/components/ui/loading-dots";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { cn } from "@/lib/utils";
 import { RangeCalendar, dateOfYmd, ymdOf } from "@/components/pages/Autoscuole/dialogs/RangeCalendar";
 
 const dateOf = dateOfYmd;
@@ -186,26 +184,25 @@ export function HolidayModal({
             <div className="mt-4 flex items-center justify-between border-t border-[#f0f0f0] pt-3.5">
               <div className="text-[13px] text-[#aaa]">{infoText}</div>
               <div className="flex gap-2">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="bare"
                   onClick={onClose}
-                  className="cursor-pointer rounded-[20px] border border-[#ddd] px-4 py-2 text-[13px] font-medium text-[#444]"
+                  className="px-4 py-2 text-[13px]"
                 >
                   Annulla
-                </button>
-                <button
+                </Button>
+                {/* REG-776: CTA nera come le altre (prima arancio). */}
+                <Button
                   type="button"
+                  size="bare"
                   disabled={!canConfirm}
                   onClick={() => setStep("confirm")}
-                  className={cn(
-                    "rounded-[20px] px-4 py-2 text-[13px] font-semibold transition-colors",
-                    canConfirm
-                      ? "cursor-pointer bg-[#f59e0b] text-white"
-                      : "cursor-default bg-[#e0e0e0] text-[#aaa]",
-                  )}
+                  className="px-4 py-2 text-[13px]"
                 >
                   Conferma
-                </button>
+                </Button>
               </div>
             </div>
           </>
@@ -237,20 +234,22 @@ export function HolidayModal({
               <Button
                 type="button"
                 variant="outline"
-                className="w-full rounded-lg"
-                disabled={pending}
+                className="w-full"
+                disabled={pending && pendingAction !== "keep"}
+                loading={pendingAction === "keep"}
                 onClick={() => submit(false)}
               >
-                {pendingAction === "keep" ? <LoadingDots className="min-h-5" /> : "Chiudi e mantieni le guide"}
+                Chiudi e mantieni le guide
               </Button>
               <Button
                 type="button"
                 variant="destructive"
-                className="w-full rounded-lg"
-                disabled={pending}
+                className="w-full"
+                disabled={pending && pendingAction !== "cancel"}
+                loading={pendingAction === "cancel"}
                 onClick={() => submit(true)}
               >
-                {pendingAction === "cancel" ? <LoadingDots className="min-h-5" /> : "Chiudi e cancella le guide"}
+                Chiudi e cancella le guide
               </Button>
             </div>
             <button

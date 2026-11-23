@@ -45,7 +45,7 @@ export function SegmentedControl<T extends string>({
               "flex cursor-pointer select-none items-center justify-center gap-1 whitespace-nowrap rounded-full px-3 py-[7px] text-[13px] font-semibold transition-colors duration-200 ease-out",
               fluid && "flex-1",
               active
-                ? "bg-[#1e1e1e] text-white shadow-clay-ink"
+                ? "bg-[#1e1e1e] text-white shadow-clay-ink-sm"
                 : "bg-transparent text-[#6a6a6a] hover:text-[#222222]",
             )}
           >

@@ -179,9 +179,9 @@ export function WhatsAppWelcomeSection({
             placeholder={DEFAULT_WELCOME_TEMPLATE}
             aria-label="Messaggio di benvenuto"
             className={cn(
-              "block min-h-[84px] w-full resize-none overflow-hidden rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 py-3",
+              "block min-h-[84px] w-full resize-none overflow-hidden rounded-[14px] border-0 bg-white px-3.5 py-3 shadow-clay-sink",
               "text-[14px] font-medium leading-[1.5] text-[#222222] placeholder:text-[#b0b0b0]",
-              "outline-none transition-[border-color] duration-200 hover:border-[#929292] focus:border-[#222222]",
+              "outline-none transition-shadow duration-200 focus:shadow-clay-focus",
             )}
           />
 

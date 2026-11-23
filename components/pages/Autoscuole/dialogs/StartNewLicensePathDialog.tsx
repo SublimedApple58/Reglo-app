@@ -21,7 +21,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { LoadingDots } from "@/components/ui/loading-dots";
 import { cn } from "@/lib/utils";
 import { LicenseCategorySelectItems } from "../LicenseCategorySelectItems";
 import { startNewLicensePath } from "@/lib/actions/autoscuole-license-paths.actions";
@@ -33,6 +32,7 @@ import {
   licenseCategoryShort,
 } from "@/lib/autoscuole/license";
 import { isQualification, pathLabel } from "@/lib/autoscuole/license-paths";
+import { SELECTABLE_CARD, SELECTABLE_CARD_ON, SELECTABLE_CARD_OFF } from "@/components/ui/proto-styles";
 
 /**
  * «Avvia nuovo percorso» (REG-458).
@@ -96,9 +96,9 @@ function Choice({
       disabled={disabled}
       onClick={onSelect}
       className={cn(
-        "flex w-full cursor-pointer items-start gap-3 rounded-[12px] border p-3.5 text-left transition-colors",
-        checked ? "border-foreground shadow-[inset_0_0_0_1px_var(--foreground)]" : "border-[#dddddd] hover:bg-[#fafafa]",
-        disabled && "cursor-not-allowed opacity-50",
+        SELECTABLE_CARD,
+        "flex w-full items-start gap-3 p-3.5",
+        checked ? SELECTABLE_CARD_ON : SELECTABLE_CARD_OFF,
       )}
     >
       <span
@@ -382,10 +382,10 @@ export function StartNewLicensePathDialog({
                 type="button"
                 size="sm"
                 onClick={() => void handleSubmit()}
-                disabled={saving}
+                loading={saving}
                 className="cursor-pointer"
               >
-                {saving ? <LoadingDots /> : `Avvia percorso ${licenseCategoryShort(licenseCategory)}`}
+                {`Avvia percorso ${licenseCategoryShort(licenseCategory)}`}
               </Button>
             </DialogFooter>
           </>

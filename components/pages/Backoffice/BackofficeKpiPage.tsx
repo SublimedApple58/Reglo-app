@@ -11,6 +11,7 @@ import { DatePickerInput } from "@/components/ui/date-picker";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import {
@@ -203,15 +204,17 @@ export function BackofficeKpiPage({
             )}
           </p>
         </div>
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           onClick={exportCsv}
           disabled={!kpis}
-          className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-white px-3 text-[13px] font-semibold text-foreground transition-colors hover:border-[#929292] disabled:cursor-default disabled:opacity-50"
+          className="text-[13px]"
         >
           <Download className="size-4" strokeWidth={2} />
           Esporta CSV
-        </button>
+        </Button>
       </motion.header>
 
       {/* ── Filtro periodo (resta in vista mentre si scorre) ── */}

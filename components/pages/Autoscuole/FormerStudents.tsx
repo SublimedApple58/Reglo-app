@@ -391,7 +391,7 @@ function AssignNameForm({
           }}
           placeholder="Nome e cognome"
           disabled={saving}
-          className="h-10 min-w-0 flex-1 rounded-[10px] border border-[#dddddd] bg-white px-3 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#b0b0b0] focus:border-[#222222] disabled:opacity-60"
+          className="h-10 min-w-0 flex-1 rounded-[14px] border-0 bg-white px-3 text-sm font-medium text-foreground shadow-clay-sink outline-none transition-shadow duration-200 placeholder:text-[#b0b0b0] focus:shadow-clay-focus disabled:opacity-60"
         />
         <Button
           type="submit"

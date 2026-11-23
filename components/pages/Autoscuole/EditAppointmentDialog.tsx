@@ -24,7 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { CreateEventPopover } from "@/components/pages/Autoscuole/dialogs/CreateEventPopover";
 import { TimePickerInput } from "@/components/ui/time-picker";
-import { LoadingDots } from "@/components/ui/loading-dots";
+import { SELECTABLE_CARD, SELECTABLE_CARD_ON, SELECTABLE_CARD_OFF } from "@/components/ui/proto-styles";
 import { DurationField } from "@/components/pages/Autoscuole/DurationField";
 import { isMotoLicenseCategory, vehicleServesLicense, LICENSE_CATEGORY_LABELS, TRANSMISSION_LABELS, type LicenseCategory, type Transmission } from "@/lib/autoscuole/license";
 import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, asMotoLessonType, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
@@ -917,9 +917,9 @@ export function EditAppointmentDialog({
       width={440}
       footer={
         <>
-          <button type="button" className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50" disabled={pending} onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
             Annulla
-          </button>
+          </Button>
           <Button
             type="button"
             size="bare"
@@ -1153,10 +1153,9 @@ export function EditAppointmentDialog({
                       disabled={pending}
                       onClick={() => setMotoLessonType(active ? null : value)}
                       className={cn(
-                        "flex cursor-pointer items-center gap-2 rounded-sm border-[1.5px] px-3 py-2 text-left transition-colors disabled:opacity-50",
-                        active
-                          ? "border-[#111111] bg-[#f2f2f2]"
-                          : "border-slate-200 bg-white hover:border-slate-300",
+                        SELECTABLE_CARD,
+                        "flex items-center gap-2 px-3 py-2",
+                        active ? SELECTABLE_CARD_ON : SELECTABLE_CARD_OFF,
                       )}
                     >
                       <Icon
@@ -1186,15 +1185,15 @@ export function EditAppointmentDialog({
                 <CheckCircle2 className="size-3.5 text-slate-500" aria-hidden />
                 Esito
               </label>
-              <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-slate-100 p-1">
+              <div className="grid grid-cols-2 gap-1 rounded-full bg-white p-[3px] shadow-clay-sink">
                 <button
                   type="button"
                   disabled={pending}
                   onClick={() => setEsito("checked_in")}
                   className={cn(
-                    "flex cursor-pointer items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold transition-colors disabled:opacity-50",
+                    "flex cursor-pointer items-center justify-center gap-1.5 rounded-full py-2 text-sm font-semibold transition-colors duration-200 disabled:opacity-50",
                     esito === "checked_in"
-                      ? "bg-white text-emerald-700 shadow-sm"
+                      ? "bg-[#1e1e1e] text-white shadow-clay-ink-sm"
                       : "text-slate-500 hover:text-slate-700",
                   )}
                 >
@@ -1206,9 +1205,9 @@ export function EditAppointmentDialog({
                   disabled={pending}
                   onClick={() => setEsito("no_show")}
                   className={cn(
-                    "flex cursor-pointer items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold transition-colors disabled:opacity-50",
+                    "flex cursor-pointer items-center justify-center gap-1.5 rounded-full py-2 text-sm font-semibold transition-colors duration-200 disabled:opacity-50",
                     esito === "no_show"
-                      ? "bg-white text-red-700 shadow-sm"
+                      ? "bg-[#1e1e1e] text-white shadow-clay-ink-sm"
                       : "text-slate-500 hover:text-slate-700",
                   )}
                 >
@@ -1329,7 +1328,7 @@ export function EditAppointmentDialog({
                       )
                     }
                     className={cn(
-                      "cursor-pointer rounded-sm border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50",
+                      "cursor-pointer rounded-full border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50",
                       on
                         ? "border-[#111111] bg-[#111111] text-white"
                         : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",

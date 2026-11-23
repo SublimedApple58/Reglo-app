@@ -7,6 +7,7 @@ import { Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { Button } from "@/components/ui/button";
 import { FadeIn } from "@/components/ui/fade-in";
 import { Skeleton } from "@/components/ui/skeleton";
 import { companyAtom } from "@/atoms/company.store";
@@ -266,24 +267,27 @@ export function BusinessInfoPane() {
                       if (event.key === "Enter") void handleSave(field);
                       if (event.key === "Escape") setEditing(null);
                     }}
-                    className="w-full max-w-[420px] rounded-[10px] border-[1.5px] border-[#222222] px-3.5 py-3 text-[15px] font-medium text-foreground outline-none"
+                    className="w-full max-w-[420px] rounded-[14px] border-0 bg-white px-3.5 py-3 text-[15px] font-medium text-foreground shadow-clay-sink outline-none transition-shadow duration-200 focus:shadow-clay-focus"
                   />
                   <div className="mt-3.5 flex items-center gap-2.5">
-                    <button
+                    <Button
                       type="button"
-                      disabled={saving}
+                      size="bare"
+                      loading={saving}
                       onClick={() => void handleSave(field)}
-                      className="flex min-h-[40px] min-w-[78px] cursor-pointer items-center justify-center rounded-[8px] bg-[#222222] px-[18px] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-60"
+                      className="min-h-[40px] min-w-[78px] px-[18px] py-2.5 text-sm"
                     >
-                      {saving ? <LoadingDots /> : "Salva"}
-                    </button>
-                    <button
+                      Salva
+                    </Button>
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="bare"
                       onClick={() => setEditing(null)}
-                      className="cursor-pointer rounded-[8px] px-[18px] py-2.5 text-sm font-semibold text-foreground hover:text-navy-900"
+                      className="px-[18px] py-2.5 text-sm"
                     >
                       Annulla
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (

@@ -6,7 +6,7 @@ import Image from "next/image";
 import { sendBroadcastPush } from "@/lib/actions/autoscuole.actions";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { LoadingDots } from "@/components/ui/loading-dots";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -24,7 +24,7 @@ const DEST_OPTIONS = [
 ] as const;
 
 const fieldClass =
-  "w-full rounded-lg border border-[#e5e5e5] bg-[#f7f7f7] px-4 py-3 text-[15px] text-foreground outline-none transition focus:border-navy-900 focus:bg-white";
+  "w-full rounded-[14px] border-0 bg-white px-4 py-3 text-[15px] text-foreground shadow-clay-sink outline-none transition-shadow duration-200 focus:shadow-clay-focus";
 
 /**
  * "Invia comunicato" dal menu hamburger (stile proto): notifica push broadcast
@@ -123,7 +123,7 @@ export function ComunicatoDialog({
                   onChange={(e) => setTitolo(e.target.value)}
                   placeholder="Titolo notifica"
                   maxLength={80}
-                  className={cn(fieldClass, "font-bold")}
+                  className={cn(fieldClass, "font-semibold")}
                 />
               </div>
               <div>
@@ -136,14 +136,15 @@ export function ComunicatoDialog({
                   className={cn(fieldClass, "min-h-[92px] resize-none font-medium leading-normal")}
                 />
               </div>
-              <button
+              <Button
                 type="button"
                 onClick={handleSend}
-                disabled={!canSend}
-                className="flex w-full cursor-pointer items-center justify-center gap-2.5 rounded-[12px] bg-gradient-to-br from-[#2b2b2b] to-[#111111] py-3.5 text-[15px] font-semibold text-white shadow-[0_6px_18px_rgba(17, 17, 17,0.35)] transition-opacity hover:opacity-95 disabled:cursor-default disabled:opacity-50"
+                disabled={!canSend && !sending}
+                loading={sending}
+                className="w-full"
               >
-                {sending ? <LoadingDots className="min-h-[1.5em]" /> : "Invia notifica"}
-              </button>
+                Invia notifica
+              </Button>
             </div>
           </>
         ) : (

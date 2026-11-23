@@ -12,7 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { LoadingDots } from "@/components/ui/loading-dots";
 import {
   Select,
   SelectContent,
@@ -117,14 +116,14 @@ export function BackofficeResolveTeoriaDeactivationDialog({
         {/* Bulk action */}
         <div className="flex items-center justify-between gap-3 border-b border-border bg-gray-50/60 px-6 py-3">
           <span className="text-xs font-medium text-muted-foreground">Applica a tutti:</span>
-          <div className="flex rounded-lg border border-border bg-white p-0.5 text-xs">
+          <div className="flex rounded-full bg-white p-[3px] text-xs shadow-clay-sink">
             <button
               type="button"
               onClick={() => applyBulk("move_to_pratica")}
               className={cn(
-                "cursor-pointer rounded-md px-3 py-1.5 font-medium transition-colors",
+                "cursor-pointer rounded-full px-3 py-1.5 font-medium transition-colors duration-200",
                 bulkAction === "move_to_pratica"
-                  ? "bg-[#222222] text-white shadow-sm"
+                  ? "bg-[#1e1e1e] text-white shadow-clay-ink-sm"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -134,9 +133,9 @@ export function BackofficeResolveTeoriaDeactivationDialog({
               type="button"
               onClick={() => applyBulk("keep_in_teoria")}
               className={cn(
-                "cursor-pointer rounded-md px-3 py-1.5 font-medium transition-colors",
+                "cursor-pointer rounded-full px-3 py-1.5 font-medium transition-colors duration-200",
                 bulkAction === "keep_in_teoria"
-                  ? "bg-[#222222] text-white shadow-sm"
+                  ? "bg-[#1e1e1e] text-white shadow-clay-ink-sm"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -223,8 +222,8 @@ export function BackofficeResolveTeoriaDeactivationDialog({
             >
               Annulla
             </Button>
-            <Button size="sm" onClick={handleConfirm} disabled={isSubmitting}>
-              {isSubmitting ? <LoadingDots /> : "Conferma e disattiva TEORIA"}
+            <Button size="sm" onClick={handleConfirm} loading={isSubmitting}>
+              Conferma e disattiva TEORIA
             </Button>
           </div>
         </DialogFooter>

@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
  * card flottante 480px radius 22 ombra 0 26px 70px, SENZA overlay scuro (il
  * ghost tratteggiato in agenda resta visibile e si aggiorna mentre scegli),
  * campi Giorno/Orario (43px radius 12 bordo #e2e2e2), chips Durata pill,
- * select "Veicolo del consorzio" con "Da assegnare", footer Annulla underline
+ * select "Veicolo del consorzio" con "Da assegnare", footer Annulla ghost
  * + CTA "Proponi orario" navy pill. Vedi docs/features/consorzio.md.
  */
 
@@ -121,7 +121,7 @@ export function ProposeSlotDialog({
               <DatePickerInput
                 value={ymd}
                 onChange={(v) => onChange({ ymd: v })}
-                className="h-[43px] rounded-[12px] border-[#e2e2e2] px-3.5 text-[14px] font-semibold text-[#222222]"
+                className="h-[43px] px-3.5 text-[14px] font-semibold text-[#222222]"
               />
             </div>
             <div>
@@ -130,7 +130,7 @@ export function ProposeSlotDialog({
                 freeInput
                 value={time}
                 onChange={(v) => onChange({ time: v })}
-                className="h-[43px] w-full rounded-[12px] border-[#e2e2e2] px-3.5 text-[14px] font-semibold text-[#222222]"
+                className="h-[43px] w-full px-3.5 text-[14px] font-semibold text-[#222222]"
               />
             </div>
           </div>
@@ -153,7 +153,7 @@ export function ProposeSlotDialog({
               value={vehicleId ?? "none"}
               onValueChange={(v) => onChange({ vehicleId: v === "none" ? null : v })}
             >
-              <SelectTrigger className="h-[43px] w-full cursor-pointer rounded-lg border-[#e2e2e2] px-3.5 text-[14px] font-semibold text-[#222222] shadow-none focus:ring-0">
+              <SelectTrigger className="h-[43px] w-full cursor-pointer rounded-[14px] border-0 bg-white px-3.5 text-[14px] font-semibold text-[#222222] shadow-clay-sink focus:ring-0 data-[state=open]:shadow-clay-focus">
                 <SelectValue placeholder="Da assegnare" />
               </SelectTrigger>
               <SelectContent className="z-[70]">
@@ -170,14 +170,16 @@ export function ProposeSlotDialog({
           </div>
 
           <div className="mt-[30px] flex items-center justify-between">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="bare"
               disabled={submitting}
               onClick={onClose}
-              className="cursor-pointer text-[14px] font-semibold text-[#222222] underline underline-offset-[3px] transition-opacity hover:opacity-70 disabled:opacity-50"
+              className="px-4 py-[13px] text-[14px] font-semibold"
             >
               Annulla
-            </button>
+            </Button>
             <Button
               type="button"
               size="bare"

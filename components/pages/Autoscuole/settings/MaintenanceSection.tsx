@@ -7,7 +7,7 @@ import { Check } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { LoadingDots } from "@/components/ui/loading-dots";
+import { Button } from "@/components/ui/button";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { activateCompanyMaintenance } from "@/lib/actions/maintenance.actions";
 import { confirmsCompanyName, type MaintenanceScope } from "@/lib/maintenance";
@@ -79,13 +79,15 @@ export function MaintenanceSection({ companyName }: { companyName: string }) {
               </p>
             </div>
           </div>
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="bare"
             onClick={() => setOpen(true)}
-            className="reglo-focus-ring h-10 shrink-0 cursor-pointer rounded-full border border-black/[0.08] bg-white px-[18px] text-sm font-semibold text-foreground shadow-[0_10px_24px_-10px_rgba(0,0,0,0.16)] transition-transform duration-200 ease-out active:scale-[0.98]"
+            className="h-10 px-[18px] text-sm"
           >
             Attiva
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -159,25 +161,29 @@ export function MaintenanceSection({ companyName }: { companyName: string }) {
           </label>
 
           <div className="mt-6 flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="bare"
               disabled={saving}
               onClick={() => {
                 setOpen(false);
                 reset();
               }}
-              className="h-12 cursor-pointer rounded-full border border-black/[0.08] bg-white px-6 text-[15px] font-semibold text-foreground transition-transform duration-200 ease-out active:scale-[0.98]"
+              className="h-12 px-6 text-[15px]"
             >
               Annulla
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              disabled={!confirmed || saving}
+              size="bare"
+              disabled={!confirmed}
+              loading={saving}
               onClick={() => void handleConfirm()}
-              className="flex h-12 min-w-[220px] cursor-pointer items-center justify-center rounded-full bg-[#1e1e1e] px-6 text-[15px] font-semibold text-white shadow-[0_14px_24px_-10px_rgba(0,0,0,0.5),inset_0_3px_4px_rgba(255,255,255,0.34),inset_0_-8px_13px_rgba(0,0,0,0.8)] transition-[transform,background-color] duration-200 ease-out active:scale-[0.98] disabled:cursor-default disabled:bg-[#d9d9d9] disabled:shadow-none"
+              className="h-12 min-w-[220px] px-6 text-[15px]"
             >
-              {saving ? <LoadingDots className="text-white" /> : "Metti in manutenzione"}
-            </button>
+              Metti in manutenzione
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

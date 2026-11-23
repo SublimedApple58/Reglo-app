@@ -4,6 +4,7 @@ import React from "react";
 import { getInstructorQrCard } from "@/lib/actions/instructor-qr.actions";
 import { instructorLinkUrl } from "@/lib/autoscuole/instructor-initials";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { Button } from "@/components/ui/button";
 import { InstructorQrCardDialog } from "@/components/pages/Autoscuole/instructor-qr/InstructorQrCardDialog";
 
 // REG-451 — scheda "Codice" del dettaglio istruttore (prototipo `QR Istruttore.html`),
@@ -70,14 +71,16 @@ export function CodiceTab({ instructorId }: { instructorId: string }) {
           ) : (
             <span aria-hidden className="block h-[40px] w-[112px] animate-pulse rounded-[10px] bg-[#f0f0f2]" />
           )}
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="bare"
             onClick={copyCode}
             disabled={!card}
-            className="flex min-w-[92px] shrink-0 cursor-pointer select-none items-center justify-center rounded-[12px] border-[1.5px] border-[#dddddd] bg-white px-[18px] py-[11px] text-[14px] font-medium leading-[normal] text-[#222222] transition-[background] duration-150 hover:bg-[#f7f7f7] disabled:cursor-default disabled:opacity-60"
+            className="min-w-[92px] select-none px-[18px] py-[11px] text-[14px] leading-[normal] text-[#222222]"
           >
             {copied ? "Copiato ✓" : "Copia"}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -88,15 +91,17 @@ export function CodiceTab({ instructorId }: { instructorId: string }) {
             L’allievo la inquadra dall’app e viene associato a questo istruttore.
           </div>
         </div>
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="bare"
           onClick={() => card && setOpen(true)}
           disabled={!card}
           aria-busy={loading}
-          className="flex shrink-0 cursor-pointer select-none items-center gap-2.5 rounded-[12px] border-[1.5px] border-[#dddddd] bg-white px-[18px] py-[11px] text-[14px] font-medium leading-[normal] text-[#222222] transition-[background] duration-150 hover:bg-[#f7f7f7] disabled:cursor-default disabled:opacity-60"
+          className="select-none gap-2.5 px-[18px] py-[11px] text-[14px] leading-[normal] text-[#222222]"
         >
           Utilizza
-        </button>
+        </Button>
       </div>
 
       <div className="mt-5 flex flex-col gap-2 rounded-[12px] border border-[#f0e060] bg-[#fffce0] px-[18px] py-4">

@@ -64,7 +64,7 @@ const formatSlot = (startsAt: string, endsAt: string) => {
 };
 
 /** Select piu' compatta della solita (h-11): con tre conflitti la card non deve scorrere. */
-const SELECT_CLASS = "h-10 rounded-lg px-3.5 text-[13.5px]";
+const SELECT_CLASS = "h-10 rounded-[14px] border-0 bg-white px-3.5 text-[13.5px] shadow-clay-sink focus-visible:shadow-clay-focus data-[state=open]:shadow-clay-focus";
 
 export { countCreatable, orderConflicts };
 

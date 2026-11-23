@@ -1924,7 +1924,7 @@ export function AutoscuoleResourcesPage({
 
         {/* Modalità di utilizzo: segmented proto + extra per modalità */}
         <div className={cn(VEIC_LBL, "mt-[22px]")}>Modalità di utilizzo</div>
-        <div className="flex gap-1 rounded-[10px] bg-[#f4f4f6] p-1">
+        <div className="flex gap-1 rounded-full bg-white p-[3px] shadow-clay-sink">
           {(
             [
               ["open", "Aperto"],
@@ -1939,10 +1939,10 @@ export function AutoscuoleResourcesPage({
               data-active={editVehicleMode === mode}
               onClick={() => setEditVehicleMode(mode)}
               className={cn(
-                "flex-1 cursor-pointer rounded-[8px] py-[9px] text-center text-[13.5px] transition-all",
+                "flex-1 cursor-pointer rounded-full py-[9px] text-center text-[13.5px] transition-colors duration-200 ease-out",
                 editVehicleMode === mode
-                  ? "bg-white font-semibold text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.1)]"
-                  : "font-medium text-[#888888] hover:text-[#555555]",
+                  ? "bg-[#1e1e1e] font-semibold text-white shadow-clay-ink-sm"
+                  : "font-medium text-[#6a6a6a] hover:bg-[#f2f2f2]",
               )}
             >
               {label}
@@ -2130,14 +2130,16 @@ export function AutoscuoleResourcesPage({
           >
             Salva
           </Button>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="bare"
             disabled={savingEditVehicle}
             onClick={closeVehicleDetail}
-            className="cursor-pointer rounded-[8px] px-[18px] py-2.5 text-sm font-semibold text-foreground hover:text-navy-900"
+            className="px-[18px] py-2.5 text-sm"
           >
             Annulla
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -2158,7 +2160,7 @@ export function AutoscuoleResourcesPage({
 
         {/* Tipo di pianificazione (segmented proto) */}
         <div className={VEIC_LBL}>Tipo di pianificazione</div>
-        <div className="mb-[22px] flex max-w-[320px] gap-1 rounded-[10px] bg-[#f4f4f6] p-1">
+        <div className="mb-[22px] flex max-w-[320px] gap-1 rounded-full bg-white p-[3px] shadow-clay-sink">
           {(
             [
               ["default", "Predefinito"],
@@ -2173,10 +2175,10 @@ export function AutoscuoleResourcesPage({
                 if (key === "default") setVehSelectedWeek(null);
               }}
               className={cn(
-                "flex-1 cursor-pointer rounded-[8px] py-[9px] text-center text-[13.5px] transition-all",
+                "flex-1 cursor-pointer rounded-full py-[9px] text-center text-[13.5px] transition-colors duration-200 ease-out",
                 availDialogTab === key
-                  ? "bg-white font-semibold text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.1)]"
-                  : "font-medium text-[#888888] hover:text-[#555555]",
+                  ? "bg-[#1e1e1e] font-semibold text-white shadow-clay-ink-sm"
+                  : "font-medium text-[#6a6a6a] hover:bg-[#f2f2f2]",
               )}
             >
               {label}
@@ -2297,19 +2299,20 @@ export function AutoscuoleResourcesPage({
               Ripristina predefinito
             </button>
           )}
-          <button
+          <Button
+            size="bare"
             type="button"
             onClick={() => void handleAvailabilitySaveClick()}
             disabled={
-              savingAvailability ||
               (availDialogTab === "default" &&
                 (!availDays.length || vehDefaultRanges.some((r) => r.endMinutes <= r.startMinutes))) ||
               (availDialogTab === "calendar" && !calendarSelectedDate)
             }
-            className="flex min-h-[40px] min-w-[78px] cursor-pointer items-center justify-center rounded-[8px] bg-[#222222] px-[18px] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-60"
+            loading={savingAvailability}
+            className="flex min-h-[40px] min-w-[78px] px-[18px] py-2.5 text-sm"
           >
-            {savingAvailability ? <LoadingDots /> : "Salva"}
-          </button>
+            Salva
+          </Button>
         </div>
       </div>
     );
@@ -2639,7 +2642,7 @@ export function AutoscuoleResourcesPage({
               autoFocus
               onChange={(e) => setNewVehicleName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreateVehicle()}
-              className="w-full rounded-[12px] border-[1.5px] border-[#ededed] bg-[#f7f8fa] px-[15px] py-[13px] text-[15px] font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222] focus:bg-white"
+              className="w-full rounded-[14px] border-0 bg-white px-[15px] py-[13px] text-[15px] font-medium text-foreground shadow-clay-sink outline-none transition-shadow duration-200 placeholder:text-[#c1c1c1] focus:shadow-clay-focus"
             />
             <div className="mb-2 mt-4 text-[13px] font-semibold text-foreground">Targa (opzionale)</div>
             <input
@@ -2647,7 +2650,7 @@ export function AutoscuoleResourcesPage({
               value={newVehiclePlate}
               onChange={(e) => setNewVehiclePlate(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === "Enter" && handleCreateVehicle()}
-              className="w-full rounded-[12px] border-[1.5px] border-[#ededed] bg-[#f7f8fa] px-[15px] py-[13px] text-[15px] font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222] focus:bg-white"
+              className="w-full rounded-[14px] border-0 bg-white px-[15px] py-[13px] text-[15px] font-medium text-foreground shadow-clay-sink outline-none transition-shadow duration-200 placeholder:text-[#c1c1c1] focus:shadow-clay-focus"
             />
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div>
@@ -2676,14 +2679,16 @@ export function AutoscuoleResourcesPage({
               </div>
             </div>
             <div className="mt-[26px] flex items-center justify-end gap-3.5">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="bare"
                 onClick={() => setCreateVehicleOpen(false)}
                 disabled={creatingVehicle}
-                className="cursor-pointer select-none px-2 py-[11px] text-sm font-semibold text-foreground transition-colors hover:text-[#555555]"
+                className="select-none px-4 py-[11px] text-sm"
               >
                 Annulla
-              </button>
+              </Button>
               <Button
                 type="button"
                 size="bare"
@@ -2903,7 +2908,7 @@ function AvailabilityCalendar({
             type="button"
             aria-label="Mese precedente"
             onClick={() => setCalendarMonth(new Date(year, month - 1, 1))}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-gray-100 transition-colors"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-gray-100 transition-colors"
           >
             <ChevronLeft className="size-4" />
           </button>
@@ -2911,7 +2916,7 @@ function AvailabilityCalendar({
             type="button"
             aria-label="Mese successivo"
             onClick={() => setCalendarMonth(new Date(year, month + 1, 1))}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-gray-100 transition-colors"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-gray-100 transition-colors"
           >
             <ChevronRight className="size-4" />
           </button>

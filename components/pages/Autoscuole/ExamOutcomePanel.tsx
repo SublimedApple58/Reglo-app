@@ -319,7 +319,7 @@ export function ExamOutcomePanel({
                             if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                           }}
                           placeholder="Numero patente — facoltativo"
-                          className="w-full rounded-lg border border-[#e2e2e6] bg-white px-2.5 py-[7px] text-[13px] font-medium text-foreground outline-none placeholder:font-normal placeholder:text-[#b0b0b0] focus:border-foreground/40 disabled:opacity-60"
+                          className="w-full rounded-[14px] border-0 bg-white px-2.5 py-[7px] text-[13px] font-medium text-foreground shadow-clay-sink outline-none transition-shadow duration-200 placeholder:font-normal placeholder:text-[#b0b0b0] focus:shadow-clay-focus disabled:opacity-60"
                         />
                       </div>
                     </div>

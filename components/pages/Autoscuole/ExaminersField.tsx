@@ -138,7 +138,7 @@ export function ExaminersField({
                         (e.target as HTMLInputElement).blur();
                       }
                     }}
-                    className="w-full rounded-lg border-[1.5px] border-[#dddddd] bg-white py-[11px] pl-3.5 pr-10 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222] disabled:opacity-60"
+                    className="w-full rounded-[14px] border-0 bg-white py-[11px] pl-3.5 pr-10 text-sm font-medium text-foreground shadow-clay-sink outline-none transition-shadow duration-200 placeholder:text-[#c1c1c1] focus:shadow-clay-focus disabled:opacity-60"
                   />
                   {(name || rows.length > 1) && !disabled ? (
                     <button

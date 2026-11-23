@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { DatePickerInput } from "@/components/ui/date-picker";
 import { TimePickerInput } from "@/components/ui/time-picker";
-import { PROTO_INPUT, PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
+import { PROTO_INPUT, PROTO_SELECT_TRIGGER, SELECTABLE_CARD, SELECTABLE_CARD_ON, SELECTABLE_CARD_OFF } from "@/components/ui/proto-styles";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { UserPhotoCircle } from "@/components/ui/user-photo";
@@ -198,14 +198,16 @@ function EditFooter({
       >
         Salva
       </Button>
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="bare"
         disabled={busy}
         onClick={onCancel}
-        className="cursor-pointer rounded-sm px-[18px] py-2.5 text-sm font-semibold text-foreground hover:text-navy-900"
+        className="min-h-[40px] px-[18px] py-2.5 text-sm font-semibold"
       >
         Annulla
-      </button>
+      </Button>
     </div>
   );
 }
@@ -681,7 +683,7 @@ export function GroupLessonManageDialog({
                   <DatePickerInput
                     value={startLocal.slice(0, 10)}
                     onChange={(d) => setStartLocal(`${d}T${startLocal.slice(11, 16) || "09:00"}`)}
-                    className="h-auto rounded-lg border-[1.5px] border-[#dddddd] px-3.5 py-[11px]"
+                    className="h-auto py-[11px]"
                   />
                 </div>
                 <div>
@@ -838,13 +840,12 @@ export function GroupLessonManageDialog({
                           type="button"
                           onClick={() => setMotoType(active ? null : value)}
                           className={cn(
-                            "flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors",
-                            active
-                              ? "border-orange-300 bg-orange-50 text-orange-800"
-                              : "border-border/60 bg-white text-foreground hover:bg-gray-50",
+                            SELECTABLE_CARD,
+                            "flex items-center gap-2 px-3 py-2 text-foreground",
+                            active ? SELECTABLE_CARD_ON : SELECTABLE_CARD_OFF,
                           )}
                         >
-                          <Icon className={cn("h-4 w-4 shrink-0", active ? "text-orange-600" : "text-muted-foreground")} />
+                          <Icon className={cn("h-4 w-4 shrink-0", active ? "text-[#222222]" : "text-muted-foreground")} />
                           <span className="flex min-w-0 flex-col">
                             <span className="text-sm font-medium">{MOTO_LESSON_TYPE_LABELS[value]}</span>
                             <span className="truncate text-[10px] text-muted-foreground">{MOTO_LESSON_TYPE_HINTS[value]}</span>
@@ -1001,25 +1002,28 @@ export function GroupLessonManageDialog({
                           rows={3}
                           maxLength={2000}
                           placeholder="Nota per questo allievo (la vedrà nella sua app)"
-                          className="w-full resize-y rounded-lg border-[1.5px] border-[#dddddd] px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222]"
+                          className="w-full resize-y rounded-[14px] border-0 bg-white px-3.5 py-2.5 text-sm font-medium text-foreground shadow-clay-sink outline-none transition-shadow duration-200 placeholder:text-[#c1c1c1] focus:shadow-clay-focus"
                         />
                         <div className="mt-1.5 flex items-center justify-end gap-3">
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
+                            size="bare"
                             disabled={busy}
                             onClick={() => setNoteEditing(null)}
-                            className="cursor-pointer px-1 text-[13px] font-semibold text-foreground transition-colors hover:text-[#555555]"
+                            className="px-3 py-2 text-[13px] font-semibold"
                           >
                             Annulla
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
-                            disabled={busy}
+                            size="bare"
+                            loading={busy}
                             onClick={() => handleSaveNote(p.appointmentId)}
-                            className="flex min-w-[96px] cursor-pointer items-center justify-center rounded-full bg-[#111111] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#2b2b2b] disabled:opacity-60"
+                            className="min-w-[96px] px-4 py-2 text-[13px]"
                           >
-                            {busy ? <LoadingDots className="scale-[0.6]" /> : "Salva nota"}
-                          </button>
+                            Salva nota
+                          </Button>
                         </div>
                       </div>
                     ) : p.notes?.trim() ? (
@@ -1156,7 +1160,7 @@ export function GroupLessonManageDialog({
                 Idonei per questa guida · {lesson.openSeats}{" "}
                 {lesson.openSeats === 1 ? "posto libero" : "posti liberi"}
               </p>
-              <div className="mt-3 flex items-center gap-2.5 rounded-lg border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+              <div className="mt-3 flex items-center gap-2.5 rounded-[14px] bg-white px-3.5 shadow-clay-sink transition-shadow duration-200 focus-within:shadow-clay-focus">
                 <SearchIcon className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
                 <input
                   value={addSearch}
@@ -1236,7 +1240,7 @@ export function GroupLessonManageDialog({
                 Le modifiche si salvano subito · {(lesson.fleet ?? []).length} moto in guida
               </p>
               {fleetOptions.length > 5 && (
-                <div className="mt-3 flex items-center gap-2.5 rounded-lg border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+                <div className="mt-3 flex items-center gap-2.5 rounded-[14px] bg-white px-3.5 shadow-clay-sink transition-shadow duration-200 focus-within:shadow-clay-focus">
                   <SearchIcon className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
                   <input
                     value={fleetSearch}

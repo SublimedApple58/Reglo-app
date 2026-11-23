@@ -415,7 +415,7 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
                       href={`https://www.google.com/maps/search/?api=1&query=${loc.latitude},${loc.longitude}${loc.placeId ? `&query_place_id=${loc.placeId}` : ""}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex size-8 items-center justify-center rounded-[8px] border border-[#dddddd] text-[#444444] transition-colors hover:border-[#222222]"
+                      className="flex size-8 items-center justify-center rounded-full border border-[#dddddd] text-[#444444] transition-colors hover:border-[#222222]"
                       aria-label="Apri in Google Maps"
                     >
                       <ExternalLink className="size-[13px]" strokeWidth={1.6} />
@@ -439,7 +439,7 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
                         },
                       })
                     }
-                    className="flex size-8 cursor-pointer items-center justify-center rounded-[8px] border border-[#dddddd] text-[#444444] transition-colors hover:border-[#222222]"
+                    className="flex size-8 cursor-pointer items-center justify-center rounded-full border border-[#dddddd] text-[#444444] transition-colors hover:border-[#222222]"
                     aria-label="Modifica"
                   >
                     <Pencil className="size-[13px]" strokeWidth={1.6} />
@@ -447,7 +447,7 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
                   <button
                     type="button"
                     onClick={() => handleDelete(loc.id, loc.name)}
-                    className="flex size-8 cursor-pointer items-center justify-center rounded-[8px] border border-[#dddddd] text-[#c13515] transition-colors hover:border-navy-900"
+                    className="flex size-8 cursor-pointer items-center justify-center rounded-full border border-[#dddddd] text-[#c13515] transition-colors hover:border-[#222222]"
                     aria-label="Elimina"
                   >
                     <Trash2 className="size-[13px]" strokeWidth={1.6} />

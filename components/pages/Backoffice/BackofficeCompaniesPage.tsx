@@ -604,16 +604,16 @@ function AutoscuolaDrawerContent({
                   <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
                     Assegna linea manualmente
                   </p>
-                  <div className="flex rounded-lg border border-border bg-white p-0.5 text-xs">
+                  <div className="flex rounded-full bg-white p-[3px] text-xs shadow-clay-sink">
                     {(["sip", "telnyx", "twilio"] as const).map((mode) => (
                       <button
                         key={mode}
                         type="button"
                         onClick={() => setAssignRoutingMode(mode)}
                         className={cn(
-                          "flex-1 cursor-pointer rounded-md px-3 py-1.5 font-medium transition-colors",
+                          "flex-1 cursor-pointer rounded-full px-3 py-1.5 font-medium transition-colors duration-200",
                           assignRoutingMode === mode
-                            ? "bg-[#222222] text-white shadow-sm"
+                            ? "bg-[#1e1e1e] text-white shadow-clay-ink-sm"
                             : "text-muted-foreground hover:text-foreground",
                         )}
                       >
@@ -642,14 +642,14 @@ function AutoscuolaDrawerContent({
                     size="sm"
                     className="w-full"
                     onClick={handleAssign}
+                    loading={isAssigning}
                     disabled={
-                      isAssigning ||
                       !assignDisplayNumber.trim() ||
                       !assignTwilioNumber.trim() ||
                       ((assignRoutingMode === "twilio" || assignRoutingMode === "telnyx") && !assignTwilioSid.trim())
                     }
                   >
-                    {isAssigning ? <LoadingDots /> : "Assegna linea"}
+                    Assegna linea
                   </Button>
                 </div>
               )}

@@ -6,7 +6,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { useRouter, usePathname } from "next/navigation";
 import { ChevronDown, HelpCircle, Smartphone, Phone, X } from "lucide-react";
 
-import { LoadingDots } from "@/components/ui/loading-dots";
+import { Button } from "@/components/ui/button";
+import { PROTO_INPUT, SELECTABLE_CARD, SELECTABLE_CARD_ON, SELECTABLE_CARD_OFF } from "@/components/ui/proto-styles";
 
 import { cn } from "@/lib/utils";
 
@@ -177,14 +178,16 @@ export function VoiceLineTutorialModal({
                 Collega il numero della segretaria
               </div>
               <div className="flex shrink-0 items-center gap-2.5">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="bare"
                   onClick={() => setHelpOpen(true)}
-                  className="flex h-8 cursor-pointer items-center gap-1.5 rounded-2xl border-[1.5px] border-[#e0e0e0] bg-white px-3.5 text-[13px] font-semibold text-[#333333] transition-colors hover:border-[#bdbdbd] hover:bg-[#fafafa]"
+                  className="h-8 gap-1.5 px-3.5 text-[13px] text-[#333333]"
                 >
                   <HelpCircle className="size-3.5" strokeWidth={1.8} />
                   Aiuto
-                </button>
+                </Button>
                 <button
                   type="button"
                   onClick={onClose}
@@ -219,10 +222,9 @@ export function VoiceLineTutorialModal({
                       type="button"
                       onClick={() => setLineType(key)}
                       className={cn(
-                        "flex flex-1 cursor-pointer select-none items-center justify-center gap-2 rounded-xl border-[1.5px] bg-white px-4 py-3 text-sm font-semibold transition-all",
-                        active
-                          ? "border-navy-900 text-navy-900"
-                          : "border-[#e0e0e0] text-[#333333] hover:border-[#bdbdbd]",
+                        SELECTABLE_CARD,
+                        "flex flex-1 select-none items-center justify-center gap-2 px-4 py-3 text-sm font-semibold",
+                        active ? cn(SELECTABLE_CARD_ON, "text-[#222222]") : cn(SELECTABLE_CARD_OFF, "text-[#333333]"),
                       )}
                     >
                       <Icon className="size-[18px]" strokeWidth={1.8} />
@@ -332,21 +334,18 @@ export function VoiceLineTutorialModal({
                     value={handoff}
                     onChange={(e) => setHandoff(e.target.value)}
                     placeholder="+39..."
-                    className="min-w-0 flex-1 rounded-lg border-[1.5px] border-[#dddddd] bg-white px-3.5 py-2.5 text-sm font-semibold text-[#222222] outline-none transition focus:border-navy-900"
+                    className={cn(PROTO_INPUT, "min-w-0 w-auto flex-1 py-2.5 font-semibold")}
                   />
-                  <button
+                  <Button
                     type="button"
+                    size="bare"
                     onClick={handleActivate}
-                    disabled={!ready || activating}
-                    className={cn(
-                      "inline-flex shrink-0 items-center justify-center gap-2 rounded-[10px] px-6 py-2.5 text-sm font-bold transition-colors",
-                      ready
-                        ? "cursor-pointer bg-navy-900 text-white hover:bg-navy-800"
-                        : "cursor-not-allowed bg-[#e6e6e6] text-[#a8a8a8]",
-                    )}
+                    disabled={!ready}
+                    loading={activating}
+                    className="px-6 py-2.5 text-sm"
                   >
-                    {activating ? <LoadingDots className="min-h-[1.5em]" /> : "Attiva segretaria"}
-                  </button>
+                    Attiva segretaria
+                  </Button>
                 </div>
               </div>
             </div>
@@ -383,13 +382,14 @@ export function VoiceLineTutorialModal({
                       Scrivici dal centro assistenza: un membro del supporto operativo ti aiuterà passo
                       passo a impostare la deviazione.
                     </div>
-                    <button
+                    <Button
                       type="button"
+                      size="bare"
                       onClick={() => router.push(`${pathname}/assistenza`)}
-                      className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-navy-900 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-navy-800"
+                      className="w-full px-5 py-3 text-sm"
                     >
                       Contatta il supporto
-                    </button>
+                    </Button>
                   </div>
                 </motion.div>
               )}

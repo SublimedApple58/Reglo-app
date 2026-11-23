@@ -203,7 +203,7 @@ da «Riduci movimento»).
 | `InlineToggle` | binario incavato che si riempie di `#111`, pallino bianco | `shadow-clay-sink` / `shadow-clay-thumb`; `decorative` = solo disegno dentro una riga `role="switch"` |
 | `Checkbox` | 6px, nera piena | — |
 | `Card` | `rounded-clay`, senza bordo | `shadow-clay-raise` |
-| `SegmentedControl`, `SegmentedPill` | binario bianco incavato, cursore **nero** (come `ClaySegmented`) | `shadow-clay-sink` / `shadow-clay-ink` |
+| `SegmentedControl`, `SegmentedPill` | binario bianco incavato, cursore **nero** (come `ClaySegmented`) | `shadow-clay-sink` / `shadow-clay-ink-sm` (REG-776: l'ombra resta dentro il binario) |
 
 **Niente blu nell'interfaccia**: i link sono neri sottolineati
 (`inlineLinkClass` in `student-detail-ui.tsx`, ex `blueLinkClass`), icone ed
@@ -215,6 +215,32 @@ fase «Teoria».
 pagine (chip di scelta, bottoni «Dettaglio», durate…), che si allineano quando
 si ridisegna la pagina (es. REG-775, drawer allievo). Le CTA nere e gli
 interruttori fatti a mano sono già stati portati su `Button`/`InlineToggle`.
+
+### 4b-bis. Un raggio per ruolo (REG-776, 2026-11-24)
+
+A parità di ruolo il raggio è lo stesso in tutta la web app; dove c'era da
+scegliere, la CTA è la più tonda. I `<button>`/`<input>` fatti a mano rimasti
+dopo REG-774 sono stati allineati a questa tabella (≈230 punti, macrostruttura
+esclusa).
+
+| Ruolo | Forma | Come |
+|---|---|---|
+| CTA (azione principale) | capsula nera | `<Button>`; attesa con `loading` |
+| Bottone secondario | capsula bianca | `<Button variant="outline">` |
+| «Annulla» / «Indietro» nei footer | capsula senza fondo | `<Button variant="ghost">`, mai link sottolineato |
+| Bottone solo icona (X, cestino, frecce, zoom, stampa…) | tondo | `rounded-full`; la X dei pannelli come quella dei `Dialog` (bianca 36px `shadow-clay-raise-sm`) |
+| Campo (input, textarea, select, data, ora) | 14px incavato | `Input`, `PROTO_INPUT`, `DatePickerInput`, `TimePickerInput`: `rounded-[14px] shadow-clay-sink`, focus `shadow-clay-focus`, errore bordo interno `#C13515` |
+| Ricerca nelle toolbar | capsula | `ExpandingSearch` |
+| Card selezionabile (1 fra 2–4) | 14px | `SELECTABLE_CARD` + `SELECTABLE_CARD_ON` (bordo interno nero) / `SELECTABLE_CARD_OFF` (in rilievo), in `components/ui/proto-styles.ts` |
+| Segmentato | capsula, cursore nero | `SegmentedPill` / `SegmentedControl`; `DurationField` usa lo stesso binario |
+| Chip di scelta | capsula; accesa nera | `ToggleChip` |
+| Pannelli flottanti (`CreateEventPopover`) | `rounded-clay` | `shadow-clay-overlay`, come i `Dialog` |
+
+Restano come sono: pagine, sezioni, card contenitore, menu e loro voci, righe
+di lista, tabelle, skeleton, avatar, campioni colore, celle di calendario e
+blocchi dell'agenda. Le righe di dettaglio (`DetailRow`) con un valore lungo
+mandano a capo il valore, allineato a destra: l'etichetta tiene la sua
+larghezza (max 60%).
 
 ### 4c. Pagina a righe del dettaglio allievo (REG-775, 2026-11-23)
 

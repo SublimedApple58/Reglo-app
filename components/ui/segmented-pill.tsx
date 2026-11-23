@@ -49,7 +49,7 @@ export function SegmentedPill<T extends string>({
               "flex cursor-pointer select-none items-center gap-1 whitespace-nowrap rounded-full transition-colors duration-200 ease-out",
               size === "sm" ? "px-3 py-[5px] text-[12.5px]" : "px-3.5 py-[7px] text-[13px]",
               active
-                ? "bg-[#1e1e1e] font-semibold text-white shadow-clay-ink"
+                ? "bg-[#1e1e1e] font-semibold text-white shadow-clay-ink-sm"
                 : "font-medium text-[#6a6a6a] hover:bg-[#f2f2f2]",
             )}
           >

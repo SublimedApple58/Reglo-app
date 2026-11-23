@@ -69,7 +69,7 @@ export function ColorSwatchPicker({
           title={title}
           disabled={saving}
           className={cn(
-            "flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-white text-muted-foreground transition hover:bg-gray-50 hover:text-foreground",
+            "flex h-7 w-7 items-center justify-center rounded-full border border-border bg-white text-muted-foreground transition hover:bg-gray-50 hover:text-foreground",
             className,
           )}
         >
@@ -128,7 +128,7 @@ export function ColorSwatchPicker({
           type="button"
           onClick={() => pick(null)}
           className={cn(
-            "mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-gray-50 hover:text-foreground",
+            "mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-border py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-gray-50 hover:text-foreground",
             !value && "border-foreground/30 text-foreground",
           )}
         >

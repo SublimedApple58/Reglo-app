@@ -88,6 +88,9 @@
   --shadow-clay-sink: inset 0 0 0 1px rgba(0, 0, 0, 0.08), inset 0 2px 5px rgba(0, 0, 0, 0.08);
   --shadow-clay-focus: inset 0 0 0 1.5px #222222;
   --shadow-clay-ink: 0 10px 20px -8px rgba(0, 0, 0, 0.45), inset 0 2px 3px rgba(255, 255, 255, 0.25), inset 0 -4px 8px rgba(0, 0, 0, 0.6);
+  /* REG-776 — cursore dei segmentati: lo stesso volume dell'ink ma l'ombra
+     resta dentro il binario (3px), così il cursore non «esce» dal contenitore. */
+  --shadow-clay-ink-sm: 0 1px 2px rgba(0, 0, 0, 0.22), inset 0 1px 1.5px rgba(255, 255, 255, 0.22), inset 0 -2px 4px rgba(0, 0, 0, 0.5);
   --shadow-clay-thumb: 0 2px 5px rgba(0, 0, 0, 0.22), inset 0 -1px 2px rgba(0, 0, 0, 0.06);
   --shadow-clay-overlay: 0 0 0 1px rgba(0, 0, 0, 0.05), 0 24px 60px -20px rgba(0, 0, 0, 0.35);
 
