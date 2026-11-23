@@ -12,12 +12,10 @@ import {
   Check,
   Clock,
   Coffee,
-  GraduationCap,
   Megaphone,
   Moon,
   Repeat,
   Smartphone,
-  Users,
   ChevronDown,
   ClipboardList,
   MapPin,
@@ -596,7 +594,8 @@ function SettingsTab({
                 </div>
               </div>
 
-              <SettingsSection title="Allievi" icon={GraduationCap} className="mt-9">
+              {/* REG-771: il titolo dice a chi arrivano gli avvisi. */}
+              <SettingsSection title="Ai tuoi allievi" size="large" className="mt-12">
                 <SettingsGroupLabel>Promemoria</SettingsGroupLabel>
                 <SettingsRow
                   title="Prima della guida"
@@ -725,7 +724,7 @@ function SettingsTab({
                 />
               </SettingsSection>
 
-              <SettingsSection title="Istruttori" icon={Users} className="mt-10">
+              <SettingsSection title="Ai tuoi istruttori" size="large" className="mt-[88px]">
                 <SettingsRow
                   title="Prima della guida"
                   icon={Clock}

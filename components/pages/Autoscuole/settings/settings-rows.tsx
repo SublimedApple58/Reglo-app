@@ -24,9 +24,15 @@ export function SettingsSection({
   className,
   id,
   testId,
+  size = "default",
 }: {
   title: string;
   icon?: SettingsIcon;
+  /**
+   * `large`: titolo che fa da separatore fra due pubblici («Ai tuoi allievi» /
+   * «Ai tuoi istruttori», REG-771). Solo tipografia e spazio, niente icona.
+   */
+  size?: "default" | "large";
   /** Solo quando serve a capire la sezione. */
   description?: React.ReactNode;
   /** Link o comando allineato al titolo («Vedi tutti»). */
@@ -39,7 +45,14 @@ export function SettingsSection({
   return (
     <section id={id} data-testid={testId} className={cn("scroll-mt-6", className)}>
       <div className="flex items-end justify-between gap-4">
-        <h3 className="flex items-center gap-2.5 text-[17px] font-semibold tracking-[-0.1px] text-[#222222]">
+        <h3
+          className={cn(
+            "flex items-center gap-2.5 font-semibold text-[#222222]",
+            size === "large"
+              ? "text-[22px] leading-[1.2] tracking-[-0.4px]"
+              : "text-[17px] tracking-[-0.1px]",
+          )}
+        >
           {Icon ? <Icon className="size-[19px] shrink-0" strokeWidth={1.9} /> : null}
           {title}
         </h3>
@@ -50,7 +63,9 @@ export function SettingsSection({
           {description}
         </p>
       ) : null}
-      <div className="mt-2 divide-y divide-[#ebebeb]">{children}</div>
+      <div className={cn("divide-y divide-[#ebebeb]", size === "large" ? "mt-1.5" : "mt-2")}>
+        {children}
+      </div>
     </section>
   );
 }

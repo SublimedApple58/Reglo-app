@@ -108,11 +108,10 @@ export function ChannelToggles({
     <div className="-mx-2.5 flex items-center" data-testid={testId}>
       {ORDER.map((channel) => {
         // WhatsApp non disponibile su questa riga (niente modello approvato o
-        // numero non collegato): l'icona non c'è, ma lo spazio resta così le
-        // colonne delle righe restano allineate (Tiziano, 24/11).
-        if (channel === "whatsapp" && whatsapp !== "ready") {
-          return <span key={channel} aria-hidden className="size-11 shrink-0" />;
-        }
+        // numero non collegato): l'icona non c'è e le altre si stringono, così
+        // Email resta sempre nell'ultima colonna e il bordo destro è dritto
+        // (REG-771, scelta di Tiziano: niente buco fra App ed Email).
+        if (channel === "whatsapp" && whatsapp !== "ready") return null;
         const on = value.includes(channel);
         const { label } = CHANNEL_META[channel];
         const title = `${label}: ${on ? "acceso" : "spento"}`;
