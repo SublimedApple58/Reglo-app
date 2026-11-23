@@ -78,8 +78,14 @@ import {
   type CompanyServiceInfo,
   type ServiceLimits,
 } from "@/lib/services";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import type { MaintenanceScope } from "@/lib/maintenance";
+import {
+  BackofficeMaintenanceSection,
+  type MaintenanceState,
+} from "@/components/pages/Backoffice/BackofficeMaintenanceSection";
 
 export type BackofficeCompanyRow = {
   id: string;
@@ -88,6 +94,9 @@ export type BackofficeCompanyRow = {
   services: CompanyServiceInfo[];
   androidStudents: number;
   iosStudents: number;
+  /** REG-773: null = account attivo. */
+  maintenanceScope?: MaintenanceScope | null;
+  maintenanceSince?: string | null;
 };
 
 /* ─────────────────────────────────────────────────────────────
@@ -1172,7 +1181,27 @@ export default function BackofficeCompaniesPage({
                       })}
                     </TableCell>
                     <TableCell>
-                      {isActive ? (
+                      {company.maintenanceScope ? (
+                        // REG-773: in manutenzione vince su Attivo/Disattivo.
+                        <div className="flex items-center gap-2">
+                          <Image
+                            src="/images/3d/barriera-riga-3d.png"
+                            alt=""
+                            width={26}
+                            height={26}
+                            className="size-[26px] shrink-0 select-none object-contain"
+                          />
+                          <div className="min-w-0 leading-tight">
+                            <span className="block text-[13px] font-semibold text-foreground">In manutenzione</span>
+                            <span className="block text-[12px] font-medium text-muted-foreground">
+                              {company.maintenanceSince
+                                ? `dal ${new Date(company.maintenanceSince).toLocaleDateString("it-IT", { day: "numeric", month: "short" })} · `
+                                : ""}
+                              {company.maintenanceScope === "EVERYONE" ? "tutti" : "solo titolare"}
+                            </span>
+                          </div>
+                        </div>
+                      ) : isActive ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                           Attivo
@@ -1310,6 +1339,26 @@ export default function BackofficeCompaniesPage({
             </div>
           </DrawerHeader>
           <div className="flex-1 overflow-y-auto bg-gray-50/50 p-6">
+            {selected && (
+              <div className="mb-6">
+                <BackofficeMaintenanceSection
+                  key={`maintenance-${selected.id}`}
+                  companyId={selected.id}
+                  companyName={selected.name}
+                  initial={{
+                    scope: selected.maintenanceScope ?? null,
+                    since: selected.maintenanceSince ?? null,
+                  }}
+                  onChanged={(next: MaintenanceState) => {
+                    const patch = { maintenanceScope: next.scope, maintenanceSince: next.since };
+                    setLocalCompanies((rows) =>
+                      rows.map((row) => (row.id === selected.id ? { ...row, ...patch } : row)),
+                    );
+                    setSelected((row) => (row ? { ...row, ...patch } : row));
+                  }}
+                />
+              </div>
+            )}
             {selected && (
               <AutoscuolaDrawerContent
                 key={selected.id}

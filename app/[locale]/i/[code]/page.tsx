@@ -8,6 +8,9 @@ import {
 import { instructorInitials, normalizeInstructorCode } from "@/lib/autoscuole/instructor-initials";
 import { resolveInstructorCode } from "@/lib/autoscuole/instructor-link";
 import { appOpenUrl, detectMobilePlatform } from "@/lib/autoscuole/instructor-link-deeplink";
+import { getCompanyMaintenanceScope } from "@/lib/autoscuole/maintenance-gate";
+import { isEntryClosedByMaintenance } from "@/lib/maintenance";
+import { MaintenancePublicNotice } from "@/components/shared/maintenance/MaintenancePublicNotice";
 
 // REG-451 — destinazione del QR della card istruttore. Pubblica (middleware):
 // la apre la fotocamera del telefono, anche senza app o sessione web.
@@ -28,6 +31,11 @@ export default async function InstructorLinkRoute({
   if (!resolved) {
     const shown = normalizeInstructorCode(rawCode) ?? decodeURIComponent(rawCode).toUpperCase().slice(0, 12);
     return <InstructorLinkInvalid code={shown} />;
+  }
+
+  // REG-773: autoscuola in manutenzione per tutti → niente iscrizioni nuove.
+  if (isEntryClosedByMaintenance(await getCompanyMaintenanceScope(resolved.companyId))) {
+    return <MaintenancePublicNotice companyName={resolved.companyName} />;
   }
 
   const platform = detectMobilePlatform((await headers()).get("user-agent"));

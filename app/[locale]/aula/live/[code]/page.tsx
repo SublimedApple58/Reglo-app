@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { requireUserAndCompany } from "@/lib/auth-guard";
 import { AulaLiveConsole } from "@/components/pages/Aula/AulaLiveConsole";
 
 export const metadata: Metadata = {
@@ -8,8 +9,10 @@ export const metadata: Metadata = {
 export default async function AulaLivePage({
   params,
 }: {
-  params: Promise<{ code: string }>;
+  params: Promise<{ locale: string; code: string }>;
 }) {
-  const { code } = await params;
+  const { locale, code } = await params;
+  // REG-773: chi è in manutenzione va alla schermata dedicata.
+  await requireUserAndCompany(locale);
   return <AulaLiveConsole code={code} />;
 }

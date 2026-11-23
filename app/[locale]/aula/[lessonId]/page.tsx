@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { requireUserAndCompany } from "@/lib/auth-guard";
 import { notFound } from "next/navigation";
 import { getAulaLesson } from "@/lib/actions/aula.actions";
 import { AulaLessonEditor } from "@/components/pages/Aula/AulaLessonEditor";
@@ -10,9 +11,11 @@ export const metadata: Metadata = {
 export default async function AulaLessonPage({
   params,
 }: {
-  params: Promise<{ lessonId: string }>;
+  params: Promise<{ locale: string; lessonId: string }>;
 }) {
-  const { lessonId } = await params;
+  const { locale, lessonId } = await params;
+  // REG-773: chi è in manutenzione va alla schermata dedicata.
+  await requireUserAndCompany(locale);
   const res = await getAulaLesson(lessonId);
   if (!res.success || !res.data) notFound();
 

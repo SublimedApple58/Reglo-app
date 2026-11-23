@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { companyAtom } from "@/atoms/company.store";
 import { getCurrentCompany, updateCompanyName } from "@/lib/actions/company.actions";
 import { getMyProfile, updateProfile } from "@/lib/actions/user.actions";
+import { MaintenanceSection } from "@/components/pages/Autoscuole/settings/MaintenanceSection";
 
 type FieldId = "nome" | "autoscuola" | "telefono";
 
@@ -325,6 +326,9 @@ export function BusinessInfoPane() {
             </div>
           </div>
         </div>
+
+        {/* REG-773: in fondo all'account, lontano dai campi di tutti i giorni. */}
+        {company?.name && <MaintenanceSection companyName={company.name} />}
       </div>
     </FadeIn>
   );
