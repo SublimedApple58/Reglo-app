@@ -56,6 +56,7 @@ import {
   RowControls,
   SETTINGS_SELECT_TRIGGER,
   SettingsDensity,
+  SettingsDetailRow,
   SettingsGroupLabel,
   SettingsReveal,
   SettingsRow,
@@ -117,10 +118,12 @@ const DEFAULT_LESSON_CONSTRAINT: LessonConstraintState = {
   endMinutes: 18 * 60,
 };
 
-/** REG-767: le schede del pane Promemoria e notifiche. */
-type ReminderTabKey = "auto" | "mano" | "log";
+/** REG-767: le schede del pane Promemoria e notifiche. REG-772: «Automatici»
+ *  non c'è più come livello, le sue due sezioni diventano schede piatte. */
+type ReminderTabKey = "allievi" | "istruttori" | "mano" | "log";
 const REMINDER_TABS: { key: ReminderTabKey; label: string }[] = [
-  { key: "auto", label: "Automatici" },
+  { key: "allievi", label: "Allievi" },
+  { key: "istruttori", label: "Istruttori" },
   { key: "mano", label: "Manuale" },
   { key: "log", label: "Ultimi invii" },
 ];
@@ -356,34 +359,46 @@ function EmptySlotNotificationSection({
         subtitle="Gli allievi idonei riceveranno la notifica a breve."
         blend
       />
+      {/* REG-772: due etichette sole, valori come testo allineati alla colonna
+          dei canali; orari senza campo né pillola, «Aggiungi» al posto del +. */}
       <SettingsReveal open={enabled}>
-        <SettingsSubRow label="A chi">
-          <Select
-            value={target}
-            onValueChange={(value) => setTarget(value as "all" | "availability_matching")}
-          >
-            <SelectTrigger className={cn(SETTINGS_SELECT_TRIGGER, "sm:w-[280px]")}>
-              <SelectValue placeholder="Destinatari" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="availability_matching">Chi è disponibile a quell&apos;ora</SelectItem>
-              <SelectItem value="all">Tutti gli allievi</SelectItem>
-            </SelectContent>
-          </Select>
-        </SettingsSubRow>
+        <div className="mt-2">
+          <SettingsDetailRow label="A chi">
+            <Select
+              value={target}
+              onValueChange={(value) => setTarget(value as "all" | "availability_matching")}
+            >
+              <SelectTrigger
+                aria-label="A chi"
+                className="h-8 w-auto justify-start gap-1.5 border-0 bg-transparent p-0 text-sm font-semibold text-[#222222] shadow-none focus:ring-0 focus-visible:underline [&>svg]:size-[15px] [&>svg]:text-[#929292] [&>svg]:opacity-100"
+              >
+                <SelectValue placeholder="Destinatari" />
+              </SelectTrigger>
+              <SelectContent align="end">
+                <SelectItem value="availability_matching">Chi è disponibile a quell&apos;ora</SelectItem>
+                <SelectItem value="all">Tutti gli allievi</SelectItem>
+              </SelectContent>
+            </Select>
+          </SettingsDetailRow>
 
-        <SettingsSubRow label="Orari">
-          {/* Un TimePicker per ogni invio della giornata: la "x" toglie
-              l'orario (min 1), il "+" ne aggiunge un altro. Il backend
-              accetta solo mezz'ore tra 08:00 e 22:00. */}
-          <div className="flex flex-wrap items-center gap-2.5 sm:justify-end">
-            {times.map((time) => (
-              <div key={time} className="group relative">
+          <SettingsDetailRow label="Orari" testId="empty-slot-times">
+            {/* Si tocca un orario per cambiarlo («Togli» nel pannello, se ne
+                resta più d'uno). Il backend accetta solo mezz'ore 08:00–22:00. */}
+            <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 py-1.5 sm:justify-end sm:gap-x-[18px]">
+              {times.map((time) => (
                 <TimePickerInput
+                  key={time}
+                  variant="text"
                   value={time}
                   minTime="08:00"
                   maxTime="22:00"
                   minuteStep={30}
+                  onClear={
+                    times.length > 1
+                      ? () => setTimes((prev) => prev.filter((t) => t !== time))
+                      : undefined
+                  }
+                  clearLabel="Togli"
                   onChange={(next) => {
                     setTimes((prev) => {
                       if (prev.includes(next)) {
@@ -396,67 +411,58 @@ function EmptySlotNotificationSection({
                     });
                   }}
                 />
-                {times.length > 1 && (
-                  <button
-                    type="button"
-                    aria-label={`Rimuovi orario ${time}`}
-                    onClick={() => setTimes((prev) => prev.filter((t) => t !== time))}
-                    className="absolute -right-1.5 -top-1.5 flex size-[18px] cursor-pointer items-center justify-center rounded-full bg-[#222222] text-white opacity-0 shadow-sm transition-opacity duration-200 hover:bg-black focus-visible:opacity-100 group-hover:opacity-100"
-                  >
-                    <X className="size-3" strokeWidth={2.4} />
-                  </button>
-                )}
-              </div>
-            ))}
-            {times.length < NOTIFICATION_TIME_OPTIONS.length && (
-              <button
-                type="button"
-                aria-label="Aggiungi orario di invio"
-                onClick={() =>
-                  setTimes((prev) => {
-                    // Primo slot libero dopo l'ultimo orario scelto (poi da capo)
-                    const last = prev[prev.length - 1];
-                    const free = [
-                      ...NOTIFICATION_TIME_OPTIONS.filter((t) => t > last),
-                      ...NOTIFICATION_TIME_OPTIONS,
-                    ].find((t) => !prev.includes(t));
-                    return free ? [...prev, free].sort() : prev;
-                  })
-                }
-                className="flex size-[38px] cursor-pointer items-center justify-center rounded-full border-[1.5px] border-dashed border-[#c9c9c9] text-[#222222] transition-colors duration-200 hover:border-[#222222] hover:bg-[#fafafa]"
-              >
-                <Plus className="size-4" strokeWidth={2.2} />
-              </button>
-            )}
-          </div>
-        </SettingsSubRow>
+              ))}
+              {times.length < NOTIFICATION_TIME_OPTIONS.length && (
+                <button
+                  type="button"
+                  aria-label="Aggiungi orario di invio"
+                  onClick={() =>
+                    setTimes((prev) => {
+                      // Primo slot libero dopo l'ultimo orario scelto (poi da capo)
+                      const last = prev[prev.length - 1];
+                      const free = [
+                        ...NOTIFICATION_TIME_OPTIONS.filter((t) => t > last),
+                        ...NOTIFICATION_TIME_OPTIONS,
+                      ].find((t) => !prev.includes(t));
+                      return free ? [...prev, free].sort() : prev;
+                    })
+                  }
+                  className="inline-flex h-8 cursor-pointer items-center text-sm font-medium text-[#6a6a6a] transition-colors duration-200 hover:text-[#222222]"
+                >
+                  Aggiungi
+                </button>
+              )}
+            </div>
+          </SettingsDetailRow>
 
-        <SettingsSubRow label="Per domani, adesso">
-          <button
-            type="button"
-            disabled={sending}
-            onClick={async () => {
-              setSending(true);
-              try {
-                const res = await triggerEmptySlotNotification();
-                if (res.success && res.data) {
-                  setSentOverlay(true);
-                } else {
-                  toast.error({
-                    description: res.message ?? "Impossibile inviare la notifica.",
-                  });
+          <SettingsDetailRow>
+            <button
+              type="button"
+              disabled={sending}
+              data-testid="empty-slot-send-now"
+              onClick={async () => {
+                setSending(true);
+                try {
+                  const res = await triggerEmptySlotNotification();
+                  if (res.success && res.data) {
+                    setSentOverlay(true);
+                  } else {
+                    toast.error({
+                      description: res.message ?? "Impossibile inviare la notifica.",
+                    });
+                  }
+                } catch {
+                  toast.error({ description: "Impossibile inviare la notifica." });
+                } finally {
+                  setSending(false);
                 }
-              } catch {
-                toast.error({ description: "Impossibile inviare la notifica." });
-              } finally {
-                setSending(false);
-              }
-            }}
-            className="inline-flex h-10 min-w-[136px] shrink-0 cursor-pointer items-center justify-center rounded-full border-[1.5px] border-[#dddddd] px-5 text-sm font-semibold text-[#222222] transition-colors duration-200 hover:border-[#222222] disabled:pointer-events-none disabled:opacity-60"
-          >
-            {sending ? <LoadingDots className="min-h-[1.5em] scale-[0.8]" /> : "Invia ora"}
-          </button>
-        </SettingsSubRow>
+              }}
+              className="inline-flex h-8 cursor-pointer items-center text-sm font-semibold text-[#222222] underline decoration-[1.5px] underline-offset-[4px] transition-opacity duration-200 disabled:pointer-events-none disabled:opacity-60"
+            >
+              {sending ? <LoadingDots className="min-h-[1.5em] scale-[0.8]" /> : "Invia ora per domani"}
+            </button>
+          </SettingsDetailRow>
+        </div>
       </SettingsReveal>
     </SettingsRow>
   );
@@ -526,8 +532,8 @@ function SettingsTab({
     />
   );
   // «Modifica messaggio» (scheda allievo) arriva con l'ancora del benvenuto:
-  // si apre direttamente la scheda «A mano».
-  const [reminderTab, setReminderTab] = React.useState<ReminderTabKey>("auto");
+  // si apre direttamente la scheda «Manuale».
+  const [reminderTab, setReminderTab] = React.useState<ReminderTabKey>("allievi");
   const [comunicatoOpen, setComunicatoOpen] = React.useState(false);
   React.useEffect(() => {
     if (window.location.hash === `#${WELCOME_SECTION_ANCHOR}`) setReminderTab("mano");
@@ -548,11 +554,15 @@ function SettingsTab({
           isFirst
           standalone={standalone}
         >
-          {/* REG-767: tre schede come «Prenotazioni e allievi». In «Automatici»
-              i canali stanno in cima e valgono per tutta la scheda; le righe che
-              non li seguono lo dicono («Solo nell'app»). Comportamento invariato. */}
+          {/* REG-767: schede come «Prenotazioni e allievi». REG-772: schede piatte
+              Allievi | Istruttori | Manuale | Ultimi invii; in Allievi e
+              Istruttori la legenda dei canali sta in cima e vale per la scheda,
+              le righe che non li seguono lo dicono («Solo nell'app»). */}
           <div data-testid="reminders-pane">
-            <div className="flex flex-wrap items-center gap-8 border-b border-[#e8e8e8]" role="tablist">
+            <div
+              className="flex flex-wrap items-center gap-x-[22px] border-b border-[#e8e8e8] sm:gap-x-8"
+              role="tablist"
+            >
               {REMINDER_TABS.map((tab) => (
                 <button
                   key={tab.key}
@@ -573,10 +583,15 @@ function SettingsTab({
               ))}
             </div>
 
-            {/* ══ AUTOMATICI ══ (REG-767, schema B: canali su ogni riga) */}
+            {/* ══ ALLIEVI / ISTRUTTORI ══ (REG-767, schema B: canali su ogni riga) */}
             {/* REG-771 bis: densità compatta, stile impostazioni iOS. */}
             <SettingsDensity value="compact">
-            <div className={cn("pt-5", reminderTab !== "auto" && "hidden")}>
+            <div
+              className={cn(
+                "pt-5",
+                reminderTab !== "allievi" && reminderTab !== "istruttori" && "hidden",
+              )}
+            >
               <div className="max-w-[620px]">
                 <p className="text-[13.5px] font-medium leading-relaxed text-[#6a6a6a]">
                   Per ogni messaggio scegli i canali: arriva su{" "}
@@ -603,8 +618,11 @@ function SettingsTab({
                 </div>
               </div>
 
-              {/* REG-771: il titolo dice a chi arrivano gli avvisi. */}
-              <SettingsSection title="Ai tuoi allievi" size="large" className="mt-7">
+              {/* REG-772: a chi arrivano lo dice la scheda, niente titolo. */}
+              <SettingsSection
+                testId="reminders-allievi"
+                className={cn("mt-6", reminderTab !== "allievi" && "hidden")}
+              >
                 <SettingsGroupLabel>Promemoria</SettingsGroupLabel>
                 <SettingsRow
                   title="Prima della guida"
@@ -733,7 +751,10 @@ function SettingsTab({
                 />
               </SettingsSection>
 
-              <SettingsSection title="Ai tuoi istruttori" size="large" className="mt-12">
+              <SettingsSection
+                testId="reminders-istruttori"
+                className={cn("mt-6", reminderTab !== "istruttori" && "hidden")}
+              >
                 <SettingsRow
                   title="Prima della guida"
                   icon={Clock}

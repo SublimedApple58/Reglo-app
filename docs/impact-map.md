@@ -301,7 +301,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 ### Communications
 - → **Payments**: calls settlement, retry, penalty, invoice jobs
 - → **Notifications**: canali **per comunicazione** (REG-767, `message-channels.ts`, `limits.channelsByMessage`, si parte con solo l'App): ogni messaggio parte su tutti e soli i canali accesi (`deliverToEach`). Chi aggiunge un punto di invio passa da `notifyAutoscuolaUser` (col suo `kind`) o da `deliverToEach`; una comunicazione nuova configurabile va aggiunta al catalogo
-- → **Impostazioni → Promemoria e notifiche**: `ChannelToggles` su ogni riga (scheda Automatici) + `RecentDeliveries` (`getRecentDeliveriesAction`, più canali per messaggio); `getChannelReachAction` serve ormai solo per sapere se WhatsApp è collegato
+- → **Impostazioni → Promemoria e notifiche**: `ChannelToggles` su ogni riga (schede Allievi e Istruttori, REG-772) + `RecentDeliveries` (`getRecentDeliveriesAction`, più canali per messaggio); `getChannelReachAction` serve ormai solo per sapere se WhatsApp è collegato
 - → **Mobile** (`reglo-mobile`): `/api/mobile/me/whatsapp` (interruttore nel profilo) e `whatsappConsent` alla registrazione
 - → **Repositioning**: processes reposition queue
 - → **Appointments**: auto-checkin, auto-complete, pending review transitions

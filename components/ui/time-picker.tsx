@@ -139,6 +139,7 @@ export function TimePickerInput({
   onClear,
   clearLabel = "Azzera",
   freeInput = false,
+  variant = "field",
   className,
 }: {
   /** Orario corrente "HH:MM" (null/undefined = non impostato, mostra placeholder). */
@@ -157,6 +158,12 @@ export function TimePickerInput({
   clearLabel?: string;
   /** Orario libero: campo per scriverlo (es. 14:50) oltre alle scelte rapide. */
   freeInput?: boolean;
+  /**
+   * `text` (REG-772): l'orario è solo testo, senza bordo né orologio; si
+   * sottolinea al passaggio e quando il pannello è aperto. Per gli elenchi di
+   * orari dentro le impostazioni («Posti liberi per domani»).
+   */
+  variant?: "field" | "text";
   className?: string;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -225,29 +232,42 @@ export function TimePickerInput({
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={handleOpenChange}>
       <PopoverPrimitive.Trigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "flex h-11 cursor-pointer select-none items-center gap-2 rounded-lg border-[1.5px] bg-white px-3 text-sm font-medium text-[#222222] transition-colors",
-            open ? "border-[#222222]" : "border-[#dddddd] hover:border-[#929292]",
-            className,
-          )}
-        >
-          {open ? (
-            label
-          ) : value != null ? (
-            value
-          ) : (
-            <span className="text-[#929292]">{placeholder ?? "—"}</span>
-          )}
-          <Clock
+        {variant === "text" ? (
+          <button
+            type="button"
             className={cn(
-              "size-[15px] shrink-0 transition-all duration-300 ease-out",
-              open ? "-rotate-[30deg] scale-110 text-[#222222]" : "text-[#929292]",
+              "inline-flex h-8 cursor-pointer select-none items-center text-sm font-semibold tabular-nums text-[#222222] decoration-[1.5px] underline-offset-[4px] transition-colors duration-200 hover:underline",
+              open && "underline",
+              className,
             )}
-            strokeWidth={1.8}
-          />
-        </button>
+          >
+            {open ? label : (value ?? placeholder ?? "—")}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={cn(
+              "flex h-11 cursor-pointer select-none items-center gap-2 rounded-lg border-[1.5px] bg-white px-3 text-sm font-medium text-[#222222] transition-colors",
+              open ? "border-[#222222]" : "border-[#dddddd] hover:border-[#929292]",
+              className,
+            )}
+          >
+            {open ? (
+              label
+            ) : value != null ? (
+              value
+            ) : (
+              <span className="text-[#929292]">{placeholder ?? "—"}</span>
+            )}
+            <Clock
+              className={cn(
+                "size-[15px] shrink-0 transition-all duration-300 ease-out",
+                open ? "-rotate-[30deg] scale-110 text-[#222222]" : "text-[#929292]",
+              )}
+              strokeWidth={1.8}
+            />
+          </button>
+        )}
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content

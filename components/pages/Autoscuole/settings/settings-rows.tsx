@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 export type SettingsIcon = React.ComponentType<{ className?: string; strokeWidth?: string | number }>;
 
 /**
- * REG-771 bis: densità delle righe. `compact` (scheda «Automatici») toglie
+ * REG-771 bis: densità delle righe. `compact` (schede Allievi e Istruttori) toglie
  * aria fra righe e gruppi come nelle impostazioni di iOS; i controlli restano
  * da 44px, quindi le righe non scendono sotto l'altezza di un tocco.
  */
@@ -43,7 +43,8 @@ export function SettingsSection({
   testId,
   size = "default",
 }: {
-  title: string;
+  /** REG-772: senza titolo quando lo dice già la scheda («Allievi», «Istruttori»). */
+  title?: string;
   icon?: SettingsIcon;
   /**
    * `large`: titolo che fa da separatore fra due pubblici («Ai tuoi allievi» /
@@ -61,26 +62,28 @@ export function SettingsSection({
 }) {
   return (
     <section id={id} data-testid={testId} className={cn("scroll-mt-6", className)}>
-      <div className="flex items-end justify-between gap-4">
-        <h3
-          className={cn(
-            "flex items-center gap-2.5 font-semibold text-[#222222]",
-            size === "large"
-              ? "text-[22px] leading-[1.2] tracking-[-0.4px]"
-              : "text-[17px] tracking-[-0.1px]",
-          )}
-        >
-          {Icon ? <Icon className="size-[19px] shrink-0" strokeWidth={1.9} /> : null}
-          {title}
-        </h3>
-        {action}
-      </div>
+      {title ? (
+        <div className="flex items-end justify-between gap-4">
+          <h3
+            className={cn(
+              "flex items-center gap-2.5 font-semibold text-[#222222]",
+              size === "large"
+                ? "text-[22px] leading-[1.2] tracking-[-0.4px]"
+                : "text-[17px] tracking-[-0.1px]",
+            )}
+          >
+            {Icon ? <Icon className="size-[19px] shrink-0" strokeWidth={1.9} /> : null}
+            {title}
+          </h3>
+          {action}
+        </div>
+      ) : null}
       {description ? (
         <p className="mt-1 max-w-[620px] text-[13.5px] font-medium leading-relaxed text-[#6a6a6a]">
           {description}
         </p>
       ) : null}
-      <div className={cn("divide-y divide-[#ebebeb]", size === "large" ? "mt-1.5" : "mt-2")}>
+      <div className={cn("divide-y divide-[#ebebeb]", !title ? undefined : size === "large" ? "mt-1.5" : "mt-2")}>
         {children}
       </div>
     </section>
@@ -216,6 +219,39 @@ export function SettingsSubRow({
     <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
       <span className="text-[13.5px] font-medium text-[#6a6a6a]">{label}</span>
       <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * REG-772: riga di dettaglio sotto una riga con interruttore («Posti liberi per
+ * domani»). Etichetta grigia a sinistra e valore come testo: su desktop il
+ * valore va sulla colonna dei canali (a destra), a 390px in una colonna fissa
+ * dopo l'etichetta. Divisore leggero, niente bordi né pillole.
+ */
+export function SettingsDetailRow({
+  label,
+  children,
+  testId,
+}: {
+  label?: string;
+  children: React.ReactNode;
+  testId?: string;
+}) {
+  return (
+    <div
+      data-testid={testId}
+      className={cn(
+        "flex min-h-11 gap-4 border-t border-[#f0f0f0]",
+        label
+          ? "grid grid-cols-[64px_1fr] items-baseline sm:flex sm:items-center sm:justify-between"
+          : "items-center",
+      )}
+    >
+      {label ? (
+        <span className="shrink-0 pt-3 text-sm font-medium text-[#6a6a6a] sm:pt-0">{label}</span>
+      ) : null}
+      {children}
     </div>
   );
 }
