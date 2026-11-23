@@ -706,7 +706,7 @@ function SettingsTab({
                 />
 
                 <SettingsGroupLabel
-                  note="Sono proposte, non impegni: arrivano solo come notifica a chi ha l'app, mai su WhatsApp o email."
+                  note="Sono proposte, non impegni: arrivano solo come notifica a chi ha l'app."
                 >
                   Solo nell&apos;app
                 </SettingsGroupLabel>
