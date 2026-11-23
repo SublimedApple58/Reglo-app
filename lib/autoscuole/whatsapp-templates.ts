@@ -56,7 +56,8 @@ export type WhatsAppTemplate = {
    * Nome su Meta: minuscolo, underscore. È la chiave dell'invio.
    *
    * `_v3` (22/10): tutti e dieci risottomessi col piè di pagina STOP
-   * (`WHATSAPP_FOOTER`), e i due riclassificati marketing riscritti.
+   * (`WHATSAPP_FOOTER`), e i due riclassificati marketing riscritti. Tutti
+   * approvati utility il 23/10 (stato letto su Telnyx il 23/11, REG-771).
    *
    * Il suffisso `_v2` non era una versione del testo: era la cicatrice del ritiro
    * del 16/10. Dopo aver cancellato i dieci template per sostituirne i testi,
@@ -102,7 +103,7 @@ export const WHATSAPP_TEMPLATES = {
   appointment_reminder_student: {
     name: "promemoria_guida_allievo_v3",
     category: "utility",
-    approval: "pending",
+    approval: "approved",
     previous: { name: "promemoria_guida_allievo_v2", category: "utility", approval: "approved" },
     variables: ["nome", "quando", "durata"],
     body:
@@ -112,7 +113,7 @@ export const WHATSAPP_TEMPLATES = {
   morning_reminder_student: {
     name: "promemoria_guida_mattutino_v3",
     category: "utility",
-    approval: "pending",
+    approval: "approved",
     previous: { name: "promemoria_guida_mattutino_v2", category: "marketing", approval: "approved" },
     variables: ["nome", "ora"],
     // `_v2` («oggi hai la guida alle {{2}}. Ci vediamo!») è stato riclassificato
@@ -124,7 +125,7 @@ export const WHATSAPP_TEMPLATES = {
   day_before_reminder_student: {
     name: "promemoria_guida_giorno_prima_v3",
     category: "utility",
-    approval: "pending",
+    approval: "approved",
     previous: { name: "promemoria_guida_giorno_prima_v2", category: "utility", approval: "approved" },
     variables: ["nome", "quando"],
     body: "Ciao {{1}}, domani hai la guida: {{2}}. A domani!",
@@ -134,7 +135,7 @@ export const WHATSAPP_TEMPLATES = {
   exam_reminder_student: {
     name: "promemoria_esame_allievo_v3",
     category: "utility",
-    approval: "pending",
+    approval: "approved",
     previous: { name: "promemoria_esame_allievo_v2", category: "utility", approval: "approved" },
     variables: ["nome", "data"],
     body:
@@ -144,7 +145,7 @@ export const WHATSAPP_TEMPLATES = {
   appointment_reminder_instructor: {
     name: "promemoria_guida_istruttore_v3",
     category: "utility",
-    approval: "pending",
+    approval: "approved",
     previous: { name: "promemoria_guida_istruttore_v2", category: "utility", approval: "approved" },
     variables: ["nome_istruttore", "nome_allievo", "quando", "durata"],
     body:
@@ -168,7 +169,7 @@ export const WHATSAPP_TEMPLATES = {
   appointment_cancelled: {
     name: "guida_annullata_allievo_v3",
     category: "utility",
-    approval: "pending",
+    approval: "approved",
     previous: { name: "guida_annullata_allievo_v2", category: "utility", approval: "approved" },
     variables: ["nome", "appuntamento"],
     body:
@@ -178,7 +179,7 @@ export const WHATSAPP_TEMPLATES = {
   appointment_rescheduled: {
     name: "guida_spostata_allievo_v3",
     category: "utility",
-    approval: "pending",
+    approval: "approved",
     previous: { name: "guida_spostata_allievo_v2", category: "marketing", approval: "approved" },
     variables: ["nome", "appuntamento", "prima", "adesso"],
     // Riscritto il 22/10: `_v2` («… si sposta … Ci vediamo nel nuovo orario!»)
@@ -190,7 +191,7 @@ export const WHATSAPP_TEMPLATES = {
   appointment_location_changed: {
     name: "guida_cambio_luogo_v3",
     category: "utility",
-    approval: "pending",
+    approval: "approved",
     previous: { name: "guida_cambio_luogo_v2", category: "utility", approval: "approved" },
     variables: ["nome", "appuntamento", "luogo"],
     body:
@@ -202,7 +203,7 @@ export const WHATSAPP_TEMPLATES = {
   exam_scheduled: {
     name: "esame_fissato_allievo_v3",
     category: "utility",
-    approval: "pending",
+    approval: "approved",
     previous: { name: "esame_fissato_allievo_v2", category: "utility", approval: "approved" },
     variables: ["nome", "quando"],
     body:
@@ -214,12 +215,12 @@ export const WHATSAPP_TEMPLATES = {
    * fila (vedi `creation-notice.ts`). `guide` è «la guida di giovedì 20
    * novembre alle 15:00» oppure «3 guide: giovedì 20/11 alle 15:00, …». Niente
    * istruttore (decisione di Tiziano): resta in push ed email. Nato già col
-   * piè di pagina STOP, quindi non ha una versione precedente: finché Meta
-   * non approva, la cascata passa all'email. */
+   * piè di pagina STOP, quindi non ha una versione precedente. Approvato
+   * utility da Meta il 18/11 (letto via GET su Telnyx il 23/11, REG-771). */
   appointment_created: {
     name: "guida_fissata_allievo_v1",
     category: "utility",
-    approval: "pending",
+    approval: "approved",
     variables: ["nome", "guide"],
     body:
       "Ciao {{1}}, l'autoscuola ha fissato per te {{2}}. " +
@@ -228,7 +229,7 @@ export const WHATSAPP_TEMPLATES = {
   case_deadline: {
     name: "scadenza_documento_allievo_v3",
     category: "utility",
-    approval: "pending",
+    approval: "approved",
     previous: { name: "scadenza_documento_allievo_v2", category: "utility", approval: "approved" },
     variables: ["nome", "documento", "data"],
     body:

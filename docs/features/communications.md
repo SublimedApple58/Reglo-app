@@ -132,10 +132,12 @@ pubblico o i loro canali fissi (`OFFER_CHANNELS`, `PUSH_ONLY`).
 `WHATSAPP_FOOTER` «Rispondi STOP…»), `category` **assegnata da Meta**,
 `approval`, e `previous` (il `_v2`). `sendableTemplateName` sceglie la prima
 versione **approvata e utility**; se nessuna lo è, `deliverWhatsApp` registra
-`skipped` e la cascata ripiega sull'email. Al 22/10: 8 `_v2` utility in uso, i
-due ex-marketing (mattutino, guida spostata) su email finché il `_v3` non è
-approvato. **Quando Meta approva un `_v3`, aggiornare `approval` qui** (lo stato
-si legge con `GET /v2/whatsapp/message_templates` su Telnyx).
+`skipped` e la riga non può accendere WhatsApp. Al 23/11 (REG-771, letto su
+Telnyx): tutti i dieci `_v3` e `guida_fissata_allievo_v1` sono **approvati
+utility**, quindi tutte le righe di «Automatici» hanno un modello. I `_v2` di
+mattutino e guida spostata restano marketing su Meta e non si usano. **Quando
+Meta cambia stato o categoria a un modello, aggiornare `approval`/`category`
+qui** (lo stato si legge con `GET /v2/whatsapp/message_templates` su Telnyx).
 
 ## Consenso
 

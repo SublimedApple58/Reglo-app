@@ -4,6 +4,7 @@ import {
   storedMessageChannels,
   whatsappReadyByMessage,
 } from "@/lib/autoscuole/message-channels";
+import { sendableTemplateName } from "@/lib/autoscuole/whatsapp-templates";
 
 /**
  * REG-767 — i canali per singola comunicazione: si parte con solo l'App,
@@ -67,13 +68,32 @@ describe("per la pagina", () => {
     expect(all.appointment_reminder_student).toEqual(["push"]);
   });
 
-  it("WhatsApp solo dove c'è un modello Meta utility approvato", () => {
+  it("REG-771: tutte le righe hanno un modello Meta utility approvato", () => {
     const ready = whatsappReadyByMessage();
-    expect(ready.appointment_cancelled).toBe(true);
-    // v2 marketing, v3 in attesa
-    expect(ready.morning_reminder_student).toBe(false);
-    expect(ready.appointment_rescheduled).toBe(false);
-    // v1 in attesa
-    expect(ready.appointment_created).toBe(false);
+    expect(Object.values(ready).every(Boolean)).toBe(true);
+  });
+
+  it("un modello si manda solo se approvato e utility, altrimenti la versione precedente", () => {
+    const base = { variables: ["nome"], body: "Ciao {{1}}, prova." };
+    // in attesa, precedente marketing: nessuno si può mandare
+    expect(
+      sendableTemplateName({
+        ...base,
+        name: "x_v3",
+        category: "utility",
+        approval: "pending",
+        previous: { name: "x_v2", category: "marketing", approval: "approved" },
+      }),
+    ).toBeNull();
+    // in attesa, precedente utility approvato: si manda il precedente
+    expect(
+      sendableTemplateName({
+        ...base,
+        name: "x_v3",
+        category: "utility",
+        approval: "pending",
+        previous: { name: "x_v2", category: "utility", approval: "approved" },
+      }),
+    ).toBe("x_v2");
   });
 });
