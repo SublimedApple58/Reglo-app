@@ -25,8 +25,8 @@ export type RecentDelivery = {
   at: string;
   label: string;
   studentName: string | null;
-  /** Il canale che ha consegnato, `null` se non è arrivato. */
-  channel: DeliveryChannel | null;
+  /** I canali che hanno consegnato (REG-767: possono essere più d'uno); vuoto se non è arrivato. */
+  channels: DeliveryChannel[];
   /** Perché non è arrivato, in parole dell'autoscuola. */
   reason: string | null;
 };
@@ -98,7 +98,10 @@ export function groupDeliveries(
   }
 
   return groups.slice(0, limit).map(({ first, rows: attempts }) => {
-    const delivered = attempts.find((attempt) => attempt.status === "sent");
+    const order: DeliveryChannel[] = ["push", "whatsapp", "email"];
+    const delivered = order.filter((channel) =>
+      attempts.some((attempt) => attempt.status === "sent" && attempt.channel === channel),
+    );
     const reasons = attempts
       .map((attempt) => friendlyReason(attempt.channel, attempt.error))
       .filter((reason): reason is string => Boolean(reason));
@@ -106,8 +109,8 @@ export function groupDeliveries(
       at: first.createdAt.toISOString(),
       label: deliveryKindLabel(first.kind),
       studentName: first.studentId ? names.get(first.studentId) ?? null : null,
-      channel: delivered ? (delivered.channel as DeliveryChannel) : null,
-      reason: delivered
+      channels: delivered,
+      reason: delivered.length
         ? null
         : reasons.length
           ? Array.from(new Set(reasons)).join(" · ")

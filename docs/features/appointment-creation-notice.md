@@ -9,7 +9,7 @@ l'esame (`exam_scheduled`). Piano e decisioni:
 ## Regole (decisioni di Tiziano del 17/11)
 - **Spento di default**, per autoscuola: Impostazioni → Promemoria e notifiche →
   «Avviso guida fissata» (`limits.studentCreationNoticeEnabled`). I canali sono
-  quelli della cascata già scelta (App → WhatsApp → Email, un messaggio solo).
+  i canali scelti sulla sua riga in Promemoria e notifiche (REG-767: parte su tutti quelli accesi).
 - **Chi lo fa partire**: titolare/segreteria/admin (web), istruttore (app),
   consorzio che accetta una richiesta guida, **assistente vocale** (incluso).
 - **Non parte** per: guide prenotate dall'allievo stesso (app, posto
@@ -43,7 +43,7 @@ Template `guida_fissata_allievo_v1` (utility, piè di pagina STOP), variabili
 `nome` e `guide` («la guida di giovedì 19 novembre alle 15:00» oppure «3 guide:
 giovedì 19/11 alle 15:00, …»), senza istruttore. Sottomesso a Meta via Telnyx il
 17/11 (template_id 4420418908269594). Finché è `pending` nel registro,
-`deliverWhatsApp` registra `skipped` e la cascata passa all'email. **Quando Meta
+`deliverWhatsApp` registra `skipped` (gli altri canali accesi partono comunque). **Quando Meta
 approva: `approval: "approved"` in `whatsapp-templates.ts`** e deploy di web e job.
 
 ## Files
@@ -58,6 +58,6 @@ approva: `approval: "approved"` in `whatsapp-templates.ts`** e deploy di web e j
 - Migrazione `20261117120000_appointment_creation_notice` (colonna `creationNotice` + indice)
 
 ## Connessioni
-- **Communications / Notifications**: cascata e registro come gli altri messaggi-evento.
+- **Communications / Notifications**: canali per riga (`appointment_created` in `message-channels.ts`) e registro come gli altri messaggi-evento.
 - **Mobile** (`reglo-mobile`): kind `appointment_created` in `types/notifications.ts`, `NotificationOverlay` (id stabile `created_<prima guida>`), `NotificationInboxScreen`; `getNotifications` dichiara `supports=appointment_created`.
 - `createAutoscuolaAppointment` ora salva `bookingSource = student_self` quando prenota l'allievo stesso (prima finiva `staff_*`; lo legge solo il KPI backoffice).

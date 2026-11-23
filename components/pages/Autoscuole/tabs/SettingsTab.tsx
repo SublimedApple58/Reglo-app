@@ -6,6 +6,8 @@ import {
   Bell,
   CalendarCheck,
   CalendarClock,
+  CalendarX,
+  SquareCheck,
   Check,
   Clock,
   Coffee,
@@ -40,14 +42,19 @@ import { InlineToggle } from "@/components/ui/inline-toggle";
 import { TimePickerInput } from "@/components/ui/time-picker";
 import { cn } from "@/lib/utils";
 import {
-  ChannelCascade,
-  type ChannelReach,
-} from "@/components/pages/Autoscuole/settings/ChannelCascade";
+  AppOnlyToggle,
+  ChannelIcon,
+  ChannelToggles,
+  type ChannelKey,
+} from "@/components/pages/Autoscuole/settings/ChannelToggles";
+import type { MessageChannelKey } from "@/lib/autoscuole/message-channels";
 import { RecentDeliveries } from "@/components/pages/Autoscuole/settings/RecentDeliveries";
 import { WELCOME_SECTION_ANCHOR } from "@/lib/autoscuole/whatsapp-welcome";
 import { WhatsAppWelcomeSection } from "@/components/pages/Autoscuole/settings/WhatsAppWelcomeSection";
 import {
+  RowControls,
   SETTINGS_SELECT_TRIGGER,
+  SettingsGroupLabel,
   SettingsReveal,
   SettingsRow,
   SettingsSection,
@@ -159,12 +166,13 @@ export type SettingsTabProps = {
   slotFillChannels: ChannelValue[];
   studentReminderChannels: ChannelValue[];
   instructorReminderChannels: ChannelValue[];
-  /** WhatsApp è collegato davvero? Se no, la riga non è accendibile (REG-500). */
+  /** WhatsApp è collegato davvero? Se no, l'icona non è accendibile (REG-500). */
   whatsappAvailable?: boolean;
-  /** Il numero da cui partono i WhatsApp, mostrato sotto la riga. */
-  whatsappSender?: string | null;
-  /** Quanti allievi raggiunge ogni canale; omessi, le righe mostrano il testo generico. */
-  channelReach?: Partial<Record<ChannelValue, ChannelReach>>;
+  /** REG-767: i canali accesi di ogni comunicazione (vuoto = spenta). */
+  messageChannels: Partial<Record<MessageChannelKey, string[]>>;
+  /** REG-767: dove WhatsApp ha un modello Meta approvato. */
+  whatsappReadyByMessage: Partial<Record<MessageChannelKey, boolean>>;
+  updateMessageChannels: (key: MessageChannelKey, next: ChannelKey[]) => Promise<void>;
   updateReminderSettings: (patch: {
     studentReminderMinutes?: number;
     instructorReminderMinutes?: number;
@@ -334,9 +342,9 @@ function EmptySlotNotificationSection({
       title="Posti liberi per domani"
       icon={CalendarClock}
       description="La sera prima, una notifica nell'app se ci sono guide libere."
-      control={
-        <InlineToggle checked={enabled} onChange={() => setEnabled((prev) => !prev)} size="lg" />
-      }
+      dim={!enabled}
+      stackOnMobile
+      control={<AppOnlyToggle on={enabled} onToggle={() => setEnabled((prev) => !prev)} />}
     >
       <SuccessOverlay
         open={sentOverlay}
@@ -470,8 +478,9 @@ function SettingsTab({
   instructorReminderEnabled,
   studentReminderChannels,
   whatsappAvailable = false,
-  whatsappSender = null,
-  channelReach,
+  messageChannels,
+  whatsappReadyByMessage,
+  updateMessageChannels,
   updateReminderSettings,
   emptySlotNotificationEnabled,
   setEmptySlotNotificationEnabled,
@@ -493,6 +502,27 @@ function SettingsTab({
   consortium = false,
 }: SettingsTabProps) {
   const standalone = Boolean(section);
+  // REG-767: i canali di ogni comunicazione, sulla sua riga.
+  const channelsOf = (key: MessageChannelKey) =>
+    (messageChannels[key] ?? []).filter(
+      (channel): channel is ChannelKey =>
+        channel === "push" || channel === "whatsapp" || channel === "email",
+    );
+  const offRow = (key: MessageChannelKey) => channelsOf(key).length === 0;
+  const channelsFor = (key: MessageChannelKey) => (
+    <ChannelToggles
+      testId={`channels-${key}`}
+      value={channelsOf(key)}
+      onChange={(next) => void updateMessageChannels(key, next)}
+      whatsapp={
+        !whatsappAvailable
+          ? "not_connected"
+          : whatsappReadyByMessage[key]
+            ? "ready"
+            : "no_template"
+      }
+    />
+  );
   // «Modifica messaggio» (scheda allievo) arriva con l'ancora del benvenuto:
   // si apre direttamente la scheda «A mano».
   const [reminderTab, setReminderTab] = React.useState<ReminderTabKey>("auto");
@@ -540,69 +570,67 @@ function SettingsTab({
               ))}
             </div>
 
-            {/* ══ AUTOMATICI ══ */}
-            <div className={cn("space-y-10 pt-8", reminderTab !== "auto" && "hidden")}>
-              {/* La cascata (REG-500): una scelta sola scrive sia i canali degli
-                  allievi sia quelli degli istruttori. */}
-              <ChannelCascade
-                value={studentReminderChannels}
-                onChange={(next) =>
-                  updateReminderSettings({
-                    studentReminderChannels: next,
-                    instructorReminderChannels: next,
-                  })
-                }
-                whatsapp={
-                  whatsappAvailable
-                    ? { state: "ready", sender: whatsappSender }
-                    : { state: "not_configured" }
-                }
-                reach={channelReach}
-              />
+            {/* ══ AUTOMATICI ══ (REG-767, schema B: canali su ogni riga) */}
+            <div className={cn("pt-6", reminderTab !== "auto" && "hidden")}>
+              <div className="max-w-[620px]">
+                <p className="text-[13.5px] font-medium leading-relaxed text-[#6a6a6a]">
+                  Per ogni messaggio scegli i canali: arriva su{" "}
+                  <span className="font-semibold text-[#222222]">tutti quelli accesi</span>. Tutti
+                  spenti, il messaggio non parte.
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] font-medium text-[#6a6a6a]">
+                  <span className="flex items-center gap-1.5">
+                    <ChannelIcon channel="push" state="on" size="legend" />
+                    acceso
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <ChannelIcon channel="push" state="off" size="legend" />
+                    spento
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <ChannelIcon channel="whatsapp" state="unavailable" size="legend" />
+                    non ancora disponibile
+                  </span>
+                </div>
+              </div>
 
-              <SettingsSection title="Allievi" icon={GraduationCap}>
+              <SettingsSection title="Allievi" icon={GraduationCap} className="mt-9">
+                <SettingsGroupLabel>Promemoria</SettingsGroupLabel>
                 <SettingsRow
-                  title="Promemoria prima della guida"
+                  title="Prima della guida"
                   icon={Clock}
+                  dim={offRow("appointment_reminder_student")}
                   stackOnMobile
                   control={
-                    <Select
-                      value={studentReminderMinutes}
-                      onValueChange={(value) =>
-                        updateReminderSettings({ studentReminderMinutes: Number(value) })
-                      }
-                    >
-                      <SelectTrigger className={SETTINGS_SELECT_TRIGGER} aria-label="Promemoria allievo">
-                        <SelectValue placeholder="Minuti" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {REMINDER_OPTIONS.map((minutes) => (
-                          <SelectItem key={minutes} value={String(minutes)}>
-                            {minutes} minuti prima
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <RowControls>
+                      <Select
+                        value={studentReminderMinutes}
+                        onValueChange={(value) =>
+                          updateReminderSettings({ studentReminderMinutes: Number(value) })
+                        }
+                      >
+                        <SelectTrigger className={SETTINGS_SELECT_TRIGGER} aria-label="Promemoria allievo">
+                          <SelectValue placeholder="Minuti" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {REMINDER_OPTIONS.map((minutes) => (
+                            <SelectItem key={minutes} value={String(minutes)}>
+                              {minutes} minuti prima
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {channelsFor("appointment_reminder_student")}
+                    </RowControls>
                   }
                 />
                 <SettingsRow
                   title="La mattina della guida"
                   icon={Coffee}
-                  description="Un promemoria in più, all'orario che scegli."
+                  dim={offRow("morning_reminder_student")}
+                  stackOnMobile
                   control={
-                    <InlineToggle
-                      checked={studentReminderMorningEnabled}
-                      onChange={() =>
-                        updateReminderSettings({
-                          studentReminderMorningEnabled: !studentReminderMorningEnabled,
-                        })
-                      }
-                      size="lg"
-                    />
-                  }
-                >
-                  <SettingsReveal open={studentReminderMorningEnabled}>
-                    <SettingsSubRow label="Orario">
+                    <RowControls>
                       <TimePickerInput
                         value={studentReminderMorningTime}
                         onChange={(value) =>
@@ -611,106 +639,124 @@ function SettingsTab({
                         minTime="05:00"
                         maxTime="12:00"
                       />
-                    </SettingsSubRow>
-                  </SettingsReveal>
-                </SettingsRow>
+                      {channelsFor("morning_reminder_student")}
+                    </RowControls>
+                  }
+                />
                 <SettingsRow
                   title="Il giorno prima"
                   icon={Moon}
-                  description="Un promemoria la sera prima, all'orario che scegli."
+                  dim={offRow("day_before_reminder_student")}
+                  stackOnMobile
                   control={
-                    <InlineToggle
-                      checked={studentReminderDayBeforeEnabled}
-                      onChange={() =>
-                        updateReminderSettings({
-                          studentReminderDayBeforeEnabled: !studentReminderDayBeforeEnabled,
-                        })
-                      }
-                      size="lg"
-                    />
-                  }
-                >
-                  <SettingsReveal open={studentReminderDayBeforeEnabled}>
-                    <SettingsSubRow label="Orario">
+                    <RowControls>
                       <TimePickerInput
                         value={studentReminderDayBeforeTime}
                         onChange={(value) =>
                           updateReminderSettings({ studentReminderDayBeforeTime: value })
                         }
                       />
-                    </SettingsSubRow>
-                  </SettingsReveal>
-                </SettingsRow>
-                {/* REG-758: avviso alla creazione, raggruppato (vedi creation-notice.ts). */}
+                      {channelsFor("day_before_reminder_student")}
+                    </RowControls>
+                  }
+                />
+
+                <SettingsGroupLabel>Avvisi sulle guide</SettingsGroupLabel>
+                {/* REG-758: guida fissata, raggruppata (vedi creation-notice.ts). */}
                 <SettingsRow
                   title="Guida fissata"
                   icon={CalendarCheck}
-                  description="Avviso quando la segreteria, un istruttore o la voce fissa una guida. Più guide di fila, un messaggio solo."
-                  control={
-                    <InlineToggle
-                      checked={studentCreationNoticeEnabled}
-                      onChange={() =>
-                        updateReminderSettings({
-                          studentCreationNoticeEnabled: !studentCreationNoticeEnabled,
-                        })
-                      }
-                      size="lg"
-                    />
-                  }
+                  dim={offRow("appointment_created")}
+                  description="Più guide fissate di fila arrivano in un messaggio solo."
+                  stackOnMobile
+                  control={channelsFor("appointment_created")}
+                />
+                <SettingsRow
+                  title="Guida annullata"
+                  icon={CalendarX}
+                  dim={offRow("appointment_cancelled")}
+                  stackOnMobile
+                  control={channelsFor("appointment_cancelled")}
+                />
+                <SettingsRow
+                  title="Guida spostata"
+                  icon={Repeat}
+                  dim={offRow("appointment_rescheduled")}
+                  stackOnMobile
+                  control={channelsFor("appointment_rescheduled")}
+                />
+                <SettingsRow
+                  title="Cambio di luogo"
+                  icon={MapPin}
+                  dim={offRow("appointment_location_changed")}
+                  stackOnMobile
+                  control={channelsFor("appointment_location_changed")}
+                />
+                <SettingsRow
+                  title="Esame fissato"
+                  icon={SquareCheck}
+                  dim={offRow("exam_scheduled")}
+                  stackOnMobile
+                  control={channelsFor("exam_scheduled")}
+                />
+
+                <SettingsGroupLabel
+                  note="Sono proposte, non impegni: arrivano solo come notifica a chi ha l'app, mai su WhatsApp o email."
+                >
+                  Solo nell&apos;app
+                </SettingsGroupLabel>
+                <EmptySlotNotificationSection
+                  enabled={emptySlotNotificationEnabled}
+                  setEnabled={setEmptySlotNotificationEnabled}
+                  target={emptySlotNotificationTarget}
+                  setTarget={setEmptySlotNotificationTarget}
+                  times={emptySlotNotificationTimes}
+                  setTimes={setEmptySlotNotificationTimes}
+                />
+                <SettingsRow
+                  title="Posto liberato, inviti di gruppo"
+                  icon={Plus}
+                  description="Partono sempre."
+                  stackOnMobile
+                  control={<AppOnlyToggle on testId="offers-row" />}
                 />
               </SettingsSection>
 
-              <SettingsSection title="Istruttori" icon={Users}>
+              <SettingsSection title="Istruttori" icon={Users} className="mt-10">
                 <SettingsRow
-                  title="Promemoria prima della guida"
+                  title="Prima della guida"
                   icon={Clock}
+                  dim={offRow("appointment_reminder_instructor")}
                   stackOnMobile
                   control={
-                    <Select
-                      value={instructorReminderEnabled ? instructorReminderMinutes : "off"}
-                      onValueChange={(value) =>
-                        value === "off"
-                          ? updateReminderSettings({ instructorReminderEnabled: false })
-                          : updateReminderSettings({
-                              instructorReminderEnabled: true,
-                              instructorReminderMinutes: Number(value),
-                            })
-                      }
-                    >
-                      <SelectTrigger className={SETTINGS_SELECT_TRIGGER} aria-label="Promemoria istruttore">
-                        <SelectValue placeholder="Minuti" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {REMINDER_OPTIONS.map((minutes) => (
-                          <SelectItem key={minutes} value={String(minutes)}>
-                            {minutes} minuti prima
-                          </SelectItem>
-                        ))}
-                        <SelectItem value="off">Non inviare</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <RowControls>
+                      <Select
+                        value={instructorReminderMinutes}
+                        onValueChange={(value) =>
+                          updateReminderSettings({ instructorReminderMinutes: Number(value) })
+                        }
+                      >
+                        <SelectTrigger className={SETTINGS_SELECT_TRIGGER} aria-label="Promemoria istruttore">
+                          <SelectValue placeholder="Minuti" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {REMINDER_OPTIONS.map((minutes) => (
+                            <SelectItem key={minutes} value={String(minutes)}>
+                              {minutes} minuti prima
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {channelsFor("appointment_reminder_instructor")}
+                    </RowControls>
                   }
                 />
-              </SettingsSection>
-
-              <SettingsSection
-                title="Solo nell'app"
-                icon={Smartphone}
-                description="Sono proposte, non impegni: arrivano solo come notifica a chi ha l'app, mai su WhatsApp o email."
-              >
-                  <EmptySlotNotificationSection
-                    enabled={emptySlotNotificationEnabled}
-                    setEnabled={setEmptySlotNotificationEnabled}
-                    target={emptySlotNotificationTarget}
-                    setTarget={setEmptySlotNotificationTarget}
-                    times={emptySlotNotificationTimes}
-                    setTimes={setEmptySlotNotificationTimes}
-                  />
                 <SettingsRow
-                  title="Posto liberato, inviti di gruppo, sostituzioni"
+                  title="Richieste di sostituzione"
                   icon={Repeat}
-                  description="Partono da soli quando serve: non si spengono."
-                  control={<span className="text-[13.5px] font-medium text-[#6a6a6a]">Sempre</span>}
+                  description="Partono sempre."
+                  stackOnMobile
+                  control={<AppOnlyToggle on />}
                 />
               </SettingsSection>
             </div>

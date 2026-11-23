@@ -111,10 +111,9 @@ l'inbox mobile ricostruisce il sottotitolo da lì, non dal testo del push.
 
 `components/pages/Autoscuole/tabs/SettingsTab.tsx`, sezione `reminders` (overlay Impostazioni, auto-save). **Rifatto a novembre 2026 (REG-767)** con tre schede come «Prenotazioni e allievi» e i mattoni di `settings/settings-rows.tsx` (`SettingsSection`, `SettingsRow`, `SettingsReveal`, `SettingsSubRow`): righe titolo + riga grigia + controllo, glifo a un colore accanto ai titoli, divisori sottili, niente card né pillole.
 - **Automatici**
-  - **Canali** (`ChannelCascade`, REG-500) in cima: valgono per tutta la scheda, tranne «Solo nell'app». Una scelta scrive i canali di allievi e istruttori.
-  - **Allievi**: promemoria prima della guida; «La mattina della guida» e «Il giorno prima» (acceso, compare l'orario); «Guida fissata» (REG-758).
-  - **Istruttori**: promemoria prima della guida, con «Non inviare».
-  - **Solo nell'app**: «Posti liberi per domani» (`emptySlotNotificationEnabled/Target/Times`, «Invia ora» → `triggerEmptySlotNotification`) e una riga descrittiva per le offerte fisse (posto liberato, inviti di gruppo, sostituzioni: `OFFER_CHANNELS`).
+  - **Canali su ogni riga** (`settings/ChannelToggles.tsx`, icone a contorno: App = telefono col puntino, WhatsApp, Email; nere accese, grigie spente, barrate se WhatsApp non ha un modello approvato o non è collegato). Ogni comunicazione parte su tutti e soli i canali accesi; tutti spenti = spenta (vedi `communications.md`). Il parametro della riga (minuti, orario) sta accanto ai canali.
+  - **Allievi** — Promemoria: prima della guida (minuti), la mattina (orario), il giorno prima (orario); Avvisi sulle guide: guida fissata (REG-758), annullata, spostata, cambio di luogo, esame fissato; **Solo nell'app** (icona app fissa + «Solo app»): «Posti liberi per domani» (`emptySlotNotificationEnabled/Target/Times`, «Invia ora» → `triggerEmptySlotNotification`) e una riga descrittiva per le offerte fisse (posto liberato, inviti di gruppo: `OFFER_CHANNELS`).
+  - **Istruttori**: promemoria prima della guida (minuti; tutti i canali spenti = «non inviare»), richieste di sostituzione (solo app, fisse).
 - **A mano**: «Messaggio di benvenuto» (`WhatsAppWelcomeSection`, vedi `whatsapp-welcome.md`; con l'ancora `#messaggio-di-benvenuto` si apre direttamente questa scheda) e il rimando a «Invia comunicato».
 - **Ultimi invii**: `RecentDeliveries`.
 Comportamento e chiavi dei limits invariati rispetto a prima del redesign.

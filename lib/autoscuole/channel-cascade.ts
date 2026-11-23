@@ -8,6 +8,10 @@
  * **tutti** i canali spuntati. Con WhatsApp acceso, chi ha l'app avrebbe
  * ricevuto push + WhatsApp + email dello stesso promemoria — e pagato da noi.
  *
+ * REG-767 (24/11/2026): la cascata è finita. Ogni comunicazione ha i suoi
+ * canali (`message-channels.ts`) e parte su tutti quelli accesi
+ * (`deliverToEach`). Resta l'ordine fisso in cui si provano.
+ *
  * L'ordine è fisso e non configurabile: l'app è gratis e arriva a chi l'ha
  * installata; WhatsApp a chi non ce l'ha; l'email resta la rete per chi non ha
  * nemmeno un numero. L'autoscuola sceglie solo **quali** gradini esistono.
@@ -26,30 +30,38 @@ export const CASCADE_ORDER: readonly DeliveryChannel[] = ["push", "whatsapp", "e
 export const OFFER_CHANNELS = ["push"] as const satisfies readonly DeliveryChannel[];
 
 /**
- * Un gradino della cascata: prova a consegnare e dice se ce l'ha fatta.
+ * Un canale: prova a consegnare e dice se ce l'ha fatta.
  * `true` vuol dire **consegnato** (la push ha raggiunto almeno un dispositivo,
  * il WhatsApp è partito, l'email è stata accettata), non «ho provato».
  */
 export type CascadeStep = () => Promise<boolean>;
 
 /**
- * Scende la cascata fra i canali attivi e si ferma al primo che consegna.
- * Ritorna il canale che ha consegnato, o `null` se nessuno ce l'ha fatta.
+ * REG-767: la comunicazione parte su **tutti e soli** i canali accesi sulla sua
+ * riga, nell'ordine App → WhatsApp → Email. Niente cascata e niente riserva
+ * (decisione di Tiziano del 24/11/2026): se è acceso solo WhatsApp va solo su
+ * WhatsApp, se sono accesi App ed Email va su tutti e due. In serie e non in
+ * parallelo: ogni tentativo scrive una riga di registro.
  *
- * I gradini mancanti in `steps` si saltano: un punto di invio che non ha
- * un'email da mandare semplicemente non la passa.
+ * Ritorna i canali che hanno consegnato (vuoto se nessuno). I canali senza
+ * `step` si saltano: un punto di invio senza email da mandare non la passa.
  */
-export async function deliverByCascade(
+export async function deliverToEach(
   channels: readonly DeliveryChannel[],
   steps: Partial<Record<DeliveryChannel, CascadeStep>>,
-): Promise<DeliveryChannel | null> {
+): Promise<DeliveryChannel[]> {
+  const delivered: DeliveryChannel[] = [];
   for (const channel of CASCADE_ORDER) {
     if (!channels.includes(channel)) continue;
     const step = steps[channel];
     if (!step) continue;
-    if (await step()) return channel;
+    try {
+      if (await step()) delivered.push(channel);
+    } catch {
+      // Un canale caduto non ferma gli altri.
+    }
   }
-  return null;
+  return delivered;
 }
 
 /** La push conta come consegnata solo se almeno un dispositivo l'ha presa. */

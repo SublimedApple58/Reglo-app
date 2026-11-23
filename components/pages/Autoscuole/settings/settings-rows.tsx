@@ -117,6 +117,33 @@ export function SettingsRow({
   );
 }
 
+/**
+ * Etichetta di un gruppo di righe dentro una sezione («Promemoria», «Solo
+ * nell'app»): grigia e piccola, con una nota facoltativa. La riga che segue non
+ * ha la linea sopra, così l'etichetta le fa da titolo.
+ */
+export function SettingsGroupLabel({
+  children,
+  note,
+}: {
+  children: React.ReactNode;
+  note?: string;
+}) {
+  return (
+    <div className="pb-1 pt-6 first:pt-3 [&+*]:!border-t-0">
+      <div className="text-[13px] font-semibold text-[#929292]">{children}</div>
+      {note ? (
+        <p className="mt-1 max-w-[560px] text-[13px] font-medium leading-relaxed text-[#6a6a6a]">{note}</p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Parametro della riga (minuti, orario) e canali, affiancati; a 390px vanno a capo. */
+export function RowControls({ children }: { children: React.ReactNode }) {
+  return <div className="flex flex-wrap items-center gap-x-4 gap-y-2">{children}</div>;
+}
+
 /** Dettagli che compaiono quando l'interruttore è acceso: altezza + dissolvenza, 250ms. */
 export function SettingsReveal({ open, children }: { open: boolean; children: React.ReactNode }) {
   return (

@@ -31,7 +31,7 @@ import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import { sendDynamicEmail } from "@/email";
 import type { ChannelAudience } from "@/lib/autoscuole/reminder-channels";
 import { resolveChannels } from "@/lib/autoscuole/reminder-channels";
-import { deliverByCascade } from "@/lib/autoscuole/channel-cascade";
+import { deliverToEach } from "@/lib/autoscuole/channel-cascade";
 import { prisma } from "@/db/prisma";
 
 /** I canali tecnicamente possibili oggi per un messaggio-evento. */
@@ -135,16 +135,17 @@ async function creationNoticeStillQueued(input: NotifyInput): Promise<boolean> {
 }
 
 /**
- * Manda il messaggio sul primo canale attivo che consegna (App → WhatsApp →
- * Email, vedi `channel-cascade.ts`). **Non lancia mai**: un canale caduto
- * non deve fermare gli altri né l'operazione che l'ha generato.
+ * Manda il messaggio su tutti i canali accesi per lui (App, WhatsApp, Email,
+ * in quest'ordine: vedi `message-channels.ts` e `channel-cascade.ts`).
+ * **Non lancia mai**: un canale caduto non deve fermare gli altri né
+ * l'operazione che l'ha generato.
  */
 export async function notifyAutoscuolaUser(input: NotifyInput): Promise<void> {
   if (await creationNoticeStillQueued(input)) return;
   const supports = input.supports ?? EVENT_CHANNELS;
   const channels = input.channels
     ? supports.filter((channel) => input.channels!.includes(channel))
-    : await resolveChannels(input.companyId, input.audience, supports);
+    : await resolveChannels(input.companyId, input.audience, supports, input.kind);
   if (!channels.length) return;
 
   const attempt = {
@@ -155,10 +156,9 @@ export async function notifyAutoscuolaUser(input: NotifyInput): Promise<void> {
     body: input.body,
   };
 
-  // REG-500: cascata, non ventaglio. Prima ogni canale attivo partiva per
-  // conto suo, e chi aveva l'app riceveva anche email (e domani WhatsApp)
-  // dello stesso evento. Ora ci si ferma al primo canale che consegna.
-  await deliverByCascade(channels, {
+  // REG-767: su tutti e soli i canali accesi per questa comunicazione (era la
+  // cascata di REG-500, che si fermava al primo canale che consegnava).
+  await deliverToEach(channels, {
     push: () =>
       deliverAndLog(
         { ...attempt, channel: "push", recipient: input.recipient.userId },

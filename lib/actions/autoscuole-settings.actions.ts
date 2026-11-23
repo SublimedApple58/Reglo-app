@@ -38,6 +38,13 @@ import {
   staffFirstName,
 } from "@/lib/autoscuole/whatsapp-welcome";
 import {
+  MESSAGE_CHANNEL_KEYS,
+  messageChannelsForSettings,
+  normalizeChannelList,
+  whatsappReadyByMessage,
+  type MessageChannelKey,
+} from "@/lib/autoscuole/message-channels";
+import {
   NATIONAL_HOLIDAY_IDS,
   parseNationalHolidaySettings,
 } from "@/lib/autoscuole/national-holidays";
@@ -342,6 +349,13 @@ const autoscuolaSettingsPatchSchema = z
       .string()
       .max(WELCOME_TEMPLATE_MAX_LENGTH, "Il messaggio è troppo lungo.")
       .nullable()
+      .optional(),
+    /**
+     * REG-767: canali per singola comunicazione. Si salvano solo le righe
+     * passate; lista vuota = comunicazione spenta.
+     */
+    channelsByMessage: z
+      .record(z.enum(MESSAGE_CHANNEL_KEYS), z.array(z.enum(["push", "whatsapp", "email"])))
       .optional(),
     instructorReminderMinutes: reminderMinutesSchema.optional(),
     instructorReminderEnabled: z.boolean().optional(),
@@ -655,6 +669,10 @@ export type AutoscuolaSettingsData = {
   studentCreationNoticeEnabled: boolean;
   /** REG-767: già risolto (il default quando l'azienda non l'ha cambiato). */
   studentWelcomeWhatsappTemplate: string;
+  /** REG-767: i canali accesi di ogni comunicazione (vuoto = spenta). */
+  messageChannels: Record<MessageChannelKey, string[]>;
+  /** REG-767: dove WhatsApp ha un modello Meta utility approvato. */
+  whatsappReadyByMessage: Record<MessageChannelKey, boolean>;
   instructorReminderMinutes: number;
   instructorReminderEnabled: boolean;
   slotFillChannels: string[];
@@ -1082,6 +1100,8 @@ const resolveAutoscuolaSettingsData = async (
     studentReminderDayBeforeTime,
     studentCreationNoticeEnabled,
     studentWelcomeWhatsappTemplate,
+    messageChannels: messageChannelsForSettings(limits as Record<string, unknown>),
+    whatsappReadyByMessage: whatsappReadyByMessage(),
     instructorReminderMinutes,
     instructorReminderEnabled,
     slotFillChannels,
@@ -1885,6 +1905,20 @@ export async function updateAutoscuolaSettings(
         payload.studentReminderDayBeforeTime ?? (typeof limits.studentReminderDayBeforeTime === "string" ? limits.studentReminderDayBeforeTime : "19:00"),
       studentCreationNoticeEnabled:
         payload.studentCreationNoticeEnabled ?? (limits.studentCreationNoticeEnabled === true),
+      // REG-767: le righe passate sovrascrivono, le altre restano (o ereditano).
+      channelsByMessage: payload.channelsByMessage
+        ? {
+            ...((limits.channelsByMessage && typeof limits.channelsByMessage === "object"
+              ? limits.channelsByMessage
+              : {}) as Record<string, string[]>),
+            ...Object.fromEntries(
+              Object.entries(payload.channelsByMessage).map(([key, list]) => [
+                key,
+                normalizeChannelList(list ?? []),
+              ]),
+            ),
+          }
+        : (limits.channelsByMessage as Record<string, string[]> | undefined),
       // Vuoto = torna al default: si salva null invece di una stringa vuota.
       studentWelcomeWhatsappTemplate:
         payload.studentWelcomeWhatsappTemplate !== undefined
@@ -2121,6 +2155,7 @@ export async function updateAutoscuolaSettings(
         studentWelcomeWhatsappTemplate: resolveWelcomeTemplate(
           nextLimits.studentWelcomeWhatsappTemplate,
         ),
+        messageChannels: messageChannelsForSettings(nextLimits as Record<string, unknown>),
         instructorReminderMinutes: nextLimits.instructorReminderMinutes,
         instructorReminderEnabled: nextLimits.instructorReminderEnabled,
         slotFillChannels: nextLimits.slotFillChannels,

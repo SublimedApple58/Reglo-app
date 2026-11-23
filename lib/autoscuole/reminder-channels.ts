@@ -10,6 +10,7 @@
  */
 import type { DeliveryChannel } from "@/lib/autoscuole/delivery-log";
 import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
+import { effectiveMessageChannels, isMessageChannelKey } from "@/lib/autoscuole/message-channels";
 
 /**
  * Quando l'autoscuola non ha scelto, valgono tutti e tre. È il default storico
@@ -66,7 +67,15 @@ export const resolveChannels = async (
   companyId: string,
   audience: ChannelAudience,
   supports: readonly DeliveryChannel[],
+  kind?: string,
 ): Promise<DeliveryChannel[]> => {
+  // REG-767: le comunicazioni del catalogo hanno i loro canali (e si spengono
+  // con la riga vuota); tutto il resto segue ancora la scelta del pubblico.
+  if (kind && isMessageChannelKey(kind) && audience !== "owner") {
+    const limits = await getCachedCompanyServiceLimits(companyId);
+    const own = effectiveMessageChannels(limits as Record<string, unknown>, kind);
+    return supports.filter((channel) => own.includes(channel));
+  }
   const configured = await getConfiguredChannels(companyId, audience);
   return supports.filter((channel) => configured.includes(channel));
 };

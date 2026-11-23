@@ -92,17 +92,28 @@ da regola, le offerte di scambio, gli slot liberati e gli inviti alle guide di
 gruppo: sono testo libero, e fuori dalle 24 ore Meta non lo accetta. Quelle
 restano `skipped` finché qualcuno non sottomette un template.
 
-## La cascata: un messaggio, un canale (REG-500, 22/10/2026)
+## Canali per comunicazione (REG-767, 24/11/2026; prima: la cascata di REG-500)
 
-`lib/autoscuole/channel-cascade.ts` → `deliverByCascade(channels, steps)` scende
-**App → WhatsApp → Email** (ordine fisso) e si ferma al primo gradino che
-consegna. Lo usano i 4 blocchi dei promemoria in `communications.ts` e
-`notifyAutoscuolaUser` (`notify.ts`). Prima partivano **tutti** i canali
-spuntati, mentre la UI prometteva «una volta sola».
+Ogni comunicazione del catalogo (`lib/autoscuole/message-channels.ts`: i tre
+promemoria allievo, il promemoria istruttore, guida fissata, annullata,
+spostata, cambio luogo, esame fissato) ha **i suoi canali**, nella chiave
+`channelsByMessage` dei limits. Parte su **tutti e soli** i canali accesi sulla
+sua riga (`deliverToEach` in `channel-cascade.ts`, ordine App → WhatsApp →
+Email): niente cascata, niente riserva. Nessun canale acceso = non parte (dove
+c'è, si spegne anche il suo interruttore: mattina, giorno prima, guida fissata,
+istruttore). Le righe mai toccate **ereditano** `studentReminderChannels` /
+`instructorReminderChannels`. Lo usano i 4 blocchi dei promemoria in
+`communications.ts` (job Trigger: arriva in prod solo con `trigger:deploy:prod`)
+e `notifyAutoscuolaUser` (`notify.ts`, via `resolveChannels(…, kind)`). Gli
+altri messaggi (fasi, festività, offerte…) seguono ancora la scelta del
+pubblico o i loro canali fissi (`OFFER_CHANNELS`, `PUSH_ONLY`).
+
+> Storia: dal 22/10 (REG-500) `deliverByCascade` scendeva App → WhatsApp → Email
+> fermandosi al primo che consegnava. Tolta il 24/11 su decisione di Tiziano.
 
 - Una push conta come consegnata solo se `sent > 0` (`pushReachedADevice`):
-  `deliverAndLog` registra `skipped`/`failed` una push senza dispositivi, e la
-  cascata passa al gradino dopo.
+  `deliverAndLog` registra `skipped`/`failed` una push senza dispositivi (gli
+  altri canali accesi partono comunque).
 - Lo stesso per l'email verso un indirizzo non consegnabile (segnaposto
   `@no-app.reglo.local` degli allievi senza email, account anonimizzati;
   `isUndeliverableEmail`): `deliverAndLog` registra `skipped` «nessuna email

@@ -1,17 +1,13 @@
 import {
   CASCADE_ORDER,
   OFFER_CHANNELS,
-  deliverByCascade,
+  deliverToEach,
   pushReachedADevice,
 } from "@/lib/autoscuole/channel-cascade";
 
 /**
- * REG-500 — un messaggio, un canale.
- *
- * Il bug che questi test impediscono di rifare: la UI prometteva «ogni allievo
- * riceve il messaggio una volta sola», mentre promemoria e messaggi-evento
- * partivano su tutti i canali spuntati. Con WhatsApp acceso, chi ha l'app
- * avrebbe ricevuto push + WhatsApp + email dello stesso promemoria.
+ * REG-767 — una comunicazione parte su tutti e soli i canali accesi sulla sua
+ * riga (era la cascata di REG-500, che si fermava al primo che consegnava).
  */
 
 const recorder = () => {
@@ -23,32 +19,32 @@ const recorder = () => {
   return { calls, step };
 };
 
-describe("deliverByCascade", () => {
-  it("si ferma al primo canale che consegna", async () => {
+describe("deliverToEach", () => {
+  it("prova tutti i canali accesi e riporta quelli che hanno consegnato", async () => {
     const { calls, step } = recorder();
-    const used = await deliverByCascade(["push", "whatsapp", "email"], {
+    const used = await deliverToEach(["push", "whatsapp", "email"], {
       push: step("push", true),
-      whatsapp: step("whatsapp", true),
+      whatsapp: step("whatsapp", false),
       email: step("email", true),
     });
-    expect(used).toBe("push");
-    expect(calls).toEqual(["push"]);
+    expect(calls).toEqual(["push", "whatsapp", "email"]);
+    expect(used).toEqual(["push", "email"]);
   });
 
-  it("chi non ha l'app riceve WhatsApp, e niente email", async () => {
+  it("solo WhatsApp acceso → solo WhatsApp, niente riserva", async () => {
     const { calls, step } = recorder();
-    const used = await deliverByCascade(["push", "whatsapp", "email"], {
-      push: step("push", false),
-      whatsapp: step("whatsapp", true),
+    const used = await deliverToEach(["whatsapp"], {
+      push: step("push", true),
+      whatsapp: step("whatsapp", false),
       email: step("email", true),
     });
-    expect(used).toBe("whatsapp");
-    expect(calls).toEqual(["push", "whatsapp"]);
+    expect(calls).toEqual(["whatsapp"]);
+    expect(used).toEqual([]);
   });
 
   it("l'ordine è sempre App → WhatsApp → Email, comunque arrivi la lista", async () => {
     const { calls, step } = recorder();
-    await deliverByCascade(["email", "whatsapp", "push"], {
+    await deliverToEach(["email", "whatsapp", "push"], {
       push: step("push", false),
       whatsapp: step("whatsapp", false),
       email: step("email", false),
@@ -56,19 +52,20 @@ describe("deliverByCascade", () => {
     expect(calls).toEqual([...CASCADE_ORDER]);
   });
 
-  it("un canale spento dall'autoscuola non si prova", async () => {
-    const { calls, step } = recorder();
-    const used = await deliverByCascade(["push", "email"], {
-      push: step("push", false),
-      whatsapp: step("whatsapp", true),
-      email: step("email", true),
+  it("un canale che lancia non ferma gli altri", async () => {
+    const used = await deliverToEach(["push", "email"], {
+      push: async () => {
+        throw new Error("giù");
+      },
+      email: async () => true,
     });
-    expect(used).toBe("email");
-    expect(calls).toEqual(["push", "email"]);
+    expect(used).toEqual(["email"]);
   });
 
-  it("senza gradini utili torna null", async () => {
-    expect(await deliverByCascade(["push"], {})).toBeNull();
+  it("nessun canale acceso → non parte niente", async () => {
+    const { calls, step } = recorder();
+    expect(await deliverToEach([], { push: step("push", true) })).toEqual([]);
+    expect(calls).toEqual([]);
   });
 });
 

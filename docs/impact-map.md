@@ -300,8 +300,8 @@ Each entry: **Feature** → list of features it connects to, with reason.
 
 ### Communications
 - → **Payments**: calls settlement, retry, penalty, invoice jobs
-- → **Notifications**: sends reminders **in cascata** App → WhatsApp → Email (`channel-cascade.ts`, REG-500): un messaggio, un canale. Chi aggiunge un punto di invio passa da `notifyAutoscuolaUser` o da `deliverByCascade`, mai canali in parallelo
-- → **Impostazioni → Promemoria e notifiche**: `ChannelCascade` + `RecentDeliveries` leggono `getChannelReachAction` / `getRecentDeliveriesAction`; una scelta scrive sia i canali allievi sia istruttori
+- → **Notifications**: canali **per comunicazione** (REG-767, `message-channels.ts`, `limits.channelsByMessage`, ereditati dai globali): ogni messaggio parte su tutti e soli i canali accesi (`deliverToEach`). Chi aggiunge un punto di invio passa da `notifyAutoscuolaUser` (col suo `kind`) o da `deliverToEach`; una comunicazione nuova configurabile va aggiunta al catalogo
+- → **Impostazioni → Promemoria e notifiche**: `ChannelToggles` su ogni riga (scheda Automatici) + `RecentDeliveries` (`getRecentDeliveriesAction`, più canali per messaggio); `getChannelReachAction` serve ormai solo per sapere se WhatsApp è collegato
 - → **Mobile** (`reglo-mobile`): `/api/mobile/me/whatsapp` (interruttore nel profilo) e `whatsappConsent` alla registrazione
 - → **Repositioning**: processes reposition queue
 - → **Appointments**: auto-checkin, auto-complete, pending review transitions

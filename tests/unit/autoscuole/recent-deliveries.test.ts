@@ -34,9 +34,22 @@ describe("groupDeliveries", () => {
     expect(result[0]).toMatchObject({
       studentName: "Giulia Rossi",
       label: "Promemoria guida",
-      channel: "whatsapp",
+      channels: ["whatsapp"],
       reason: null,
     });
+  });
+
+  it("REG-767: arrivato su più canali li mostra tutti, in ordine", () => {
+    const [item] = groupDeliveries(
+      [
+        row({ channel: "email", status: "sent", recipient: "giulia@example.it" }),
+        row({ channel: "push", status: "sent" }),
+      ],
+      names,
+      10,
+    );
+    expect(item.channels).toEqual(["push", "email"]);
+    expect(item.reason).toBeNull();
   });
 
   it("niente arrivato: il motivo è detto in parole della segreteria", () => {
@@ -48,7 +61,7 @@ describe("groupDeliveries", () => {
       names,
       10,
     );
-    expect(item.channel).toBeNull();
+    expect(item.channels).toEqual([]);
     expect(item.reason).toBe("ha chiesto di non ricevere WhatsApp · non ha l'app");
   });
 

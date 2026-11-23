@@ -2,12 +2,13 @@
 
 import * as React from "react";
 
-import { Bell, History, Mail, MessageCircle, XCircle } from "lucide-react";
+import { History, Mail, MessageCircle, XCircle } from "lucide-react";
 
 import { getRecentDeliveriesAction } from "@/lib/actions/autoscuole-settings.actions";
 import type { RecentDelivery } from "@/lib/autoscuole/recent-deliveries";
 import { cn } from "@/lib/utils";
 import { SettingsSection } from "@/components/pages/Autoscuole/settings/settings-rows";
+import { AppChannelIcon } from "@/components/pages/Autoscuole/settings/ChannelToggles";
 
 /**
  * «Ultimi invii» (REG-500): cosa è partito davvero, e su quale canale.
@@ -22,7 +23,7 @@ import { SettingsSection } from "@/components/pages/Autoscuole/settings/settings
 const COLLAPSED = 5;
 
 const CHANNEL = {
-  push: { icon: Bell, label: "App" },
+  push: { icon: AppChannelIcon, label: "App" },
   whatsapp: { icon: MessageCircle, label: "WhatsApp" },
   email: { icon: Mail, label: "Email" },
 } as const;
@@ -81,8 +82,7 @@ export function RecentDeliveries() {
         </div>
       ) : (
         visible.map((item, index) => {
-          const channel = item.channel ? CHANNEL[item.channel] : null;
-          const Icon = channel?.icon ?? XCircle;
+          const delivered = item.channels.map((key) => CHANNEL[key]);
           return (
           <div
             key={`${item.at}-${index}`}
@@ -100,15 +100,21 @@ export function RecentDeliveries() {
                 </div>
               ) : null}
             </div>
-            <div
-              className={cn(
-                "inline-flex items-center gap-1.5 whitespace-nowrap text-[13px] font-medium",
-                channel ? "text-[#6a6a6a]" : "text-[#222222]",
-              )}
-            >
-              <Icon className="size-3.5 self-center" strokeWidth={2} />
-              {channel?.label ?? "Non arrivato"}
-            </div>
+            {delivered.length ? (
+              <div className="inline-flex items-center gap-3 whitespace-nowrap text-[13px] font-medium text-[#6a6a6a]">
+                {delivered.map(({ icon: Icon, label }) => (
+                  <span key={label} className="inline-flex items-center gap-1.5">
+                    <Icon className="size-3.5 self-center" strokeWidth={2} />
+                    {label}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 whitespace-nowrap text-[13px] font-medium text-[#222222]">
+                <XCircle className="size-3.5 self-center" strokeWidth={2} />
+                Non arrivato
+              </div>
+            )}
           </div>
           );
         })

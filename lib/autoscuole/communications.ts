@@ -5,9 +5,9 @@ import { sendDynamicEmail } from "@/email";
 import { prisma as defaultPrisma } from "@/db/prisma";
 import { deliverWhatsApp } from "@/lib/autoscuole/whatsapp-delivery";
 // REG-604: i canali li decide un solo modulo, condiviso con i messaggi-evento.
-import { parseReminderChannels } from "@/lib/autoscuole/reminder-channels";
+import { effectiveMessageChannels } from "@/lib/autoscuole/message-channels";
 import { deliverAndLog } from "@/lib/autoscuole/delivery-log";
-import { deliverByCascade } from "@/lib/autoscuole/channel-cascade";
+import { deliverToEach } from "@/lib/autoscuole/channel-cascade";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
   processAutoscuolaInvoiceFinalization as processAutoscuolaInvoiceFinalizationJob,
@@ -683,8 +683,9 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
     const limits = (service.limits ?? {}) as Record<string, unknown>;
     const studentMinutes = parseReminderMinutes(limits.studentReminderMinutes);
     const instructorMinutes = parseReminderMinutes(limits.instructorReminderMinutes);
-    const studentChannels = parseReminderChannels(limits.studentReminderChannels);
-    const instructorChannels = parseReminderChannels(limits.instructorReminderChannels);
+    // REG-767: canali della singola comunicazione (ereditati dalla scelta globale).
+    const studentChannels = effectiveMessageChannels(limits, "appointment_reminder_student");
+    const instructorChannels = effectiveMessageChannels(limits, "appointment_reminder_instructor");
     // "Non inviare" nelle impostazioni promemoria: default true se assente.
     const instructorReminderEnabled = limits.instructorReminderEnabled !== false;
 
@@ -769,8 +770,8 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
       const body = isExam
         ? `Promemoria: ${formatAutoscuolaDateOnly(appointment.startsAt)} hai l'esame di guida. ${EXAM_REMINDER_SUFFIX}`
         : `Promemoria guida il ${startsAtLabel}. Durata ${durationMinutes} minuti.`;
-      // REG-500: cascata App → WhatsApp → Email, ci si ferma al primo che consegna.
-      await deliverByCascade(studentChannels, {
+      // REG-767: su tutti i canali accesi per questa comunicazione, niente cascata.
+      await deliverToEach(studentChannels, {
         ...(appointment.studentId
           ? {
               push: () =>
@@ -875,8 +876,8 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
       const body = instrIsExam
         ? `Promemoria esame con ${studentName} il ${startsAtLabel}.`
         : `Promemoria guida con ${studentName} il ${startsAtLabel}. Durata ${durationMinutes} minuti.`;
-      // REG-500: cascata App → WhatsApp → Email, ci si ferma al primo che consegna.
-      await deliverByCascade(instructorChannels, {
+      // REG-767: su tutti i canali accesi per questa comunicazione, niente cascata.
+      await deliverToEach(instructorChannels, {
         ...(instructor.userId
           ? {
               push: () =>
@@ -991,7 +992,7 @@ export const processAutoscuolaMorningReminders = async ({
     // Only fire at the configured time (within a 1-min window)
     if (currentTime !== reminderTime) continue;
 
-    const studentChannels = parseReminderChannels(limits.studentReminderChannels);
+    const studentChannels = effectiveMessageChannels(limits, "morning_reminder_student");
 
     // Get today's appointments (in Europe/Rome timezone)
     const dayStart = new Date(`${todayStr}T00:00:00+02:00`);
@@ -1035,8 +1036,8 @@ export const processAutoscuolaMorningReminders = async ({
         ? `Buongiorno! Oggi hai l'esame di guida. ${EXAM_REMINDER_SUFFIX}`
         : `Buongiorno! Hai una guida oggi alle ${startsAtLabel.split(" alle ")[1] ?? startsAtLabel}. Durata ${durationMinutes} minuti.`;
 
-      // REG-500: cascata App → WhatsApp → Email, ci si ferma al primo che consegna.
-      await deliverByCascade(studentChannels, {
+      // REG-767: su tutti i canali accesi per questa comunicazione, niente cascata.
+      await deliverToEach(studentChannels, {
         ...(appointment.studentId
           ? {
               push: () =>
@@ -1160,7 +1161,7 @@ export const processAutoscuolaDayBeforeReminders = async ({
     // Only fire at the configured time (within a 1-min window)
     if (currentTime !== reminderTime) continue;
 
-    const studentChannels = parseReminderChannels(limits.studentReminderChannels);
+    const studentChannels = effectiveMessageChannels(limits, "day_before_reminder_student");
 
     // Get tomorrow's appointments (in Europe/Rome timezone)
     const dayStart = new Date(`${tomorrowStr}T00:00:00+02:00`);
@@ -1205,8 +1206,8 @@ export const processAutoscuolaDayBeforeReminders = async ({
         ? `Promemoria: domani hai l'esame di guida. ${EXAM_REMINDER_SUFFIX}`
         : `Promemoria: domani hai una guida alle ${timeLabel}. Durata ${durationMinutes} minuti.`;
 
-      // REG-500: cascata App → WhatsApp → Email, ci si ferma al primo che consegna.
-      await deliverByCascade(studentChannels, {
+      // REG-767: su tutti i canali accesi per questa comunicazione, niente cascata.
+      await deliverToEach(studentChannels, {
         ...(appointment.studentId
           ? {
               push: () =>

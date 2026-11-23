@@ -8,6 +8,11 @@ import {
 import type { StudentBookingSettingsValue } from "@/components/pages/Autoscuole/tabs/BookingsTab";
 import React from "react";
 import { DEFAULT_WELCOME_TEMPLATE } from "@/lib/autoscuole/whatsapp-welcome";
+import {
+  MESSAGE_ENABLED_FLAG,
+  type MessageChannelKey,
+} from "@/lib/autoscuole/message-channels";
+import type { ChannelKey } from "@/components/pages/Autoscuole/settings/ChannelToggles";
 import { invalidateWhatsAppWelcomeContext } from "@/components/pages/Autoscuole/StudentWhatsAppButton";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -492,6 +497,13 @@ export function AutoscuoleResourcesPage({
   const [studentCreationNoticeEnabled, setStudentCreationNoticeEnabled] = React.useState(false);
   const [studentWelcomeWhatsappTemplate, setStudentWelcomeWhatsappTemplate] =
     React.useState(DEFAULT_WELCOME_TEMPLATE);
+  // REG-767: canali per singola comunicazione.
+  const [messageChannels, setMessageChannels] = React.useState<
+    Partial<Record<MessageChannelKey, string[]>>
+  >({});
+  const [whatsappReadyByMessage, setWhatsappReadyByMessage] = React.useState<
+    Partial<Record<MessageChannelKey, boolean>>
+  >({});
   const [instructorReminderMinutes, setInstructorReminderMinutes] = React.useState("60");
   const [instructorReminderEnabled, setInstructorReminderEnabled] = React.useState(true);
   const [slotFillChannels, setSlotFillChannels] = React.useState<ChannelValue[]>([
@@ -730,11 +742,9 @@ export function AutoscuoleResourcesPage({
   // Raggiungibilità per canale (REG-500): caricata SOLO quando si apre il
   // pannello dei promemoria. Scorre gli allievi della company, quindi non sta
   // nel bootstrap delle impostazioni che gira su ogni schermata.
-  const [channelReach, setChannelReach] = React.useState<
-    { push: { reachable: number; total: number }; whatsapp: { reachable: number; total: number }; email: { reachable: number; total: number } } | undefined
-  >(undefined);
+  // REG-767: della raggiungibilità serve solo sapere se WhatsApp è collegato
+  // (i canali ora stanno su ogni riga, senza i numeri per canale).
   const [whatsappAvailable, setWhatsappAvailable] = React.useState(false);
-  const [whatsappSender, setWhatsappSender] = React.useState<string | null>(null);
   const channelReachRequested = React.useRef(false);
 
   React.useEffect(() => {
@@ -743,9 +753,7 @@ export function AutoscuoleResourcesPage({
     channelReachRequested.current = true;
     void getChannelReachAction().then((res) => {
       if (!res.success || !res.data) return;
-      setChannelReach(res.data.reach);
       setWhatsappAvailable(res.data.whatsappAvailable);
-      setWhatsappSender(res.data.whatsappSender);
     });
   }, [affiliateReduced, configTab]);
 
@@ -771,6 +779,8 @@ export function AutoscuoleResourcesPage({
     setStudentWelcomeWhatsappTemplate(
       res.data.studentWelcomeWhatsappTemplate ?? DEFAULT_WELCOME_TEMPLATE,
     );
+    setMessageChannels(res.data.messageChannels ?? {});
+    setWhatsappReadyByMessage(res.data.whatsappReadyByMessage ?? {});
     setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
     setInstructorReminderEnabled(res.data.instructorReminderEnabled !== false);
     setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
@@ -1299,6 +1309,30 @@ export function AutoscuoleResourcesPage({
         description: res.message ?? "Impossibile salvare le impostazioni promemoria.",
       });
     }
+  };
+
+  // REG-767: i canali di una comunicazione. Dove la comunicazione ha già un suo
+  // interruttore (mattina, giorno prima, guida fissata, istruttore), «nessun
+  // canale» lo spegne e il primo canale acceso lo riaccende.
+  const updateMessageChannels = async (key: MessageChannelKey, next: ChannelKey[]) => {
+    const prev = messageChannels;
+    const flag = MESSAGE_ENABLED_FLAG[key];
+    const on = next.length > 0;
+    setMessageChannels((current) => ({ ...current, [key]: next }));
+    const res = await updateAutoscuolaSettings({
+      channelsByMessage: { [key]: next },
+      ...(flag ? { [flag]: on } : {}),
+    });
+    if (!res.success) {
+      setMessageChannels(prev);
+      toast.error({ description: res.message ?? "Impossibile salvare i canali." });
+      return;
+    }
+    if (flag === "studentReminderMorningEnabled") setStudentReminderMorningEnabled(on);
+    if (flag === "studentReminderDayBeforeEnabled") setStudentReminderDayBeforeEnabled(on);
+    if (flag === "studentCreationNoticeEnabled") setStudentCreationNoticeEnabled(on);
+    if (flag === "instructorReminderEnabled") setInstructorReminderEnabled(on);
+    if (res.data?.messageChannels) setMessageChannels(res.data.messageChannels);
   };
 
   // REG-767: il testo si salva da solo, separato dal resto dei promemoria.
@@ -2313,8 +2347,9 @@ export function AutoscuoleResourcesPage({
             studentReminderChannels={studentReminderChannels}
             instructorReminderChannels={instructorReminderChannels}
             whatsappAvailable={whatsappAvailable}
-            whatsappSender={whatsappSender}
-            channelReach={channelReach}
+            messageChannels={messageChannels}
+            whatsappReadyByMessage={whatsappReadyByMessage}
+            updateMessageChannels={updateMessageChannels}
             updateReminderSettings={updateReminderSettings}
             emptySlotNotificationEnabled={emptySlotNotificationEnabled}
             setEmptySlotNotificationEnabled={saveEmptySlotNotificationEnabled}
