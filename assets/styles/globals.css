@@ -77,6 +77,20 @@
   --shadow-toast-danger: 0 8px 16px rgba(220, 38, 38, 0.3);
   --shadow-toast-info: 0 8px 16px rgba(17, 17, 17, 0.3);
 
+  /* REG-774 — «clay leggero», le stesse ombre del mobile (reglo-mobile
+     docs/design-system.md §0.4). Non si animano: si scambiano al tocco. */
+  --radius-clay: 28px;
+  --shadow-clay-cta: 0 14px 24px -10px rgba(0, 0, 0, 0.5), inset 0 3px 4px rgba(255, 255, 255, 0.34), inset 0 -8px 13px rgba(0, 0, 0, 0.8);
+  --shadow-clay-cta-pressed: 0 3px 6px -2px rgba(0, 0, 0, 0.25), inset 0 3px 8px rgba(0, 0, 0, 0.7), inset 0 -1px 2px rgba(255, 255, 255, 0.06);
+  --shadow-clay-raise: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 10px 24px -10px rgba(0, 0, 0, 0.16), inset 0 -2.5px 4px rgba(0, 0, 0, 0.035);
+  --shadow-clay-raise-pressed: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 2px 5px -2px rgba(0, 0, 0, 0.14), inset 0 3px 8px rgba(0, 0, 0, 0.11);
+  --shadow-clay-raise-sm: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 6px 14px -6px rgba(0, 0, 0, 0.18), inset 0 -2px 3px rgba(0, 0, 0, 0.035);
+  --shadow-clay-sink: inset 0 0 0 1px rgba(0, 0, 0, 0.08), inset 0 2px 5px rgba(0, 0, 0, 0.08);
+  --shadow-clay-focus: inset 0 0 0 1.5px #222222;
+  --shadow-clay-ink: 0 10px 20px -8px rgba(0, 0, 0, 0.45), inset 0 2px 3px rgba(255, 255, 255, 0.25), inset 0 -4px 8px rgba(0, 0, 0, 0.6);
+  --shadow-clay-thumb: 0 2px 5px rgba(0, 0, 0, 0.22), inset 0 -1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-clay-overlay: 0 0 0 1px rgba(0, 0, 0, 0.05), 0 24px 60px -20px rgba(0, 0, 0, 0.35);
+
   /* Scala dell'accento (valori neutri, nome storico — vedi :root) */
   --color-navy-50: var(--navy-50);
   --color-navy-100: var(--navy-100);
@@ -562,7 +576,7 @@
     max-height: 92dvh !important;
     overflow-y: auto !important;
     overscroll-behavior: contain;
-    border-radius: 24px 24px 0 0 !important;
+    border-radius: 28px 28px 0 0 !important;
     border-left-width: 0 !important;
     border-right-width: 0 !important;
     border-bottom: env(safe-area-inset-bottom) solid #fff !important;

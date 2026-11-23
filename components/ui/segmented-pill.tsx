@@ -4,9 +4,9 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Segmented control a pillola del redesign Airbnb: track #f2f2f2 con bordo
- * chiaro, opzione attiva = thumb bianco con ombra leggera. Valori presi 1:1
- * dal prototipo (padding 7px 14px, radius 50px, 13px 600/500).
+ * Segmentato a capsula. REG-774: come `ClaySegmented` del mobile, binario
+ * bianco incavato e cursore nero con volume; misure invariate (padding 7px
+ * 14px, 13px 600/500), colori in 200 ms.
  */
 export function SegmentedPill<T extends string>({
   value,
@@ -29,7 +29,7 @@ export function SegmentedPill<T extends string>({
     <div
       role="tablist"
       className={cn(
-        "inline-flex shrink-0 rounded-full border-[1.5px] border-[#e0e0e0] bg-[#f2f2f2] p-[3px]",
+        "inline-flex shrink-0 rounded-full bg-white p-[3px] shadow-clay-sink",
         className,
       )}
     >
@@ -43,10 +43,10 @@ export function SegmentedPill<T extends string>({
             aria-selected={active}
             onClick={() => onChange(opt.value)}
             className={cn(
-              "flex cursor-pointer select-none items-center gap-1 whitespace-nowrap rounded-full px-3.5 py-[7px] text-[13px] transition-colors",
+              "flex cursor-pointer select-none items-center gap-1 whitespace-nowrap rounded-full px-3.5 py-[7px] text-[13px] transition-colors duration-200 ease-out",
               active
-                ? "bg-white font-semibold text-foreground shadow-[0_2px_8px_rgba(0,0,0,0.10)]"
-                : "font-medium text-[#6a6a6a] hover:bg-[#e8e8e8]",
+                ? "bg-[#1e1e1e] font-semibold text-white shadow-clay-ink"
+                : "font-medium text-[#6a6a6a] hover:bg-[#f2f2f2]",
             )}
           >
             {opt.icon}
@@ -55,7 +55,7 @@ export function SegmentedPill<T extends string>({
               <span
                 className={cn(
                   "text-[12px] font-semibold",
-                  active ? "text-[#929292]" : "text-[#c1c1c1]",
+                  active ? "text-white/60" : "text-[#b0b0b0]",
                 )}
               >
                 {opt.count}

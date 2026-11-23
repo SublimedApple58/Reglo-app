@@ -3,19 +3,26 @@
 import { cn } from "@/lib/utils";
 
 /**
- * InlineToggle — iOS-style toggle switch.
- * Navy when on (redesign Airbnb), gray when off.
+ * InlineToggle — interruttore «clay» (REG-774, come `ClayToggle` del mobile):
+ * binario incavato che si riempie di nero, pallino bianco in rilievo, 200 ms.
  */
 export function InlineToggle({
   checked,
   onChange,
   disabled,
   size = "default",
+  decorative = false,
 }: {
   checked: boolean;
   onChange?: () => void;
   disabled?: boolean;
   size?: "sm" | "default" | "lg" | "xl";
+  /**
+   * Solo il disegno, dentro un controllo che fa già da interruttore (un
+   * `<button role="switch">` con l'etichetta): uno span nascosto ai lettori,
+   * così non c'è un bottone dentro un bottone.
+   */
+  decorative?: boolean;
 }) {
   const trackSize =
     size === "sm" ? "h-4 w-7" : size === "lg" ? "h-[26px] w-11" : size === "xl" ? "h-8 w-[52px]" : "h-5 w-9";
@@ -30,6 +37,32 @@ export function InlineToggle({
           ? checked ? "translate-x-[23px]" : "translate-x-[3px]"
           : checked ? "translate-x-[18px]" : "translate-x-[2px]";
 
+  const trackClass = cn(
+    "relative inline-flex shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-out",
+    trackSize,
+    checked
+      ? "bg-[#111111] shadow-[inset_0_2px_4px_rgba(0,0,0,0.45)]"
+      : "bg-[#e9e9e9] shadow-clay-sink",
+    disabled && "pointer-events-none opacity-40",
+  );
+  const thumb = (
+    <span
+      className={cn(
+        "absolute rounded-full bg-white shadow-clay-thumb transition-transform duration-200 ease-out",
+        thumbSize,
+        translate,
+      )}
+    />
+  );
+
+  if (decorative) {
+    return (
+      <span aria-hidden className={trackClass}>
+        {thumb}
+      </span>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -37,20 +70,9 @@ export function InlineToggle({
       aria-checked={checked}
       onClick={onChange}
       disabled={disabled}
-      className={cn(
-        "relative inline-flex shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200",
-        trackSize,
-        checked ? "bg-navy-900" : "bg-black/15",
-        disabled && "pointer-events-none opacity-40",
-      )}
+      className={trackClass}
     >
-      <span
-        className={cn(
-          "absolute rounded-full bg-white shadow-sm transition-transform duration-200",
-          thumbSize,
-          translate,
-        )}
-      />
+      {thumb}
     </button>
   );
 }

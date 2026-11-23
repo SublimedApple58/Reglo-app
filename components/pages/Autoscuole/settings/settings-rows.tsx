@@ -258,4 +258,4 @@ export function SettingsDetailRow({
 
 /** Select della stessa misura di «Prenotazioni e allievi». */
 export const SETTINGS_SELECT_TRIGGER =
-  "h-11 w-full rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 text-sm font-medium text-[#222222] shadow-none hover:border-[#929292] focus:border-[#222222] focus:ring-0 sm:w-[200px]";
+  "h-11 w-full rounded-[14px] px-3.5 text-sm font-medium text-[#222222] focus:ring-0 sm:w-[200px]";

@@ -3,17 +3,18 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
+/** REG-774: card «clay», bianca in rilievo, raggio 28 (come `ClaySurface` del mobile). */
 const cardVariants = cva(
   "text-card-foreground flex flex-col border bg-card",
   {
     variants: {
       hierarchy: {
         primary:
-          "rounded-card-primary shadow-card-primary gap-4 p-6 border-border",
+          "rounded-clay shadow-clay-raise gap-4 p-6 border-transparent",
         secondary:
-          "rounded-[16px] shadow-card gap-2.5 p-6 border-border",
+          "rounded-clay shadow-clay-raise gap-2.5 p-6 border-transparent",
         tertiary:
-          "rounded-[16px] shadow-card gap-1.5 p-4 border-border",
+          "rounded-clay shadow-clay-raise gap-1.5 p-4 border-transparent",
       },
       variant: {
         default: "",

@@ -4,10 +4,9 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Segmented control rettangolare del redesign Airbnb (stile toggle "Tipo di
- * pianificazione"): track grigio #f4f4f6, opzione attiva = thumb BIANCO
- * rialzato con angoli morbidi (rounded-[8px]) e ombra leggera. Variante non-pill
- * di {@link SegmentedPill}. Segmenti a larghezza contenuto; usa `fluid` per
+ * Segmentato compatto (stile toggle "Tipo di pianificazione"). REG-774: come
+ * `ClaySegmented` del mobile, binario bianco incavato e cursore nero con
+ * volume, a capsula come {@link SegmentedPill}. Segmenti a larghezza contenuto; usa `fluid` per
  * dividerli equamente (flex-1) quando sono pochi e vuoi occupare tutta la barra.
  */
 export function SegmentedControl<T extends string>({
@@ -31,7 +30,7 @@ export function SegmentedControl<T extends string>({
   return (
     <div
       role="tablist"
-      className={cn("inline-flex shrink-0 gap-1 rounded-[10px] bg-[#f4f4f6] p-1", className)}
+      className={cn("inline-flex shrink-0 gap-1 rounded-full bg-white p-1 shadow-clay-sink", className)}
     >
       {options.map((opt) => {
         const active = opt.value === value;
@@ -43,16 +42,16 @@ export function SegmentedControl<T extends string>({
             aria-selected={active}
             onClick={() => onChange(opt.value)}
             className={cn(
-              "flex cursor-pointer select-none items-center justify-center gap-1 whitespace-nowrap rounded-[8px] px-3 py-[7px] text-[13px] font-semibold transition-all",
+              "flex cursor-pointer select-none items-center justify-center gap-1 whitespace-nowrap rounded-full px-3 py-[7px] text-[13px] font-semibold transition-colors duration-200 ease-out",
               fluid && "flex-1",
               active
-                ? "bg-white text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.1)]"
-                : "bg-transparent text-[#999999] hover:text-[#666666]",
+                ? "bg-[#1e1e1e] text-white shadow-clay-ink"
+                : "bg-transparent text-[#6a6a6a] hover:text-[#222222]",
             )}
           >
             {opt.label}
             {opt.count != null && (
-              <span className={cn("text-[12px] font-semibold", active ? "text-[#929292]" : "text-[#c1c1c1]")}>
+              <span className={cn("text-[12px] font-semibold", active ? "text-white/60" : "text-[#b0b0b0]")}>
                 {opt.count}
               </span>
             )}
