@@ -314,8 +314,9 @@ test.describe("Autoscuole smoke", () => {
     await expect(page.getByText("Posti liberi per domani").first()).toBeVisible({
       timeout: 30000,
     });
-    // flip → auto-save senza errori → restore
-    const slotToggle = page.getByTestId("empty-slot-row").getByRole("switch").first();
+    // flip → auto-save senza errori → restore. Dal REG-767 l'interruttore è il
+    // pulsante dell'app («App: acceso/spento»), non più uno switch.
+    const slotToggle = page.getByTestId("empty-slot-row").getByRole("button", { name: /^App:/ });
     await slotToggle.click();
     await page.waitForTimeout(3000);
     await expectNoSaveError();
