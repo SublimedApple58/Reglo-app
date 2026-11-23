@@ -30,6 +30,7 @@ import {
   examTimeSetText,
 } from "@/lib/autoscuole/exam-notifications";
 import {
+  EVENT_CHANNELS,
   EVENT_CHANNELS_WITH_WHATSAPP,
   notifyAutoscuolaUser,
   notifyAutoscuolaUsers,
@@ -808,12 +809,21 @@ const notifyAppointmentRescheduled = async ({
     const which = isExamType(appointment.type) ? "Un esame" : "Una guida";
     const from = describeWhen({ type: appointment.type, startsAt: oldStartsAt, endsAt: oldEndsAt });
     const to = describeWhen(appointment);
+    const instructorUser = await prisma.user.findUnique({
+      where: { id: instructor.userId },
+      select: { email: true },
+    });
+    // REG-771: la riga «Guida spostata» degli Istruttori, non quella degli
+    // allievi. `kind` resta `appointment_rescheduled`: è quello che legge il
+    // mobile per la campanella. Niente WhatsApp: nessun modello per gli
+    // istruttori.
     await notifyAutoscuolaUser({
       companyId,
       kind: "appointment_rescheduled",
+      channelKey: "appointment_rescheduled_instructor",
       audience: "instructor",
-      recipient: { userId: instructor.userId },
-      supports: PUSH_ONLY,
+      recipient: { userId: instructor.userId, email: instructorUser?.email },
+      supports: EVENT_CHANNELS,
       title: text.title,
       body: `${which} è stato spostato dal ${from.when} al ${to.when}.`,
       appointmentId: appointment.id,

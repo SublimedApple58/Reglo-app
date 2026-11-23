@@ -108,6 +108,20 @@ e `notifyAutoscuolaUser` (`notify.ts`, via `resolveChannels(…, kind)`). Gli
 altri messaggi (fasi, festività, offerte…) seguono ancora la scelta del
 pubblico o i loro canali fissi (`OFFER_CHANNELS`, `PUSH_ONLY`).
 
+REG-771 (23/11): niente righe «prese in prestito».
+- **Spostamento all'istruttore** (`notifyAppointmentRescheduled` in `autoscuole.actions.ts`,
+  quando la segreteria sposta una sua guida): riga sua,
+  `appointment_rescheduled_instructor` (sezione Istruttori, App ed Email, niente
+  WhatsApp perché non c'è un modello). Il `kind` resta `appointment_rescheduled`
+  (lo legge il mobile): la riga si passa con `channelKey` a
+  `notifyAutoscuolaUser`.
+- **Scambio guida tra allievi** (`instructorSwapAppointments`): segue la riga
+  «Guida spostata» degli allievi con tutti i suoi canali, WhatsApp compreso
+  (`guida_spostata_allievo_v3`). Prima usciva solo come push.
+- Resta da decidere: il ritiro di un allievo da una guida di gruppo avvisa
+  l'istruttore con `kind: "appointment_cancelled"`, quindi segue la riga
+  «Guida annullata» degli allievi (filtrata su App).
+
 > Storia: dal 22/10 (REG-500) `deliverByCascade` scendeva App → WhatsApp → Email
 > fermandosi al primo che consegnava. Tolta il 24/11 su decisione di Tiziano.
 

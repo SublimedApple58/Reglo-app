@@ -15,11 +15,18 @@
  * Chi non ha mai toccato la riga parte con **solo l'App** (decisione di Tiziano
  * del 24/11/2026; WhatsApp ed Email si accendono riga per riga). Le chiavi sono i `kind`
  * già usati dagli invii e dai modelli WhatsApp (`whatsapp-templates.ts`).
+ *
+ * REG-771: una chiave può non coincidere col `kind`. Lo spostamento di una
+ * guida avvisato all'istruttore ha `kind: "appointment_rescheduled"` (è quello
+ * che legge il mobile) ma la sua riga, `appointment_rescheduled_instructor`:
+ * prima seguiva di nascosto la riga «Guida spostata» degli allievi. Chi invia
+ * passa `channelKey` a `notifyAutoscuolaUser`.
  */
 import type { DeliveryChannel } from "@/lib/autoscuole/delivery-log";
 import {
-  getWhatsAppTemplate,
   sendableTemplateName,
+  WHATSAPP_TEMPLATES,
+  type WhatsAppTemplate,
 } from "@/lib/autoscuole/whatsapp-templates";
 
 export const CHANNEL_ORDER: readonly DeliveryChannel[] = ["push", "whatsapp", "email"];
@@ -37,6 +44,7 @@ export const MESSAGE_CHANNEL_KEYS = [
   "appointment_location_changed",
   "exam_scheduled",
   "appointment_reminder_instructor",
+  "appointment_rescheduled_instructor",
 ] as const;
 
 export type MessageChannelKey = (typeof MESSAGE_CHANNEL_KEYS)[number];
@@ -55,6 +63,7 @@ export const MESSAGE_AUDIENCE: Record<MessageChannelKey, "student" | "instructor
   appointment_location_changed: "student",
   exam_scheduled: "student",
   appointment_reminder_instructor: "instructor",
+  appointment_rescheduled_instructor: "instructor",
 };
 
 /**
@@ -119,9 +128,14 @@ export function effectiveMessageChannels(
   return storedMessageChannels(limits, key);
 }
 
-/** WhatsApp si può accendere su questa riga? Serve un modello Meta utility approvato. */
+/**
+ * WhatsApp si può accendere su questa riga? Serve un modello Meta utility
+ * approvato. Le righe senza modello nel registro (oggi «Guida spostata» degli
+ * istruttori, REG-771) mostrano solo App ed Email.
+ */
 export function whatsappTemplateReady(key: MessageChannelKey): boolean {
-  return sendableTemplateName(getWhatsAppTemplate(key)) !== null;
+  const template = (WHATSAPP_TEMPLATES as Record<string, WhatsAppTemplate>)[key];
+  return template ? sendableTemplateName(template) !== null : false;
 }
 
 /** Per la pagina: i canali accesi di ogni riga (vuota = spenta). */

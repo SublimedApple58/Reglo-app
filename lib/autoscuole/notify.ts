@@ -32,6 +32,7 @@ import { sendDynamicEmail } from "@/email";
 import type { ChannelAudience } from "@/lib/autoscuole/reminder-channels";
 import { resolveChannels } from "@/lib/autoscuole/reminder-channels";
 import { deliverToEach } from "@/lib/autoscuole/channel-cascade";
+import type { MessageChannelKey } from "@/lib/autoscuole/message-channels";
 import { prisma } from "@/db/prisma";
 
 /** I canali tecnicamente possibili oggi per un messaggio-evento. */
@@ -65,6 +66,12 @@ export type NotifyInput = {
    * era un modo di farli divergere.
    */
   kind: string;
+  /**
+   * REG-771: la riga di «Promemoria e notifiche» da cui leggere i canali, se
+   * diversa da `kind`. Serve quando lo stesso `kind` va a pubblici diversi con
+   * righe diverse (lo spostamento: allievi e istruttori).
+   */
+  channelKey?: MessageChannelKey;
   audience: ChannelAudience;
   recipient: NotifyRecipient;
   title: string;
@@ -145,7 +152,12 @@ export async function notifyAutoscuolaUser(input: NotifyInput): Promise<void> {
   const supports = input.supports ?? EVENT_CHANNELS;
   const channels = input.channels
     ? supports.filter((channel) => input.channels!.includes(channel))
-    : await resolveChannels(input.companyId, input.audience, supports, input.kind);
+    : await resolveChannels(
+        input.companyId,
+        input.audience,
+        supports,
+        input.channelKey ?? input.kind,
+      );
   if (!channels.length) return;
 
   const attempt = {

@@ -10,9 +10,15 @@ import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { sendDynamicEmail } from "@/email";
-import { deliverWhatsApp } from "@/lib/autoscuole/whatsapp-delivery";
+import { deliverWhatsApp, firstNameFor } from "@/lib/autoscuole/whatsapp-delivery";
+import { describeWhen } from "@/lib/autoscuole/exam-notifications";
 // REG-604: punto di invio unico. Le offerte conservano `slotFillChannels`.
-import { notifyAutoscuolaUser, notifyAutoscuolaUsers, PUSH_ONLY } from "@/lib/autoscuole/notify";
+import {
+  EVENT_CHANNELS_WITH_WHATSAPP,
+  notifyAutoscuolaUser,
+  notifyAutoscuolaUsers,
+  PUSH_ONLY,
+} from "@/lib/autoscuole/notify";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import { adjustStudentLessonCredits } from "@/lib/autoscuole/payments";
 import {
@@ -1157,7 +1163,7 @@ export async function instructorSwapAppointments(
       prisma.autoscuolaAppointment.findFirst({
         where: { id: payload.appointmentIdA, companyId },
         include: {
-          student: { select: { id: true, name: true } },
+          student: { select: { id: true, name: true, email: true, phone: true } },
           vehicle: { select: { licenseCategory: true, transmission: true } },
           appointmentVehicles: { where: { role: "follow" }, select: { vehicleId: true } },
         },
@@ -1165,7 +1171,7 @@ export async function instructorSwapAppointments(
       prisma.autoscuolaAppointment.findFirst({
         where: { id: payload.appointmentIdB, companyId },
         include: {
-          student: { select: { id: true, name: true } },
+          student: { select: { id: true, name: true, email: true, phone: true } },
           vehicle: { select: { licenseCategory: true, transmission: true } },
           appointmentVehicles: { where: { role: "follow" }, select: { vehicleId: true } },
         },
@@ -1299,33 +1305,42 @@ export async function instructorSwapAppointments(
       ],
     });
 
-    // Notify both students (fire & forget)
+    // REG-771: per ciascun allievo la sua guida si è spostata, quindi segue la
+    // riga «Guida spostata» degli allievi in Promemoria e notifiche (canali e
+    // WhatsApp compresi). Prima usciva solo come push, a prescindere dalla riga.
     const formatDate = (d: Date) =>
       d.toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
 
-    await notifyAutoscuolaUser({
-      companyId,
-      kind: "appointment_rescheduled",
-      audience: "student",
-      recipient: { userId: apptA.studentId },
-      supports: PUSH_ONLY,
-      title: "🔄 Scambio guida",
-      body: `La tua guida del ${formatDate(apptA.startsAt)} è stata spostata al ${formatDate(apptB.startsAt)}.`,
-      appointmentId: apptB.id,
-      data: { appointmentId: apptB.id, startsAt: apptB.startsAt.toISOString() },
-    });
+    const notifySwapped = async (
+      student: { id: string; name: string | null; email: string | null; phone: string | null },
+      from: typeof apptA,
+      to: typeof apptA,
+    ) => {
+      const fromWhen = describeWhen(from);
+      const toWhen = describeWhen(to);
+      await notifyAutoscuolaUser({
+        companyId,
+        kind: "appointment_rescheduled",
+        audience: "student",
+        recipient: { userId: student.id, email: student.email, phone: student.phone },
+        supports: EVENT_CHANNELS_WITH_WHATSAPP,
+        whatsapp: {
+          values: {
+            nome: firstNameFor(student),
+            appuntamento: toWhen.subject,
+            prima: fromWhen.when,
+            adesso: toWhen.when,
+          },
+        },
+        title: "🔄 Scambio guida",
+        body: `La tua guida del ${formatDate(from.startsAt)} è stata spostata al ${formatDate(to.startsAt)}.`,
+        appointmentId: to.id,
+        data: { appointmentId: to.id, startsAt: to.startsAt.toISOString() },
+      });
+    };
 
-    await notifyAutoscuolaUser({
-      companyId,
-      kind: "appointment_rescheduled",
-      audience: "student",
-      recipient: { userId: apptB.studentId },
-      supports: PUSH_ONLY,
-      title: "🔄 Scambio guida",
-      body: `La tua guida del ${formatDate(apptB.startsAt)} è stata spostata al ${formatDate(apptA.startsAt)}.`,
-      appointmentId: apptA.id,
-      data: { appointmentId: apptA.id, startsAt: apptA.startsAt.toISOString() },
-    });
+    if (apptA.student) await notifySwapped(apptA.student, apptA, apptB);
+    if (apptB.student) await notifySwapped(apptB.student, apptB, apptA);
 
     return {
       success: true,

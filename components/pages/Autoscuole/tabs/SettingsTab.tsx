@@ -683,6 +683,7 @@ function SettingsTab({
                   title="Guida spostata"
                   icon={Repeat}
                   dim={offRow("appointment_rescheduled")}
+                  description="Anche negli scambi di guida tra due allievi."
                   stackOnMobile
                   control={channelsFor("appointment_rescheduled")}
                 />
@@ -751,6 +752,15 @@ function SettingsTab({
                       {channelsFor("appointment_reminder_instructor")}
                     </RowControls>
                   }
+                />
+                {/* REG-771: prima seguiva la riga «Guida spostata» degli allievi. */}
+                <SettingsRow
+                  title="Guida spostata"
+                  icon={Repeat}
+                  dim={offRow("appointment_rescheduled_instructor")}
+                  description="Quando la segreteria sposta una sua guida."
+                  stackOnMobile
+                  control={channelsFor("appointment_rescheduled_instructor")}
                 />
                 <SettingsRow
                   title="Richieste di sostituzione"

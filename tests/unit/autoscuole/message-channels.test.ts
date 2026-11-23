@@ -62,15 +62,26 @@ describe("effectiveMessageChannels", () => {
 describe("per la pagina", () => {
   it("dà una lista per ogni comunicazione del catalogo", () => {
     const all = messageChannelsForSettings({});
-    expect(Object.keys(all)).toHaveLength(9);
+    expect(Object.keys(all)).toHaveLength(10);
+    // REG-771: la riga istruttori dello spostamento parte con solo l'App
+    expect(all.appointment_rescheduled_instructor).toEqual(["push"]);
     // mattino e giorno prima sono spenti di default, come prima
     expect(all.morning_reminder_student).toEqual([]);
     expect(all.appointment_reminder_student).toEqual(["push"]);
   });
 
-  it("REG-771: tutte le righe hanno un modello Meta utility approvato", () => {
-    const ready = whatsappReadyByMessage();
-    expect(Object.values(ready).every(Boolean)).toBe(true);
+  it("REG-771: tutte le righe hanno un modello Meta utility approvato, tranne lo spostamento agli istruttori", () => {
+    const { appointment_rescheduled_instructor, ...rest } = whatsappReadyByMessage();
+    expect(Object.values(rest).every(Boolean)).toBe(true);
+    expect(appointment_rescheduled_instructor).toBe(false);
+  });
+
+  it("REG-771: la riga istruttori dello spostamento è indipendente da quella degli allievi", () => {
+    const limits = {
+      channelsByMessage: { appointment_rescheduled: ["email"], appointment_rescheduled_instructor: ["push"] },
+    };
+    expect(effectiveMessageChannels(limits, "appointment_rescheduled")).toEqual(["email"]);
+    expect(effectiveMessageChannels(limits, "appointment_rescheduled_instructor")).toEqual(["push"]);
   });
 
   it("un modello si manda solo se approvato e utility, altrimenti la versione precedente", () => {
