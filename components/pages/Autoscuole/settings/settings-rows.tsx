@@ -8,12 +8,16 @@ import { cn } from "@/lib/utils";
 /**
  * Mattoni del pane «Promemoria e notifiche» (REG-767), sullo stesso impianto
  * di «Prenotazioni e allievi»: sezioni con un titolo, righe titolo + una riga
- * grigia + controllo a destra, divisori sottili. Niente card, niente icone
- * davanti ai titoli: la gerarchia la fa la tipografia.
+ * grigia + controllo a destra, divisori sottili. Niente card né pillole: la
+ * gerarchia la fa la tipografia, e un glifo a un colore accanto al titolo
+ * (come le righe dei promemoria di sempre) aiuta a riconoscere la voce.
  */
+
+export type SettingsIcon = React.ComponentType<{ className?: string; strokeWidth?: string | number }>;
 
 export function SettingsSection({
   title,
+  icon: Icon,
   description,
   action,
   children,
@@ -22,6 +26,7 @@ export function SettingsSection({
   testId,
 }: {
   title: string;
+  icon?: SettingsIcon;
   /** Solo quando serve a capire la sezione. */
   description?: React.ReactNode;
   /** Link o comando allineato al titolo («Vedi tutti»). */
@@ -34,7 +39,10 @@ export function SettingsSection({
   return (
     <section id={id} data-testid={testId} className={cn("scroll-mt-6", className)}>
       <div className="flex items-end justify-between gap-4">
-        <h3 className="text-[17px] font-semibold tracking-[-0.1px] text-[#222222]">{title}</h3>
+        <h3 className="flex items-center gap-2.5 text-[17px] font-semibold tracking-[-0.1px] text-[#222222]">
+          {Icon ? <Icon className="size-[19px] shrink-0" strokeWidth={1.9} /> : null}
+          {title}
+        </h3>
         {action}
       </div>
       {description ? (
@@ -54,6 +62,7 @@ export function SettingsSection({
  */
 export function SettingsRow({
   title,
+  icon: Icon,
   description,
   control,
   stackOnMobile,
@@ -62,6 +71,7 @@ export function SettingsRow({
   testId,
 }: {
   title: string;
+  icon?: SettingsIcon;
   description?: React.ReactNode;
   control?: React.ReactNode;
   stackOnMobile?: boolean;
@@ -82,10 +92,16 @@ export function SettingsRow({
         <div className="min-w-0">
           <div
             className={cn(
-              "text-[15px] font-semibold",
+              "flex items-center gap-2 text-[15px] font-semibold",
               dim ? "text-[#929292]" : "text-[#222222]",
             )}
           >
+            {Icon ? (
+              <Icon
+                className={cn("size-[17px] shrink-0", dim && "text-[#b4b4b4]")}
+                strokeWidth={2}
+              />
+            ) : null}
             {title}
           </div>
           {description ? (

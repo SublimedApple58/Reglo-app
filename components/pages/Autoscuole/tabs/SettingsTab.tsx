@@ -4,7 +4,15 @@ import React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Bell,
+  CalendarCheck,
+  CalendarClock,
   Check,
+  Clock,
+  Coffee,
+  GraduationCap,
+  Megaphone,
+  Moon,
+  Users,
   ChevronDown,
   ClipboardList,
   MapPin,
@@ -313,6 +321,7 @@ function EmptySlotNotificationSection({
     <SettingsRow
       testId="empty-slot-row"
       title="Posti liberi per domani"
+      icon={CalendarClock}
       description="La sera prima, una notifica nell'app se ci sono guide libere."
       control={
         <InlineToggle checked={enabled} onChange={() => setEnabled((prev) => !prev)} size="lg" />
@@ -493,9 +502,10 @@ function SettingsTab({
               sezioni con un titolo, righe titolo + riga grigia + controllo,
               divisori sottili. Il comportamento dei promemoria è quello di prima. */}
           <div className="space-y-10" data-testid="reminders-pane">
-            <SettingsSection title="Allievi">
+            <SettingsSection title="Allievi" icon={GraduationCap}>
               <SettingsRow
                 title="Promemoria prima della guida"
+                icon={Clock}
                 stackOnMobile
                 control={
                   <Select
@@ -519,6 +529,7 @@ function SettingsTab({
               />
               <SettingsRow
                 title="La mattina della guida"
+                icon={Coffee}
                 description="Un promemoria in più, all'orario che scegli."
                 control={
                   <InlineToggle
@@ -547,6 +558,7 @@ function SettingsTab({
               </SettingsRow>
               <SettingsRow
                 title="Il giorno prima"
+                icon={Moon}
                 description="Un promemoria la sera prima, all'orario che scegli."
                 control={
                   <InlineToggle
@@ -574,6 +586,7 @@ function SettingsTab({
               {/* REG-758: avviso alla creazione, raggruppato (vedi creation-notice.ts). */}
               <SettingsRow
                 title="Guida fissata"
+                icon={CalendarCheck}
                 description="Avviso quando la segreteria, un istruttore o la voce fissa una guida. Più guide di fila, un messaggio solo."
                 control={
                   <InlineToggle
@@ -597,9 +610,10 @@ function SettingsTab({
               />
             </SettingsSection>
 
-            <SettingsSection title="Istruttori">
+            <SettingsSection title="Istruttori" icon={Users}>
               <SettingsRow
                 title="Promemoria prima della guida"
+                icon={Clock}
                 stackOnMobile
                 control={
                   <Select
@@ -656,7 +670,8 @@ function SettingsTab({
               onSave={saveStudentWelcomeWhatsappTemplate}
             />
 
-            <p className="text-[13.5px] font-medium text-[#929292]">
+            <p className="flex items-center gap-2 text-[13.5px] font-medium text-[#929292]">
+              <Megaphone className="size-[15px] shrink-0" strokeWidth={2} />
               Per scrivere a tutti gli allievi usa «Invia comunicato», dal menu.
             </p>
           </div>

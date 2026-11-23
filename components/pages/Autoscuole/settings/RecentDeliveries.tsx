@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { Bell, History, Mail, MessageCircle, XCircle } from "lucide-react";
+
 import { getRecentDeliveriesAction } from "@/lib/actions/autoscuole-settings.actions";
 import type { RecentDelivery } from "@/lib/autoscuole/recent-deliveries";
 import { cn } from "@/lib/utils";
@@ -14,15 +16,15 @@ import { SettingsSection } from "@/components/pages/Autoscuole/settings/settings
  * nessuno lo sapeva. Qui l'autoscuola vede l'esito di ogni messaggio — e, se
  * non è arrivato, il perché detto in parole sue.
  *
- * REG-767: lista nativa del pane (niente riquadro), canale scritto in grigio.
+ * REG-767: lista nativa del pane (niente riquadro), canale con il suo glifo.
  */
 
 const COLLAPSED = 5;
 
-const CHANNEL_LABEL = {
-  push: "App",
-  whatsapp: "WhatsApp",
-  email: "Email",
+const CHANNEL = {
+  push: { icon: Bell, label: "App" },
+  whatsapp: { icon: MessageCircle, label: "WhatsApp" },
+  email: { icon: Mail, label: "Email" },
 } as const;
 
 const timeLabel = (iso: string) => {
@@ -53,6 +55,7 @@ export function RecentDeliveries() {
   return (
     <SettingsSection
       title="Ultimi invii"
+      icon={History}
       testId="recent-deliveries"
       action={
         items && items.length > COLLAPSED ? (
@@ -77,7 +80,10 @@ export function RecentDeliveries() {
           Ancora nessun invio.
         </div>
       ) : (
-        visible.map((item, index) => (
+        visible.map((item, index) => {
+          const channel = item.channel ? CHANNEL[item.channel] : null;
+          const Icon = channel?.icon ?? XCircle;
+          return (
           <div
             key={`${item.at}-${index}`}
             className="grid grid-cols-[52px_1fr_auto] items-baseline gap-3 py-3 text-[13.5px]"
@@ -96,14 +102,16 @@ export function RecentDeliveries() {
             </div>
             <div
               className={cn(
-                "whitespace-nowrap text-[13px] font-medium",
-                item.channel ? "text-[#6a6a6a]" : "text-[#222222]",
+                "inline-flex items-center gap-1.5 whitespace-nowrap text-[13px] font-medium",
+                channel ? "text-[#6a6a6a]" : "text-[#222222]",
               )}
             >
-              {item.channel ? CHANNEL_LABEL[item.channel] : "Non arrivato"}
+              <Icon className="size-3.5 self-center" strokeWidth={2} />
+              {channel?.label ?? "Non arrivato"}
             </div>
           </div>
-        ))
+          );
+        })
       )}
     </SettingsSection>
   );

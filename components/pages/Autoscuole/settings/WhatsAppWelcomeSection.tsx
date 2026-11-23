@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { WhatsAppGlyph } from "@/components/pages/Autoscuole/NeverAccessedNudge";
 import { SettingsSection } from "@/components/pages/Autoscuole/settings/settings-rows";
 import { useWhatsAppWelcomeContext } from "@/components/pages/Autoscuole/StudentWhatsAppButton";
 import {
@@ -28,6 +29,15 @@ import { cn } from "@/lib/utils";
  * segnaposto si inseriscono dal menu «Inserisci», l'anteprima sta sotto.
  * «Modifica messaggio» (scheda allievo) arriva qui con l'ancora.
  */
+/** Il logo WhatsApp a un colore, con la stessa firma delle icone lucide. */
+function WhatsAppSectionIcon({ className }: { className?: string }) {
+  return (
+    <span className={cn("inline-flex items-center justify-center", className)}>
+      <WhatsAppGlyph size={19} />
+    </span>
+  );
+}
+
 export function WhatsAppWelcomeSection({
   value,
   consortium,
@@ -115,6 +125,7 @@ export function WhatsAppWelcomeSection({
         id={WELCOME_SECTION_ANCHOR}
         testId="whatsapp-welcome-section"
         title="Messaggio di benvenuto"
+        icon={WhatsAppSectionIcon}
         description="Si apre in WhatsApp dal tasto nella scheda dell'allievo."
       >
         <div className="py-4">

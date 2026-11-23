@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { Bell, Mail, MessageCircle, Send } from "lucide-react";
+
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { SettingsRow, SettingsSection } from "@/components/pages/Autoscuole/settings/settings-rows";
 
@@ -16,8 +18,8 @@ import { SettingsRow, SettingsSection } from "@/components/pages/Autoscuole/sett
  * sotto il titolo. L'app non ha un interruttore: è sempre inclusa, e un
  * interruttore bloccato si rileggeva come spegnibile.
  *
- * REG-767: righe native del pane (titolo, una riga grigia, controllo), senza
- * icone, pillole «Attivo» né riquadro informativo.
+ * REG-767: righe native del pane (icona, titolo, una riga grigia, controllo),
+ * senza pillole «Attivo» né riquadro informativo.
  *
  * WhatsApp non ha un'attivazione per autoscuola: il mittente è **uno solo,
  * di Reglo**. Finché non è collegato la riga è spenta e non accendibile — è il
@@ -74,11 +76,13 @@ export function ChannelCascade({
   return (
     <SettingsSection
       title="Canali"
+      icon={Send}
       description="In quest'ordine, fino al primo che arriva. Ognuno riceve il messaggio una volta sola."
       testId="channel-cascade"
     >
       <SettingsRow
         title="App Reglo"
+        icon={Bell}
         description={
           pushReach
             ? `Arriva a ${n(pushReach.reachable)} dei tuoi ${n(pushReach.total)} allievi`
@@ -88,6 +92,7 @@ export function ChannelCascade({
       />
       <SettingsRow
         title="WhatsApp"
+        icon={MessageCircle}
         dim={!whatsappReady}
         description={
           !whatsappReady
@@ -107,6 +112,7 @@ export function ChannelCascade({
       />
       <SettingsRow
         title="Email"
+        icon={Mail}
         description={whatsappReady ? "Per chi non ha né l'app né WhatsApp" : "Per chi non ha l'app"}
         control={
           <InlineToggle
