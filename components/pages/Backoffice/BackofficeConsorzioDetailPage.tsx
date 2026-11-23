@@ -201,7 +201,7 @@ export default function BackofficeConsorzioDetailPage({ detail }: { detail: Cons
           <h1 className="text-[26px] font-bold tracking-[-0.4px] text-foreground">
             {detail.consorzio.name}
           </h1>
-          <Badge tone="border-[#ded5f5] bg-[#f5f1ff] text-[#6d28d9]">Consorzio</Badge>
+          <Badge tone="border-[#dddddd] bg-[#f2f2f2] text-[#222222]">Consorzio</Badge>
         </div>
       </div>
 

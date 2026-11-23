@@ -55,7 +55,8 @@ const PILL_TONES: Record<PillTone, string> = {
   red: "border-[#fad4cc] bg-[#fff4f2] text-[#c13515]",
   amber: "border-[#f0e060] bg-[#fffce0] text-[#7a6a00]",
   violet: "border-[#e2d0fa] bg-[#f3e8ff] text-[#7c3aed]",
-  blue: "border-[#c5d8fa] bg-[#f0f4ff] text-[#1a4fa0]",
+  // REG-774: niente azzurro nell'interfaccia, il tono «blue» è un grigio scuro.
+  blue: "border-[#dddddd] bg-[#f7f7f7] text-[#222222]",
   gray: "border-[#dddddd] bg-[#f7f7f7] text-[#929292]",
   pink: "border-[#f0c8df] bg-[#fdf0f6] text-[#92174d]",
 };
@@ -125,6 +126,6 @@ export function StudentAvatar({
 /** Etichetta di sezione del drawer ("Anagrafica", "Guide"…). */
 export const sectionLabelClass = "mb-4 text-[12px] font-semibold text-[#929292]";
 
-/** Link-azione blu inline (proto #428bff) */
-export const blueLinkClass =
-  "cursor-pointer text-[12px] font-medium text-[#428bff] hover:underline disabled:cursor-default disabled:opacity-50";
+/** Link-azione inline: nero sottolineato (REG-774, niente blu; prima #428bff) */
+export const inlineLinkClass =
+  "cursor-pointer text-[12px] font-medium text-[#222222] underline decoration-[1.5px] underline-offset-[3px] hover:decoration-2 disabled:cursor-default disabled:opacity-50";

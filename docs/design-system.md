@@ -165,8 +165,8 @@ Restano diversi **di proposito**:
 |---|---|---|
 | Chip durata, toggle-chip, segmented pill | `rounded-full` | sono scelte, non campi: la forma li distingue |
 | Barre di ricerca a pillola (Consorzio, Backoffice, Studenti) | `rounded-full` / `[50px]` | pattern riconoscibile di filtro, non un campo di form |
-| Bottoni CTA | `rounded-[32px]` | sono azioni |
-| Checkbox | `rounded-[4px]` | convenzione di piattaforma |
+| Bottoni (tutte le varianti) | `rounded-full` | sono azioni: sempre a capsula (REG-774) |
+| Checkbox | `rounded-[6px]` | convenzione di piattaforma (REG-774) |
 | Pannelli dropdown, popover, calendario | `rounded-xl` (18px) | superfici, non controlli |
 | Cartelli e pannelli delle **Impostazioni** | 9 / 10 / 12px | linguaggio visivo proprio, lasciato intatto per decisione di Tiziano |
 
@@ -179,6 +179,42 @@ Restano diversi **di proposito**:
 | `35px` | card primary | `rounded-card-primary` | Card principali grandi |
 
 ---
+
+## 4b. «Clay leggero» sul web (REG-774, 2026-11-23)
+
+Le basi del design system del mobile (`reglo-mobile/docs/design-system.md`
+§0) portate sui **componenti condivisi**, senza toccare la macrostruttura
+(impostazioni Airbnb, layout, navigazione, drawer restano com'erano). Token in
+`assets/styles/globals.css` (`@theme`): `rounded-clay` (28px) e le ombre
+`shadow-clay-*` qui sotto. **Le ombre non si animano**: si scambiano al tocco;
+si animano solo scala e colori (200 ms, `ease-out`, niente rimbalzo, mai spente
+da «Riduci movimento»).
+
+| Componente | Forma | Ombra |
+|---|---|---|
+| `Button` default (CTA) | capsula `#1e1e1e`, 600 | `shadow-clay-cta`; premuta `shadow-clay-cta-pressed` + scala .98; disabilitata `#d9d9d9` senza ombra |
+| `Button` outline / secondary | capsula bianca | `shadow-clay-raise`; premuta `shadow-clay-raise-pressed` |
+| `Button` destructive | capsula bianca, testo `#c13515` | `shadow-clay-raise` |
+| `Button` ghost / icon / link | tondi; il link è nero sottolineato | — |
+| `Button loading` | i puntini (`LoadingDots`) al posto dell'etichetta, che resta invisibile e tiene la larghezza; niente sbiadito, niente clic | — |
+| `Button size="bare"` | nessuna misura: le decide chi lo usa (bottoni nati a mano convertiti in REG-774) | — |
+| `Input`, `Textarea`, `SelectTrigger`, `PROTO_*`, `SETTINGS_SELECT_TRIGGER` | bianco, `rounded-[14px]`, senza bordo | incavato `shadow-clay-sink`; focus/aperto `shadow-clay-focus` (bordo interno nero 1.5px) |
+| `Dialog`, `AlertDialog` | `rounded-clay`; sotto 640px foglio dal basso 28/28/0/0 | `shadow-clay-overlay`; X tonda bianca 36px `shadow-clay-raise-sm` |
+| `InlineToggle` | binario incavato che si riempie di `#111`, pallino bianco | `shadow-clay-sink` / `shadow-clay-thumb`; `decorative` = solo disegno dentro una riga `role="switch"` |
+| `Checkbox` | 6px, nera piena | — |
+| `Card` | `rounded-clay`, senza bordo | `shadow-clay-raise` |
+| `SegmentedControl`, `SegmentedPill` | binario bianco incavato, cursore **nero** (come `ClaySegmented`) | `shadow-clay-sink` / `shadow-clay-ink` |
+
+**Niente blu nell'interfaccia**: i link sono neri sottolineati
+(`inlineLinkClass` in `student-detail-ui.tsx`, ex `blueLinkClass`), icone ed
+etichette del backoffice neutre. Restano i colori che sono **dati**: palette
+istruttori, colori dei tipi di guida (compreso l'indaco della teoria), avatar,
+fase «Teoria».
+
+**Restano fuori (di proposito)**: i `<button>`/`<input>` fatti a mano nelle
+pagine (chip di scelta, bottoni «Dettaglio», durate…), che si allineano quando
+si ridisegna la pagina (es. REG-775, drawer allievo). Le CTA nere e gli
+interruttori fatti a mano sono già stati portati su `Button`/`InlineToggle`.
 
 ## 5. Ombre
 
@@ -237,7 +273,7 @@ CSS variables per animazioni in `globals.css`:
 
 | Componente | File | Pattern |
 |-----------|------|---------|
-| Button | `button.tsx` | CVA variants: default, destructive, outline, secondary, ghost, link |
+| Button | `button.tsx` | CVA variants: default, destructive, outline, secondary, ghost, link; size `bare`; prop `loading` (REG-774, §4b) |
 | Card | `card.tsx` | Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter |
 | Dialog | `dialog.tsx` | Radix Dialog with overlay |
 | Sheet | `sheet.tsx` | Side panel (drawer) |
@@ -257,7 +293,7 @@ CSS variables per animazioni in `globals.css`:
 - `resource-card.tsx` — card per risorse (istruttori, veicoli)
 - `stat-metric.tsx` — metriche dashboard
 - `toggle-chip.tsx` — chip toggle (analogo SelectableChip mobile)
-- `inline-toggle.tsx` — toggle inline
+- `inline-toggle.tsx` — interruttore clay (REG-774), `decorative` dentro righe `role="switch"`
 - `field-group.tsx` — form field grouping
 - `page-states.tsx` — empty, error, loading states
 - `page-skeleton.tsx` — full page skeleton

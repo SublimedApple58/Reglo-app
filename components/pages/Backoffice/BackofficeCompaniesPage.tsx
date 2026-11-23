@@ -429,8 +429,8 @@ function AutoscuolaDrawerContent({
       {/* ── Modalità app ── */}
       <section className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
         <div className="flex items-center gap-2.5 mb-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-50">
-            <Phone className="h-4 w-4 text-sky-600" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#f2f2f2]">
+            <Phone className="h-4 w-4 text-[#222222]" />
           </div>
           <div>
             <p className="text-sm font-semibold text-foreground">Modalità app</p>
@@ -662,8 +662,8 @@ function AutoscuolaDrawerContent({
       <section className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50">
-              <Smartphone className="h-4 w-4 text-blue-600" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#f2f2f2]">
+              <Smartphone className="h-4 w-4 text-[#222222]" />
             </div>
             <div className="flex items-center gap-2">
               <p className="text-sm font-semibold text-foreground">Allievi invitati</p>
@@ -685,8 +685,6 @@ function AutoscuolaDrawerContent({
                   platformFilter === f
                     ? f === "android"
                       ? "bg-green-600 text-white"
-                      : f === "ios"
-                      ? "bg-blue-600 text-white"
                       : "bg-foreground text-background"
                     : "bg-gray-100 text-muted-foreground hover:bg-gray-200"
                 )}
@@ -722,7 +720,7 @@ function AutoscuolaDrawerContent({
                     <td className="px-3 py-2 text-foreground">{student.email}</td>
                     <td className="px-3 py-2">
                       {student.platform === "ios" ? (
-                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">iOS</span>
+                        <span className="rounded-full bg-[#f2f2f2] px-2 py-0.5 text-[10px] font-semibold text-[#222222]">iOS</span>
                       ) : student.platform === "android" ? (
                         <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">Android</span>
                       ) : (
@@ -752,8 +750,8 @@ function AutoscuolaDrawerContent({
       {/* ── Fasi attive del percorso ── */}
       <section className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
         <div className="flex items-center gap-2.5 mb-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50">
-            <Layers className="h-4 w-4 text-indigo-600" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#f2f2f2]">
+            <Layers className="h-4 w-4 text-[#222222]" />
           </div>
           <div>
             <p className="text-sm font-semibold text-foreground">Fasi attive del percorso</p>
@@ -1158,7 +1156,7 @@ export default function BackofficeCompaniesPage({
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                             <span className="font-medium text-foreground [overflow-wrap:anywhere]">{company.name}</span>
                             {consorzio && (
-                              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#ecebff] px-2 py-0.5 text-[10px] font-semibold text-[#3b35a8]">
+                              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#f2f2f2] px-2 py-0.5 text-[10px] font-semibold text-[#222222]">
                                 <Layers className="h-3 w-3" />
                                 Consorzio
                               </span>
@@ -1222,7 +1220,7 @@ export default function BackofficeCompaniesPage({
                             </span>
                           )}
                           {company.iosStudents > 0 && (
-                            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                            <span className="rounded-full bg-[#f2f2f2] px-2 py-0.5 text-[10px] font-semibold text-[#222222]">
                               {company.iosStudents} iOS
                             </span>
                           )}

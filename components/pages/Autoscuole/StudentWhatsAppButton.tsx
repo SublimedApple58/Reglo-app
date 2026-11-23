@@ -8,7 +8,7 @@ import { Plus } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FadeIn } from "@/components/ui/fade-in";
 import { WhatsAppGlyph } from "@/components/pages/Autoscuole/NeverAccessedNudge";
-import { blueLinkClass } from "@/components/pages/Autoscuole/student-detail-ui";
+import { inlineLinkClass } from "@/components/pages/Autoscuole/student-detail-ui";
 import { getWhatsAppWelcomeContext } from "@/lib/actions/autoscuole-settings.actions";
 import {
   WELCOME_SECTION_ANCHOR,
@@ -183,7 +183,7 @@ export function StudentWhatsAppButton({
           {onAddPhone ? (
             <>
               <span aria-hidden className="text-[#dddddd]">·</span>
-              <button type="button" className={cn(blueLinkClass, "text-[13px]")} onClick={onAddPhone}>
+              <button type="button" className={cn(inlineLinkClass, "text-[13px]")} onClick={onAddPhone}>
                 Correggi
               </button>
             </>

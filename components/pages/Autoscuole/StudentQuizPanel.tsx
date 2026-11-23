@@ -310,7 +310,7 @@ export function StudentQuizPanel({
             }
           />
           <StatTile
-            icon={<Target className="size-4 text-[#428bff]" strokeWidth={1.8} />}
+            icon={<Target className="size-4 text-[#222222]" strokeWidth={1.8} />}
             label="Risposte corrette"
             value={`${detail.coverage.accuracyPct}%`}
             hint={`${detail.coverage.correctCount} su ${detail.coverage.attemptedCount} domande viste`}

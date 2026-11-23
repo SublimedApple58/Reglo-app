@@ -4,7 +4,7 @@ import * as React from 'react';
 import { getStudentMediaOverview } from '@/lib/actions/student-media.actions';
 
 const linkClass =
-  'cursor-pointer text-[12px] font-medium text-[#428bff] hover:underline';
+  'cursor-pointer text-[12px] font-medium text-[#222222] underline decoration-[1.5px] underline-offset-[3px] hover:decoration-2';
 
 export type StudentMediaOverview = {
   photoUrl: string | null;

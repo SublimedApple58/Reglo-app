@@ -912,7 +912,7 @@ function UserDetailPanelContent({
                     type="button"
                     onClick={handleTestPush}
                     disabled={testPushing}
-                    className="flex cursor-pointer items-center gap-2 text-[13px] font-semibold text-[#428bff] hover:underline disabled:opacity-60"
+                    className="flex cursor-pointer items-center gap-2 text-[13px] font-semibold text-[#222222] underline decoration-[1.5px] underline-offset-[3px] hover:decoration-2 disabled:opacity-60"
                   >
                     {testPushing ? (
                       <LoadingDots className="min-h-[19px] scale-[0.8]" />

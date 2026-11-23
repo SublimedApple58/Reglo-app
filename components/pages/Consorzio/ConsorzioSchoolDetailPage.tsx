@@ -56,7 +56,7 @@ import {
  * −0.4 + badge pill, azioni Sospendi/Rimuovi sottolineate; card DATI ANAGRAFICI
  * 16px radius bordo #EBEBEB con righe label 13/valore 14; stat card 14px radius
  * con numeri 26/700 −0.6 (verde #1F6B2A, ambra); tabella Allievi con righe h61,
- * avatar 32 navy, badge patente pill azzurra #EEF4FF/#2A6FDB, chip codici
+ * avatar 32 navy, badge patente grigio #F2F2F2/#222222 (REG-774: niente azzurro), chip codici
  * #F0F0F0/#111111. Vedi docs/features/consorzio.md.
  */
 
@@ -534,7 +534,7 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
                   {student.licenseCategory ? (
                     <span
                       className="inline-flex items-center whitespace-nowrap px-2.5 py-1 text-[12px] font-bold leading-[1.4]"
-                      style={{ background: "#EEF4FF", color: "#2A6FDB", borderRadius: 20 }}
+                      style={{ background: "#F2F2F2", color: "#222222", borderRadius: 20 }}
                     >
                       {licenseCategoryShort(student.licenseCategory)}
                     </span>

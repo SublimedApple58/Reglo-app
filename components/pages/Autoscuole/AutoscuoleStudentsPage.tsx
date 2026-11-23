@@ -179,7 +179,7 @@ import {
   Pill,
   StudentAvatar,
   avatarColor,
-  blueLinkClass,
+  inlineLinkClass,
   initialsOf,
   sectionLabelClass,
   type PillTone,
@@ -2956,7 +2956,7 @@ export function AutoscuoleStudentsPage({
                     disabled={phoneSaving}
                     className="w-full max-w-[170px] rounded-lg border border-[#e2e2e6] bg-white px-2.5 py-1.5 text-sm font-medium text-foreground outline-none focus:border-foreground/40 disabled:opacity-60"
                   />
-                  <button type="button" className={blueLinkClass} disabled={phoneSaving} onClick={() => void saveStudentPhone()}>
+                  <button type="button" className={inlineLinkClass} disabled={phoneSaving} onClick={() => void saveStudentPhone()}>
                     {phoneSaving ? "…" : "Salva"}
                   </button>
                   <button
@@ -2971,7 +2971,7 @@ export function AutoscuoleStudentsPage({
               ) : (
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-foreground">{register.student.phone || "—"}</p>
-                  <button type="button" className={blueLinkClass} onClick={startEditPhone}>
+                  <button type="button" className={inlineLinkClass} onClick={startEditPhone}>
                     {register.student.phone ? "Modifica" : "Aggiungi"}
                   </button>
                 </div>
@@ -2990,7 +2990,7 @@ export function AutoscuoleStudentsPage({
                 {activeLicensePath && <Pill tone="blue">In corso</Pill>}
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                <button type="button" className={blueLinkClass} onClick={() => setLicenseDialogOpen(true)}>
+                <button type="button" className={inlineLinkClass} onClick={() => setLicenseDialogOpen(true)}>
                   Modifica
                 </button>
                 {!affiliate && (
@@ -3001,7 +3001,7 @@ export function AutoscuoleStudentsPage({
                         precedente. */}
                     <button
                       type="button"
-                      className={blueLinkClass}
+                      className={inlineLinkClass}
                       onClick={() => setNewPathDialogOpen(true)}
                     >
                       Avvia nuovo percorso
@@ -3014,13 +3014,13 @@ export function AutoscuoleStudentsPage({
               <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Fase percorso</p>
               <div className="flex flex-wrap items-center gap-2">
                 <Pill tone={phaseBadge.tone}>{phaseBadge.label}</Pill>
-                <button type="button" className={blueLinkClass} onClick={() => setPhaseDialogOpen(true)}>
+                <button type="button" className={inlineLinkClass} onClick={() => setPhaseDialogOpen(true)}>
                   Cambia fase
                 </button>
                 {!affiliate && register.studentPhase === "AWAITING" && (
                   <button
                     type="button"
-                    className={blueLinkClass}
+                    className={inlineLinkClass}
                     disabled={
                       grantSavingId === register.student.id ||
                       (quizCtx !== null && quizCtx.available <= 0)
@@ -3114,7 +3114,7 @@ export function AutoscuoleStudentsPage({
               </div>
               <button
                 type="button"
-                className={blueLinkClass}
+                className={inlineLinkClass}
                 disabled={blockSaving}
                 onClick={() => void handleToggleBlock(!register.bookingBlocked)}
               >
@@ -3131,7 +3131,7 @@ export function AutoscuoleStudentsPage({
                 </div>
                 <button
                   type="button"
-                  className={blueLinkClass}
+                  className={inlineLinkClass}
                   disabled={exemptSaving}
                   onClick={async () => {
                     if (!selectedStudentId || exemptSaving) return;
@@ -3237,7 +3237,7 @@ export function AutoscuoleStudentsPage({
               </div>
               <button
                 type="button"
-                className={blueLinkClass}
+                className={inlineLinkClass}
                 disabled={examReadySaving}
                 onClick={async () => {
                   if (!selectedStudentId || examReadySaving) return;
@@ -3482,7 +3482,7 @@ export function AutoscuoleStudentsPage({
                     </div>
                     <button
                       type="button"
-                      className={blueLinkClass}
+                      className={inlineLinkClass}
                       onClick={() => {
                         setLessonsPathChoice(path.id);
                         setDrawerTab("lessons");
@@ -3526,7 +3526,7 @@ export function AutoscuoleStudentsPage({
               </div>
               <button
                 type="button"
-                className="cursor-pointer text-[13px] font-semibold text-[#428bff] hover:underline"
+                className="cursor-pointer text-[13px] font-semibold text-[#222222] underline decoration-[1.5px] underline-offset-[3px] hover:decoration-2"
                 onClick={() => setPhaseDialogOpen(true)}
               >
                 Modifica
@@ -3723,7 +3723,7 @@ export function AutoscuoleStudentsPage({
             </p>
             <button
               type="button"
-              className={blueLinkClass}
+              className={inlineLinkClass}
               onClick={() =>
                 setLessonsPathChoice(
                   filteredPath
@@ -3858,7 +3858,7 @@ export function AutoscuoleStudentsPage({
                         key={i}
                         className={cn(
                           "rounded-[4px] px-2 py-0.5 text-[12px] font-semibold",
-                          isExam ? "bg-[#f3e8ff] text-[#7c3aed]" : "bg-[#f0f4ff] text-[#428bff]",
+                          isExam ? "bg-[#f3e8ff] text-[#7c3aed]" : "bg-[#f2f2f2] text-[#222222]",
                         )}
                       >
                         {formatLessonType(t)}
@@ -3896,7 +3896,7 @@ export function AutoscuoleStudentsPage({
                       {lesson.manualPaymentStatus !== "paid" && (
                         <button
                           type="button"
-                          className={cn(blueLinkClass, "ml-1")}
+                          className={cn(inlineLinkClass, "ml-1")}
                           disabled={paymentSaving === lesson.id}
                           onClick={() => void handleSetManualPayment(lesson.id, "paid")}
                         >
@@ -3906,7 +3906,7 @@ export function AutoscuoleStudentsPage({
                       {lesson.manualPaymentStatus !== "paid" && !isExam && (credits?.availableCredits ?? 0) > 0 && (
                         <button
                           type="button"
-                          className={cn(blueLinkClass, "ml-1")}
+                          className={cn(inlineLinkClass, "ml-1")}
                           disabled={paymentSaving === lesson.id}
                           onClick={() => void handleCoverWithCredit(lesson.id)}
                         >
@@ -3916,7 +3916,7 @@ export function AutoscuoleStudentsPage({
                       {lesson.manualPaymentStatus === "paid" && (
                         <button
                           type="button"
-                          className={cn(blueLinkClass, "ml-1")}
+                          className={cn(inlineLinkClass, "ml-1")}
                           disabled={paymentSaving === lesson.id}
                           onClick={() => void handleSetManualPayment(lesson.id, "unpaid")}
                         >

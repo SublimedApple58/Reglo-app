@@ -21,7 +21,7 @@ import { asExamOutcome } from "@/lib/autoscuole/exam-outcome";
 import {
   Pill,
   StudentAvatar,
-  blueLinkClass,
+  inlineLinkClass,
   sectionLabelClass,
   splitFullName,
 } from "@/components/pages/Autoscuole/student-detail-ui";
@@ -280,7 +280,7 @@ export function ConsorzioStudentDrawer({
                 />
                 <button
                   type="button"
-                  className={blueLinkClass}
+                  className={inlineLinkClass}
                   disabled={phoneSaving}
                   onClick={() => void savePhone()}
                 >
@@ -300,7 +300,7 @@ export function ConsorzioStudentDrawer({
                 <p className="text-sm font-medium text-foreground">{data.phone || "—"}</p>
                 <button
                   type="button"
-                  className={blueLinkClass}
+                  className={inlineLinkClass}
                   onClick={() => {
                     setPhoneDraft(data.phone ?? "");
                     setEditingPhone(true);
@@ -324,7 +324,7 @@ export function ConsorzioStudentDrawer({
               {activePath && <Pill tone="blue">In corso</Pill>}
               <button
                 type="button"
-                className={blueLinkClass}
+                className={inlineLinkClass}
                 onClick={() => setLicenseDialogOpen(true)}
               >
                 Modifica
@@ -334,7 +334,7 @@ export function ConsorzioStudentDrawer({
                   prima si rimediava registrando due volte la stessa persona. */}
               <button
                 type="button"
-                className={blueLinkClass}
+                className={inlineLinkClass}
                 onClick={() => setNewPathDialogOpen(true)}
               >
                 Avvia nuovo percorso
@@ -348,7 +348,7 @@ export function ConsorzioStudentDrawer({
               </Pill>
               <button
                 type="button"
-                className={blueLinkClass}
+                className={inlineLinkClass}
                 onClick={() => setPhaseDialogOpen(true)}
               >
                 Modifica
@@ -412,7 +412,7 @@ export function ConsorzioStudentDrawer({
                   </div>
                   <button
                     type="button"
-                    className={blueLinkClass}
+                    className={inlineLinkClass}
                     onClick={() => {
                       setLessonsPathChoice(path.id);
                       setTab("lessons");
@@ -433,7 +433,7 @@ export function ConsorzioStudentDrawer({
           <p className={cn(sectionLabelClass, "mb-0")}>Codici contabili</p>
           <button
             type="button"
-            className={blueLinkClass}
+            className={inlineLinkClass}
             onClick={() => setPickerOpen((prev) => !prev)}
           >
             {pickerOpen ? "Chiudi" : "Aggiungi codice"}
@@ -563,7 +563,7 @@ export function ConsorzioStudentDrawer({
         </p>
         <button
           type="button"
-          className={blueLinkClass}
+          className={inlineLinkClass}
           onClick={() =>
             setLessonsPathChoice(
               filteredPath ? ALL_LESSON_PATHS : thisPath?.id ?? ALL_LESSON_PATHS,
@@ -615,7 +615,7 @@ export function ConsorzioStudentDrawer({
                   new Date(row.startsAt).getTime() <= Date.now() && (
                     <button
                       type="button"
-                      className={blueLinkClass}
+                      className={inlineLinkClass}
                       onClick={() => setOutcomeExamId(row.appointmentId)}
                     >
                       Registra esito

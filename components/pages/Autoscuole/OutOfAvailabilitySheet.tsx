@@ -136,7 +136,7 @@ export function OutOfAvailabilitySheet({
                         Istruttore
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700 text-xs">
+                      <Badge variant="outline" className="border-[#dddddd] bg-[#f7f7f7] text-[#222222] text-xs">
                         Veicolo
                       </Badge>
                     )}
