@@ -6,26 +6,19 @@ import {
 } from "@/lib/autoscuole/message-channels";
 
 /**
- * REG-767 — i canali per singola comunicazione: ereditati dalla scelta globale
- * di prima, sovrascrivibili riga per riga, riga vuota = spenta.
+ * REG-767 — i canali per singola comunicazione: si parte con solo l'App,
+ * sovrascrivibili riga per riga, riga vuota = spenta.
  */
 
 describe("storedMessageChannels", () => {
-  it("senza scelte eredita la lista globale del suo pubblico", () => {
+  it("le righe mai toccate partono con solo l'App, qualunque fosse la scelta globale", () => {
     const limits = {
-      studentReminderChannels: ["email", "push"],
-      instructorReminderChannels: ["push"],
+      studentReminderChannels: ["push", "whatsapp", "email"],
+      instructorReminderChannels: ["email"],
     };
-    expect(storedMessageChannels(limits, "appointment_cancelled")).toEqual(["push", "email"]);
+    expect(storedMessageChannels(limits, "appointment_cancelled")).toEqual(["push"]);
     expect(storedMessageChannels(limits, "appointment_reminder_instructor")).toEqual(["push"]);
-  });
-
-  it("senza niente salvato valgono tutti e tre, come il default storico", () => {
-    expect(storedMessageChannels({}, "appointment_reminder_student")).toEqual([
-      "push",
-      "whatsapp",
-      "email",
-    ]);
+    expect(storedMessageChannels({}, "appointment_reminder_student")).toEqual(["push"]);
   });
 
   it("la riga salvata vince sulla globale, e una lista vuota resta vuota", () => {
@@ -53,7 +46,7 @@ describe("effectiveMessageChannels", () => {
   });
 
   it("il promemoria istruttore è acceso di default", () => {
-    expect(effectiveMessageChannels({ instructorReminderChannels: ["push"] }, "appointment_reminder_instructor")).toEqual(["push"]);
+    expect(effectiveMessageChannels({}, "appointment_reminder_instructor")).toEqual(["push"]);
     expect(
       effectiveMessageChannels({ instructorReminderEnabled: false }, "appointment_reminder_instructor"),
     ).toEqual([]);
@@ -71,7 +64,7 @@ describe("per la pagina", () => {
     expect(Object.keys(all)).toHaveLength(9);
     // mattino e giorno prima sono spenti di default, come prima
     expect(all.morning_reminder_student).toEqual([]);
-    expect(all.appointment_reminder_student).toEqual(["push", "whatsapp", "email"]);
+    expect(all.appointment_reminder_student).toEqual(["push"]);
   });
 
   it("WhatsApp solo dove c'è un modello Meta utility approvato", () => {

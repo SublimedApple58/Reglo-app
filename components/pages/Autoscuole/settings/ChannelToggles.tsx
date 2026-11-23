@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Mail, MessageCircle } from "lucide-react";
+import { Mail } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { WHATSAPP_GLYPH_PATH } from "@/components/pages/Autoscuole/NeverAccessedNudge";
 
 /**
  * REG-767 — i canali di una comunicazione, sulla sua riga.
@@ -47,12 +48,21 @@ export function AppChannelIcon({
   );
 }
 
+/** Il logo ufficiale di WhatsApp, a un colore (richiesta di Tiziano, 24/11). */
+export function WhatsAppChannelIcon({ className }: { className?: string; strokeWidth?: number | string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+      <path d={WHATSAPP_GLYPH_PATH} />
+    </svg>
+  );
+}
+
 export const CHANNEL_META: Record<
   ChannelKey,
   { label: string; Icon: React.ComponentType<{ className?: string; strokeWidth?: number | string }> }
 > = {
   push: { label: "App", Icon: AppChannelIcon },
-  whatsapp: { label: "WhatsApp", Icon: MessageCircle },
+  whatsapp: { label: "WhatsApp", Icon: WhatsAppChannelIcon },
   email: { label: "Email", Icon: Mail },
 };
 

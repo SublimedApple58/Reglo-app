@@ -101,8 +101,8 @@ spostata, cambio luogo, esame fissato) ha **i suoi canali**, nella chiave
 sua riga (`deliverToEach` in `channel-cascade.ts`, ordine App → WhatsApp →
 Email): niente cascata, niente riserva. Nessun canale acceso = non parte (dove
 c'è, si spegne anche il suo interruttore: mattina, giorno prima, guida fissata,
-istruttore). Le righe mai toccate **ereditano** `studentReminderChannels` /
-`instructorReminderChannels`. Lo usano i 4 blocchi dei promemoria in
+istruttore). Le righe mai toccate partono con **solo l'App** (decisione del 24/11:
+WhatsApp ed Email si accendono riga per riga). Lo usano i 4 blocchi dei promemoria in
 `communications.ts` (job Trigger: arriva in prod solo con `trigger:deploy:prod`)
 e `notifyAutoscuolaUser` (`notify.ts`, via `resolveChannels(…, kind)`). Gli
 altri messaggi (fasi, festività, offerte…) seguono ancora la scelta del

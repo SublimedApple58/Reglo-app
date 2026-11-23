@@ -2,13 +2,13 @@
 
 import * as React from "react";
 
-import { History, Mail, MessageCircle, XCircle } from "lucide-react";
+import { History, Mail, XCircle } from "lucide-react";
 
 import { getRecentDeliveriesAction } from "@/lib/actions/autoscuole-settings.actions";
 import type { RecentDelivery } from "@/lib/autoscuole/recent-deliveries";
 import { cn } from "@/lib/utils";
 import { SettingsSection } from "@/components/pages/Autoscuole/settings/settings-rows";
-import { AppChannelIcon } from "@/components/pages/Autoscuole/settings/ChannelToggles";
+import { AppChannelIcon, WhatsAppChannelIcon } from "@/components/pages/Autoscuole/settings/ChannelToggles";
 
 /**
  * «Ultimi invii» (REG-500): cosa è partito davvero, e su quale canale.
@@ -24,7 +24,7 @@ const COLLAPSED = 5;
 
 const CHANNEL = {
   push: { icon: AppChannelIcon, label: "App" },
-  whatsapp: { icon: MessageCircle, label: "WhatsApp" },
+  whatsapp: { icon: WhatsAppChannelIcon, label: "WhatsApp" },
   email: { icon: Mail, label: "Email" },
 } as const;
 

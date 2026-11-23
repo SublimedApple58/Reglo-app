@@ -12,8 +12,8 @@
  *   niente cascata, niente riserva;
  * - nessun canale acceso = la comunicazione non parte.
  *
- * Chi non ha mai toccato la riga eredita la scelta globale di prima, così
- * nessuna autoscuola perde un canale nel passaggio. Le chiavi sono i `kind`
+ * Chi non ha mai toccato la riga parte con **solo l'App** (decisione di Tiziano
+ * del 24/11/2026; WhatsApp ed Email si accendono riga per riga). Le chiavi sono i `kind`
  * già usati dagli invii e dai modelli WhatsApp (`whatsapp-templates.ts`).
  */
 import type { DeliveryChannel } from "@/lib/autoscuole/delivery-log";
@@ -23,6 +23,9 @@ import {
 } from "@/lib/autoscuole/whatsapp-templates";
 
 export const CHANNEL_ORDER: readonly DeliveryChannel[] = ["push", "whatsapp", "email"];
+
+/** Le righe mai toccate partono così: solo l'App. */
+export const DEFAULT_MESSAGE_CHANNELS: readonly DeliveryChannel[] = ["push"];
 
 export const MESSAGE_CHANNEL_KEYS = [
   "appointment_reminder_student",
@@ -41,7 +44,7 @@ export type MessageChannelKey = (typeof MESSAGE_CHANNEL_KEYS)[number];
 export const isMessageChannelKey = (value: string): value is MessageChannelKey =>
   (MESSAGE_CHANNEL_KEYS as readonly string[]).includes(value);
 
-/** A chi va: decide da quale scelta globale si eredita il default. */
+/** A chi va la comunicazione. */
 export const MESSAGE_AUDIENCE: Record<MessageChannelKey, "student" | "instructor"> = {
   appointment_reminder_student: "student",
   morning_reminder_student: "student",
@@ -78,8 +81,8 @@ export const normalizeChannelList = (value: readonly unknown[]): DeliveryChannel
   CHANNEL_ORDER.filter((channel) => value.some((item) => item === channel && isChannel(item)));
 
 /**
- * I canali salvati per questa comunicazione, o quelli ereditati dalla scelta
- * globale di prima. Una lista vuota salvata vuol dire «spenta» e resta vuota.
+ * I canali salvati per questa comunicazione, o il valore di partenza (solo
+ * App). Una lista vuota salvata vuol dire «spenta» e resta vuota.
  */
 export function storedMessageChannels(
   limits: Record<string, unknown>,
@@ -90,14 +93,10 @@ export function storedMessageChannels(
     const own = (byMessage as Record<string, unknown>)[key];
     if (Array.isArray(own)) return normalizeChannelList(own);
   }
-  // Stessa regola di `parseReminderChannels` (scritta qui per non creare un
-  // giro di import con `reminder-channels.ts`): assente o vuota = tutti e tre.
-  const global =
-    MESSAGE_AUDIENCE[key] === "instructor"
-      ? limits.instructorReminderChannels
-      : limits.studentReminderChannels;
-  const inherited = Array.isArray(global) ? normalizeChannelList(global) : [];
-  return inherited.length ? inherited : [...CHANNEL_ORDER];
+  // Valore di partenza deciso da Tiziano il 24/11/2026: solo l'App. Con
+  // l'invio su tutti i canali accesi, ereditare la vecchia scelta globale
+  // (quasi sempre tutti e tre) avrebbe triplicato ogni messaggio.
+  return [...DEFAULT_MESSAGE_CHANNELS];
 }
 
 /** Vero se la comunicazione è accesa dal suo booleano (dove esiste). */
