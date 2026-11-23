@@ -119,8 +119,8 @@ export function SettingsRow({
 
 /**
  * Etichetta di un gruppo di righe dentro una sezione («Promemoria», «Solo
- * nell'app»): grigia e piccola, con una nota facoltativa. La riga che segue non
- * ha la linea sopra, così l'etichetta le fa da titolo.
+ * nell'app»): grigia e piccola, con una nota facoltativa. Niente linea sotto
+ * (i divisori del gruppo stanno sul fondo delle righe), così le fa da titolo.
  */
 export function SettingsGroupLabel({
   children,
@@ -130,7 +130,7 @@ export function SettingsGroupLabel({
   note?: string;
 }) {
   return (
-    <div className="pb-1 pt-6 first:pt-3 [&+*]:!border-t-0">
+    <div className="!border-b-0 pb-1 pt-6 first:pt-3">
       <div className="text-[13px] font-semibold text-[#929292]">{children}</div>
       {note ? (
         <p className="mt-1 max-w-[560px] text-[13px] font-medium leading-relaxed text-[#6a6a6a]">{note}</p>
