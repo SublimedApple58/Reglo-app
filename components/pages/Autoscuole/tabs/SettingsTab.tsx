@@ -582,10 +582,13 @@ function SettingsTab({
                     <ChannelIcon channel="push" state="on" size="legend" />
                     App Reglo
                   </span>
-                  <span className="flex items-center gap-1.5">
-                    <ChannelIcon channel="whatsapp" state="on" size="legend" />
-                    WhatsApp
-                  </span>
+                  {/* REG-771: senza WhatsApp collegato non si nomina nemmeno. */}
+                  {whatsappAvailable ? (
+                    <span className="flex items-center gap-1.5">
+                      <ChannelIcon channel="whatsapp" state="on" size="legend" />
+                      WhatsApp
+                    </span>
+                  ) : null}
                   <span className="flex items-center gap-1.5">
                     <ChannelIcon channel="email" state="on" size="legend" />
                     Email
