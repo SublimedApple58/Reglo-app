@@ -7,6 +7,7 @@ import {
   CalendarCheck,
   CalendarClock,
   CalendarX,
+  CalendarMinus,
   SquareCheck,
   Check,
   Clock,
@@ -770,6 +771,15 @@ function SettingsTab({
                   description="Quando un allievo si ritira da una sua guida di gruppo."
                   stackOnMobile
                   control={channelsFor("appointment_cancelled_instructor")}
+                />
+                {/* REG-771: prima seguiva la vecchia scelta unica dei canali istruttori. */}
+                <SettingsRow
+                  title="Assenza settimanale"
+                  icon={CalendarMinus}
+                  dim={offRow("weekly_absence")}
+                  description="Quando un suo allievo dichiara che salta una settimana."
+                  stackOnMobile
+                  control={channelsFor("weekly_absence")}
                 />
                 <SettingsRow
                   title="Richieste di sostituzione"

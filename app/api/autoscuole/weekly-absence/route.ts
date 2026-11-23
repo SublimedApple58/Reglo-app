@@ -7,7 +7,7 @@ import {
   parseInstructorSettings,
   buildCompanyBookingDefaults,
 } from "@/lib/autoscuole/instructor-clusters";
-import { notifyAutoscuolaUser, PUSH_ONLY } from "@/lib/autoscuole/notify";
+import { EVENT_CHANNELS, notifyAutoscuolaUser } from "@/lib/autoscuole/notify";
 import { isInstructor } from "@/lib/autoscuole/roles";
 
 const postSchema = z.object({
@@ -85,12 +85,17 @@ export async function POST(request: Request) {
     // Notify instructor
     if (member.assignedInstructor.userId) {
       const studentName = member.user?.name ?? "Un allievo";
+      const instructorUser = await prisma.user.findUnique({
+        where: { id: member.assignedInstructor.userId },
+        select: { email: true },
+      });
+      // REG-771: riga «Assenza settimanale» degli Istruttori (App ed Email).
       await notifyAutoscuolaUser({
         companyId: membership.companyId,
         kind: "weekly_absence",
         audience: "instructor",
-        recipient: { userId: member.assignedInstructor.userId },
-        supports: PUSH_ONLY,
+        recipient: { userId: member.assignedInstructor.userId, email: instructorUser?.email },
+        supports: EVENT_CHANNELS,
         title: "Assenza settimanale",
         body: `${studentName} ha dichiarato assenza per la settimana del ${payload.weekStart}.`,
         data: {

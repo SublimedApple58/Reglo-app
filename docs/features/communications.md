@@ -123,10 +123,12 @@ REG-771 (23/11): niente righe «prese in prestito».
   `appointment_cancelled_instructor` («Guida annullata» tra gli Istruttori, App
   ed Email). `kind` resta `appointment_cancelled`. È l'unico annullamento che
   oggi avvisa l'istruttore: le altre cancellazioni non gli mandano niente.
-- Nessun avviso agli istruttori legge più una riga degli allievi. Restano fuori
-  dal catalogo, e seguono la vecchia scelta globale `instructorReminderChannels`
-  ∩ App: `swap_instructor_notify` («Richieste di sostituzione», solo app) e
-  `weekly_absence` (assenza settimanale dichiarata dall'allievo, non in pagina).
+- **Assenza settimanale** (`weekly_absence`, `app/api/autoscuole/weekly-absence`):
+  riga sua tra gli Istruttori (App ed Email). Prima seguiva la vecchia scelta
+  globale `instructorReminderChannels` ∩ App e non compariva in pagina.
+- Nessun avviso agli istruttori legge più una riga degli allievi. L'unico che
+  usa ancora `instructorReminderChannels` (via `getConfiguredChannels`) è
+  `swap_instructor_notify` («Richieste di sostituzione», solo app, fisso).
 
 > Storia: dal 22/10 (REG-500) `deliverByCascade` scendeva App → WhatsApp → Email
 > fermandosi al primo che consegnava. Tolta il 24/11 su decisione di Tiziano.

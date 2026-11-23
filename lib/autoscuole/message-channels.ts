@@ -48,6 +48,7 @@ export const MESSAGE_CHANNEL_KEYS = [
   "appointment_reminder_instructor",
   "appointment_rescheduled_instructor",
   "appointment_cancelled_instructor",
+  "weekly_absence",
 ] as const;
 
 export type MessageChannelKey = (typeof MESSAGE_CHANNEL_KEYS)[number];
@@ -68,6 +69,9 @@ export const MESSAGE_AUDIENCE: Record<MessageChannelKey, "student" | "instructor
   appointment_reminder_instructor: "instructor",
   appointment_rescheduled_instructor: "instructor",
   appointment_cancelled_instructor: "instructor",
+  // REG-771: l'allievo dichiara una settimana di assenza, avviso al suo
+  // istruttore. Prima seguiva la vecchia scelta unica `instructorReminderChannels`.
+  weekly_absence: "instructor",
 };
 
 /**
@@ -134,8 +138,8 @@ export function effectiveMessageChannels(
 
 /**
  * WhatsApp si può accendere su questa riga? Serve un modello Meta utility
- * approvato. Le righe senza modello nel registro (oggi «Guida spostata» e
- * «Guida annullata» degli istruttori, REG-771) mostrano solo App ed Email.
+ * approvato. Le righe senza modello nel registro (oggi le tre degli istruttori
+ * aggiunte da REG-771) mostrano solo App ed Email.
  */
 export function whatsappTemplateReady(key: MessageChannelKey): boolean {
   const template = (WHATSAPP_TEMPLATES as Record<string, WhatsAppTemplate>)[key];
