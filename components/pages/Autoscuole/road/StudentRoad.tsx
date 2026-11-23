@@ -466,7 +466,9 @@ function AllRoutesMap({
       map.off("mousemove", ALL_ROUTES_HIT, onMove);
       map.off("mouseleave", ALL_ROUTES_HIT, clear);
       map.off("click", ALL_ROUTES_HIT, onClick);
-      map.removeControl(nav);
+      // REG-777: uscendo dalla pagina `useRoadMap` ha già fatto `map.remove()`,
+      // che toglie i controlli: un secondo `removeControl` lancia (nav._map è sparito).
+      if (map.hasControl(nav)) map.removeControl(nav);
     };
   }, [handle]);
 
