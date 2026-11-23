@@ -5,8 +5,7 @@ autoscuola. **Nessun dato si perde**: si blocca solo l'accesso (UI e API) e si
 fermano gli invii verso le persone. Lo **sblocco** si fa **solo dal backoffice**
 interno, mai dal titolare.
 
-> Stato: backend fatto (fase 1). UI web, backoffice e mobile in lavorazione
-> (fasi 3–4). Piano: `plans/` del task REG-773.
+> Mobile: `reglo-mobile/docs/features/maintenance-mode.md`.
 
 ## Ambiti
 
@@ -94,13 +93,33 @@ Verifica del 2026-11-23 sul DB dev, con un'autoscuola temporanea poi cancellata
 dai job e voce si comportano come da tabella in ogni passo, e dopo lo sblocco
 tornano tutti normali; registro `activate → change_scope → unlock`.
 
+## Dove si accende e dove si spegne
+
+- **Web, titolare**: Impostazioni → «Informazioni aziendali», in fondo:
+  riga «Modalità manutenzione» → dialogo (ambito «Solo te / Tutti» + nome
+  dell'autoscuola scritto; CTA attiva solo se coincide) → `activateCompanyMaintenance`
+  → `/[locale]/manutenzione`.
+- **Mobile, titolare**: Impostazioni → Account → stesso foglio (form sheet).
+- **Backoffice** (`/backoffice`, lista autoscuole): la colonna Stato dice «In
+  manutenzione · dal … · tutti / solo titolare»; in «Gestisci» la sezione
+  **Manutenzione** (prima di tutte) attiva, cambia ambito con il segmentato,
+  **sblocca** e mostra lo storico. Ogni cambio chiede conferma.
+- **Schermate di blocco**: web `/[locale]/manutenzione` (fuori dal layout
+  `/user`; si torna all'app da sola quando non si è più bloccati), mobile
+  `MaintenanceScreen`, pagine pubbliche (QR `/i/`) `MaintenancePublicNotice`.
+  Le pagine Aula del docente passano da `requireUserAndCompany` e
+  reindirizzano alla schermata.
+
 ## Testi delle schermate
 
 Le schermate di manutenzione (web e mobile, titolare e non) **non devono mai far
 capire che l'ha chiesto il titolare**: tono di manutenzione tecnica neutra,
-niente «come hai chiesto», niente «tu», niente riepilogo dell'ambito. Solo il
-backoffice (interno) mostra chi l'ha attivata. CTA: «Scrivi al supporto»
-(`support@reglo.it`); su mobile l'unica azione è «Esci».
+niente «come hai chiesto», niente «tu», niente riepilogo dell'ambito, niente
+frase sui dati. Testo: «L'account è temporaneamente in manutenzione e tornerà
+disponibile il prima possibile.» (mobile: «…e l'app tornerà disponibile…»).
+Solo il backoffice (interno) mostra chi l'ha attivata. Web: CTA «Scrivi al
+supporto» (`support@reglo.it`) ed «Esci»; mobile: solo «Esci», uguale per tutti
+i ruoli.
 
 ## File
 
@@ -113,4 +132,9 @@ backoffice (interno) mostra chi l'ha attivata. CTA: «Scrivi al supporto»
 | `lib/actions/maintenance.actions.ts` | Attivazione dal web |
 | `app/api/autoscuole/maintenance/route.ts` | Attivazione dal mobile |
 | `lib/actions/backoffice.actions.ts` | `setBackofficeCompanyMaintenance`, `getBackofficeCompanyMaintenanceEvents`, stato nella lista |
+| `app/[locale]/manutenzione/page.tsx` | Schermata web |
+| `components/pages/Autoscuole/settings/MaintenanceSection.tsx` | Riga + dialogo di conferma (in `tabs/BusinessInfoPane.tsx`) |
+| `components/pages/Backoffice/BackofficeMaintenanceSection.tsx` | Sezione del backoffice (in `BackofficeCompaniesPage.tsx`) |
+| `components/shared/maintenance/MaintenancePublicNotice.tsx` | Avviso delle pagine pubbliche |
+| `public/images/3d/barriera-3d.png`, `barriera-riga-3d.png` | Icona 3D (grande e da riga) |
 | `tests/unit/maintenance.test.ts` | Regole pure |

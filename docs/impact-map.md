@@ -219,6 +219,15 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Backoffice**: pannello "Link investor" dentro la pagina KPI (crea/copia/revoca, contatore aperture)
 - Modello `InvestorKpiLink` (token, label, revoca, scadenza, viste): nessuna relazione con Company/User, è un oggetto di livello Reglo
 
+### Modalità manutenzione (REG-773)
+- → **Tutte le action e route autenticate**: il blocco sta in `getActiveCompanyContext`. Una strada nuova che deve restare aperta a un account in manutenzione usa `getActiveCompanyContextUnchecked` (oggi: push unregister, `/manutenzione`). Una nuova lettura del contesto che salta `getActiveCompanyContext` salta anche il blocco.
+- → **Notifications / push / WhatsApp / Communications**: cancelli in `notify.ts`, `push.ts`, `whatsapp-delivery.ts`, `sendAutoscuolaMessage` e filtro `companyNotClosedToEveryone` sui job promemoria e posti liberi. Un canale di invio nuovo va fatto passare da `maintenance-gate.ts`.
+- → **Payments / Penalties / fatture**: volutamente NON filtrati (decisione di Tiziano, vedi scheda).
+- → **Voice AI**: Twilio/Telnyx rispondono col messaggio di manutenzione in ambito `EVERYONE`.
+- → **Inviti, iscrizione con codice, QR istruttore, Aula live**: chiusi in ambito `EVERYONE` (`isEntryClosedByMaintenance`).
+- → **Backoffice**: stato in lista + sezione in «Gestisci»; identità di chi sblocca da `getBackofficeIdentity`.
+- → **Mobile**: campo `maintenance` in login e `/api/mobile/me` (`describeMemberMaintenance`); il `message` `COMPANY_MAINTENANCE` è letto dall'app.
+
 ### Backoffice — accesso personale (REG-413)
 - → **Tutto il backoffice**: `requireGlobalAdmin` / `validateBackofficeCookie` accettano la sessione personale (`BackofficeSession`) o, finché `GLOBAL_ADMIN_PASSWORD` è in env, la vecchia credenziale condivisa
 - → **Email template**: mail di accesso con `internalStaffOnly` (parte anche su staging, solo verso `@reglo.it`)
