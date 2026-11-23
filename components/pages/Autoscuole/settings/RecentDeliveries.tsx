@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Bell, Mail, MessageCircle, XCircle } from "lucide-react";
 
 import { getRecentDeliveriesAction } from "@/lib/actions/autoscuole-settings.actions";
 import type { RecentDelivery } from "@/lib/autoscuole/recent-deliveries";
 import { cn } from "@/lib/utils";
+import { SettingsSection } from "@/components/pages/Autoscuole/settings/settings-rows";
 
 /**
  * «Ultimi invii» (REG-500): cosa è partito davvero, e su quale canale.
@@ -13,14 +13,16 @@ import { cn } from "@/lib/utils";
  * Esiste perché il fallimento era muto: per mesi i WhatsApp non partivano e
  * nessuno lo sapeva. Qui l'autoscuola vede l'esito di ogni messaggio — e, se
  * non è arrivato, il perché detto in parole sue.
+ *
+ * REG-767: lista nativa del pane (niente riquadro), canale scritto in grigio.
  */
 
 const COLLAPSED = 5;
 
-const CHANNEL = {
-  push: { icon: Bell, label: "App" },
-  whatsapp: { icon: MessageCircle, label: "WhatsApp" },
-  email: { icon: Mail, label: "Email" },
+const CHANNEL_LABEL = {
+  push: "App",
+  whatsapp: "WhatsApp",
+  email: "Email",
 } as const;
 
 const timeLabel = (iso: string) => {
@@ -49,72 +51,60 @@ export function RecentDeliveries() {
   const visible = items ? (expanded ? items : items.slice(0, COLLAPSED)) : [];
 
   return (
-    <div className="mt-[26px] overflow-hidden rounded-[14px] border border-[#ebebeb]">
-      <div className="flex items-center justify-between border-b border-[#ebebeb] px-4 py-3.5">
-        <div>
-          <div className="text-[15px] font-semibold text-[#222222]">Ultimi invii</div>
-          <div className="text-[13px] font-medium text-[#929292]">
-            Cosa è partito davvero, e su quale canale
-          </div>
-        </div>
-        {items && items.length > COLLAPSED ? (
+    <SettingsSection
+      title="Ultimi invii"
+      testId="recent-deliveries"
+      action={
+        items && items.length > COLLAPSED ? (
           <button
             type="button"
             onClick={() => setExpanded((prev) => !prev)}
-            className="text-[13px] font-semibold text-[#222222] underline underline-offset-[3px]"
+            className="cursor-pointer text-[13.5px] font-semibold text-[#222222] underline underline-offset-[3px] transition-colors duration-200 hover:text-[#555555]"
           >
             {expanded ? "Mostra meno" : "Vedi tutti"}
           </button>
-        ) : null}
-      </div>
-
+        ) : null
+      }
+    >
       {items === null ? (
-        <div className="space-y-2 px-4 py-3.5" aria-busy>
+        <div className="space-y-3 py-4" aria-busy>
           {[0, 1, 2].map((i) => (
             <div key={i} className="h-4 animate-pulse rounded bg-[#f3f3f3]" />
           ))}
         </div>
       ) : items.length === 0 ? (
-        <div className="px-4 py-3.5 text-[13px] font-medium text-[#929292]">
-          Ancora nessun invio registrato.
+        <div className="py-4 text-[13.5px] font-medium text-[#929292]">
+          Ancora nessun invio.
         </div>
       ) : (
-        visible.map((item, index) => {
-          const channel = item.channel ? CHANNEL[item.channel] : null;
-          const Icon = channel?.icon ?? XCircle;
-          return (
+        visible.map((item, index) => (
+          <div
+            key={`${item.at}-${index}`}
+            className="grid grid-cols-[52px_1fr_auto] items-baseline gap-3 py-3 text-[13.5px]"
+          >
+            <div className="font-medium tabular-nums text-[#929292]">{timeLabel(item.at)}</div>
+            <div className="min-w-0">
+              <div className="truncate font-semibold text-[#222222]">
+                {item.studentName ?? "Allievo"}{" "}
+                <span className="font-medium text-[#929292]">· {item.label}</span>
+              </div>
+              {item.reason ? (
+                <div className="mt-px text-[12.5px] font-medium text-[#929292]">
+                  {item.reason.charAt(0).toUpperCase() + item.reason.slice(1)}
+                </div>
+              ) : null}
+            </div>
             <div
-              key={`${item.at}-${index}`}
               className={cn(
-                "grid grid-cols-[54px_1fr_auto] items-center gap-3 px-4 py-[11px] text-[13px]",
-                index > 0 && "border-t border-[#f3f3f3]",
+                "whitespace-nowrap text-[13px] font-medium",
+                item.channel ? "text-[#6a6a6a]" : "text-[#222222]",
               )}
             >
-              <div className="font-medium tabular-nums text-[#929292]">{timeLabel(item.at)}</div>
-              <div className="min-w-0">
-                <div className="truncate font-semibold text-[#222222]">
-                  {item.studentName ?? "Allievo"}{" "}
-                  <span className="font-medium text-[#929292]">· {item.label}</span>
-                </div>
-                {item.reason ? (
-                  <div className="mt-px text-xs font-medium text-[#929292]">
-                    {item.reason.charAt(0).toUpperCase() + item.reason.slice(1)}
-                  </div>
-                ) : null}
-              </div>
-              <div
-                className={cn(
-                  "inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold",
-                  channel ? "text-[#222222]" : "text-[#8a8a8a]",
-                )}
-              >
-                <Icon className="size-3.5" strokeWidth={2} />
-                {channel?.label ?? "Non arrivato"}
-              </div>
+              {item.channel ? CHANNEL_LABEL[item.channel] : "Non arrivato"}
             </div>
-          );
-        })
+          </div>
+        ))
       )}
-    </div>
+    </SettingsSection>
   );
 }

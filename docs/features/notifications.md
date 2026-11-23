@@ -109,7 +109,13 @@ l'inbox mobile ricostruisce il sottotitolo da lì, non dal testo del push.
 
 ## Web settings (pane "Promemoria e notifiche")
 
-`components/pages/Autoscuole/tabs/SettingsTab.tsx`, sezione `reminders` (overlay Impostazioni, auto-save): preavvisi a minuti allievo/istruttore, promemoria mattutino e giorno prima (TimePickerInput), canali per promemoria/cancellazioni, e la sezione FLAT **"Notifica slot disponibili domani"** (riga toggle con divider + Destinatari/Orari/"Invia ora per domani", come il proto: niente card) (`emptySlotNotificationEnabled/Target/Times` + bottone "Invia ora per domani" → `triggerEmptySlotNotification`). Il setting è stato SPOSTATO qui da "Prenotazioni e allievi > App allievi" il 2026-07-12.
+`components/pages/Autoscuole/tabs/SettingsTab.tsx`, sezione `reminders` (overlay Impostazioni, auto-save). **Rifatto il 24/11/2026 (REG-767)** sull'impianto di «Prenotazioni e allievi», coi mattoni di `settings/settings-rows.tsx` (`SettingsSection`, `SettingsRow`, `SettingsReveal`, `SettingsSubRow`): sezioni con titolo, righe titolo + riga grigia + controllo, divisori sottili, niente card, icone o pillole. Sezioni:
+- **Allievi** — promemoria prima della guida (select), «La mattina della guida» e «Il giorno prima» (toggle; acceso, compare l'orario con `TimePickerInput`), «Guida fissata» (REG-758), «Posti liberi per domani» (ex «Notifica slot disponibili domani»: toggle; acceso, compaiono «A chi», «Orari» e «Invia ora» → `triggerEmptySlotNotification`; `emptySlotNotificationEnabled/Target/Times`; spostato qui da «Prenotazioni e allievi > App allievi» il 2026-07-12).
+- **Istruttori** — promemoria prima della guida, con «Non inviare».
+- **Canali** — `ChannelCascade` (REG-500): App sempre, WhatsApp, Email; una scelta scrive i canali di allievi e istruttori.
+- **Ultimi invii** — `RecentDeliveries`, lista senza riquadro.
+- **Messaggio di benvenuto** — `WhatsAppWelcomeSection` (REG-767, vedi `whatsapp-welcome.md`).
+Comportamento e chiavi dei limits invariati rispetto a prima del redesign.
 
 ## Checklist for adding a new notification kind
 1. **Backend push**: add `sendAutoscuolaPushToUsers()` call with `data.kind` in the action file

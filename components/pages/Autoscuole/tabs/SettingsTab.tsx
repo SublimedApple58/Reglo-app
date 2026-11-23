@@ -3,17 +3,12 @@
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  ArrowRight,
   Bell,
   Check,
   ChevronDown,
   ClipboardList,
-  CalendarCheck,
-  Coffee,
   MapPin,
-  Moon,
   Plus,
-  Send,
   X,
 } from "lucide-react";
 
@@ -33,7 +28,6 @@ import {
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { TimePickerInput } from "@/components/ui/time-picker";
-import { PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 import { cn } from "@/lib/utils";
 import {
   ChannelCascade,
@@ -41,6 +35,13 @@ import {
 } from "@/components/pages/Autoscuole/settings/ChannelCascade";
 import { RecentDeliveries } from "@/components/pages/Autoscuole/settings/RecentDeliveries";
 import { WhatsAppWelcomeSection } from "@/components/pages/Autoscuole/settings/WhatsAppWelcomeSection";
+import {
+  SETTINGS_SELECT_TRIGGER,
+  SettingsReveal,
+  SettingsRow,
+  SettingsSection,
+  SettingsSubRow,
+} from "@/components/pages/Autoscuole/settings/settings-rows";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -285,61 +286,9 @@ function PolicySwitch({
   );
 }
 
-/** Riga FLAT del proto (Promemoria mattutino / giorno prima): icona+titolo,
- *  sub grigio, toggle a destra, divider sotto; orario rivelato quando attivo. */
-function ReminderBanner({
-  icon: Icon,
-  title,
-  description,
-  checked,
-  onToggle,
-  timeValue,
-  minTime,
-  maxTime,
-  onTimeChange,
-}: {
-  icon: React.ComponentType<{ className?: string; strokeWidth?: string | number }>;
-  title: string;
-  description: string;
-  checked: boolean;
-  onToggle: () => void;
-  /** Senza orario (REG-758, «guida fissata»): la riga è solo l'interruttore. */
-  timeValue?: string;
-  /** Limiti opzionali: senza, il picker naviga tutte le 24 ore. */
-  minTime?: string;
-  maxTime?: string;
-  onTimeChange?: (v: string) => void;
-}) {
-  return (
-    <div className="border-b border-[#ebebeb] py-[18px]">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-[15px] font-semibold text-[#222222]">
-            <Icon className="size-[17px] shrink-0" strokeWidth={2} />
-            {title}
-          </div>
-          <div className="mt-0.5 text-sm font-medium text-[#929292]">{description}</div>
-        </div>
-        <InlineToggle checked={checked} onChange={onToggle} size="lg" />
-      </div>
-      {checked && timeValue !== undefined && onTimeChange && (
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <span className="text-[13px] font-medium text-[#555555]">Orario di invio</span>
-          <TimePickerInput
-            value={timeValue}
-            onChange={onTimeChange}
-            minTime={minTime}
-            maxTime={maxTime}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Sezione FLAT "Notifica slot disponibili domani" del proto: riga
- *  titolo+sub+toggle con divider, poi Destinatari, Orari di invio e la riga
- *  "Invia ora per domani" con bottone pill outline. Nessuna card. */
+/** «Posti liberi per domani» (ex «Notifica slot disponibili domani»): riga con
+ *  interruttore; acceso, sotto compaiono destinatari, orari e l'invio subito.
+ *  REG-767: stesso linguaggio delle altre righe del pane, niente card. */
 function EmptySlotNotificationSection({
   enabled,
   setEnabled,
@@ -361,7 +310,14 @@ function EmptySlotNotificationSection({
   const [sentOverlay, setSentOverlay] = React.useState(false);
 
   return (
-    <div className="mt-7">
+    <SettingsRow
+      testId="empty-slot-row"
+      title="Posti liberi per domani"
+      description="La sera prima, una notifica nell'app se ci sono guide libere."
+      control={
+        <InlineToggle checked={enabled} onChange={() => setEnabled((prev) => !prev)} size="lg" />
+      }
+    >
       <SuccessOverlay
         open={sentOverlay}
         onClose={() => setSentOverlay(false)}
@@ -370,146 +326,112 @@ function EmptySlotNotificationSection({
         subtitle="Gli allievi idonei riceveranno la notifica a breve."
         blend
       />
-      {/* Riga toggle */}
-      <div className="flex items-center justify-between gap-4 border-b border-[#ebebeb] pb-[18px]">
-        <div>
-          <div className="text-[15px] font-semibold text-foreground">
-            Notifica slot disponibili domani
-          </div>
-          <div className="mt-0.5 text-sm font-medium text-[#929292]">
-            Ogni sera gli allievi riceveranno una notifica push se ci sono guide libere
-            per il giorno dopo.
-          </div>
-        </div>
-        <InlineToggle checked={enabled} onChange={() => setEnabled((prev) => !prev)} size="lg" />
-      </div>
+      <SettingsReveal open={enabled}>
+        <SettingsSubRow label="A chi">
+          <Select
+            value={target}
+            onValueChange={(value) => setTarget(value as "all" | "availability_matching")}
+          >
+            <SelectTrigger className={cn(SETTINGS_SELECT_TRIGGER, "sm:w-[280px]")}>
+              <SelectValue placeholder="Destinatari" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="availability_matching">Chi è disponibile a quell&apos;ora</SelectItem>
+              <SelectItem value="all">Tutti gli allievi</SelectItem>
+            </SelectContent>
+          </Select>
+        </SettingsSubRow>
 
-      {enabled && (
-        <>
-              <div className="mt-4">
-                <div className="mb-2 text-xs font-semibold text-[#555555]">Destinatari</div>
-                <Select
-                  value={target}
-                  onValueChange={(value) => setTarget(value as "all" | "availability_matching")}
-                >
-                  <SelectTrigger className={cn(PROTO_SELECT_TRIGGER, "w-[320px] max-w-full")}>
-                    <SelectValue placeholder="Destinatari" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="availability_matching">
-                      Solo allievi con disponibilità corrispondente
-                    </SelectItem>
-                    <SelectItem value="all">Tutti gli allievi</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="mt-4">
-                <div className="mb-2.5 text-xs font-semibold text-[#555555]">Orari di invio</div>
-                {/* Un TimePicker per ogni invio della giornata: la "x" toglie
-                    l'orario (min 1), il "+" ne aggiunge un altro. Il backend
-                    accetta solo mezz'ore tra 08:00 e 22:00. */}
-                <div className="flex flex-wrap items-center gap-2.5">
-                  {times.map((time) => (
-                    <div key={time} className="group relative">
-                      <TimePickerInput
-                        value={time}
-                        minTime="08:00"
-                        maxTime="22:00"
-                        minuteStep={30}
-                        onChange={(next) => {
-                          setTimes((prev) => {
-                            if (prev.includes(next)) {
-                              toast.error({
-                                description: `Le ${next} sono già tra gli orari di invio.`,
-                              });
-                              return prev;
-                            }
-                            return prev.map((t) => (t === time ? next : t)).sort();
-                          });
-                        }}
-                      />
-                      {times.length > 1 && (
-                        <button
-                          type="button"
-                          aria-label={`Rimuovi orario ${time}`}
-                          onClick={() => setTimes((prev) => prev.filter((t) => t !== time))}
-                          className="absolute -right-1.5 -top-1.5 flex size-[18px] cursor-pointer items-center justify-center rounded-full bg-[#222222] text-white opacity-0 shadow-sm transition-opacity hover:bg-black focus-visible:opacity-100 group-hover:opacity-100"
-                        >
-                          <X className="size-3" strokeWidth={2.4} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  {times.length < NOTIFICATION_TIME_OPTIONS.length && (
-                    <button
-                      type="button"
-                      aria-label="Aggiungi orario di invio"
-                      onClick={() =>
-                        setTimes((prev) => {
-                          // Primo slot libero dopo l'ultimo orario scelto (poi da capo)
-                          const last = prev[prev.length - 1];
-                          const free = [
-                            ...NOTIFICATION_TIME_OPTIONS.filter((t) => t > last),
-                            ...NOTIFICATION_TIME_OPTIONS,
-                          ].find((t) => !prev.includes(t));
-                          return free ? [...prev, free].sort() : prev;
-                        })
-                      }
-                      className="flex size-[38px] cursor-pointer items-center justify-center rounded-full border-[1.5px] border-dashed border-[#c9c9c9] text-[#222222] transition-colors hover:border-[#222222] hover:bg-[#fafafa]"
-                    >
-                      <Plus className="size-4" strokeWidth={2.2} />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Invia ora per domani (riga del proto) */}
-              <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-foreground">Invia ora per domani</div>
-                  <div className="mt-0.5 text-[13px] font-medium text-[#929292]">
-                    Invia subito la notifica di guide disponibili per domani a tutti gli
-                    allievi idonei.
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  disabled={sending}
-                  onClick={async () => {
-                    setSending(true);
-                    try {
-                      const res = await triggerEmptySlotNotification();
-                      if (res.success && res.data) {
-                        setSentOverlay(true);
-                      } else {
+        <SettingsSubRow label="Orari">
+          {/* Un TimePicker per ogni invio della giornata: la "x" toglie
+              l'orario (min 1), il "+" ne aggiunge un altro. Il backend
+              accetta solo mezz'ore tra 08:00 e 22:00. */}
+          <div className="flex flex-wrap items-center gap-2.5 sm:justify-end">
+            {times.map((time) => (
+              <div key={time} className="group relative">
+                <TimePickerInput
+                  value={time}
+                  minTime="08:00"
+                  maxTime="22:00"
+                  minuteStep={30}
+                  onChange={(next) => {
+                    setTimes((prev) => {
+                      if (prev.includes(next)) {
                         toast.error({
-                          description: res.message ?? "Impossibile inviare la notifica.",
+                          description: `Le ${next} sono già tra gli orari di invio.`,
                         });
+                        return prev;
                       }
-                    } catch {
-                      toast.error({ description: "Impossibile inviare la notifica." });
-                    } finally {
-                      setSending(false);
-                    }
+                      return prev.map((t) => (t === time ? next : t)).sort();
+                    });
                   }}
-                  className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-full border-[1.5px] border-[#dddddd] px-[22px] py-[11px] text-[15px] font-semibold text-foreground transition-colors hover:border-[#222222] disabled:pointer-events-none disabled:opacity-60"
-                >
-                  {sending ? (
-                    <LoadingDots className="min-h-[1.5em] scale-[0.8]" />
-                  ) : (
-                    <>
-                      <Send className="size-[15px]" strokeWidth={1.7} />
-                      Invia notifica
-                    </>
-                  )}
-                </button>
+                />
+                {times.length > 1 && (
+                  <button
+                    type="button"
+                    aria-label={`Rimuovi orario ${time}`}
+                    onClick={() => setTimes((prev) => prev.filter((t) => t !== time))}
+                    className="absolute -right-1.5 -top-1.5 flex size-[18px] cursor-pointer items-center justify-center rounded-full bg-[#222222] text-white opacity-0 shadow-sm transition-opacity duration-200 hover:bg-black focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <X className="size-3" strokeWidth={2.4} />
+                  </button>
+                )}
               </div>
-        </>
-      )}
-    </div>
+            ))}
+            {times.length < NOTIFICATION_TIME_OPTIONS.length && (
+              <button
+                type="button"
+                aria-label="Aggiungi orario di invio"
+                onClick={() =>
+                  setTimes((prev) => {
+                    // Primo slot libero dopo l'ultimo orario scelto (poi da capo)
+                    const last = prev[prev.length - 1];
+                    const free = [
+                      ...NOTIFICATION_TIME_OPTIONS.filter((t) => t > last),
+                      ...NOTIFICATION_TIME_OPTIONS,
+                    ].find((t) => !prev.includes(t));
+                    return free ? [...prev, free].sort() : prev;
+                  })
+                }
+                className="flex size-[38px] cursor-pointer items-center justify-center rounded-full border-[1.5px] border-dashed border-[#c9c9c9] text-[#222222] transition-colors duration-200 hover:border-[#222222] hover:bg-[#fafafa]"
+              >
+                <Plus className="size-4" strokeWidth={2.2} />
+              </button>
+            )}
+          </div>
+        </SettingsSubRow>
+
+        <SettingsSubRow label="Per domani, adesso">
+          <button
+            type="button"
+            disabled={sending}
+            onClick={async () => {
+              setSending(true);
+              try {
+                const res = await triggerEmptySlotNotification();
+                if (res.success && res.data) {
+                  setSentOverlay(true);
+                } else {
+                  toast.error({
+                    description: res.message ?? "Impossibile inviare la notifica.",
+                  });
+                }
+              } catch {
+                toast.error({ description: "Impossibile inviare la notifica." });
+              } finally {
+                setSending(false);
+              }
+            }}
+            className="inline-flex h-10 min-w-[136px] shrink-0 cursor-pointer items-center justify-center rounded-full border-[1.5px] border-[#dddddd] px-5 text-sm font-semibold text-[#222222] transition-colors duration-200 hover:border-[#222222] disabled:pointer-events-none disabled:opacity-60"
+          >
+            {sending ? <LoadingDots className="min-h-[1.5em] scale-[0.8]" /> : "Invia ora"}
+          </button>
+        </SettingsSubRow>
+      </SettingsReveal>
+    </SettingsRow>
   );
 }
+
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -567,163 +489,176 @@ function SettingsTab({
           isFirst
           standalone={standalone}
         >
-          <div>
-            {/* Preavviso a minuti */}
-            <div className="mb-4 grid gap-4 sm:grid-cols-2">
-              <div>
-                <div className="mb-2 text-xs font-semibold text-[#555555]">Promemoria allievo</div>
-                <Select
-                  value={studentReminderMinutes}
-                  onValueChange={(value) =>
-                    updateReminderSettings({ studentReminderMinutes: Number(value) })
-                  }
-                >
-                  <SelectTrigger className={PROTO_SELECT_TRIGGER}>
-                    <SelectValue placeholder="Minuti" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {REMINDER_OPTIONS.map((minutes) => (
-                      <SelectItem key={minutes} value={String(minutes)}>
-                        {minutes} minuti prima
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <div className="mb-2 text-xs font-semibold text-[#555555]">Promemoria istruttore</div>
-                <Select
-                  value={instructorReminderEnabled ? instructorReminderMinutes : "off"}
-                  onValueChange={(value) =>
-                    value === "off"
-                      ? updateReminderSettings({ instructorReminderEnabled: false })
-                      : updateReminderSettings({
-                          instructorReminderEnabled: true,
-                          instructorReminderMinutes: Number(value),
-                        })
-                  }
-                >
-                  <SelectTrigger className={PROTO_SELECT_TRIGGER}>
-                    <SelectValue placeholder="Minuti" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {REMINDER_OPTIONS.map((minutes) => (
-                      <SelectItem key={minutes} value={String(minutes)}>
-                        {minutes} minuti prima
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="off">Non inviare</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Righe flat promemoria extra (proto) */}
-            <div className="mt-1">
-              <ReminderBanner
-                icon={Coffee}
-                title="Promemoria mattutino"
-                description="Invia un promemoria la mattina del giorno della guida, in aggiunta al reminder a minuti."
-                checked={studentReminderMorningEnabled}
-                onToggle={() =>
-                  updateReminderSettings({
-                    studentReminderMorningEnabled: !studentReminderMorningEnabled,
-                  })
-                }
-                timeValue={studentReminderMorningTime}
-                minTime="05:00"
-                maxTime="12:00"
-                onTimeChange={(value) =>
-                  updateReminderSettings({ studentReminderMorningTime: value })
+          {/* REG-767: pane rifatto sull'impianto di «Prenotazioni e allievi» —
+              sezioni con un titolo, righe titolo + riga grigia + controllo,
+              divisori sottili. Il comportamento dei promemoria è quello di prima. */}
+          <div className="space-y-10" data-testid="reminders-pane">
+            <SettingsSection title="Allievi">
+              <SettingsRow
+                title="Promemoria prima della guida"
+                stackOnMobile
+                control={
+                  <Select
+                    value={studentReminderMinutes}
+                    onValueChange={(value) =>
+                      updateReminderSettings({ studentReminderMinutes: Number(value) })
+                    }
+                  >
+                    <SelectTrigger className={SETTINGS_SELECT_TRIGGER} aria-label="Promemoria allievo">
+                      <SelectValue placeholder="Minuti" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REMINDER_OPTIONS.map((minutes) => (
+                        <SelectItem key={minutes} value={String(minutes)}>
+                          {minutes} minuti prima
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 }
               />
-              <ReminderBanner
-                icon={Moon}
-                title="Promemoria il giorno prima"
-                description="Invia un promemoria il giorno prima della guida, all'orario scelto."
-                checked={studentReminderDayBeforeEnabled}
-                onToggle={() =>
-                  updateReminderSettings({
-                    studentReminderDayBeforeEnabled: !studentReminderDayBeforeEnabled,
-                  })
+              <SettingsRow
+                title="La mattina della guida"
+                description="Un promemoria in più, all'orario che scegli."
+                control={
+                  <InlineToggle
+                    checked={studentReminderMorningEnabled}
+                    onChange={() =>
+                      updateReminderSettings({
+                        studentReminderMorningEnabled: !studentReminderMorningEnabled,
+                      })
+                    }
+                    size="lg"
+                  />
                 }
-                timeValue={studentReminderDayBeforeTime}
-                onTimeChange={(value) =>
-                  updateReminderSettings({ studentReminderDayBeforeTime: value })
+              >
+                <SettingsReveal open={studentReminderMorningEnabled}>
+                  <SettingsSubRow label="Orario">
+                    <TimePickerInput
+                      value={studentReminderMorningTime}
+                      onChange={(value) =>
+                        updateReminderSettings({ studentReminderMorningTime: value })
+                      }
+                      minTime="05:00"
+                      maxTime="12:00"
+                    />
+                  </SettingsSubRow>
+                </SettingsReveal>
+              </SettingsRow>
+              <SettingsRow
+                title="Il giorno prima"
+                description="Un promemoria la sera prima, all'orario che scegli."
+                control={
+                  <InlineToggle
+                    checked={studentReminderDayBeforeEnabled}
+                    onChange={() =>
+                      updateReminderSettings({
+                        studentReminderDayBeforeEnabled: !studentReminderDayBeforeEnabled,
+                      })
+                    }
+                    size="lg"
+                  />
                 }
-              />
+              >
+                <SettingsReveal open={studentReminderDayBeforeEnabled}>
+                  <SettingsSubRow label="Orario">
+                    <TimePickerInput
+                      value={studentReminderDayBeforeTime}
+                      onChange={(value) =>
+                        updateReminderSettings({ studentReminderDayBeforeTime: value })
+                      }
+                    />
+                  </SettingsSubRow>
+                </SettingsReveal>
+              </SettingsRow>
               {/* REG-758: avviso alla creazione, raggruppato (vedi creation-notice.ts). */}
-              <ReminderBanner
-                icon={CalendarCheck}
-                title="Avviso guida fissata"
-                description="Avvisa l'allievo quando la segreteria, un istruttore o l'assistente vocale gli fissa una guida. Più guide fissate di fila arrivano in un messaggio solo."
-                checked={studentCreationNoticeEnabled}
-                onToggle={() =>
-                  updateReminderSettings({
-                    studentCreationNoticeEnabled: !studentCreationNoticeEnabled,
-                  })
+              <SettingsRow
+                title="Guida fissata"
+                description="Avviso quando la segreteria, un istruttore o la voce fissa una guida. Più guide di fila, un messaggio solo."
+                control={
+                  <InlineToggle
+                    checked={studentCreationNoticeEnabled}
+                    onChange={() =>
+                      updateReminderSettings({
+                        studentCreationNoticeEnabled: !studentCreationNoticeEnabled,
+                      })
+                    }
+                    size="lg"
+                  />
                 }
               />
-            </div>
+              <EmptySlotNotificationSection
+                enabled={emptySlotNotificationEnabled}
+                setEnabled={setEmptySlotNotificationEnabled}
+                target={emptySlotNotificationTarget}
+                setTarget={setEmptySlotNotificationTarget}
+                times={emptySlotNotificationTimes}
+                setTimes={setEmptySlotNotificationTimes}
+              />
+            </SettingsSection>
 
-            {/* ── Come avvisiamo allievi e istruttori: la cascata (REG-500) ──
-                Una scelta sola per tutti: scrive sia i canali degli allievi sia
-                quelli degli istruttori, così le due chiavi non divergono più.
-                La vecchia matrice («Personalizza») è sparita, con la card
-                «Cancellazioni» che in realtà comandava le offerte — ora sempre
-                e solo push (`OFFER_CHANNELS`). Disegno: anteprima v2 del 22/10. */}
-            <div className="mt-[22px]">
-              <ChannelCascade
-                value={studentReminderChannels}
-                onChange={(next) =>
-                  updateReminderSettings({
-                    studentReminderChannels: next,
-                    instructorReminderChannels: next,
-                  })
+            <SettingsSection title="Istruttori">
+              <SettingsRow
+                title="Promemoria prima della guida"
+                stackOnMobile
+                control={
+                  <Select
+                    value={instructorReminderEnabled ? instructorReminderMinutes : "off"}
+                    onValueChange={(value) =>
+                      value === "off"
+                        ? updateReminderSettings({ instructorReminderEnabled: false })
+                        : updateReminderSettings({
+                            instructorReminderEnabled: true,
+                            instructorReminderMinutes: Number(value),
+                          })
+                    }
+                  >
+                    <SelectTrigger className={SETTINGS_SELECT_TRIGGER} aria-label="Promemoria istruttore">
+                      <SelectValue placeholder="Minuti" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REMINDER_OPTIONS.map((minutes) => (
+                        <SelectItem key={minutes} value={String(minutes)}>
+                          {minutes} minuti prima
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="off">Non inviare</SelectItem>
+                    </SelectContent>
+                  </Select>
                 }
-                whatsapp={
-                  whatsappAvailable
-                    ? { state: "ready", sender: whatsappSender }
-                    : { state: "not_configured" }
-                }
-                reach={channelReach}
               />
-              <RecentDeliveries />
-            </div>
+            </SettingsSection>
+
+            {/* La cascata (REG-500): una scelta sola scrive sia i canali degli
+                allievi sia quelli degli istruttori. */}
+            <ChannelCascade
+              value={studentReminderChannels}
+              onChange={(next) =>
+                updateReminderSettings({
+                  studentReminderChannels: next,
+                  instructorReminderChannels: next,
+                })
+              }
+              whatsapp={
+                whatsappAvailable
+                  ? { state: "ready", sender: whatsappSender }
+                  : { state: "not_configured" }
+              }
+              reach={channelReach}
+            />
+
+            <RecentDeliveries />
 
             {/* REG-767: «Messaggio di benvenuto» (scheda allievo e conferma di creazione). */}
-            <div className="mt-4">
-              <WhatsAppWelcomeSection
-                value={studentWelcomeWhatsappTemplate}
-                consortium={consortium}
-                onSave={saveStudentWelcomeWhatsappTemplate}
-              />
-            </div>
-
-            {/* Rimando a Invia comunicato (flat come nel proto, niente box) */}
-            <div className="mt-6 flex flex-wrap items-center gap-2 text-sm font-medium text-[#6a6a6a]">
-              <span>Per inviare un comunicato personalizzato vai su</span>
-              <span className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-full border border-[#e0e0e0] bg-white">
-                <svg width="14" height="11" viewBox="0 0 18 13" fill="none">
-                  <path d="M1 1h16M1 6.5h16M1 12h16" stroke="#222" strokeWidth="1.7" strokeLinecap="round" />
-                </svg>
-              </span>
-              <ArrowRight className="size-[15px] text-[#bbbbbb]" strokeWidth={2} />
-              <span className="inline-flex items-center gap-[5px] font-semibold text-[#222222]">
-                <Bell className="size-[15px]" strokeWidth={2} />
-                Invia comunicato
-              </span>
-            </div>
-
-            {/* Notifica slot disponibili domani (flat, in fondo al pane) */}
-            <EmptySlotNotificationSection
-              enabled={emptySlotNotificationEnabled}
-              setEnabled={setEmptySlotNotificationEnabled}
-              target={emptySlotNotificationTarget}
-              setTarget={setEmptySlotNotificationTarget}
-              times={emptySlotNotificationTimes}
-              setTimes={setEmptySlotNotificationTimes}
+            <WhatsAppWelcomeSection
+              value={studentWelcomeWhatsappTemplate}
+              consortium={consortium}
+              onSave={saveStudentWelcomeWhatsappTemplate}
             />
+
+            <p className="text-[13.5px] font-medium text-[#929292]">
+              Per scrivere a tutti gli allievi usa «Invia comunicato», dal menu.
+            </p>
           </div>
         </AccordionSection>
         )}

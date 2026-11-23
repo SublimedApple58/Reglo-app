@@ -310,18 +310,12 @@ test.describe("Autoscuole smoke", () => {
 
     // ── "Notifica slot disponibili domani" è migrata in Promemoria e notifiche ──
     await page.goto("/it/user/autoscuole?tab=settings&pane=reminders");
-    // Redesign: sezione flat in fondo al pane (niente più card/accordion "Notifica slot vuoti").
-    await expect(page.getByText("Notifica slot disponibili domani").first()).toBeVisible({
+    // REG-767: la riga si chiama «Posti liberi per domani», nella sezione Allievi.
+    await expect(page.getByText("Posti liberi per domani").first()).toBeVisible({
       timeout: 30000,
     });
     // flip → auto-save senza errori → restore
-    const slotToggle = page
-      .locator("div")
-      .filter({ hasText: /^Notifica slot disponibili domani/ })
-      .filter({ has: page.locator('button[role="switch"]') })
-      .last()
-      .getByRole("switch")
-      .first();
+    const slotToggle = page.getByTestId("empty-slot-row").getByRole("switch").first();
     await slotToggle.click();
     await page.waitForTimeout(3000);
     await expectNoSaveError();

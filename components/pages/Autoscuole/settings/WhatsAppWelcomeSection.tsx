@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { WhatsAppGlyph } from "@/components/pages/Autoscuole/NeverAccessedNudge";
+import { SettingsSection } from "@/components/pages/Autoscuole/settings/settings-rows";
 import { useWhatsAppWelcomeContext } from "@/components/pages/Autoscuole/StudentWhatsAppButton";
 import {
   DEFAULT_WELCOME_TEMPLATE,
@@ -110,95 +110,91 @@ export function WhatsAppWelcomeSection({
   const isDefault = (draft.trim() ? draft : DEFAULT_WELCOME_TEMPLATE) === DEFAULT_WELCOME_TEMPLATE;
 
   return (
-    <div
-      ref={rootRef}
-      id={WELCOME_SECTION_ANCHOR}
-      className="scroll-mt-6 border-b border-[#ebebeb] py-[18px]"
-      data-testid="whatsapp-welcome-section"
-    >
-      <div className="flex items-center gap-2 text-[15px] font-semibold text-[#222222]">
-        <WhatsAppGlyph size={17} />
-        Messaggio di benvenuto
-      </div>
-      <div className="mt-0.5 text-sm font-medium text-[#929292]">
-        Si apre in WhatsApp dalla scheda dell&apos;allievo.
-      </div>
-
-      <textarea
-        ref={textareaRef}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        rows={3}
-        maxLength={WELCOME_TEMPLATE_MAX_LENGTH}
-        placeholder={DEFAULT_WELCOME_TEMPLATE}
-        aria-label="Messaggio di benvenuto"
-        className={cn(
-          "mt-3.5 block w-full resize-none rounded-xl border border-[#dddddd] bg-white px-3.5 py-3",
-          "text-[14px] font-medium leading-[1.5] text-[#222222] placeholder:text-[#b0b0b0]",
-          "outline-none transition-[border-color,box-shadow] duration-200 focus:border-[#222222] focus:shadow-[0_0_0_1px_#222222]",
-        )}
-      />
-
-      <div className="mt-2 flex min-h-7 items-center justify-between gap-3 text-[13px] font-medium">
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            data-testid="whatsapp-welcome-insert"
-            className="inline-flex cursor-pointer items-center gap-1 rounded-md py-1 font-semibold text-[#222222] outline-none transition-colors duration-200 hover:text-[#555555]"
-          >
-            Inserisci
-            <ChevronDown className="size-3.5" strokeWidth={2} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="start"
-            className="z-[300] min-w-[220px]"
-            onCloseAutoFocus={(e) => e.preventDefault()}
-          >
-            {placeholders.map((p) => (
-              <DropdownMenuItem key={p.token} onSelect={() => insert(p.token)}>
-                {p.token === "{autoscuola}" && consortium ? "Nome del consorzio" : p.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <div className="flex items-center gap-3">
-          <AnimatePresence initial={false}>
-            {saved ? (
-              <motion.span
-                key="saved"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-                className="text-[#929292]"
-              >
-                Salvato
-              </motion.span>
-            ) : null}
-          </AnimatePresence>
-          {!isDefault ? (
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                setDraft(DEFAULT_WELCOME_TEMPLATE);
-                void save(null);
-              }}
-              className="cursor-pointer text-[#929292] underline-offset-2 transition-colors duration-200 hover:text-[#222222] hover:underline"
-            >
-              Ripristina
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      <p
-        data-testid="whatsapp-welcome-preview"
-        className="mt-3 whitespace-pre-wrap rounded-xl bg-[#f7f7f7] px-3.5 py-2.5 text-[13px] font-medium leading-[1.5] text-[#6a6a6a]"
+    <div ref={rootRef}>
+      <SettingsSection
+        id={WELCOME_SECTION_ANCHOR}
+        testId="whatsapp-welcome-section"
+        title="Messaggio di benvenuto"
+        description="Si apre in WhatsApp dal tasto nella scheda dell'allievo."
       >
-        {preview}
-      </p>
+        <div className="py-4">
+          <textarea
+            ref={textareaRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            rows={3}
+            maxLength={WELCOME_TEMPLATE_MAX_LENGTH}
+            placeholder={DEFAULT_WELCOME_TEMPLATE}
+            aria-label="Messaggio di benvenuto"
+            className={cn(
+              "block w-full resize-none rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 py-3",
+              "text-[14px] font-medium leading-[1.5] text-[#222222] placeholder:text-[#b0b0b0]",
+              "outline-none transition-[border-color] duration-200 hover:border-[#929292] focus:border-[#222222]",
+            )}
+          />
+
+          <div className="mt-2 flex min-h-7 items-center justify-between gap-3 text-[13px] font-medium">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                data-testid="whatsapp-welcome-insert"
+                className="inline-flex cursor-pointer items-center gap-1 rounded-md py-1 font-semibold text-[#222222] outline-none transition-colors duration-200 hover:text-[#555555]"
+              >
+                Inserisci
+                <ChevronDown className="size-3.5" strokeWidth={2} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                className="z-[300] min-w-[220px]"
+                onCloseAutoFocus={(e) => e.preventDefault()}
+              >
+                {placeholders.map((p) => (
+                  <DropdownMenuItem key={p.token} onSelect={() => insert(p.token)}>
+                    {p.token === "{autoscuola}" && consortium ? "Nome del consorzio" : p.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <div className="flex items-center gap-3">
+              <AnimatePresence initial={false}>
+                {saved ? (
+                  <motion.span
+                    key="saved"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                    className="text-[#929292]"
+                  >
+                    Salvato
+                  </motion.span>
+                ) : null}
+              </AnimatePresence>
+              {!isDefault ? (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setDraft(DEFAULT_WELCOME_TEMPLATE);
+                    void save(null);
+                  }}
+                  className="cursor-pointer text-[#929292] underline-offset-2 transition-colors duration-200 hover:text-[#222222] hover:underline"
+                >
+                  Ripristina
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <p
+            data-testid="whatsapp-welcome-preview"
+            className="mt-3 whitespace-pre-wrap rounded-xl bg-[#f7f7f7] px-3.5 py-2.5 text-[13px] font-medium leading-[1.5] text-[#6a6a6a]"
+          >
+            {preview}
+          </p>
+        </div>
+      </SettingsSection>
     </div>
   );
 }
