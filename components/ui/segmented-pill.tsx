@@ -13,6 +13,7 @@ export function SegmentedPill<T extends string>({
   onChange,
   options,
   className,
+  size = "default",
 }: {
   value: T;
   onChange: (value: T) => void;
@@ -24,6 +25,8 @@ export function SegmentedPill<T extends string>({
     count?: number;
   }>;
   className?: string;
+  /** «sm»: dentro una riga (es. Priorità esame nel dettaglio allievo, REG-775). */
+  size?: "default" | "sm";
 }) {
   return (
     <div
@@ -43,7 +46,8 @@ export function SegmentedPill<T extends string>({
             aria-selected={active}
             onClick={() => onChange(opt.value)}
             className={cn(
-              "flex cursor-pointer select-none items-center gap-1 whitespace-nowrap rounded-full px-3.5 py-[7px] text-[13px] transition-colors duration-200 ease-out",
+              "flex cursor-pointer select-none items-center gap-1 whitespace-nowrap rounded-full transition-colors duration-200 ease-out",
+              size === "sm" ? "px-3 py-[5px] text-[12.5px]" : "px-3.5 py-[7px] text-[13px]",
               active
                 ? "bg-[#1e1e1e] font-semibold text-white shadow-clay-ink"
                 : "font-medium text-[#6a6a6a] hover:bg-[#f2f2f2]",

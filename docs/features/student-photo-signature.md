@@ -28,7 +28,7 @@
 | `app/api/students/[studentUserId]/media/[kind]/route.ts` | GET download web: `kind=photo\|signature`, `?variant=original\|portale`; auth sessione + staff della company attiva + allievo membro della stessa company; `Content-Disposition: attachment` |
 | `lib/actions/student-media.actions.ts` | `getStudentMediaOverview(studentUserId)` → signed URL anteprime (stessa auth del download) |
 | `components/pages/Autoscuole/StudentMediaSection.tsx` | Sezione "Firma" del drawer (anteprima + link Originale/Portale); passa gli URL al parent via onLoaded |
-| `components/pages/Autoscuole/AutoscuoleStudentsPage.tsx` | Header drawer: avatar 96px + pill "Modifica" (upload staff) + pill download foto con menu Originale/Portale; monta `StudentMediaSection` nel Riepilogo |
+| `components/pages/Autoscuole/AutoscuoleStudentsPage.tsx` | Testata drawer: avatar 64px + bottone fotocamera (upload staff). REG-775: lo scarico della foto (Originale/Portale) sta in «Documenti» insieme alla firma, cioè `StudentMediaSection` nel Riepilogo |
 
 ## Note
 
@@ -45,7 +45,7 @@ Ogni avatar a iniziali mostra la foto profilo se presente, via **risoluzione bat
 - `app/api/autoscuole/user-photos/route.ts` — GET per il mobile (`ids`/`instructorIds` CSV).
 - `components/ui/user-photo.tsx` — cache modulo + batching 50ms; hook `useUserPhotoUrl`/`useInstructorPhotoUrl`, wrapper `UserPhotoCircle` (foto se c'è, children=iniziali altrimenti), `invalidateUserPhoto`.
 - Siti patchati web: `AutoscuoleStudentsPage` (StudentAvatar: lista+drawer), `AutoscuoleAgendaPage` (allievi esame ×3, istruttori week/day), `InstructorsTab`, `GroupLessonManageDialog`/`CreateDialog`, `AdminUsersPage`, `AutoscuoleVoicePage`.
-- Upload web staff: pill "Modifica" sull'avatar del drawer → `POST /api/students/[id]/media/photo`.
+- Upload web staff: bottone fotocamera sull'avatar del drawer → `POST /api/students/[id]/media/photo`.
 - **Esclusi (fallback iniziali, eventuale follow-up)**: `OwnerNotificationsBell` (payload senza userId), `components/shared/header/user-button.tsx` (header legacy), picker mobile label-only.
 
 ## Copia avatar 512 px (REG-639 giro Road, 28/10/2026)

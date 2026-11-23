@@ -100,7 +100,7 @@ test.describe("Autoscuole smoke", () => {
       await firstDetail.click();
       const panel = page.getByTestId("student-detail-panel");
       await expect(panel).toBeVisible();
-      await expect(panel.getByText("Anagrafica")).toBeVisible({ timeout: 20000 });
+      await expect(panel.getByText("Contatti e accesso")).toBeVisible({ timeout: 20000 });
       // Tab Guide del panel
       await panel.getByText("Guide", { exact: true }).click();
       await page.keyboard.press("Escape");
@@ -150,7 +150,7 @@ test.describe("Autoscuole smoke", () => {
       await firstDetail.click();
       const panel = page.getByTestId("user-detail-panel");
       await expect(panel).toBeVisible();
-      await expect(panel.getByText("Anagrafica")).toBeVisible({ timeout: 20000 });
+      await expect(panel.getByText("Contatti e accesso")).toBeVisible({ timeout: 20000 });
       await page.keyboard.press("Escape");
       await expect(panel).not.toBeVisible();
     }

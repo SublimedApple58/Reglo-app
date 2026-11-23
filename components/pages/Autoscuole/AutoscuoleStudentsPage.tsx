@@ -1,13 +1,7 @@
 "use client";
 
 import React from "react";
-import { ArrowDownAZ, Ban, Camera, ChevronDown, ChevronLeft, ChevronRight, Download, KeyRound, LockOpen, MapPin, Ticket, UserPlus, UserRoundPlus, Users, X } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
+import { ArrowDownAZ, Ban, Camera, ChevronDown, ChevronLeft, ChevronRight, KeyRound, Lock, LockOpen, MapPin, Ticket, UserPlus, UserRoundPlus, Users, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import {
@@ -50,7 +44,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { WhatsAppConsentField } from "@/components/pages/Autoscuole/WhatsAppConsentField";
 import { DatePickerInput } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
-import { InlineToggle } from "@/components/ui/inline-toggle";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -94,6 +87,24 @@ import { setStudentLocations } from "@/lib/actions/autoscuole-student-locations.
 import { availabilityByLocationEnabled } from "@/lib/autoscuole/location-availability";
 import { StudentLocationsPicker } from "./locations/StudentLocationsPicker";
 import { StudentMediaSection } from "@/components/pages/Autoscuole/StudentMediaSection";
+import {
+  ClosedPathsSection,
+  DetailAddButton,
+  DetailBodySkeleton,
+  DetailFigure,
+  DetailProgress,
+  DetailRow,
+  DetailRows,
+  DetailSection,
+  DetailSections,
+  DetailSelectRow,
+  DetailStats,
+  DetailSwitchRow,
+  DrawerHeader,
+  DrawerTabs,
+  PhoneRow,
+  drawerBodyClass,
+} from "@/components/pages/Autoscuole/student-detail-sheet";
 import { useUserPhotoUrl, invalidateUserPhoto } from "@/components/ui/user-photo";
 import { ChangeStudentPhaseDialog } from "@/components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog";
 import {
@@ -106,8 +117,6 @@ import { EditStudentLicenseDialog } from "@/components/pages/Autoscuole/dialogs/
 import { StartNewLicensePathDialog } from "@/components/pages/Autoscuole/dialogs/StartNewLicensePathDialog";
 import {
   closedPathsNewestFirst,
-  historySectionTitle,
-  isQualification,
   openPath,
   pathForDate,
   pathLabel,
@@ -519,18 +528,13 @@ const drivingHoursRemainingLabel = (minutes: number): string => {
   return `Mancano ${formatDrivingHours(minutes)} ore`;
 };
 
-const formatPathDate = (iso: string): string => {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
-};
-
 const EXAM_WEEKDAYS = ["Domenica", "Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato"];
 const EXAM_MONTHS = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
 
 /**
  * R6 (Road novembre): l'esame di guida prenotato in cima al riepilogo
- * dell'allievo, nel viola della card esame dell'agenda (`#F5F0FF`).
+ * dell'allievo. REG-775: card bianca del design system, niente viola
+ * (resta l'icona 3D dell'esame).
  * Un esame senza orario (REG-604) ha `endsAt` null: niente ora.
  */
 function NextExamCard({
@@ -557,36 +561,33 @@ function NextExamCard({
   ].filter((r): r is string[] => r !== null);
   return (
     <div
-      className="mt-1 flex items-start gap-4 rounded-2xl border border-[#E4D9FB] bg-[#F5F0FF] px-5 py-[18px] shadow-[0_8px_20px_-12px_rgba(139,92,246,0.35)]"
+      className="mb-7 flex items-start gap-4 rounded-clay bg-white p-5 shadow-clay-raise max-[420px]:gap-3 max-[420px]:p-4"
       data-testid="student-next-exam"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/images/3d/esame-3d.png" alt="" width={48} height={48} className="shrink-0" />
+      <img src="/images/3d/esame-3d.png" alt="" width={52} height={52} className="size-[52px] shrink-0 max-[420px]:size-11" />
       <div className="min-w-0 flex-1">
-        <p className="text-[12.5px] font-semibold text-[#6D28D9]">Esame di guida · {countdown}</p>
-        <p className="mt-0.5 text-[19px] font-semibold tracking-[-0.3px] text-[#2E1065]">
+        <p className="text-[17px] font-semibold tracking-[-0.2px] text-foreground">Esame di guida</p>
+        <p className="mt-0.5 text-[15px] font-medium text-foreground">
           {day}
           {time ? `, ${time}` : ""}
+          <span className="text-[#6a6a6a]"> · {countdown}</span>
         </p>
-        {!time ? <p className="text-[13px] font-medium text-[#4C1D95]">Orario da definire</p> : null}
+        {!time ? <p className="text-[13px] font-medium text-[#6a6a6a]">Orario da definire</p> : null}
         {rows.length ? (
-          <div className="mt-3 grid grid-cols-[auto_1fr] gap-x-[18px] gap-y-1.5 text-[13.5px]">
+          <div className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13.5px]">
             {rows.map(([label, value]) => (
               <React.Fragment key={label}>
-                <span className="font-medium text-[#7C5BB8]">{label}</span>
-                <span className="font-medium text-[#2E1065]">{value}</span>
+                <span className="font-medium text-[#929292]">{label}</span>
+                <span className="min-w-0 font-medium text-foreground">{value}</span>
               </React.Fragment>
             ))}
           </div>
         ) : null}
+        <Button type="button" variant="outline" size="sm" className="mt-4" onClick={onOpenAgenda}>
+          Apri in agenda
+        </Button>
       </div>
-      <button
-        type="button"
-        onClick={onOpenAgenda}
-        className="shrink-0 whitespace-nowrap text-[13px] font-semibold text-[#5B21B6] underline underline-offset-2 hover:text-[#4C1D95]"
-      >
-        Apri in agenda
-      </button>
     </div>
   );
 }
@@ -1156,7 +1157,6 @@ export function AutoscuoleStudentsPage({
   // Foto profilo dell'allievo: sostituisce le iniziali nell'avatar del drawer.
   const [drawerPhotoUrl, setDrawerPhotoUrl] = React.useState<string | null>(null);
   const [drawerPhotoUploading, setDrawerPhotoUploading] = React.useState(false);
-  const [drawerPhotoMenuOpen, setDrawerPhotoMenuOpen] = React.useState(false);
   const [mediaRefreshKey, setMediaRefreshKey] = React.useState(0);
   const drawerPhotoInputRef = React.useRef<HTMLInputElement | null>(null);
   const [lessonFilter, setLessonFilter] = React.useState<LessonFilter>("all");
@@ -2892,10 +2892,34 @@ export function AutoscuoleStudentsPage({
     if (!register) return null;
     const phaseBadge = PHASE_BADGES[register.studentPhase ?? "PRATICA"];
     const nextExam = register.nextExam ?? null;
+    const completedMinutes = register.summary.completedMinutes ?? 0;
+    const requiredMinutes = register.summary.requiredMinutes ?? 0;
+    const readyLabel = daysReadyLabel(register.examReadyAt);
+    const blockDescription = !register.bookingBlocked
+      ? "Attive"
+      : register.bookingBlockUntil
+        ? `Bloccate fino al ${blockUntilInstantToDateLabel(register.bookingBlockUntil)}, poi si riattivano da sole`
+        : register.bookingBlockReason === "unpaid_threshold"
+          ? "Bloccate in automatico per guide da pagare"
+          : "Bloccate";
+    const priorityMode =
+      register.examPriorityOverride === null || register.examPriorityOverride === undefined
+        ? "Automatica"
+        : register.examPriorityOverride
+          ? "Forzata attiva"
+          : "Forzata disattiva";
+    const priorityValue: "auto" | "on" | "off" =
+      register.examPriorityOverride === null || register.examPriorityOverride === undefined
+        ? "auto"
+        : register.examPriorityOverride
+          ? "on"
+          : "off";
+    const theoryCountdown =
+      register.studentPhase === "TEORIA" ? getTheoryCountdown(register.theoryExamAt) : null;
+
     return (
       <>
-        {/* R6 (Road novembre): esame prenotato in cima, nel viola dell'esame
-            dell'agenda (Tiziano 10/11/2026). */}
+        {/* R6 (Road novembre): esame prenotato in cima. */}
         {nextExam ? (
           <NextExamCard
             exam={nextExam}
@@ -2907,745 +2931,506 @@ export function AutoscuoleStudentsPage({
           />
         ) : null}
 
-        {/* Anagrafica */}
-        <section className={cn("border-b border-[#f2f2f2] pb-7", nextExam && "pt-7")}>
-          <p className={sectionLabelClass}>Anagrafica</p>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3.5">
-            <div>
-              <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Nome</p>
-              <p className="text-sm font-medium text-foreground">
-                {formatStudentName(register.student, studentNameOrder)}
-              </p>
-            </div>
-            <div>
-              <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Email</p>
-              <p className="break-all text-sm font-medium text-foreground">{register.student.email || "—"}</p>
-            </div>
-            {register.student.loginPhone ? (
-              <div className="col-span-2">
-                <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Accesso all&apos;app</p>
-                {register.student.activatedAt ? (
-                  <p className="text-sm font-medium text-foreground">
-                    Attivato il {formatActivationDate(register.student.activatedAt)}
-                  </p>
-                ) : (
-                  <>
-                    <p className="text-sm font-medium text-foreground">Primo accesso non ancora fatto</p>
-                    <p className="mt-0.5 text-[12.5px] leading-snug text-[#6a6a6a]">
-                      Nell&apos;app tocca «Primo accesso» e scrive {formatLoginPhone(register.student.loginPhone)}: poi
-                      sceglie email e password.
-                    </p>
-                  </>
-                )}
+        <DetailSections>
+          {/* Percorso: obbligo guide in grande, poi patente, fase e i segnali
+              legati alla fase (licenza quiz, esame teorico, pronto per l'esame). */}
+          <DetailSection testId="student-path">
+            {!affiliate ? (
+              <div className="pb-2">
+                <DetailFigure
+                  value={formatDrivingHours(completedMinutes)}
+                  label={`di ${formatDrivingHours(requiredMinutes)} ore di guida obbligatorie`}
+                />
+                <DetailProgress ratio={completedMinutes / Math.max(1, requiredMinutes)} />
+                <p className="text-[13px] font-medium text-[#6a6a6a]">
+                  {register.summary.isCompleted
+                    ? "Obbligo completato"
+                    : drivingHoursRemainingLabel(register.summary.remainingMinutes ?? 0)}
+                </p>
               </div>
             ) : null}
-            <div>
-              <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Telefono</p>
-              {editingPhone ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="tel"
-                    autoFocus
-                    value={phoneDraft}
-                    onChange={(e) => setPhoneDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") void saveStudentPhone();
-                      if (e.key === "Escape") setEditingPhone(false);
-                    }}
-                    placeholder="+39 333 123 4567"
-                    disabled={phoneSaving}
-                    className="w-full max-w-[170px] rounded-lg border border-[#e2e2e6] bg-white px-2.5 py-1.5 text-sm font-medium text-foreground outline-none focus:border-foreground/40 disabled:opacity-60"
-                  />
-                  <button type="button" className={inlineLinkClass} disabled={phoneSaving} onClick={() => void saveStudentPhone()}>
-                    {phoneSaving ? "…" : "Salva"}
-                  </button>
-                  <button
-                    type="button"
-                    className="text-[13px] font-medium text-[#929292] hover:text-foreground disabled:opacity-60"
-                    disabled={phoneSaving}
-                    onClick={() => setEditingPhone(false)}
-                  >
-                    Annulla
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-foreground">{register.student.phone || "—"}</p>
-                  <button type="button" className={inlineLinkClass} onClick={startEditPhone}>
-                    {register.student.phone ? "Modifica" : "Aggiungi"}
-                  </button>
-                </div>
-              )}
-            </div>
-            {/* REG-458 — qui stava «Case attiva», che per il 99% degli allievi
-                stampava la parola «iscritto»: il guscio di un modello mai
-                adottato. Il percorso vero sta nel campo qui sotto e nello
-                storico in fondo al riepilogo. */}
-            <div>
-              <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Percorso patente</p>
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-medium text-foreground">
-                  {pathLabel(register)}
-                </p>
-                {activeLicensePath && <Pill tone="blue">In corso</Pill>}
-              </div>
-              <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                <button type="button" className={inlineLinkClass} onClick={() => setLicenseDialogOpen(true)}>
-                  Modifica
-                </button>
-                {!affiliate && (
-                  <>
-                    <span aria-hidden className="text-[#dddddd]">·</span>
-                    {/* Correggere e ricominciare sono due gesti diversi: averli
-                        confusi in uno solo e' cio' che faceva perdere la patente
-                        precedente. */}
-                    <button
-                      type="button"
-                      className={inlineLinkClass}
-                      onClick={() => setNewPathDialogOpen(true)}
-                    >
-                      Avvia nuovo percorso
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-            <div>
-              <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Fase percorso</p>
-              <div className="flex flex-wrap items-center gap-2">
-                <Pill tone={phaseBadge.tone}>{phaseBadge.label}</Pill>
-                <button type="button" className={inlineLinkClass} onClick={() => setPhaseDialogOpen(true)}>
-                  Cambia fase
-                </button>
-                {!affiliate && register.studentPhase === "AWAITING" && (
-                  <button
-                    type="button"
-                    className={inlineLinkClass}
-                    disabled={
-                      grantSavingId === register.student.id ||
-                      (quizCtx !== null && quizCtx.available <= 0)
-                    }
-                    onClick={() => void handleGrantSeat(register.student.id)}
-                    title={
-                      quizCtx !== null && quizCtx.available <= 0
-                        ? "Nessuna licenza quiz disponibile"
-                        : "Assegna licenza quiz e attiva la fase teoria"
-                    }
-                  >
-                    {grantSavingId === register.student.id ? "Assegno…" : "Assegna quiz"}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {!affiliate && groupLessonsEnabledGlobal && (
-            <div
-              className="mt-5 flex cursor-pointer items-center justify-between gap-3 rounded-[10px] bg-[#f8f8f8] p-4"
-              onClick={async () => {
-                if (groupOptInSaving) return;
-                const next = !(register.groupLessonsOptIn ?? false);
-                setGroupOptInSaving(true);
-                try {
-                  const res = await updateStudentGroupLessonOptIn({
-                    studentId: register.student.id,
-                    optIn: next,
-                  });
-                  if (res.success) {
-                    setRegister((prev) =>
-                      prev ? { ...prev, groupLessonsOptIn: next } : prev,
-                    );
-                    toast.success({ description: res.message ?? "Aggiornato." });
-                  } else {
-                    toast.error({ description: res.message ?? "Errore." });
+            <DetailRows>
+              {/* REG-458 — il percorso vero; «Modifica» corregge quello in corso. */}
+              <DetailRow
+                label="Patente"
+                description={activeLicensePath ? "Percorso in corso" : undefined}
+                value={pathLabel(register)}
+                onClick={() => setLicenseDialogOpen(true)}
+                testId="student-license-row"
+              />
+              <DetailRow
+                label="Fase"
+                value={phaseBadge.label}
+                onClick={() => setPhaseDialogOpen(true)}
+                testId="student-phase-row"
+              />
+              {!affiliate && register.studentPhase === "AWAITING" ? (
+                <DetailRow
+                  label="Licenza quiz"
+                  description={
+                    quizCtx !== null && quizCtx.available <= 0
+                      ? "Nessuna licenza quiz disponibile"
+                      : "Assegnala per attivare la fase teoria"
                   }
-                } catch {
-                  toast.error({ description: "Errore aggiornamento." });
-                } finally {
-                  setGroupOptInSaving(false);
-                }
-              }}
-            >
-              <div>
-                <p className="text-sm font-semibold text-foreground">Guide di gruppo</p>
-                <p className="mt-0.5 text-[12px] font-medium text-[#929292]">
-                  {(register.groupLessonsOptIn ?? false)
-                    ? "L'allievo può partecipare alle guide di gruppo."
-                    : "L'allievo non può partecipare alle guide di gruppo."}
-                </p>
-              </div>
-              <InlineToggle checked={register.groupLessonsOptIn ?? false} size="sm" />
-            </div>
-          )}
-        </section>
-
-        {/* Tutto ciò che segue vive di dati del servizio attivo (foto e firme,
-            blocchi prenotazione, pagellino, crediti): nella vista ridotta la
-            scheda si ferma all'anagrafica. */}
-        {!affiliate && (
-          <>
-        <StudentMediaSection
-          studentUserId={register.student.id}
-          refreshKey={mediaRefreshKey}
-          onLoaded={(media) => setDrawerPhotoUrl(media.photoUrl)}
-        />
-
-        {/* Gestione prenotazioni */}
-        <section className="border-b border-[#f2f2f2] py-7">
-          <p className={sectionLabelClass}>Gestione prenotazioni</p>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="mb-1 text-[12px] font-medium text-[#929292]">Prenotazioni</p>
-                <Pill tone={register.bookingBlocked ? "red" : "green"}>
-                  {register.bookingBlocked ? "Bloccate" : "Attive"}
-                </Pill>
-                {register.bookingBlocked && register.bookingBlockReason === "unpaid_threshold" && (
-                  <p className="mt-1 text-[11px] font-medium text-[#929292]">
-                    Blocco automatico per guide da pagare
-                  </p>
-                )}
-                {register.bookingBlocked && register.bookingBlockUntil && (
-                  <p className="mt-1 text-[11px] font-medium text-[#929292]">
-                    Fino al {blockUntilInstantToDateLabel(register.bookingBlockUntil)} · poi si
-                    riattiva da solo
-                  </p>
-                )}
-              </div>
-              <button
-                type="button"
-                className={inlineLinkClass}
-                disabled={blockSaving}
-                onClick={() => void handleToggleBlock(!register.bookingBlocked)}
-              >
-                {blockSaving ? "Salvo…" : register.bookingBlocked ? "Sblocca" : "Blocca"}
-              </button>
-            </div>
-            {weeklyLimitActive && (
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="mb-1 text-[12px] font-medium text-[#929292]">Limite guide settimanali</p>
-                  <Pill tone={register.weeklyBookingLimitExempt ? "blue" : "gray"}>
-                    {register.weeklyBookingLimitExempt ? "Esente" : "Soggetto al limite"}
-                  </Pill>
-                </div>
-                <button
-                  type="button"
-                  className={inlineLinkClass}
-                  disabled={exemptSaving}
-                  onClick={async () => {
-                    if (!selectedStudentId || exemptSaving) return;
-                    setExemptSaving(true);
-                    const res = await toggleWeeklyBookingLimitExempt({
+                  right={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      loading={grantSavingId === register.student.id}
+                      disabled={quizCtx !== null && quizCtx.available <= 0}
+                      onClick={() => void handleGrantSeat(register.student.id)}
+                    >
+                      Assegna quiz
+                    </Button>
+                  }
+                />
+              ) : null}
+              {!affiliate && register.studentPhase === "TEORIA" ? (
+                <DetailRow
+                  label="Esame teorico"
+                  description={theoryCountdown ? theoryCountdown.label : undefined}
+                  value={theoryCountdown ? theoryCountdown.dateText : "Da fissare"}
+                  onClick={() => setPhaseDialogOpen(true)}
+                />
+              ) : null}
+              {/* Pronto per l'esame — segnale interno, solo in fase pratica */}
+              {!affiliate && register.studentPhase === "PRATICA" ? (
+                <DetailSwitchRow
+                  label="Pronto per l'esame"
+                  description={
+                    register.examReady && readyLabel
+                      ? readyLabel.charAt(0).toUpperCase() + readyLabel.slice(1)
+                      : "Non segnato"
+                  }
+                  checked={Boolean(register.examReady)}
+                  busy={examReadySaving}
+                  testId="student-exam-ready"
+                  onChange={async () => {
+                    if (!selectedStudentId || examReadySaving) return;
+                    const next = !register.examReady;
+                    setExamReadySaving(true);
+                    const res = await setStudentExamReady({
                       studentId: selectedStudentId,
-                      exempt: !register.weeklyBookingLimitExempt,
+                      ready: next,
                     });
-                    setExemptSaving(false);
+                    setExamReadySaving(false);
                     if (!res.success) {
                       toast.error({ description: res.message ?? "Errore aggiornamento." });
                       return;
                     }
-                    setRegister((prev) => prev ? { ...prev, weeklyBookingLimitExempt: !prev.weeklyBookingLimitExempt } : prev);
-                    toast.success({ description: register.weeklyBookingLimitExempt ? "Limite riattivato." : "Allievo esente dal limite." });
+                    const nextAt = res.data?.examReadyAt ?? (next ? new Date().toISOString() : null);
+                    setRegister((prev) =>
+                      prev ? { ...prev, examReady: next, examReadyAt: nextAt } : prev,
+                    );
+                    setStudents((prev) =>
+                      prev.map((s) =>
+                        s.id === selectedStudentId
+                          ? { ...s, examReady: next, examReadyAt: nextAt }
+                          : s,
+                      ),
+                    );
+                    toast.success({
+                      description: next
+                        ? "Allievo segnato pronto per l'esame."
+                        : "Rimosso dai pronti.",
+                    });
                   }}
-                >
-                  {exemptSaving ? "Salvo…" : register.weeklyBookingLimitExempt ? "Riattiva limite" : "Rendi esente"}
-                </button>
-              </div>
-            )}
-            {weeklyLimitActive && examPriorityEnabledGlobal && (
-              <div>
-                <div className="mb-1 flex items-center gap-2">
-                  <p className="text-[12px] font-medium text-[#929292]">Priorità esame</p>
-                  <span className="text-[10px] font-medium text-[#c1c1c1]">
-                    {register.examPriorityOverride === null || register.examPriorityOverride === undefined
-                      ? "automatico"
-                      : register.examPriorityOverride
-                        ? "forzato attivo"
-                        : "forzato disattivo"}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Pill tone={register.examPriorityActive ? "blue" : "gray"}>
-                    {register.examPriorityActive ? "Priorità attiva" : "Nessuna priorità"}
-                  </Pill>
-                  <div className="flex items-center gap-1">
-                    {([
-                      { label: "Auto", value: null },
-                      { label: "Forza attivo", value: true },
-                      { label: "Forza disattivo", value: false },
-                    ] as const).map((opt) => {
-                      const active = register.examPriorityOverride === opt.value;
-                      return (
-                        <button
-                          key={String(opt.value)}
-                          type="button"
-                          disabled={examPrioritySaving}
-                          className={cn(
-                            "cursor-pointer select-none whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50",
-                            active
-                              ? "bg-[#222222] text-white"
-                              : "border border-[#dddddd] text-foreground hover:bg-[#f2f2f2]",
-                          )}
-                          onClick={async () => {
-                            if (!selectedStudentId || examPrioritySaving) return;
-                            if (register.examPriorityOverride === opt.value) return;
-                            setExamPrioritySaving(true);
-                            const res = await setExamPriorityOverride({
-                              studentId: selectedStudentId,
-                              override: opt.value,
-                            });
-                            setExamPrioritySaving(false);
-                            if (!res.success) {
-                              toast.error({ description: res.message ?? "Errore aggiornamento." });
-                              return;
-                            }
-                            setRegister((prev) =>
-                              prev ? { ...prev, examPriorityOverride: opt.value } : prev,
-                            );
-                            toast.success({ description: "Priorità esame aggiornata." });
-                          }}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
+                />
+              ) : null}
+            </DetailRows>
+            {/* Correggere e ricominciare sono due gesti diversi: averli confusi
+                in uno solo e' cio' che faceva perdere la patente precedente. */}
+            {!affiliate ? (
+              <DetailAddButton onClick={() => setNewPathDialogOpen(true)}>
+                Avvia un nuovo percorso
+              </DetailAddButton>
+            ) : null}
+          </DetailSection>
 
-        {/* Pronto per l'esame — segnale interno, solo in fase pratica */}
-        {register.studentPhase === "PRATICA" && (
-          <section className="border-b border-[#f2f2f2] py-7">
-            <p className={sectionLabelClass}>Esame pratico</p>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="mb-1 flex items-center gap-2">
-                  <p className="text-[12px] font-medium text-[#929292]">Pronto per l&apos;esame</p>
-                  {register.examReady && (
-                    <span className="text-[10px] font-medium text-[#c1c1c1]">
-                      {daysReadyLabel(register.examReadyAt)}
-                    </span>
-                  )}
-                </div>
-                <Pill tone={register.examReady ? "green" : "gray"}>
-                  {register.examReady ? "Pronto" : "Non segnato"}
-                </Pill>
-              </div>
-              <button
-                type="button"
-                className={inlineLinkClass}
-                disabled={examReadySaving}
-                onClick={async () => {
-                  if (!selectedStudentId || examReadySaving) return;
-                  const next = !register.examReady;
-                  setExamReadySaving(true);
-                  const res = await setStudentExamReady({
-                    studentId: selectedStudentId,
-                    ready: next,
-                  });
-                  setExamReadySaving(false);
-                  if (!res.success) {
-                    toast.error({ description: res.message ?? "Errore aggiornamento." });
-                    return;
-                  }
-                  const nextAt = res.data?.examReadyAt ?? (next ? new Date().toISOString() : null);
-                  setRegister((prev) =>
-                    prev ? { ...prev, examReady: next, examReadyAt: nextAt } : prev,
-                  );
-                  setStudents((prev) =>
-                    prev.map((s) =>
-                      s.id === selectedStudentId
-                        ? { ...s, examReady: next, examReadyAt: nextAt }
-                        : s,
-                    ),
-                  );
-                  toast.success({
-                    description: next
-                      ? "Allievo segnato pronto per l'esame."
-                      : "Rimosso dai pronti.",
-                  });
-                }}
+          {/* Riepilogo guide — modalità manuale; i tipi completati sempre */}
+          {!affiliate &&
+          ((manualMode && register.extendedSummary) || register.byLessonType.length > 0) ? (
+            <DetailSection title="Guide">
+              {manualMode && register.extendedSummary ? (
+                <DetailStats
+                  items={[
+                    { label: "Prenotate", value: register.extendedSummary.booked },
+                    { label: "Completate", value: register.extendedSummary.completed },
+                    { label: "Annullate", value: register.extendedSummary.cancelled },
+                    { label: "In programma", value: register.extendedSummary.upcoming },
+                  ]}
+                />
+              ) : null}
+              <DetailRows
+                className={cn(
+                  manualMode && register.extendedSummary && "border-t border-[#efefef]",
+                )}
               >
-                {examReadySaving ? "Salvo…" : register.examReady ? "Rimuovi" : "Segna pronto"}
-              </button>
-            </div>
-          </section>
-        )}
+                {manualMode && register.extendedSummary && register.extendedSummary.manualUnpaid > 0 ? (
+                  <DetailRow
+                    label="Da pagare"
+                    value={
+                      <span className="text-foreground">
+                        {register.extendedSummary.manualUnpaid === 1
+                          ? "1 guida"
+                          : `${register.extendedSummary.manualUnpaid} guide`}
+                      </span>
+                    }
+                  />
+                ) : null}
+                {register.byLessonType.length > 0 ? (
+                  <DetailRow
+                    label="Tipi completati"
+                    value={register.byLessonType
+                      .map((item) => `${formatLessonType(item.type)} ${item.count}`)
+                      .join(" · ")}
+                  />
+                ) : null}
+              </DetailRows>
+            </DetailSection>
+          ) : null}
 
-        {/* Istruttore assegnato */}
-        {autonomousInstructors.length > 0 && (
-          <section className="border-b border-[#f2f2f2] py-7">
-            <p className={sectionLabelClass}>Istruttore assegnato</p>
-            <Select
-              value={selectedStudent?.assignedInstructorId ?? "__none__"}
-              onValueChange={async (value) => {
-                if (!selectedStudentId || assigningSaving) return;
-                setAssigningSaving(true);
-                const instrId = value === "__none__" ? null : value;
-                const res = await assignStudentToInstructor({
-                  studentId: selectedStudentId,
-                  instructorId: instrId,
-                });
-                setAssigningSaving(false);
-                if (!res.success) {
-                  toast.error({ description: res.message ?? "Errore." });
-                  return;
-                }
-                // Update local state
-                setStudents((prev) =>
-                  prev.map((s) =>
-                    s.id === selectedStudentId
-                      ? { ...s, assignedInstructorId: instrId }
-                      : s,
-                  ),
-                );
-                toast.success({
-                  description: instrId
-                    ? `Assegnato a ${instructorMap.get(instrId) ?? "istruttore"}.`
-                    : "Rimosso dall'istruttore.",
-                });
-              }}
-            >
-              <SelectTrigger className="w-full" disabled={assigningSaving}>
-                <SelectValue placeholder="Nessun istruttore" />
-              </SelectTrigger>
-              {/* z-[200]: il dropdown deve stare sopra il DetailPanel (z-[200]),
-                  altrimenti si apre dietro il pannello e sembra non rispondere
-                  al click — stessa convenzione di date-picker/time-picker. */}
-              <SelectContent className="z-[200]">
-                <SelectItem value="__none__">Nessuno (pool generale)</SelectItem>
-                {autonomousInstructors.map((instr) => (
-                  <SelectItem key={instr.id} value={instr.id}>
-                    {instr.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </section>
-        )}
+          {/* Prenotazioni: blocco, limite settimanale, priorità esame, guide
+              di gruppo, istruttore. Ogni interruttore salva subito. */}
+          {!affiliate ? (
+            <DetailSection title="Prenotazioni" testId="student-bookings">
+              <DetailRows>
+                <DetailSwitchRow
+                  label="Prenota dall'app"
+                  description={blockDescription}
+                  checked={!register.bookingBlocked}
+                  busy={blockSaving}
+                  testId="student-booking-block"
+                  onChange={() => void handleToggleBlock(!register.bookingBlocked)}
+                />
+                {weeklyLimitActive ? (
+                  <DetailSwitchRow
+                    label="Esente dal limite settimanale"
+                    description={
+                      register.weeklyBookingLimitExempt
+                        ? "Può prenotare oltre il limite"
+                        : "Conta nel limite di guide a settimana"
+                    }
+                    checked={Boolean(register.weeklyBookingLimitExempt)}
+                    busy={exemptSaving}
+                    testId="student-weekly-exempt"
+                    onChange={async () => {
+                      if (!selectedStudentId || exemptSaving) return;
+                      setExemptSaving(true);
+                      const res = await toggleWeeklyBookingLimitExempt({
+                        studentId: selectedStudentId,
+                        exempt: !register.weeklyBookingLimitExempt,
+                      });
+                      setExemptSaving(false);
+                      if (!res.success) {
+                        toast.error({ description: res.message ?? "Errore aggiornamento." });
+                        return;
+                      }
+                      setRegister((prev) => prev ? { ...prev, weeklyBookingLimitExempt: !prev.weeklyBookingLimitExempt } : prev);
+                      toast.success({ description: register.weeklyBookingLimitExempt ? "Limite riattivato." : "Allievo esente dal limite." });
+                    }}
+                  />
+                ) : null}
+                {weeklyLimitActive && examPriorityEnabledGlobal ? (
+                  <DetailRow
+                    label="Priorità esame"
+                    description={`${priorityMode} · ${register.examPriorityActive ? "ora attiva" : "nessuna priorità"}`}
+                    right={
+                      <SegmentedPill
+                        size="sm"
+                        className={cn(examPrioritySaving && "pointer-events-none opacity-50")}
+                        value={priorityValue}
+                        options={[
+                          { value: "auto", label: "Auto" },
+                          { value: "on", label: "Sì" },
+                          { value: "off", label: "No" },
+                        ]}
+                        onChange={async (next) => {
+                          const override = next === "auto" ? null : next === "on";
+                          if (!selectedStudentId || examPrioritySaving) return;
+                          if (register.examPriorityOverride === override) return;
+                          setExamPrioritySaving(true);
+                          const res = await setExamPriorityOverride({
+                            studentId: selectedStudentId,
+                            override,
+                          });
+                          setExamPrioritySaving(false);
+                          if (!res.success) {
+                            toast.error({ description: res.message ?? "Errore aggiornamento." });
+                            return;
+                          }
+                          setRegister((prev) =>
+                            prev ? { ...prev, examPriorityOverride: override } : prev,
+                          );
+                          toast.success({ description: "Priorità esame aggiornata." });
+                        }}
+                      />
+                    }
+                  />
+                ) : null}
+                {groupLessonsEnabledGlobal ? (
+                  <DetailSwitchRow
+                    label="Guide di gruppo"
+                    description={
+                      (register.groupLessonsOptIn ?? false)
+                        ? "Può partecipare alle guide di gruppo"
+                        : "Non partecipa alle guide di gruppo"
+                    }
+                    checked={register.groupLessonsOptIn ?? false}
+                    busy={groupOptInSaving}
+                    testId="student-group-optin"
+                    onChange={async () => {
+                      if (groupOptInSaving) return;
+                      const next = !(register.groupLessonsOptIn ?? false);
+                      setGroupOptInSaving(true);
+                      try {
+                        const res = await updateStudentGroupLessonOptIn({
+                          studentId: register.student.id,
+                          optIn: next,
+                        });
+                        if (res.success) {
+                          setRegister((prev) =>
+                            prev ? { ...prev, groupLessonsOptIn: next } : prev,
+                          );
+                          toast.success({ description: res.message ?? "Aggiornato." });
+                        } else {
+                          toast.error({ description: res.message ?? "Errore." });
+                        }
+                      } catch {
+                        toast.error({ description: "Errore aggiornamento." });
+                      } finally {
+                        setGroupOptInSaving(false);
+                      }
+                    }}
+                  />
+                ) : null}
+                {autonomousInstructors.length > 0 ? (
+                  <Select
+                    value={selectedStudent?.assignedInstructorId ?? "__none__"}
+                    onValueChange={async (value) => {
+                      if (!selectedStudentId || assigningSaving) return;
+                      setAssigningSaving(true);
+                      const instrId = value === "__none__" ? null : value;
+                      const res = await assignStudentToInstructor({
+                        studentId: selectedStudentId,
+                        instructorId: instrId,
+                      });
+                      setAssigningSaving(false);
+                      if (!res.success) {
+                        toast.error({ description: res.message ?? "Errore." });
+                        return;
+                      }
+                      setStudents((prev) =>
+                        prev.map((s) =>
+                          s.id === selectedStudentId
+                            ? { ...s, assignedInstructorId: instrId }
+                            : s,
+                        ),
+                      );
+                      toast.success({
+                        description: instrId
+                          ? `Assegnato a ${instructorMap.get(instrId) ?? "istruttore"}.`
+                          : "Rimosso dall'istruttore.",
+                      });
+                    }}
+                  >
+                    <DetailSelectRow
+                      label="Istruttore"
+                      placeholder="Nessuno"
+                      disabled={assigningSaving}
+                      testId="student-instructor-row"
+                    />
+                    {/* z-[200]: il dropdown deve stare sopra il DetailPanel (z-[200]). */}
+                    <SelectContent className="z-[200]" align="end">
+                      <SelectItem value="__none__">Nessuno (pool generale)</SelectItem>
+                      {autonomousInstructors.map((instr) => (
+                        <SelectItem key={instr.id} value={instr.id}>
+                          {instr.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : null}
+              </DetailRows>
+            </DetailSection>
+          ) : null}
 
-        {/* Luogo di default (REG-392): precompila il Luogo quando si prenota
-            una guida per questo allievo. */}
-        {availabilityByLocationEnabled(availabilityByLocationStored, locations.length) ? (
-          <StudentLocationsPicker
-            locations={locations}
-            selectedIds={selectedStudent?.locationIds ?? []}
-            primaryId={selectedStudent?.defaultLocationId ?? null}
-            saving={studentLocationsSaving || defaultLocationSaving}
-            onToggle={handleToggleStudentLocation}
-            onSetPrimary={(id) => void handleSetDefaultLocation(id)}
-          />
-        ) : locations.length > 0 && (
-          <section className="border-b border-[#f2f2f2] py-7">
-            <p className={sectionLabelClass}>Luogo di default</p>
-            <Select
-              value={selectedStudent?.defaultLocationId ?? "__none__"}
-              onValueChange={(value) =>
-                handleSetDefaultLocation(value === "__none__" ? null : value)
-              }
-            >
-              <SelectTrigger className="w-full" disabled={defaultLocationSaving}>
-                <SelectValue placeholder="Sede dell'autoscuola" />
-              </SelectTrigger>
-              <SelectContent className="z-[200]">
-                <SelectItem value="__none__">Sede dell&apos;autoscuola</SelectItem>
-                {locations
-                  .filter((l) => !l.isDefault)
-                  .map((loc) => (
-                    <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name}
-                      {loc.isPrecise ? " · Preciso" : " · Generico"}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-            <p className="mt-2 text-[12px] font-medium leading-normal text-[#929292]">
-              Precompilato nel form di prenotazione guida quando selezioni questo allievo.
-            </p>
-          </section>
-        )}
-
-        {/* Riepilogo guide — manual mode */}
-        {manualMode && register.extendedSummary && (
-          <section className="border-b border-[#f2f2f2] py-7">
-            <p className={sectionLabelClass}>Riepilogo guide</p>
-            <div className="grid grid-cols-4">
-              {[
-                { label: "Prenotate", value: register.extendedSummary.booked },
-                { label: "Completate", value: register.extendedSummary.completed },
-                { label: "Annullate", value: register.extendedSummary.cancelled },
-                { label: "In programma", value: register.extendedSummary.upcoming },
-              ].map((stat, i) => (
-                <div key={stat.label} className={cn("py-3 text-center", i < 3 && "border-r border-[#f2f2f2]")}>
-                  <p className="text-[22px] font-bold leading-none text-foreground">{stat.value}</p>
-                  <p className="mt-1 text-[12px] font-medium text-[#929292]">{stat.label}</p>
+          {/* Crediti guida — non in modalità manuale */}
+          {!affiliate && (paymentMode?.auto || paymentMode?.credits) ? (
+            <DetailSection title="Crediti" testId="student-credits">
+              {creditsLoading ? (
+                <div className="space-y-3 py-3">
+                  <Skeleton className="h-9 w-32" />
+                  <Skeleton className="h-12 w-full rounded-[14px]" />
                 </div>
-              ))}
-            </div>
-            {register.extendedSummary.manualUnpaid > 0 && (
-              <div className="mt-3 rounded-[10px] border border-[#f0e060] bg-[#fffce0] px-4 py-2.5">
-                <span className="text-sm font-medium text-[#7a6a00]">
-                  Da pagare: {register.extendedSummary.manualUnpaid}
-                </span>
-              </div>
-            )}
-          </section>
-        )}
+              ) : (
+                <>
+                  <div className="py-3">
+                    <DetailFigure
+                      value={credits?.availableCredits ?? 0}
+                      label={(credits?.availableCredits ?? 0) === 1 ? "credito disponibile" : "crediti disponibili"}
+                    />
+                    <div className="mt-4 flex flex-wrap items-center gap-2.5">
+                      <Input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={creditsInput}
+                        onChange={(event) => setCreditsInput(event.target.value)}
+                        className="h-12 min-w-0 flex-1 basis-[120px]"
+                        placeholder="Crediti"
+                        aria-label="Crediti da assegnare o stornare"
+                      />
+                      <div className="flex gap-2.5">
+                        <Button
+                          onClick={() => void handleAdjustCredits("grant")}
+                          loading={creditsSaving === "grant"}
+                          disabled={creditsSaving !== null}
+                        >
+                          Assegna
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => void handleAdjustCredits("revoke")}
+                          loading={creditsSaving === "revoke"}
+                          disabled={creditsSaving !== null}
+                        >
+                          Storna
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  {credits?.ledger.length ? (
+                    <DetailRows className="border-t border-[#efefef]">
+                      {credits.ledger.slice(0, 8).map((entry) => (
+                        <DetailRow
+                          key={entry.id}
+                          label={formatCreditReason(entry.reason)}
+                          description={`${formatDate(entry.createdAt, true)}${entry.actorName ? ` · ${entry.actorName}` : ""}`}
+                          value={
+                            <span
+                              className={cn(
+                                "tabular-nums",
+                                entry.delta >= 0 ? "font-semibold text-foreground" : "text-[#6a6a6a]",
+                              )}
+                            >
+                              {entry.delta >= 0 ? "+" : "−"}
+                              {Math.abs(entry.delta)}
+                            </span>
+                          }
+                        />
+                      ))}
+                    </DetailRows>
+                  ) : (
+                    <p className="text-[13px] font-medium text-[#929292]">
+                      Nessun movimento crediti disponibile.
+                    </p>
+                  )}
+                </>
+              )}
+            </DetailSection>
+          ) : null}
 
-        {/* Obbligo guide */}
-        <section className="border-b border-[#f2f2f2] py-7">
-          <p className={cn(sectionLabelClass, "mb-3")}>Obbligo guide</p>
-          <div className="mb-2.5 flex items-baseline gap-1">
-            <span className="text-[32px] font-bold leading-none tracking-[-1px] text-foreground">
-              {formatDrivingHours(register.summary.completedMinutes ?? 0)}
-            </span>
-            <span className="text-base font-medium text-[#929292]">
-              /{formatDrivingHours(register.summary.requiredMinutes ?? 0)} ore
-            </span>
-          </div>
-          <div className="mb-1.5 h-1 overflow-hidden rounded-[2px] bg-[#f2f2f2]">
-            <div
-              className="h-full rounded-[2px] bg-navy-900 transition-all"
-              style={{
-                width: `${Math.min(100, ((register.summary.completedMinutes ?? 0) / Math.max(1, register.summary.requiredMinutes ?? 0)) * 100)}%`,
+          {/* Luoghi (REG-705) o luogo di default (REG-392): precompila il
+              Luogo quando si prenota una guida per questo allievo. */}
+          {affiliate ? null : availabilityByLocationEnabled(availabilityByLocationStored, locations.length) ? (
+            <StudentLocationsPicker
+              locations={locations}
+              selectedIds={selectedStudent?.locationIds ?? []}
+              primaryId={selectedStudent?.defaultLocationId ?? null}
+              saving={studentLocationsSaving || defaultLocationSaving}
+              onToggle={handleToggleStudentLocation}
+              onSetPrimary={(id) => void handleSetDefaultLocation(id)}
+            />
+          ) : locations.length > 0 ? (
+            <DetailSection
+              title="Luogo"
+              foot="Precompilato nel form di prenotazione guida quando selezioni questo allievo."
+            >
+              <Select
+                value={selectedStudent?.defaultLocationId ?? "__none__"}
+                onValueChange={(value) =>
+                  handleSetDefaultLocation(value === "__none__" ? null : value)
+                }
+              >
+                <DetailSelectRow
+                  label="Luogo di default"
+                  placeholder="Sede dell'autoscuola"
+                  disabled={defaultLocationSaving}
+                />
+                <SelectContent className="z-[200]" align="end">
+                  <SelectItem value="__none__">Sede dell&apos;autoscuola</SelectItem>
+                  {locations
+                    .filter((l) => !l.isDefault)
+                    .map((loc) => (
+                      <SelectItem key={loc.id} value={loc.id}>
+                        {loc.name}
+                        {loc.isPrecise ? " · Preciso" : " · Generico"}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </DetailSection>
+          ) : null}
+
+          {/* Contatti e accesso — il nome sta già nella testata (REG-775). */}
+          <DetailSection title="Contatti e accesso" testId="student-contacts">
+            <DetailRows>
+              <DetailRow
+                label="Email"
+                value={<span className="break-all">{register.student.email || "—"}</span>}
+              />
+              <PhoneRow
+                phone={register.student.phone}
+                editing={editingPhone}
+                draft={phoneDraft}
+                saving={phoneSaving}
+                onStart={startEditPhone}
+                onDraftChange={setPhoneDraft}
+                onSave={() => void saveStudentPhone()}
+                onCancel={() => setEditingPhone(false)}
+              />
+              {register.student.loginPhone ? (
+                <DetailRow
+                  label="Accesso all'app"
+                  description={
+                    register.student.activatedAt
+                      ? undefined
+                      : `Nell'app tocca «Primo accesso» e scrive ${formatLoginPhone(register.student.loginPhone)}: poi sceglie email e password.`
+                  }
+                  value={
+                    register.student.activatedAt
+                      ? `Attivato il ${formatActivationDate(register.student.activatedAt)}`
+                      : "Primo accesso da fare"
+                  }
+                />
+              ) : null}
+            </DetailRows>
+          </DetailSection>
+
+          {/* Firma e foto profilo da scaricare */}
+          {!affiliate ? (
+            <StudentMediaSection
+              studentUserId={register.student.id}
+              refreshKey={mediaRefreshKey}
+              photoUrl={drawerPhotoUrl}
+              onLoaded={(media) => setDrawerPhotoUrl(media.photoUrl)}
+            />
+          ) : null}
+
+          {/* REG-458 — storico dei percorsi chiusi, solo se ce n'è almeno uno. */}
+          {!affiliate && closedLicensePaths.length > 0 ? (
+            <ClosedPathsSection
+              paths={closedLicensePaths}
+              lessonsCount={lessonsCountForPath}
+              onOpenLessons={(pathId) => {
+                setLessonsPathChoice(pathId);
+                setDrawerTab("lessons");
               }}
             />
-          </div>
-          <p className="text-[12px] font-medium text-[#929292]">
-            {register.summary.isCompleted
-              ? "Obbligo completato"
-              : drivingHoursRemainingLabel(register.summary.remainingMinutes ?? 0)}
-          </p>
-        </section>
-
-        {/* REG-458 — storico dei percorsi chiusi. Esiste SOLO se ce n'è almeno
-            uno: su un allievo al primo percorso una sezione vuota sarebbe
-            peggio di una sezione assente. */}
-        {closedLicensePaths.length > 0 && (
-          <section className="border-b border-[#f2f2f2] py-7">
-            <p className={cn(sectionLabelClass, "mb-3")}>
-              {historySectionTitle(closedLicensePaths)}
-            </p>
-            <div className="overflow-hidden rounded-[12px] border border-[#ececec]">
-              {closedLicensePaths.map((path, index) => {
-                const conseguita = path.status === "obtained";
-                const quando = conseguita ? path.obtainedAt ?? path.closedAt : path.closedAt;
-                const guide = lessonsCountForPath(path.id);
-                return (
-                  <div
-                    key={path.id}
-                    className={cn(
-                      "flex items-center gap-4 px-4 py-3.5",
-                      index > 0 && "border-t border-[#f2f2f2]",
-                    )}
-                  >
-                    <Pill tone={conseguita ? "green" : "gray"}>
-                      {licenseCategoryShort(path.licenseCategory) || "—"}
-                    </Pill>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13.5px] font-medium text-foreground">
-                        {[
-                          // Su una qualificazione il cambio non vuol dire niente.
-                          path.transmission && !isQualification(path.licenseCategory)
-                            ? TRANSMISSION_LABELS[path.transmission as Transmission] ??
-                              path.transmission
-                            : null,
-                          `${conseguita ? "conseguita" : "abbandonato"}${
-                            quando ? ` il ${formatPathDate(quando)}` : ""
-                          }`,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </p>
-                      <p className="mt-0.5 text-[12.5px] text-[#929292]">
-                        {path.licenseNumber ? (
-                          <>
-                            Patente{" "}
-                            <span className="font-semibold tabular-nums text-foreground">
-                              {path.licenseNumber}
-                            </span>
-                          </>
-                        ) : (
-                          "Nessun numero registrato"
-                        )}
-                        {" · "}
-                        {guide === 0
-                          ? "nessuna guida"
-                          : guide === 1
-                            ? "1 guida"
-                            : `${guide} guide`}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className={inlineLinkClass}
-                      onClick={() => {
-                        setLessonsPathChoice(path.id);
-                        setDrawerTab("lessons");
-                      }}
-                    >
-                      Vedi guide
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
-        {/* Esame teorico — solo fase teoria */}
-        {register.studentPhase === "TEORIA" && (
-          <section className="border-b border-[#f2f2f2] py-7">
-            <p className={cn(sectionLabelClass, "mb-3")}>Esame teorico</p>
-            <div className="flex items-center justify-between gap-3 rounded-[12px] bg-[#f7f7f7] p-4">
-              <div>
-                <p className="mb-1.5 text-[13px] font-medium text-[#929292]">Data esame</p>
-                {(() => {
-                  const countdown = getTheoryCountdown(register.theoryExamAt);
-                  if (!countdown) {
-                    return (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#dddddd] bg-white px-2.5 py-[3px]">
-                        <span className="size-1.5 rounded-full bg-[#929292]" />
-                        <span className="text-[12px] font-semibold text-[#929292]">Da fissare</span>
-                      </span>
-                    );
-                  }
-                  return (
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-foreground">{countdown.dateText}</span>
-                      <Pill tone={countdown.tone === "imminent" ? "red" : countdown.tone === "soon" ? "amber" : "gray"}>
-                        {countdown.label}
-                      </Pill>
-                    </div>
-                  );
-                })()}
-              </div>
-              <button
-                type="button"
-                className="cursor-pointer text-[13px] font-semibold text-[#222222] underline decoration-[1.5px] underline-offset-[3px] hover:decoration-2"
-                onClick={() => setPhaseDialogOpen(true)}
-              >
-                Modifica
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* Tipi guida */}
-        {register.byLessonType.length > 0 && (
-          <section className="border-b border-[#f2f2f2] py-7">
-            <p className={cn(sectionLabelClass, "mb-3")}>Tipi guida completati</p>
-            <div className="flex flex-wrap gap-2">
-              {register.byLessonType.map((item) => (
-                <span
-                  key={`${item.type}-${item.count}`}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-[#dddddd] bg-white px-3 py-1 text-xs font-medium text-foreground"
-                >
-                  {formatLessonType(item.type)}
-                  <span className="text-[#929292]">{item.count}</span>
-                </span>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Crediti guida — hide in manual mode */}
-        {(paymentMode?.auto || paymentMode?.credits) && (
-          <section className="py-7">
-            <p className={cn(sectionLabelClass, "mb-3")}>Crediti guida</p>
-            {creditsLoading ? (
-              <div className="space-y-2">
-                <Skeleton className="h-6 w-28 rounded-full" />
-                <Skeleton className="h-10 w-full rounded-xl" />
-              </div>
-            ) : (
-              <>
-                <div className="mb-3.5 flex items-center justify-between">
-                  <div>
-                    <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Saldo disponibile</p>
-                    <p className="text-2xl font-bold leading-none text-foreground">
-                      {credits?.availableCredits ?? 0}
-                    </p>
-                  </div>
-                  <span className="rounded-[4px] border border-[#dddddd] bg-[#f7f7f7] px-2.5 py-1 text-[11px] font-semibold text-[#929292]">
-                    {credits?.availableCredits ?? 0} crediti
-                  </span>
-                </div>
-                <Input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={creditsInput}
-                  onChange={(event) => setCreditsInput(event.target.value)}
-                  className="mb-2.5"
-                  placeholder="Crediti"
-                />
-                <div className="flex flex-col gap-2">
-                  <Button
-                    onClick={() => void handleAdjustCredits("grant")}
-                    disabled={creditsSaving !== null}
-                    className="w-full"
-                  >
-                    {creditsSaving === "grant" ? "Assegno…" : "Assegna crediti"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => void handleAdjustCredits("revoke")}
-                    disabled={creditsSaving !== null}
-                    className="w-full"
-                  >
-                    {creditsSaving === "revoke" ? "Storno…" : "Storna crediti"}
-                  </Button>
-                </div>
-                {credits?.ledger.length ? (
-                  <div className="mt-5">
-                    <p className="mb-2.5 text-[12px] font-semibold tracking-[0.3px] text-[#929292]">CRONOLOGIA</p>
-                    <div>
-                      {credits.ledger.slice(0, 8).map((entry, idx, arr) => (
-                        <div
-                          key={entry.id}
-                          className={cn(
-                            "flex items-center justify-between gap-2 py-3",
-                            idx < arr.length - 1 && "border-b border-[#f2f2f2]",
-                          )}
-                        >
-                          <div>
-                            <p className="text-[13px] font-semibold text-foreground">
-                              {formatCreditReason(entry.reason)}
-                            </p>
-                            <p className="mt-0.5 text-[12px] font-medium text-[#929292]">
-                              {formatDate(entry.createdAt, true)}
-                              {entry.actorName ? ` · ${entry.actorName}` : ""}
-                            </p>
-                          </div>
-                          <span
-                            className={cn(
-                              "shrink-0 text-[13px]",
-                              entry.delta >= 0 ? "font-bold text-navy-900" : "font-semibold text-[#555555]",
-                            )}
-                          >
-                            {entry.delta >= 0 ? "+" : ""}
-                            {entry.delta}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    Nessun movimento crediti disponibile.
-                  </p>
-                )}
-              </>
-            )}
-          </section>
-        )}
-          </>
-        )}
+          ) : null}
+        </DetailSections>
       </>
     );
   };
@@ -4890,19 +4675,10 @@ export function AutoscuoleStudentsPage({
         }}
         testId="student-detail-panel"
       >
-        <div className="border-b border-[#dddddd] px-6 pt-6">
-          <div className="relative mb-5 flex flex-col items-center pt-2 text-center">
-            <button
-              type="button"
-              aria-label="Chiudi"
-              onClick={closeStudentDetail}
-              className="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#f2f2f2]"
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M3 3l8 8M11 3l-8 8" stroke="#6a6a6a" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-            </button>
-            {panelHeaderStudent && (
+        <DrawerHeader
+          onClose={closeStudentDetail}
+          avatar={
+            panelHeaderStudent ? (
               <div className="relative">
                 <input
                   ref={drawerPhotoInputRef}
@@ -4912,7 +4688,8 @@ export function AutoscuoleStudentsPage({
                   onChange={handleDrawerPhotoChange}
                 />
                 {/* Foto e firma sono del servizio attivo: nella vista ridotta
-                    l'avatar resta, il caricamento no. */}
+                    l'avatar resta, il caricamento no. Lo scarico della foto
+                    sta in «Documenti» (REG-775). */}
                 <button
                   type="button"
                   onClick={() => {
@@ -4924,125 +4701,75 @@ export function AutoscuoleStudentsPage({
                 >
                   <StudentAvatar
                     student={panelHeaderStudent}
-                    size={96}
+                    size={64}
                     photoUrl={drawerPhotoUrl}
                     nameOrder={studentNameOrder}
                   />
                 </button>
-                {/* Pill "Modifica" (stile area personale) + download foto accanto */}
                 {!affiliate && (
-                <div className="absolute -bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1.5">
                   <button
                     type="button"
+                    aria-label="Modifica foto profilo"
                     onClick={() => drawerPhotoInputRef.current?.click()}
-                    className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 py-1.5 shadow-[0_3px_10px_rgba(0,0,0,0.14)] transition-shadow duration-150 hover:shadow-[0_3px_10px_rgba(0,0,0,0.14),0_0_0_1px_#d9d9d9]"
+                    className="absolute -bottom-1 -right-1.5 flex size-7 cursor-pointer items-center justify-center rounded-full bg-white shadow-clay-raise-sm transition-transform duration-200 active:scale-[0.94]"
                   >
                     {drawerPhotoUploading ? (
-                      <LoadingDots className="min-h-4 text-foreground" />
+                      <LoadingDots className="min-h-3 scale-75 text-foreground" />
                     ) : (
-                      <>
-                        <Camera className="size-3.5 text-foreground" strokeWidth={1.7} />
-                        <span className="text-[12px] font-semibold text-foreground">Modifica</span>
-                      </>
+                      <Camera className="size-3.5 text-foreground" strokeWidth={1.8} />
                     )}
                   </button>
-                  {drawerPhotoUrl && (
-                    <DropdownMenu open={drawerPhotoMenuOpen} onOpenChange={setDrawerPhotoMenuOpen}>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          type="button"
-                          title="Scarica foto profilo"
-                          className="flex size-[30px] cursor-pointer items-center justify-center rounded-full bg-white shadow-[0_3px_10px_rgba(0,0,0,0.14)] transition-shadow duration-150 hover:shadow-[0_3px_10px_rgba(0,0,0,0.14),0_0_0_1px_#d9d9d9]"
-                        >
-                          <Download className="size-3.5 text-foreground" strokeWidth={1.7} />
-                        </button>
-                      </DropdownMenuTrigger>
-                      {/* Il DetailPanel è z-[200]: il default z-50 del menu finirebbe dietro */}
-                      <DropdownMenuContent align="center" className="z-[300] min-w-[210px]">
-                        <DropdownMenuItem asChild>
-                          <a
-                            href={`/api/students/${panelHeaderStudent.id}/media/photo?variant=original`}
-                            download
-                            onClick={() => setDrawerPhotoMenuOpen(false)}
-                          >
-                            Originale
-                          </a>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <a
-                            href={`/api/students/${panelHeaderStudent.id}/media/photo?variant=portale`}
-                            download
-                            onClick={() => setDrawerPhotoMenuOpen(false)}
-                          >
-                            Portale dell&apos;automobilista
-                          </a>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </div>
                 )}
               </div>
-            )}
-            <div className="mt-4">
-              <p className="text-lg font-bold tracking-[-0.2px] text-foreground">
-                {panelHeaderStudent
-                  ? formatStudentName(panelHeaderStudent, studentNameOrder)
-                  : "Dettaglio allievo"}
+            ) : (
+              <Skeleton className="size-16 rounded-full" />
+            )
+          }
+          name={
+            panelHeaderStudent
+              ? formatStudentName(panelHeaderStudent, studentNameOrder)
+              : "Dettaglio allievo"
+          }
+          subtitle={
+            register
+              ? [pathLabel(register), PHASE_BADGES[register.studentPhase ?? "PRATICA"].label]
+                  .filter(Boolean)
+                  .join(" · ")
+              : undefined
+          }
+          status={
+            register?.bookingBlocked ? (
+              <p className="flex items-center gap-1.5 text-[13.5px] font-semibold text-foreground">
+                <Lock className="size-3.5" strokeWidth={2} aria-hidden />
+                Prenotazioni bloccate
               </p>
-              <p className="mt-0.5 text-[13px] font-medium text-[#929292]">
-                {register?.student.email || register?.student.phone || selectedStudent?.email || ""}
-              </p>
-              {/* REG-767: messaggio di benvenuto su WhatsApp, solo titolare e segreteria. */}
-              {register && !affiliate ? (
-                <StudentWhatsAppButton
-                  className="mt-3"
-                  canWrite={company?.role === "admin"}
-                  student={{
-                    phone: register.student.phone,
-                    firstName: register.student.firstName,
-                    lastName: register.student.lastName,
-                    licenseCategory: activeLicensePath?.licenseCategory ?? register.licenseCategory,
-                  }}
-                  onAddPhone={() => {
-                    setDrawerTab("summary");
-                    startEditPhone();
-                  }}
-                />
-              ) : null}
-              {register?.bookingBlocked && (
-                <div className="mt-2 flex justify-center">
-                  <Pill tone="red">Prenotazioni bloccate</Pill>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="flex items-stretch">
-            {drawerTabs.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setDrawerTab(tab.key)}
-                className={cn(
-                  "flex-1 cursor-pointer select-none whitespace-nowrap border-b-2 px-1 py-3 text-center text-sm transition-colors sm:px-2",
-                  drawerTab === tab.key
-                    ? "border-[#222222] font-semibold text-foreground"
-                    : "border-transparent font-medium text-[#6a6a6a] hover:text-foreground",
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
+            ) : null
+          }
+          actions={
+            register && !affiliate ? (
+              // REG-767: messaggio di benvenuto su WhatsApp, solo titolare e segreteria.
+              <StudentWhatsAppButton
+                align="start"
+                canWrite={company?.role === "admin"}
+                student={{
+                  phone: register.student.phone,
+                  firstName: register.student.firstName,
+                  lastName: register.student.lastName,
+                  licenseCategory: activeLicensePath?.licenseCategory ?? register.licenseCategory,
+                }}
+                onAddPhone={() => {
+                  setDrawerTab("summary");
+                  startEditPhone();
+                }}
+              />
+            ) : null
+          }
+          tabs={<DrawerTabs tabs={drawerTabs} value={drawerTab} onChange={setDrawerTab} />}
+        />
 
-        <div className="p-6">
+        <div className={drawerBodyClass}>
           {registerLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-24 w-full rounded-2xl" />
-              <Skeleton className="h-24 w-full rounded-2xl" />
-              <Skeleton className="h-56 w-full rounded-2xl" />
-            </div>
+            <DetailBodySkeleton />
           ) : register ? (
             <>
               {drawerTab === "summary" && renderPanelSummary()}

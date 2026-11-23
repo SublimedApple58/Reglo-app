@@ -82,8 +82,8 @@ test("allievo consorzio: creazione minima, codici collassati, drawer a tab", asy
   await expect(drawer).toBeVisible();
   await expect(drawer.getByText(`Allievo ${surname}`).first()).toBeVisible();
 
-  // Tab Riepilogo: anagrafica + nessuna email finta a schermo + codici contabili
-  await expect(drawer.getByText("Anagrafica")).toBeVisible();
+  // Tab Riepilogo: contatti + nessuna email finta a schermo + codici contabili
+  await expect(drawer.getByText("Contatti e accesso")).toBeVisible();
   await expect(drawer.getByText("3331234567").first()).toBeVisible();
   await expect(drawer.getByText("Non attivo")).toBeVisible();
   await expect(drawer.getByText(/no-app\.reglo\.local/)).toHaveCount(0);

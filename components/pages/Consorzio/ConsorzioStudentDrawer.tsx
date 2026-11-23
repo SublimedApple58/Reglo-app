@@ -9,7 +9,6 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { EditStudentLicenseDialog } from "@/components/pages/Autoscuole/dialogs/EditStudentLicenseDialog";
 import { ChangeStudentPhaseDialog } from "@/components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog";
 import {
-  STUDENT_PHASE_PILL_TONE,
   studentPhaseLabel,
 } from "@/components/pages/Consorzio/student-phase";
 import {
@@ -27,17 +26,13 @@ import {
 } from "@/components/pages/Autoscuole/student-detail-ui";
 import { updateStudentPhone } from "@/lib/actions/autoscuole.actions";
 import {
-  TRANSMISSION_LABELS,
   licenseCategoryShort,
   licensePathPhrase,
-  type Transmission,
 } from "@/lib/autoscuole/license";
 import {
   ALL_LESSON_PATHS,
   closedPathsNewestFirst,
   currentPath,
-  historySectionTitle,
-  isQualification,
   lessonsPathFilterId,
   openPath,
   pathForDate,
@@ -45,6 +40,22 @@ import {
 } from "@/lib/autoscuole/license-paths";
 import { StartNewLicensePathDialog } from "@/components/pages/Autoscuole/dialogs/StartNewLicensePathDialog";
 import { cn } from "@/lib/utils";
+import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  ClosedPathsSection,
+  DetailAddButton,
+  DetailBodySkeleton,
+  DetailRow,
+  DetailRows,
+  DetailSection,
+  DetailSections,
+  DetailStats,
+  DrawerHeader,
+  DrawerTabs,
+  PhoneRow,
+  drawerBodyClass,
+} from "@/components/pages/Autoscuole/student-detail-sheet";
 import { useAtomValue } from "jotai";
 import { companyAtom } from "@/atoms/company.store";
 import { StudentWhatsAppButton } from "@/components/pages/Autoscuole/StudentWhatsAppButton";
@@ -101,40 +112,24 @@ type DrawerTab = "summary" | "lessons" | "costs";
 function DrawerSkeleton() {
   return (
     <>
-      <div className="border-b border-[#dddddd] px-6 pt-6">
-        <div className="mb-5 flex flex-col items-center pt-2">
-          <Skeleton className="size-24 rounded-full" />
-          <Skeleton className="mt-4 h-5 w-44 rounded" />
-          <Skeleton className="mt-2 h-3 w-36 rounded" />
+      <div className="px-4 pt-5 sm:px-6 sm:pt-6">
+        <div className="flex items-center gap-4">
+          <Skeleton className="size-16 rounded-full" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-6 w-44" />
+            <Skeleton className="h-4 w-36" />
+          </div>
         </div>
-        <div className="flex items-stretch gap-6 pb-3">
+        <div className="mt-6 flex items-stretch gap-6 border-b border-[#efefef] pb-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-4 flex-1 rounded" />
+            <Skeleton key={i} className="h-4 flex-1" />
           ))}
         </div>
       </div>
-      <div className="space-y-3 p-6">
-        <Skeleton className="h-24 w-full rounded-2xl" />
-        <Skeleton className="h-24 w-full rounded-2xl" />
-        <Skeleton className="h-56 w-full rounded-2xl" />
+      <div className={drawerBodyClass}>
+        <DetailBodySkeleton />
       </div>
     </>
-  );
-}
-
-/** Riga "etichetta + valore" dell'anagrafica (come nel drawer autoscuole). */
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <p className="mb-0.5 text-[12px] font-medium text-[#929292]">{label}</p>
-      {children}
-    </div>
   );
 }
 
@@ -169,12 +164,6 @@ export function ConsorzioStudentDrawer({
   const [licenseDialogOpen, setLicenseDialogOpen] = React.useState(false);
   const [newPathDialogOpen, setNewPathDialogOpen] = React.useState(false);
 
-  /** «14 giugno 2026» — le date dello storico percorsi. */
-  const formatPathDate = (iso: string): string => {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
-  };
   const [phaseDialogOpen, setPhaseDialogOpen] = React.useState(false);
   // Esame di cui si sta registrando l'esito: stessa modalina di agenda e
   // dettaglio allievo delle autoscuole.
@@ -246,288 +235,160 @@ export function ConsorzioStudentDrawer({
     const activePath = openPath(data.licensePaths ?? []);
     const closedPaths = closedPathsNewestFirst(data.licensePaths ?? []);
     return (
-    <>
-      {/* Anagrafica */}
-      <section className="border-b border-[#f2f2f2] pb-7">
-        <p className={sectionLabelClass}>Anagrafica</p>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-3.5">
-          <Field label="Nome">
-            {/* Anche qui l'ordine scelto dall'autoscuola (REG-507): l'header
-                del drawer e la tabella sotto lo applicavano già, questo campo
-                no — la stessa schermata scriveva il nome in due modi. */}
-            <p className="text-sm font-medium text-foreground">
-              {formatStoredName(data.name, nameOrder)}
+      <DetailSections>
+        {/* Percorso: patente e fase, con i loro dialog. */}
+        <DetailSection testId="student-path">
+          <DetailRows>
+            <DetailRow
+              label="Patente"
+              description={activePath ? "Percorso in corso" : undefined}
+              value={pathLabel(data)}
+              onClick={() => setLicenseDialogOpen(true)}
+              testId="student-license-row"
+            />
+            <DetailRow
+              label="Fase"
+              value={studentPhaseLabel(data.studentPhase)}
+              onClick={() => setPhaseDialogOpen(true)}
+              testId="student-phase-row"
+            />
+          </DetailRows>
+          {/* REG-458 — la scala C → CE → CQC qui è la norma, non l'eccezione:
+              prima si rimediava registrando due volte la stessa persona. */}
+          <DetailAddButton onClick={() => setNewPathDialogOpen(true)}>
+            Avvia un nuovo percorso
+          </DetailAddButton>
+        </DetailSection>
+
+        {/* Attività col consorzio */}
+        <DetailSection title="Attività col consorzio">
+          <DetailStats
+            items={[
+              { value: String(data.lessonsCount), label: "Guide superiori" },
+              { value: formatHours(data.certifiedMinutes), label: "Ore certificate" },
+              { value: formatHours(toCertifyMinutes), label: "Da certificare" },
+            ]}
+          />
+        </DetailSection>
+
+        {/* Codici contabili — la parte consorzio-only */}
+        <DetailSection title="Codici contabili" testId="student-codes">
+          {data.codes.length === 0 ? (
+            <p className="py-3 text-[15px] font-medium text-[#6a6a6a]">
+              Nessun codice assegnato a questo allievo.
             </p>
-          </Field>
-          <Field label="Email">
-            <p className="break-all text-sm font-medium text-foreground">{data.email || "—"}</p>
-          </Field>
-          <Field label="Telefono">
-            {editingPhone ? (
-              <div className="flex items-center gap-2">
-                <input
-                  type="tel"
-                  autoFocus
-                  value={phoneDraft}
-                  onChange={(e) => setPhoneDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void savePhone();
-                    if (e.key === "Escape") setEditingPhone(false);
-                  }}
-                  placeholder="+39 333 123 4567"
-                  disabled={phoneSaving}
-                  className="w-full max-w-[170px] rounded-lg border border-[#e2e2e6] bg-white px-2.5 py-1.5 text-sm font-medium text-foreground outline-none focus:border-foreground/40 disabled:opacity-60"
-                />
-                <button
-                  type="button"
-                  className={inlineLinkClass}
-                  disabled={phoneSaving}
-                  onClick={() => void savePhone()}
-                >
-                  {phoneSaving ? "…" : "Salva"}
-                </button>
-                <button
-                  type="button"
-                  className="text-[13px] font-medium text-[#929292] hover:text-foreground disabled:opacity-60"
-                  disabled={phoneSaving}
-                  onClick={() => setEditingPhone(false)}
-                >
-                  Annulla
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium text-foreground">{data.phone || "—"}</p>
-                <button
-                  type="button"
-                  className={inlineLinkClass}
-                  onClick={() => {
-                    setPhoneDraft(data.phone ?? "");
-                    setEditingPhone(true);
-                  }}
-                >
-                  {data.phone ? "Modifica" : "Aggiungi"}
-                </button>
-              </div>
-            )}
-          </Field>
-          <Field label="Autoscuola">
-            <p className="text-sm font-medium text-foreground">
-              {[data.schoolName, data.schoolCity].filter(Boolean).join(" · ") || "—"}
-            </p>
-          </Field>
-          <Field label="Percorso patente">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-medium text-foreground">
-                {pathLabel(data)}
-              </p>
-              {activePath && <Pill tone="blue">In corso</Pill>}
-              <button
-                type="button"
-                className={inlineLinkClass}
-                onClick={() => setLicenseDialogOpen(true)}
-              >
-                Modifica
-              </button>
-              <span aria-hidden className="text-[#dddddd]">·</span>
-              {/* REG-458 — la scala C → CE → CQC qui è la norma, non l'eccezione:
-                  prima si rimediava registrando due volte la stessa persona. */}
-              <button
-                type="button"
-                className={inlineLinkClass}
-                onClick={() => setNewPathDialogOpen(true)}
-              >
-                Avvia nuovo percorso
-              </button>
-            </div>
-          </Field>
-          <Field label="Fase percorso">
-            <div className="flex items-center gap-2">
-              <Pill tone={STUDENT_PHASE_PILL_TONE[data.studentPhase]}>
-                {studentPhaseLabel(data.studentPhase)}
-              </Pill>
-              <button
-                type="button"
-                className={inlineLinkClass}
-                onClick={() => setPhaseDialogOpen(true)}
-              >
-                Modifica
-              </button>
-            </div>
-          </Field>
-          <Field label="Accesso all'app">
-            <Pill tone={data.email ? "green" : "gray"}>
-              {data.email ? "Attivo" : "Non attivo"}
-            </Pill>
-          </Field>
-        </div>
-      </section>
-
-      {/* REG-458 — percorsi già chiusi. Il titolo evita la parola «patenti»:
-          CQC e ADR sono qualificazioni, non patenti. */}
-      {closedPaths.length > 0 && (
-        <section className="border-b border-[#f2f2f2] py-7">
-          <p className={cn(sectionLabelClass, "mb-3")}>{historySectionTitle(closedPaths)}</p>
-          <div className="overflow-hidden rounded-[12px] border border-[#ececec]">
-            {closedPaths.map((path, index) => {
-              const conseguita = path.status === "obtained";
-              const quando = conseguita ? path.obtainedAt ?? path.closedAt : path.closedAt;
-              return (
-                <div
-                  key={path.id}
-                  className={cn(
-                    "flex items-center gap-4 px-4 py-3.5",
-                    index > 0 && "border-t border-[#f2f2f2]",
-                  )}
-                >
-                  <Pill tone={conseguita ? "green" : "gray"}>
-                    {licenseCategoryShort(path.licenseCategory) || "—"}
-                  </Pill>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13.5px] font-medium text-foreground">
-                      {[
-                        path.transmission && !isQualification(path.licenseCategory)
-                          ? TRANSMISSION_LABELS[path.transmission as Transmission] ??
-                            path.transmission
-                          : null,
-                        `${conseguita ? "conseguita" : "abbandonato"}${
-                          quando ? ` il ${formatPathDate(quando)}` : ""
-                        }`,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
-                    <p className="mt-0.5 text-[12.5px] text-[#929292]">
-                      {path.licenseNumber ? (
-                        <>
-                          Patente{" "}
-                          <span className="font-semibold tabular-nums text-foreground">
-                            {path.licenseNumber}
-                          </span>
-                        </>
-                      ) : (
-                        "Nessun numero registrato"
-                      )}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className={inlineLinkClass}
-                    onClick={() => {
-                      setLessonsPathChoice(path.id);
-                      setTab("lessons");
-                    }}
-                  >
-                    Vedi guide
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* Codici contabili — la parte consorzio-only */}
-      <section className="border-b border-[#f2f2f2] py-7">
-        <div className="mb-4 flex items-center justify-between">
-          <p className={cn(sectionLabelClass, "mb-0")}>Codici contabili</p>
-          <button
-            type="button"
-            className={inlineLinkClass}
-            onClick={() => setPickerOpen((prev) => !prev)}
-          >
-            {pickerOpen ? "Chiudi" : "Aggiungi codice"}
-          </button>
-        </div>
-
-        {data.codes.length === 0 ? (
-          <p className="text-[13px] font-medium text-[#929292]">
-            Nessun codice assegnato a questo allievo.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {data.codes.map((code) => (
-              <div
-                key={code.id}
-                className="flex items-center gap-3 rounded-[10px] bg-[#f8f8f8] px-3.5 py-2.5"
-              >
-                <span className="text-[13px] font-semibold tabular-nums text-foreground">
-                  {code.code}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-[#929292]">
-                  {code.description ?? ""}
-                </span>
-                <button
-                  type="button"
-                  aria-label={`Rimuovi ${code.code}`}
-                  disabled={busy}
-                  onClick={() =>
-                    void saveCodes(data.codes.filter((c) => c.id !== code.id).map((c) => c.id))
+          ) : (
+            <DetailRows>
+              {data.codes.map((code) => (
+                <DetailRow
+                  key={code.id}
+                  label={<span className="tabular-nums">{code.code}</span>}
+                  description={code.description ?? undefined}
+                  right={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Rimuovi ${code.code}`}
+                      disabled={busy}
+                      onClick={() =>
+                        void saveCodes(data.codes.filter((c) => c.id !== code.id).map((c) => c.id))
+                      }
+                    >
+                      <X className="text-[#6a6a6a]" strokeWidth={1.8} />
+                    </Button>
                   }
-                  className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-[#ececec] disabled:opacity-50"
-                >
-                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
-                    <path
-                      d="M2 2l8 8M10 2l-8 8"
-                      stroke="#8a8a8a"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                </button>
+                />
+              ))}
+            </DetailRows>
+          )}
+
+          <div
+            className={cn(
+              "grid transition-[grid-template-rows,opacity] duration-[250ms] ease-[cubic-bezier(.22,.7,.24,1)]",
+              pickerOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+            )}
+            aria-hidden={!pickerOpen}
+          >
+            <div className="overflow-hidden">
+              <p className="mb-2 mt-3 text-[13px] font-medium text-[#929292]">
+                Scegli dall&apos;elenco del consorzio
+              </p>
+              <div className="max-h-[236px] overflow-y-auto rounded-[14px] bg-white px-4 shadow-clay-sink">
+                <DetailRows>
+                  {data.allCodes.map((code) => {
+                    const assigned = assignedIds.has(code.id);
+                    return (
+                      <DetailRow
+                        key={code.id}
+                        className="min-h-[52px]"
+                        label={<span className="tabular-nums">{code.code}</span>}
+                        description={code.description ?? undefined}
+                        value={assigned ? "Assegnato" : undefined}
+                        right={
+                          assigned ? null : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              tabIndex={pickerOpen ? 0 : -1}
+                              disabled={busy}
+                              onClick={() => void saveCodes([...assignedIds, code.id])}
+                            >
+                              Aggiungi
+                            </Button>
+                          )
+                        }
+                      />
+                    );
+                  })}
+                </DetailRows>
               </div>
-            ))}
-          </div>
-        )}
-
-        {pickerOpen && (
-          <div className="mt-4">
-            <p className="mb-2 text-[12px] font-medium text-[#929292]">
-              Scegli dall&apos;elenco del consorzio
-            </p>
-            <div className="flex max-h-[132px] flex-wrap gap-1.5 overflow-y-auto">
-              {data.allCodes.map((code) => {
-                const assigned = assignedIds.has(code.id);
-                const label = code.description ? `${code.code} · ${code.description}` : code.code;
-                return (
-                  <button
-                    key={code.id}
-                    type="button"
-                    disabled={assigned || busy}
-                    onClick={() => void saveCodes([...assignedIds, code.id])}
-                    className={cn(
-                      "select-none rounded-full px-[11px] py-1.5 text-[12.5px] font-semibold transition-colors",
-                      assigned
-                        ? "cursor-default bg-[#111111] text-white opacity-55"
-                        : "cursor-pointer bg-[#f2f2f2] text-[#444444] hover:bg-[#e9e9e9] disabled:opacity-50",
-                    )}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
             </div>
           </div>
-        )}
-      </section>
 
-      {/* Attività col consorzio */}
-      <section className="py-7">
-        <p className={sectionLabelClass}>Attività col consorzio</p>
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { value: String(data.lessonsCount), label: "guide superiori" },
-            { value: formatHours(data.certifiedMinutes), label: "ore certificate" },
-            { value: formatHours(toCertifyMinutes), label: "da certificare" },
-          ].map((card) => (
-            <div key={card.label} className="rounded-[14px] border border-[#ebebeb] px-4 py-3.5">
-              <p className="text-[22px] font-bold tracking-[-0.4px] text-foreground">{card.value}</p>
-              <p className="mt-0.5 text-[12px] font-medium text-[#929292]">{card.label}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-    </>
+          <DetailAddButton onClick={() => setPickerOpen((prev) => !prev)}>
+            {pickerOpen ? "Chiudi l'elenco" : "Aggiungi codice"}
+          </DetailAddButton>
+        </DetailSection>
+
+        {/* Contatti e accesso — il nome sta già nella testata (REG-775). */}
+        <DetailSection title="Contatti e accesso" testId="student-contacts">
+          <DetailRows>
+            <DetailRow label="Email" value={<span className="break-all">{data.email || "—"}</span>} />
+            <PhoneRow
+              phone={data.phone}
+              editing={editingPhone}
+              draft={phoneDraft}
+              saving={phoneSaving}
+              onStart={() => {
+                setPhoneDraft(data.phone ?? "");
+                setEditingPhone(true);
+              }}
+              onDraftChange={setPhoneDraft}
+              onSave={() => void savePhone()}
+              onCancel={() => setEditingPhone(false)}
+            />
+            <DetailRow
+              label="Autoscuola"
+              value={[data.schoolName, data.schoolCity].filter(Boolean).join(" · ") || "—"}
+            />
+            <DetailRow label="Accesso all'app" value={data.email ? "Attivo" : "Non attivo"} />
+          </DetailRows>
+        </DetailSection>
+
+        {/* REG-458 — percorsi già chiusi. Il titolo evita la parola «patenti»:
+            CQC e ADR sono qualificazioni, non patenti. */}
+        {closedPaths.length > 0 ? (
+          <ClosedPathsSection
+            paths={closedPaths}
+            onOpenLessons={(pathId) => {
+              setLessonsPathChoice(pathId);
+              setTab("lessons");
+            }}
+          />
+        ) : null}
+      </DetailSections>
     );
   };
 
@@ -758,89 +619,66 @@ export function ConsorzioStudentDrawer({
           <DrawerSkeleton />
         ) : (
           <FadeIn>
-            {/* Header — stesso impianto del dettaglio allievo autoscuole */}
-            <div className="border-b border-[#dddddd] px-6 pt-6">
-              <div className="relative mb-5 flex flex-col items-center pt-2 text-center">
-                <button
-                  type="button"
-                  aria-label="Chiudi dettaglio allievo"
-                  onClick={onClose}
-                  className="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#f2f2f2]"
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <path
-                      d="M3 3l8 8M11 3l-8 8"
-                      stroke="#6a6a6a"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                </button>
+            {/* Testata — stessa del dettaglio allievo autoscuole (REG-775) */}
+            <DrawerHeader
+              onClose={onClose}
+              closeLabel="Chiudi dettaglio allievo"
+              avatar={
                 <StudentAvatar
                   student={{ id: detail.userId, ...nameParts }}
-                  size={96}
+                  size={64}
                   nameOrder={nameOrder}
                 />
-                <div className="mt-4">
-                  <p className="text-lg font-bold tracking-[-0.2px] text-foreground">
-                    {formatStoredName(detail.name, nameOrder)}
-                  </p>
-                  <p className="mt-0.5 text-[13px] font-medium text-[#929292]">
-                    {detail.email || detail.phone || "Nessun recapito"}
-                  </p>
-                  <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
-                    {detail.schoolName && <Pill tone="gray">{detail.schoolName}</Pill>}
-                    {detail.licenseCategory && <Pill tone="blue">{licenseCategoryShort(detail.licenseCategory)}</Pill>}
-                    <Pill tone={STUDENT_PHASE_PILL_TONE[detail.studentPhase]}>
-                      {studentPhaseLabel(detail.studentPhase)}
-                    </Pill>
-                  </div>
-                  {/* REG-767: messaggio di benvenuto su WhatsApp, solo titolare e segreteria. */}
-                  <StudentWhatsAppButton
-                    className="mt-3"
-                    canWrite={company?.role === "admin"}
-                    student={{
-                      phone: detail.phone,
-                      firstName: nameParts.firstName,
-                      lastName: nameParts.lastName,
-                      licenseCategory:
-                        openPath(detail.licensePaths ?? [])?.licenseCategory ?? detail.licenseCategory,
-                      schoolName: detail.schoolName,
-                    }}
-                    onAddPhone={() => {
-                      setTab("summary");
-                      setPhoneDraft(detail.phone ?? "");
-                      setEditingPhone(true);
-                    }}
-                  />
-                </div>
-              </div>
-              <div className="flex items-stretch">
-                {(
-                  [
+              }
+              name={formatStoredName(detail.name, nameOrder)}
+              subtitle={
+                [
+                  detail.schoolName,
+                  licenseCategoryShort(detail.licenseCategory) || null,
+                  studentPhaseLabel(detail.studentPhase),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              }
+              status={
+                !detail.email && !detail.phone ? (
+                  <p className="text-[13.5px] font-medium text-[#929292]">Nessun recapito</p>
+                ) : null
+              }
+              actions={
+                // REG-767: messaggio di benvenuto su WhatsApp, solo titolare e segreteria.
+                <StudentWhatsAppButton
+                  align="start"
+                  canWrite={company?.role === "admin"}
+                  student={{
+                    phone: detail.phone,
+                    firstName: nameParts.firstName,
+                    lastName: nameParts.lastName,
+                    licenseCategory:
+                      openPath(detail.licensePaths ?? [])?.licenseCategory ?? detail.licenseCategory,
+                    schoolName: detail.schoolName,
+                  }}
+                  onAddPhone={() => {
+                    setTab("summary");
+                    setPhoneDraft(detail.phone ?? "");
+                    setEditingPhone(true);
+                  }}
+                />
+              }
+              tabs={
+                <DrawerTabs
+                  tabs={[
                     { key: "summary" as const, label: "Riepilogo" },
                     { key: "lessons" as const, label: "Guide" },
                     { key: "costs" as const, label: "Costi" },
-                  ]
-                ).map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => setTab(item.key)}
-                    className={cn(
-                      "flex-1 cursor-pointer select-none border-b-2 px-2 py-3 text-center text-sm transition-colors",
-                      tab === item.key
-                        ? "border-[#222222] font-semibold text-foreground"
-                        : "border-transparent font-medium text-[#6a6a6a] hover:text-foreground",
-                    )}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+                  ]}
+                  value={tab}
+                  onChange={setTab}
+                />
+              }
+            />
 
-            <div className="p-6">
+            <div className={drawerBodyClass}>
               {tab === "summary" && renderSummary(detail)}
               {tab === "lessons" && renderLessons(detail)}
               {tab === "costs" && renderCosts(detail)}

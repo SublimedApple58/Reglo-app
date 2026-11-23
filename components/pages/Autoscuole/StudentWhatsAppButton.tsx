@@ -65,11 +65,12 @@ export function useWelcomeSettingsHref() {
   return `/${locale}/user/autoscuole?tab=settings&pane=reminders#${WELCOME_SECTION_ANCHOR}`;
 }
 
+// REG-775: capsula bianca in rilievo, come i `Button` outline del design system.
 const headerButtonClass = cn(
-  "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-[#dddddd] bg-white px-3.5",
-  "text-[13px] font-semibold text-[#222222]",
-  "transition-[background-color,border-color] duration-200 ease-out",
-  "hover:border-[#b0b0b0] hover:bg-[#f7f7f7] active:bg-[#f0f0f0]",
+  "inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full bg-white px-3.5 shadow-clay-raise",
+  "text-[13.5px] font-semibold text-[#222222]",
+  "transition-[transform,background-color] duration-200 ease-out",
+  "hover:bg-[#fafafa] active:scale-[0.98] active:shadow-clay-raise-pressed",
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#222222]/20",
 );
 
@@ -102,6 +103,7 @@ export function StudentWhatsAppButton({
   student,
   onAddPhone,
   variant = "header",
+  align = "center",
   className,
 }: {
   canWrite: boolean;
@@ -109,6 +111,8 @@ export function StudentWhatsAppButton({
   /** Porta al campo Telefono della scheda, già in modifica. Senza, niente «Aggiungi il numero». */
   onAddPhone?: () => void;
   variant?: "header" | "primary";
+  /** «start» nella testata compatta del drawer (REG-775), allineato al nome. */
+  align?: "center" | "start";
   className?: string;
 }) {
   const context = useWhatsAppWelcomeContext(canWrite);
@@ -118,8 +122,8 @@ export function StudentWhatsAppButton({
   const primary = variant === "primary";
   if (context === undefined) {
     return (
-      <div className={cn("flex flex-col items-center", className)}>
-        <Skeleton className={primary ? "h-12 w-full rounded-full" : "h-8 w-[196px] rounded-full"} />
+      <div className={cn("flex flex-col", align === "start" ? "items-start" : "items-center", className)}>
+        <Skeleton className={primary ? "h-12 w-full rounded-full" : "h-9 w-[196px] rounded-full"} />
       </div>
     );
   }
@@ -137,7 +141,7 @@ export function StudentWhatsAppButton({
   if (link.state === "missing" && !onAddPhone) return null;
 
   return (
-    <FadeIn className={cn("flex flex-col items-center", className)}>
+    <FadeIn className={cn("flex flex-col", align === "start" ? "items-start" : "items-center", className)}>
       {link.state === "ready" ? (
         <>
           <a

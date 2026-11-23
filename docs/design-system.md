@@ -216,6 +216,27 @@ pagine (chip di scelta, bottoni «Dettaglio», durate…), che si allineano quan
 si ridisegna la pagina (es. REG-775, drawer allievo). Le CTA nere e gli
 interruttori fatti a mano sono già stati portati su `Button`/`InlineToggle`.
 
+### 4c. Pagina a righe del dettaglio allievo (REG-775, 2026-11-23)
+
+Il Riepilogo del drawer allievo (autoscuole e consorzio) è una **pagina
+piatta**: primitivi in `components/pages/Autoscuole/student-detail-sheet.tsx`.
+
+| Primitivo | Cosa fa |
+|-----------|---------|
+| `DrawerHeader` + `DrawerTabs` | testata compatta a sinistra: avatar 64, nome 22/600, una riga di stato in testo (niente pillole), azioni allineate al nome, schede con sottolineatura che scorre in 250 ms |
+| `DetailSections` | separa le sezioni con una fascia `#f7f7f7` alta 8px a tutta larghezza (salta i figli nulli) |
+| `DetailSection` | titolo 17/600 nero, nota a destra in grigio, nota sotto |
+| `DetailRow` | etichetta + sottotitolo grigio, valore grigio a destra; con `onClick` diventa bottone con › (apre un dialog) |
+| `DetailSwitchRow` | tutta la riga è `role="switch"`, `InlineToggle decorative`, salva subito |
+| `DetailSelectRow` | riga che apre una `Select` Radix |
+| `DetailFigure`, `DetailProgress`, `DetailStats` | numero grande, barra nera, fila di numeri |
+| `PhoneRow`, `ClosedPathsSection`, `DetailBodySkeleton` | telefono modificabile, percorsi conclusi, skeleton a forma di sezioni |
+
+Regole: ogni azione è una riga o un `Button` (mai link sottolineati sparsi);
+gli stati sono testo grigio, non pillole; niente colori d'accento (anche
+l'esame prenotato è una card bianca). `Pill` e `inlineLinkClass` restano solo
+nelle schede Guide/Note/Costi, che si allineano quando vengono ridisegnate.
+
 ## 5. Ombre
 
 Definite in `tailwind.config.ts` e come CSS variables:
