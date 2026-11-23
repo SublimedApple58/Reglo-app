@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { WhatsAppConsentField } from "@/components/pages/Autoscuole/WhatsAppConsentField";
 import { useAtomValue } from "jotai";
 import { StudentAddedWelcomeStep } from "@/components/pages/Autoscuole/StudentWhatsAppButton";
+import { Button } from "@/components/ui/button";
 
 /**
  * "Aggiungi allievo" del consorzio (dal dettaglio autoscuola consorziata).
@@ -485,18 +486,15 @@ export function ConsorzioStudentCreateDialog({
             >
               Annulla
             </button>
-            <button
+            <Button
               type="submit"
-              disabled={!canSubmit}
-              className={cn(
-                "flex min-w-[148px] select-none items-center justify-center gap-[7px] rounded-[50px] px-[26px] py-3 text-sm font-semibold text-white transition-colors",
-                canSubmit
-                  ? "cursor-pointer bg-[#111111] hover:bg-[#2b2b2b]"
-                  : "cursor-not-allowed bg-[#c4c4d4]",
-              )}
+              size="bare"
+              disabled={!canSubmit && !saving}
+              loading={saving}
+              className="flex min-w-[148px] select-none gap-[7px] px-[26px] py-3 text-sm"
             >
-              {saving ? <LoadingDots /> : "Aggiungi allievo"}
-            </button>
+              Aggiungi allievo
+            </Button>
           </div>
         </form>
         )}

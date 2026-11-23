@@ -66,6 +66,7 @@ import {
 } from "./road-nav";
 import { RoadBackLink } from "./road-nav-ui";
 import { useCompanyHotspots } from "./road-hotspot-match";
+import { Button } from "@/components/ui/button";
 
 const POLL_MS = 5000;
 const EASE = "cubic-bezier(0.2, 0, 0, 1)";
@@ -559,14 +560,15 @@ export function RoadSessionDetail({ sessionId, from }: { sessionId: string; from
                 >
                   Annulla
                 </button>
-                <button
+                <Button
                   type="button"
+                  size="bare"
                   data-testid="road-trim-continue"
                   onClick={continueTrim}
-                  className="grid h-11 cursor-pointer place-items-center rounded-[22px] bg-[#111111] text-[14.5px] font-semibold text-white transition-colors duration-200 hover:bg-[#2a2a2a]"
+                  className="h-11 text-[14.5px]"
                 >
                   Continua
-                </button>
+                </Button>
               </div>
             </div>
           ) : null}

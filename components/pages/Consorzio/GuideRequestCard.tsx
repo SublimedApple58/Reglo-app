@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { Button } from "@/components/ui/button";
 
 /**
  * Card flottante "Richiesta di guida" (consorzio) — riproduzione 1:1 della card
@@ -154,14 +155,16 @@ export function GuideRequestCard({
             </p>
           ) : null}
 
-          <button
+          <Button
             type="button"
-            disabled={responding || !instructorId}
+            size="bare"
+            disabled={!instructorId}
+            loading={responding}
             onClick={onAccept}
-            className="mt-5 flex w-full cursor-pointer items-center justify-center rounded-[32px] bg-[#111111] px-[22px] py-3 text-[14.5px] font-bold text-white transition-colors hover:bg-[#000000] disabled:opacity-40"
+            className="mt-5 flex w-full px-[22px] py-3 text-[14.5px]"
           >
-            {responding ? <LoadingDots className="min-h-[18px]" /> : "Accetta"}
-          </button>
+            Accetta
+          </Button>
 
           <div className="mt-3.5 flex items-center justify-center gap-[26px]">
             <button

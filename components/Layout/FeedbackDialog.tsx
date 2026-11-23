@@ -9,6 +9,7 @@ import { submitProductFeedback } from "@/lib/actions/support.actions";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 const RATING_LABELS: Record<number, string> = {
   0: "Tocca le stelle per valutare",
@@ -254,13 +255,9 @@ export function FeedbackDialog({
               Abbiamo registrato cosa possiamo fare per arrivare a 5. La tua segnalazione va dritta
               al team di sviluppo: ci lavoriamo e ti aggiorniamo appena risolto.
             </p>
-            <button
-              type="button"
-              onClick={close}
-              className="inline-block cursor-pointer rounded-[10px] bg-[#222222] px-7 py-3 text-sm font-semibold text-white transition-colors hover:bg-black"
-            >
+            <Button type="button" size="bare" onClick={close} className="inline-flex px-7 py-3 text-sm">
               Chiudi
-            </button>
+            </Button>
           </div>
         ) : (
           /* ── Esito 1-3 stelle ── */

@@ -21,6 +21,7 @@ import { LoadingDots } from "@/components/ui/loading-dots";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { RoadHeadquartersGate } from "./road/RoadHeadquartersGate";
+import { Button } from "@/components/ui/button";
 
 const newId = () =>
   (typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -327,13 +328,15 @@ export function RoadSettingsPane() {
               aria-label="Nuova segnalazione"
               className="h-11 min-w-0 flex-1 rounded-xl border border-[#d9d9d9] bg-white px-3.5 text-[14.5px] text-[#222222] outline-none placeholder:text-[#9a9a9a] focus:border-[#111111] disabled:bg-[#f7f7f7]"
             />
-            <button
+            <Button
               type="submit"
-              disabled={full || !draft.trim() || Boolean(saving)}
-              className="grid h-11 min-w-[106px] cursor-pointer place-items-center rounded-[22px] bg-[#111111] px-[18px] text-[14.5px] font-semibold text-white transition-colors hover:bg-[#2a2a2a] disabled:cursor-default disabled:opacity-40"
+              size="bare"
+              disabled={(full || !draft.trim() || Boolean(saving)) && saving !== "add"}
+              loading={saving === "add"}
+              className="h-11 min-w-[106px] px-[18px] text-[14.5px]"
             >
-              {saving === "add" ? <LoadingDots /> : "Aggiungi"}
-            </button>
+              Aggiungi
+            </Button>
           </form>
         ) : null}
       </div>

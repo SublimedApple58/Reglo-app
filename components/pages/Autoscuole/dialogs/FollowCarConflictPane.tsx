@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { TRANSMISSION_LABELS, type Transmission } from "@/lib/autoscuole/license";
 import { cn } from "@/lib/utils";
 import { countCreatable, orderConflicts } from "@/lib/autoscuole/follow-car-conflict";
+import { Button } from "@/components/ui/button";
 
 /**
  * «Auto al seguito occupata» — il secondo schermo della prenotazione multipla
@@ -123,13 +124,9 @@ export function FollowCarConflictPane({
               È libera in tutte le date in conflitto
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onApplyToAll}
-            className="shrink-0 cursor-pointer whitespace-nowrap rounded-full bg-[#222222] px-3.5 py-2 text-[12px] font-semibold text-white transition-colors hover:bg-black"
-          >
+          <Button type="button" size="bare" onClick={onApplyToAll} className="px-3.5 py-2 text-[12px]">
             Applica a tutte
-          </button>
+          </Button>
         </div>
       ) : null}
 

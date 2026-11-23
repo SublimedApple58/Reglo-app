@@ -4,6 +4,7 @@ import { Lock, Smartphone } from 'lucide-react';
 import { auth } from '@/auth';
 import { getActiveCompanyContext } from '@/lib/company-context';
 import { signOutUser } from '@/lib/actions/user.actions';
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: 'Accesso riservato',
@@ -78,12 +79,9 @@ export default async function UnauthorizedPage() {
             </div>
 
             <form action={signOutUser} className="mt-8">
-              <button
-                type="submit"
-                className="w-full cursor-pointer rounded-[10px] bg-[#222222] py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-black"
-              >
+              <Button type="submit" size="bare" className="w-full py-[13px] text-[15px]">
                 Esci
-              </button>
+              </Button>
             </form>
 
             {displayName && (

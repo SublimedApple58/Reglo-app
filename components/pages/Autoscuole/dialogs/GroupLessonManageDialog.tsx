@@ -48,6 +48,7 @@ import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-
 import { formatStoredName, storedNameInitials } from "@/lib/autoscuole/student-name-order";
 import { CoInstructorPicker } from "@/components/pages/Autoscuole/CoInstructorPicker";
 import { GroupMotoTrigger, GroupMotoSwapConfirm, describeMotoSwap, firstStudentName, type FleetMoto } from "./GroupMotoPicker";
+import { Button } from "@/components/ui/button";
 
 type VehicleWithLicense = {
   id: string;
@@ -188,14 +189,15 @@ function EditFooter({
 }) {
   return (
     <div className="mt-3.5 flex items-center gap-2.5">
-      <button
+      <Button
         type="button"
-        disabled={busy}
+        size="bare"
+        loading={busy}
         onClick={onSave}
-        className="flex min-h-[40px] min-w-[78px] cursor-pointer items-center justify-center rounded-sm bg-[#222222] px-[18px] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-60"
+        className="flex min-h-[40px] min-w-[78px] px-[18px] py-2.5 text-sm"
       >
-        {busy ? <LoadingDots /> : "Salva"}
-      </button>
+        Salva
+      </Button>
       <button
         type="button"
         disabled={busy}
@@ -1073,14 +1075,16 @@ export function GroupLessonManageDialog({
                       </p>
                     </div>
                   </div>
-                  <button
+                  <Button
                     type="button"
-                    disabled={busy}
+                    size="bare"
+                    disabled={busy && !inviting}
+                    loading={inviting}
                     onClick={handleInvite}
-                    className="flex min-w-[84px] shrink-0 cursor-pointer select-none items-center justify-center rounded-full bg-[#111111] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#2b2b2b] disabled:opacity-60"
+                    className="flex min-w-[84px] select-none px-4 py-2 text-[13px]"
                   >
-                    {inviting ? <LoadingDots className="scale-[0.6]" /> : "Invita"}
-                  </button>
+                    Invita
+                  </Button>
                 </div>
               </>
             ) : null}

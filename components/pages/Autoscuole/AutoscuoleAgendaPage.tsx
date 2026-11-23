@@ -134,7 +134,7 @@ import {
 } from "@/lib/autoscuole/student-name-order";
 import { agendaVehicleLabel } from "@/lib/autoscuole/agenda-vehicle-label";
 import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
-import { blueLinkClass } from "@/components/pages/Autoscuole/student-detail-ui";
+import { inlineLinkClass } from "@/components/pages/Autoscuole/student-detail-ui";
 import {
   AGENDA_COLOR_EXCEPTIONS,
   DEFAULT_AGENDA_COLOR_CRITERION,
@@ -948,7 +948,7 @@ function StudentContactLines({
           {schoolHref ? (
             <Link
               href={schoolHref}
-              className={blueLinkClass}
+              className={inlineLinkClass}
               // Il pannello è trascinabile: senza fermare il pointerdown, il
               // gesto di drag si mangerebbe il click sul link.
               onPointerDownCapture={(event) => event.stopPropagation()}
@@ -7461,14 +7461,16 @@ export function AutoscuoleAgendaPage({
 
                 {/* Footer pinnato: "Salva" sempre raggiungibile anche col dialog lungo */}
                 <div className="shrink-0 space-y-2 rounded-b-[20px] border-t border-[#f0f0f0] bg-white px-7 py-4">
-                    <button
+                    <Button
                       type="button"
-                      disabled={!examDirty || examPanelPending}
+                      size="bare"
+                      disabled={!examDirty && !examPanelPending}
+                      loading={examPanelPending}
                       onClick={saveExam}
-                      className="flex w-full cursor-pointer items-center justify-center rounded-full bg-[#222222] py-3 text-sm font-semibold text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
+                      className="flex w-full py-3 text-sm"
                     >
-                      {examPanelPending ? <LoadingDots className="min-h-5" /> : "Salva modifiche"}
-                    </button>
+                      Salva modifiche
+                    </Button>
                     <button
                       type="button"
                       disabled={examPanelPending}
@@ -7711,10 +7713,12 @@ export function AutoscuoleAgendaPage({
                 ? "Nessun allievo — potrai aggiungerli in seguito"
                 : `${examForm.studentIds.length} alliev${examForm.studentIds.length === 1 ? "o" : "i"} selezionat${examForm.studentIds.length === 1 ? "o" : "i"}`}
             </p>
-            <button
+            <Button
               type="button"
-              disabled={examCreating || !examForm.date}
-              className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
+              size="bare"
+              disabled={!examForm.date}
+              loading={examCreating}
+              className="flex gap-2 px-5 py-2.5 text-sm"
               onClick={async () => {
                 setExamCreating(true);
                 const instrId = examForm.instructorId && examForm.instructorId !== "__none__" ? examForm.instructorId : null;
@@ -7750,8 +7754,8 @@ export function AutoscuoleAgendaPage({
                 }
               }}
             >
-              {examCreating ? <LoadingDots className="min-h-5" /> : "Crea esame"}
-            </button>
+              Crea esame
+            </Button>
           </>
         }
       >
@@ -7887,10 +7891,12 @@ export function AutoscuoleAgendaPage({
             <button type="button" className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50" disabled={blockCreating} onClick={() => { setBlockDialogOpen(false); setBlockEditId(null); }}>
               Annulla
             </button>
-            <button
+            <Button
               type="button"
-              disabled={blockCreating || !blockForm.instructorId || !blockForm.date}
-              className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
+              size="bare"
+              disabled={!blockForm.instructorId || !blockForm.date}
+              loading={blockCreating}
+              className="flex gap-2 px-5 py-2.5 text-sm"
               onClick={async () => {
                 setBlockCreating(true);
                 const blockStart = new Date(`${blockForm.date}T${blockForm.startTime}:00`);
@@ -7946,8 +7952,8 @@ export function AutoscuoleAgendaPage({
                 });
               }}
             >
-              {blockCreating ? <LoadingDots className="min-h-5" /> : (blockEditId ? "Salva modifiche" : (blockKind === "theory" ? "Crea lezione" : "Crea evento"))}
-            </button>
+              {blockEditId ? "Salva modifiche" : blockKind === "theory" ? "Crea lezione" : "Crea evento"}
+            </Button>
           </>
         }
       >

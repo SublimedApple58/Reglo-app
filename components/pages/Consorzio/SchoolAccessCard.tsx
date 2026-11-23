@@ -29,6 +29,7 @@ import {
   type AffiliateSchoolRow,
 } from "@/lib/actions/consorzio-affiliate.actions";
 import { AccessBadge } from "./school-access";
+import { Button } from "@/components/ui/button";
 
 const formatDay = (iso: string) =>
   new Date(iso).toLocaleDateString("it-IT", { day: "numeric", month: "short" });
@@ -173,15 +174,16 @@ export function SchoolAccessCard({
         </dl>
 
         <div className="mt-[18px] flex flex-wrap items-center gap-2.5">
-          <button
+          <Button
             type="button"
+            size="bare"
             onClick={invite}
-            disabled={busy || row.access === "active"}
-            className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-4 py-[10px] text-[14px] font-semibold text-white shadow-cta transition-opacity hover:opacity-90 disabled:cursor-default disabled:opacity-40"
+            disabled={row.access === "active"}
+            loading={busy}
+            className="flex gap-2 px-4 py-[10px] text-[14px]"
           >
-            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
             {invited ? "Reinvia invito" : "Invita titolare"}
-          </button>
+          </Button>
           {invited && (
             <button
               type="button"

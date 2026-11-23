@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import {
   Dialog,
@@ -667,7 +667,7 @@ export function AutoscuolePaymentsPage({
               <h3 className="text-sm font-semibold text-foreground">Crediti guida e penali</h3>
               <p className="text-xs text-muted-foreground">Gestisci crediti e penali senza Stripe</p>
             </div>
-            <InlineToggle checked={lessonCreditFlowEnabled} />
+            <InlineToggle checked={lessonCreditFlowEnabled} decorative />
           </div>
 
           {lessonCreditFlowEnabled && (
@@ -686,7 +686,7 @@ export function AutoscuolePaymentsPage({
                 <h3 className="text-sm font-semibold text-foreground">Crediti obbligatori per prenotare</h3>
                 <p className="text-xs text-muted-foreground">Se disattivato, gli allievi possono prenotare anche senza crediti. Le guide senza credito risulteranno da pagare.</p>
               </div>
-              <InlineToggle checked={lessonCreditsRequired} />
+              <InlineToggle checked={lessonCreditsRequired} decorative />
             </div>
           )}
 
@@ -769,7 +769,7 @@ export function AutoscuolePaymentsPage({
                   <span className="text-sm font-medium text-foreground">Crediti guida e penali</span>
                   <p className="text-xs text-muted-foreground">Gestisci crediti e penali per annullamenti tardivi</p>
                 </div>
-                <InlineToggle checked={lessonCreditFlowEnabled} />
+                <InlineToggle checked={lessonCreditFlowEnabled} decorative />
               </div>
 
               {lessonCreditFlowEnabled && (
@@ -788,7 +788,7 @@ export function AutoscuolePaymentsPage({
                     <span className="text-sm font-medium text-foreground">Crediti obbligatori per prenotare</span>
                     <p className="text-xs text-muted-foreground">Se disattivato, gli allievi possono prenotare anche senza crediti. Le guide senza credito risulteranno da pagare.</p>
                   </div>
-                  <InlineToggle checked={lessonCreditsRequired} />
+                  <InlineToggle checked={lessonCreditsRequired} decorative />
                 </div>
               )}
 
@@ -841,7 +841,7 @@ export function AutoscuolePaymentsPage({
                     <span className="text-sm font-medium text-foreground">Abilita pagamenti automatici</span>
                     <p className="text-xs text-muted-foreground">Addebito a fine guida con fattura automatica</p>
                   </div>
-                  <InlineToggle checked={autoPaymentsEnabled} />
+                  <InlineToggle checked={autoPaymentsEnabled} decorative />
                 </div>
 
                 {autoPaymentsEnabled && (
@@ -1152,7 +1152,7 @@ export function AutoscuolePaymentsPage({
                 href={testReceiptUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1E3A5F] px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+                className={cn(buttonVariants({ size: "bare" }), "flex w-full gap-2 px-4 py-2.5 text-sm")}
               >
                 Apri ricevuta PDF ↗
               </a>

@@ -145,7 +145,7 @@ export function LocationAvailabilityCard({
             {description}
           </div>
         </div>
-        <InlineToggle checked={enabled} size="lg" disabled={tooFewLocations} />
+        <InlineToggle checked={enabled} size="lg" disabled={tooFewLocations} decorative />
       </div>
 
       <div
@@ -215,7 +215,7 @@ export function LocationAvailabilityCard({
                 }}
                 className="cursor-pointer"
               >
-                <InlineToggle checked={local.locationChangeBufferEnabled} />
+                <InlineToggle checked={local.locationChangeBufferEnabled} decorative />
               </div>
             </div>
           </div>

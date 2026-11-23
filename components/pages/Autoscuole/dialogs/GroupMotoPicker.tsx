@@ -14,6 +14,7 @@ import {
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { motoChoicesForSeat, type FleetVehicle, type MotoChangePlan, type MotoSeat } from "@/lib/autoscuole/group-moto";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 /**
  * REG-636 — per-participant moto of a moto group lesson (web roster).
@@ -271,14 +272,15 @@ export function GroupMotoSwapConfirm({
         </p>
       ) : null}
       <div className="mt-3.5 flex items-center gap-2">
-        <button
+        <Button
           type="button"
-          disabled={busy}
+          size="bare"
+          loading={busy}
           onClick={onConfirm}
-          className="flex min-h-[34px] min-w-[86px] cursor-pointer items-center justify-center rounded-full bg-[#111111] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-black disabled:opacity-60"
+          className="flex min-h-[34px] min-w-[86px] px-4 py-2 text-[13px]"
         >
-          {busy ? <LoadingDots className="scale-[0.6]" /> : cleanSwap ? "Scambia" : "Conferma"}
-        </button>
+          {cleanSwap ? "Scambia" : "Conferma"}
+        </Button>
         <button
           type="button"
           disabled={busy}

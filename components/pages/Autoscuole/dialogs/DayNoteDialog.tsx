@@ -9,6 +9,7 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { cn } from "@/lib/utils";
 import { ymdOf, dateOfYmd } from "@/components/pages/Autoscuole/dialogs/RangeCalendar";
 import { DAY_NOTE_MAX_LENGTH } from "@/lib/autoscuole/day-notes";
+import { Button } from "@/components/ui/button";
 
 /**
  * REG-632 — «Nota del giorno»: un'etichetta per tutta l'autoscuola sulla data
@@ -183,17 +184,16 @@ export function DayNoteDialog({
               >
                 Annulla
               </button>
-              <button
+              <Button
                 type="submit"
+                size="bare"
                 data-testid="day-note-save"
-                disabled={!canSave || !!pending}
-                className={cn(
-                  "min-w-[76px] rounded-[20px] px-4 py-2 text-[13px] font-semibold transition-colors",
-                  canSave ? "cursor-pointer bg-[#222222] text-white hover:bg-black" : "cursor-default bg-[#e0e0e0] text-[#aaa]",
-                )}
+                disabled={(!canSave || !!pending) && pending !== "save"}
+                loading={pending === "save"}
+                className="min-w-[76px] px-4 py-2 text-[13px]"
               >
-                {pending === "save" ? <LoadingDots className="min-h-5" /> : "Salva"}
-              </button>
+                Salva
+              </Button>
             </div>
           </div>
         </form>

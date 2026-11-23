@@ -4,6 +4,7 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import { Lightbulb } from "lucide-react";
 import { createPortal } from "react-dom";
+import { Button } from "@/components/ui/button";
 
 export type NovitaEntryKey = "qr-istruttore" | "pagellino" | "foto-firma" | "agenda-pausa" | "veicoli" | "istruttori";
 
@@ -48,16 +49,17 @@ function NovitaVideo({
 
 function GoButton({ label, onClick, className }: { label: string; onClick: () => void; className?: string }) {
   return (
-    <button
+    <Button
       type="button"
+      size="bare"
       onClick={onClick}
-      className={`inline-flex cursor-pointer items-center gap-2 rounded-[14px] bg-[#111111] px-6 py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-[#2b2b2b] ${className ?? ""}`}
+      className={`gap-2 px-6 py-[13px] text-[15px] ${className ?? ""}`}
     >
       {label}
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
         <path d="M3 8h9M8.5 4l4 4-4 4" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-    </button>
+    </Button>
   );
 }
 

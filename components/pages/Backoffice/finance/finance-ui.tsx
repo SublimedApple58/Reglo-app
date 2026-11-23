@@ -192,10 +192,12 @@ export function FinButton({
       type="button"
       {...props}
       className={cn(
-        "inline-flex h-10 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-        variant === "primary" && "bg-[#111111] text-white hover:bg-[#2a2a2a]",
+        // REG-774: stesse capsule «clay» di `Button` (primaria nera con volume,
+        // secondaria bianca in rilievo), misure invariate.
+        "inline-flex h-10 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-4 text-sm font-semibold transition-[transform,background-color] duration-200 ease-out active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50",
+        variant === "primary" && "bg-[#1e1e1e] text-white shadow-clay-cta hover:bg-[#2a2a2a] active:shadow-clay-cta-pressed",
         variant === "ghost" &&
-          "border border-[#e9e9eb] bg-white text-[#111111] hover:border-[#d4d4d8] hover:bg-[#fafafa]",
+          "bg-white text-[#111111] shadow-clay-raise hover:bg-[#fafafa] active:shadow-clay-raise-pressed",
         variant === "danger" && "text-[#c2410c] hover:bg-[#fff7ed]",
         className,
       )}

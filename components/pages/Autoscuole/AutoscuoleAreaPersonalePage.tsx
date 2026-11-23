@@ -31,6 +31,7 @@ import {
 } from "@/lib/actions/company-plan.actions";
 import { BILLING_PERIOD_SUFFIX, formatEuroCents } from "@/lib/company-plan";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 type PaneKey = "profilo" | "documenti" | "abbonamento";
 
@@ -315,18 +316,15 @@ function ProfiloPane() {
                   >
                     Annulla
                   </button>
-                  <button
+                  <Button
                     type="button"
+                    size="bare"
                     onClick={confirmReset}
-                    disabled={resetSubmitting}
-                    className="flex cursor-pointer select-none items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-black disabled:pointer-events-none disabled:opacity-60"
+                    loading={resetSubmitting}
+                    className="flex select-none gap-2 px-5 py-2.5 text-[13.5px]"
                   >
-                    {resetSubmitting ? (
-                      <LoadingDots className="min-h-5" />
-                    ) : (
-                      "Conferma nuova password"
-                    )}
-                  </button>
+                    Conferma nuova password
+                  </Button>
                   <button
                     type="button"
                     onClick={requestResetCode}
@@ -460,7 +458,7 @@ function DocumentiPane() {
             {/* ── Contratto ── */}
             <div className="mb-8 flex items-center gap-[18px] rounded-[14px] border border-[#ebebeb] px-[22px] py-5">
               <div className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[10px] bg-[#eef4ff]">
-                <FileText className="size-[22px] text-[#2a6fdb]" strokeWidth={1.7} />
+                <FileText className="size-[22px] text-[#222222]" strokeWidth={1.7} />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-base font-semibold text-foreground">

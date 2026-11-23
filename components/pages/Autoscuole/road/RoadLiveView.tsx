@@ -41,6 +41,7 @@ import {
   ZoomControls,
   roadSessionName,
 } from "./road-ui";
+import { Button } from "@/components/ui/button";
 
 const POLL_MS = 5000;
 const MOVE_MS = 1000;
@@ -575,13 +576,9 @@ function SelectedCard({
         </div>
       ))}
       <div className={cn("mt-4 grid gap-2", phone ? "grid-cols-[1fr_auto]" : "grid-cols-1")}>
-        <button
-          type="button"
-          onClick={onOpen}
-          className="grid h-11 cursor-pointer place-items-center rounded-[22px] bg-[#111111] px-[18px] text-[14.5px] font-semibold text-white transition-colors hover:bg-[#2a2a2a]"
-        >
+        <Button type="button" size="bare" onClick={onOpen} className="h-11 px-[18px] text-[14.5px]">
           Apri la guida
-        </button>
+        </Button>
         {phone ? (
           <a
             href={`tel:${phone.replace(/\s+/g, "")}`}

@@ -1977,7 +1977,7 @@ export function AutoscuoleResourcesPage({
                         className={cn(
                           "cursor-pointer rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors",
                           active
-                            ? "border-[#b9ccf5] bg-[#dbe4fb] text-[#26324d]"
+                            ? "border-[#b0b0b0] bg-[#e6e6e6] text-[#111111]"
                             : "border-[#e0e0e0] bg-white text-[#666666] hover:border-[#c9c9c9]",
                         )}
                       >
@@ -2038,7 +2038,7 @@ export function AutoscuoleResourcesPage({
                   : "Usa gli orari propri del veicolo (impostali da Disponibilità)."}
               </div>
             </div>
-            <InlineToggle checked={editVehicleFollowsAvailability} size="lg" />
+            <InlineToggle checked={editVehicleFollowsAvailability} size="lg" decorative />
           </div>
         ) : null}
 
@@ -2119,15 +2119,17 @@ export function AutoscuoleResourcesPage({
 
         {/* Footer: Salva near-black + Annulla che torna alla lista */}
         <div className="mt-7 flex items-center gap-2.5 border-t border-[#eeeeee] pt-5">
-          <button
+          <Button
             type="button"
+            size="bare"
             data-testid="vehicle-save"
-            disabled={savingEditVehicle || !editVehicleName.trim()}
+            disabled={!editVehicleName.trim()}
+            loading={savingEditVehicle}
             onClick={handleSaveEditVehicle}
-            className="flex min-h-[40px] min-w-[78px] cursor-pointer items-center justify-center rounded-[8px] bg-[#222222] px-[18px] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-60"
+            className="flex min-h-[40px] min-w-[78px] px-[18px] py-2.5 text-sm"
           >
-            {savingEditVehicle ? <LoadingDots /> : "Salva"}
-          </button>
+            Salva
+          </Button>
           <button
             type="button"
             disabled={savingEditVehicle}
@@ -2196,7 +2198,7 @@ export function AutoscuoleResourcesPage({
                     className={cn(
                       "cursor-pointer rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors",
                       active
-                        ? "border-[#b9ccf5] bg-[#dbe4fb] text-[#26324d]"
+                        ? "border-[#b0b0b0] bg-[#e6e6e6] text-[#111111]"
                         : "border-[#e0e0e0] bg-white text-[#666666] hover:border-[#c9c9c9]",
                     )}
                   >
@@ -2682,19 +2684,16 @@ export function AutoscuoleResourcesPage({
               >
                 Annulla
               </button>
-              <button
+              <Button
                 type="button"
+                size="bare"
                 onClick={handleCreateVehicle}
-                disabled={creatingVehicle || !newVehicleName.trim()}
-                className={cn(
-                  "flex min-w-[150px] select-none items-center justify-center gap-[7px] rounded-[50px] px-[26px] py-3 text-sm font-semibold text-white transition-colors",
-                  newVehicleName.trim() && !creatingVehicle
-                    ? "cursor-pointer bg-[#111111] hover:bg-[#2b2b2b]"
-                    : "cursor-not-allowed bg-[#c4c4d4]",
-                )}
+                disabled={!newVehicleName.trim()}
+                loading={creatingVehicle}
+                className="flex min-w-[150px] select-none gap-[7px] px-[26px] py-3 text-sm"
               >
-                {creatingVehicle ? <LoadingDots /> : "Aggiungi veicolo"}
-              </button>
+                Aggiungi veicolo
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -2973,7 +2972,7 @@ function AvailabilityCalendar({
             )}
           >
             <span className="text-xs font-medium text-foreground">Disponibile</span>
-            <InlineToggle checked={dayEnabled} size="sm" />
+            <InlineToggle checked={dayEnabled} size="sm" decorative />
           </div>
           {dayEnabled && (
             <TimeRangeRows ranges={ranges} onChange={(next) => setRanges(() => next)} />

@@ -11,6 +11,7 @@ import { updateDefaultAutoscuolaLocation } from "@/lib/actions/autoscuola-locati
 import { roadApi, type RoadHeadquartersStatus } from "@/lib/autoscuole/road/client";
 import { cn } from "@/lib/utils";
 import { usePlacesAutocomplete, type PlaceSuggestion } from "../locations/use-places-autocomplete";
+import { Button } from "@/components/ui/button";
 
 type Picked = {
   address: string;
@@ -108,13 +109,9 @@ function HeadquartersNotice({ open, onClose }: { open: boolean; onClose: () => v
           Il titolare deve ancora inserirlo nella web app, in Impostazioni › Sede e luoghi. Fino ad allora il giro
           della prossima guida si chiude all&apos;ultima tappa.
         </SheetHeader>
-        <button
-          type="button"
-          onClick={onClose}
-          className="h-12 w-full cursor-pointer select-none rounded-[50px] bg-[#111111] text-[14.5px] font-semibold text-white transition-colors duration-200 hover:bg-[#2b2b2b]"
-        >
+        <Button type="button" size="bare" onClick={onClose} className="h-12 w-full select-none text-[14.5px]">
           Ho capito
-        </button>
+        </Button>
       </DialogContent>
     </Dialog>
   );
@@ -326,18 +323,17 @@ function HeadquartersRequired({ sedeName, onSaved }: { sedeName: string; onSaved
           </>
         )}
 
-        <button
+        <Button
           type="button"
+          size="bare"
           data-testid="road-hq-save"
           onClick={save}
-          disabled={!picked || saving}
-          className={cn(
-            "mt-6 flex h-12 w-full select-none items-center justify-center rounded-[50px] text-[14.5px] font-semibold text-white transition-colors duration-200",
-            picked ? "cursor-pointer bg-[#111111] hover:bg-[#2b2b2b]" : "cursor-not-allowed bg-[#c9c9c9]",
-          )}
+          disabled={!picked}
+          loading={saving}
+          className="mt-6 flex h-12 w-full select-none text-[14.5px]"
         >
-          {saving ? <LoadingDots /> : "Salva e continua"}
-        </button>
+          Salva e continua
+        </Button>
         <div className="mt-3 text-center text-[12px] font-medium text-[#a3a3a3]">
           Potrai cambiarla quando vuoi in Impostazioni › Sede e luoghi.
         </div>

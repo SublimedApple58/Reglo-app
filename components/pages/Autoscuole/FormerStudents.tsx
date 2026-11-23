@@ -24,6 +24,7 @@ import {
 } from "@/lib/autoscuole/former-students";
 import { pathLabel } from "@/lib/autoscuole/license-paths";
 import { formatLessonDuration } from "@/lib/autoscuole/lesson-duration";
+import { Button } from "@/components/ui/button";
 
 /**
  * REG-629 — «Ex allievi» della pagina Allievi: chi ha lasciato l'autoscuola
@@ -392,17 +393,16 @@ function AssignNameForm({
           disabled={saving}
           className="h-10 min-w-0 flex-1 rounded-[10px] border border-[#dddddd] bg-white px-3 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#b0b0b0] focus:border-[#222222] disabled:opacity-60"
         />
-        <button
+        <Button
           type="submit"
+          size="bare"
           data-testid="former-assign-name-save"
-          disabled={!canSave || saving}
-          className={cn(
-            "h-10 min-w-[76px] rounded-full px-4 text-[13px] font-semibold transition-colors",
-            canSave ? "cursor-pointer bg-[#222222] text-white hover:bg-black" : "cursor-default bg-[#e6e6e6] text-[#aaaaaa]",
-          )}
+          disabled={!canSave}
+          loading={saving}
+          className="h-10 min-w-[76px] px-4 text-[13px]"
         >
-          {saving ? <LoadingDots className="min-h-5" /> : "Salva"}
-        </button>
+          Salva
+        </Button>
       </div>
       {onCancel && (
         <button type="button" onClick={onCancel} className="mt-2 text-[12px] font-medium text-[#929292] hover:text-foreground">

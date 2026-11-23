@@ -920,14 +920,16 @@ export function EditAppointmentDialog({
           <button type="button" className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50" disabled={pending} onClick={() => onOpenChange(false)}>
             Annulla
           </button>
-          <button
+          <Button
             type="button"
-            disabled={!canSubmit}
+            size="bare"
+            disabled={!canSubmit && !pending}
+            loading={pending}
             onClick={handleSubmit}
-            className="flex cursor-pointer items-center gap-2 rounded-sm bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
+            className="flex gap-2 px-5 py-2.5 text-sm"
           >
-            {pending ? <LoadingDots className="min-h-5" /> : "Salva modifiche"}
-          </button>
+            Salva modifiche
+          </Button>
         </>
       }
     >

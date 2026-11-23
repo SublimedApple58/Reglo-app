@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 /**
  * Dialog "Proponi un altro orario" (consorzio, azione "Sposta" della richiesta
@@ -177,14 +178,15 @@ export function ProposeSlotDialog({
             >
               Annulla
             </button>
-            <button
+            <Button
               type="button"
-              disabled={submitting}
+              size="bare"
+              loading={submitting}
               onClick={onSubmit}
-              className="flex min-w-[143px] cursor-pointer items-center justify-center rounded-[32px] bg-[#111111] px-[26px] py-[13px] text-[14px] font-bold text-white transition-colors hover:bg-[#000000] disabled:opacity-40"
+              className="flex min-w-[143px] px-[26px] py-[13px] text-[14px]"
             >
-              {submitting ? <LoadingDots className="min-h-[17px]" /> : "Proponi orario"}
-            </button>
+              Proponi orario
+            </Button>
           </div>
         </motion.div>
       )}

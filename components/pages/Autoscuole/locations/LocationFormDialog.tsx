@@ -17,6 +17,7 @@ import { type LessonTransmission } from "@/lib/autoscuole/location-for-license";
 import { LicenseTransmissionPicker } from "./LicenseTransmissionPicker";
 import { cn } from "@/lib/utils";
 import { usePlacesAutocomplete, type PlaceSuggestion } from "./use-places-autocomplete";
+import { Button } from "@/components/ui/button";
 
 export type LocationFormValues = {
   name: string;
@@ -271,7 +272,7 @@ export function LocationFormDialog({
               Gli allievi potranno aprire il luogo in Google Maps.
             </div>
           </div>
-          <InlineToggle checked={isPrecise} size="lg" />
+          <InlineToggle checked={isPrecise} size="lg" decorative />
         </div>
 
         {/* ── Indirizzo (solo posizione precisa) ── */}
@@ -351,19 +352,16 @@ export function LocationFormDialog({
           >
             Annulla
           </button>
-          <button
+          <Button
             type="button"
+            size="bare"
             onClick={handleSubmit}
-            disabled={!canSubmit || saving}
-            className={cn(
-              "flex min-w-[128px] select-none items-center justify-center gap-[7px] rounded-[50px] px-[26px] py-3 text-sm font-semibold text-white transition-colors",
-              canSubmit
-                ? "cursor-pointer bg-[#111111] hover:bg-[#2b2b2b]"
-                : "cursor-not-allowed bg-[#c4c4d4]",
-            )}
+            disabled={!canSubmit}
+            loading={saving}
+            className="flex min-w-[128px] select-none gap-[7px] px-[26px] py-3 text-sm"
           >
-            {saving ? <LoadingDots /> : "Salva luogo"}
-          </button>
+            Salva luogo
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

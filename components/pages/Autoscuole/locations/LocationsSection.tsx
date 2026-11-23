@@ -20,6 +20,7 @@ import {
   readLocationAvailabilitySettings,
   type LocationAvailabilitySettings,
 } from "@/lib/autoscuole/location-availability";
+import { Button } from "@/components/ui/button";
 
 type Location = {
   id: string;
@@ -310,13 +311,9 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
             La sede è il luogo di partenza predefinito di ogni guida. Aggiungila ora per
             iniziare a creare le prenotazioni, poi potrai gestire eventuali luoghi extra.
           </div>
-          <button
-            type="button"
-            onClick={startEditSede}
-            className="inline-flex cursor-pointer items-center justify-center rounded-[10px] bg-[#111111] px-[26px] py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-[#2b2b2b]"
-          >
+          <Button type="button" size="bare" onClick={startEditSede} className="px-[26px] py-[13px] text-[15px]">
             Imposta la sede
-          </button>
+          </Button>
         </FadeIn>
         {editing ? (
           <LocationFormDialog
@@ -496,7 +493,7 @@ export function LocationsSection({ consortium = false }: { consortium?: boolean 
               : "Ogni luogo vale per tutte le patenti. Le guide si precompilano con il luogo dell'allievo, se ne ha uno, altrimenti con la sede."}
           </div>
         </div>
-        <InlineToggle checked={byLicense} size="lg" />
+        <InlineToggle checked={byLicense} size="lg" decorative />
       </div>
 
       {locationAvailability ? (

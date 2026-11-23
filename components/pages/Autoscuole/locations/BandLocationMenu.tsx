@@ -11,6 +11,8 @@ import {
   setAgendaBandLocation,
   type BandLocationSnapshot,
 } from "@/lib/actions/autoscuole-band-location.actions";
+import { Button } from "@/components/ui/button";
+import { InlineToggle } from "@/components/ui/inline-toggle";
 
 export type BandMenuLocation = {
   id: string;
@@ -246,15 +248,16 @@ export function BandLocationMenu({
                     >
                       Annulla
                     </button>
-                    <button
+                    <Button
                       type="button"
-                      className="inline-flex h-[30px] min-w-[128px] cursor-pointer items-center justify-center rounded-[9px] bg-[#111111] px-3 text-[12.5px] font-medium text-white transition-opacity duration-150 hover:opacity-90"
+                      size="bare"
+                      className="h-[30px] min-w-[128px] px-3 text-[12.5px]"
                       onClick={() => void apply(o.id)}
-                      disabled={busy}
+                      loading={busy}
                       data-testid="band-location-confirm"
                     >
-                      {busy ? <LoadingDots className="scale-[0.5]" /> : "Cambia comunque"}
-                    </button>
+                      Cambia comunque
+                    </Button>
                   </div>
                 </div>
               )}
@@ -276,19 +279,7 @@ export function BandLocationMenu({
                 className="inline-flex cursor-pointer items-center gap-[7px] text-[#222222]"
               >
                 Ogni {weekday}
-                <span
-                  className={cn(
-                    "relative h-4 w-7 rounded-full transition-colors duration-200 ease-out",
-                    everyWeekday ? "bg-[#111111]" : "bg-[#e4e4e4]",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "absolute left-0.5 top-0.5 size-3 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.2)] transition-transform duration-200 ease-out",
-                      everyWeekday && "translate-x-3",
-                    )}
-                  />
-                </span>
+                <InlineToggle checked={everyWeekday} size="sm" decorative />
               </button>
             )}
           </div>
