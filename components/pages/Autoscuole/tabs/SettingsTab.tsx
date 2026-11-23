@@ -581,16 +581,17 @@ function SettingsTab({
                 <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] font-medium text-[#6a6a6a]">
                   <span className="flex items-center gap-1.5">
                     <ChannelIcon channel="push" state="on" size="legend" />
-                    acceso
+                    App Reglo
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <ChannelIcon channel="push" state="off" size="legend" />
-                    spento
+                    <ChannelIcon channel="whatsapp" state="on" size="legend" />
+                    WhatsApp
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <ChannelIcon channel="whatsapp" state="unavailable" size="legend" />
-                    non ancora disponibile
+                    <ChannelIcon channel="email" state="on" size="legend" />
+                    Email
                   </span>
+                  <span className="text-[#929292]">Nere se accese, grigie se spente.</span>
                 </div>
               </div>
 

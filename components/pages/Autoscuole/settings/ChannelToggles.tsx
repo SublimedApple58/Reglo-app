@@ -11,13 +11,14 @@ import { WHATSAPP_GLYPH_PATH } from "@/components/pages/Autoscuole/NeverAccessed
  *
  * Solo icone a contorno (variante 1 approvata da Tiziano il 24/11/2026): nere
  * se accese, grigio chiaro se spente, area di tocco da 44px, passaggio di
- * colore in 200ms. Niente cerchi pieni né pillole. La comunicazione parte su
+ * colore in 200ms. Niente cerchi pieni né pillole. Dove WhatsApp non è
+ * disponibile l'icona non c'è (resta lo spazio vuoto). La comunicazione parte su
  * tutti e soli i canali accesi; tutti spenti = non parte.
  */
 
 export type ChannelKey = "push" | "whatsapp" | "email";
 
-/** WhatsApp su questa riga: attivabile, senza modello Meta approvato, o non collegato. */
+/** WhatsApp su questa riga: attivabile, senza modello Meta approvato, o non collegato (gli ultimi due: niente icona). */
 export type WhatsAppAvailability = "ready" | "no_template" | "not_connected";
 
 const ORDER: ChannelKey[] = ["push", "whatsapp", "email"];
@@ -66,11 +67,6 @@ export const CHANNEL_META: Record<
   email: { label: "Email", Icon: Mail },
 };
 
-const WHATSAPP_REASON: Record<Exclude<WhatsAppAvailability, "ready">, string> = {
-  no_template: "WhatsApp non ancora disponibile per questo messaggio: il modello è in attesa di approvazione",
-  not_connected: "WhatsApp non ancora collegato",
-};
-
 /** Un solo canale, nei suoi tre stati. Usato anche dalla legenda. */
 export function ChannelIcon({
   channel,
@@ -78,7 +74,7 @@ export function ChannelIcon({
   size = "row",
 }: {
   channel: ChannelKey;
-  state: "on" | "off" | "unavailable";
+  state: "on" | "off";
   size?: "row" | "legend";
 }) {
   const { Icon } = CHANNEL_META[channel];
@@ -88,19 +84,9 @@ export function ChannelIcon({
         "relative flex items-center justify-center transition-colors duration-200 ease-out",
         state === "on" && "text-[#222222]",
         state === "off" && "text-[#c4c4c4]",
-        state === "unavailable" && "text-[#e0e0e0]",
       )}
     >
       <Icon className={size === "row" ? "size-[21px]" : "size-[17px]"} strokeWidth={1.6} />
-      {state === "unavailable" ? (
-        <span
-          aria-hidden
-          className={cn(
-            "absolute h-[1.6px] -rotate-45 rounded-full bg-[#e0e0e0]",
-            size === "row" ? "w-6" : "w-[19px]",
-          )}
-        />
-      ) : null}
     </span>
   );
 }
@@ -121,12 +107,15 @@ export function ChannelToggles({
   return (
     <div className="-mx-2.5 flex items-center" data-testid={testId}>
       {ORDER.map((channel) => {
-        const unavailable = channel === "whatsapp" && whatsapp !== "ready";
-        const on = !unavailable && value.includes(channel);
+        // WhatsApp non disponibile su questa riga (niente modello approvato o
+        // numero non collegato): l'icona non c'è, ma lo spazio resta così le
+        // colonne delle righe restano allineate (Tiziano, 24/11).
+        if (channel === "whatsapp" && whatsapp !== "ready") {
+          return <span key={channel} aria-hidden className="size-11 shrink-0" />;
+        }
+        const on = value.includes(channel);
         const { label } = CHANNEL_META[channel];
-        const title = unavailable
-          ? WHATSAPP_REASON[whatsapp as Exclude<WhatsAppAvailability, "ready">]
-          : `${label}: ${on ? "acceso" : "spento"}`;
+        const title = `${label}: ${on ? "acceso" : "spento"}`;
         return (
           <button
             key={channel}
@@ -134,7 +123,7 @@ export function ChannelToggles({
             aria-pressed={on}
             aria-label={title}
             title={title}
-            disabled={disabled || unavailable}
+            disabled={disabled}
             data-channel={channel}
             onClick={() =>
               onChange(
@@ -147,10 +136,10 @@ export function ChannelToggles({
               "group flex size-11 items-center justify-center rounded-full outline-none",
               "transition-transform duration-200 ease-out active:scale-[0.92]",
               "focus-visible:ring-2 focus-visible:ring-[#222222]/15",
-              unavailable ? "cursor-not-allowed" : "cursor-pointer",
+              "cursor-pointer",
             )}
           >
-            <ChannelIcon channel={channel} state={unavailable ? "unavailable" : on ? "on" : "off"} />
+            <ChannelIcon channel={channel} state={on ? "on" : "off"} />
           </button>
         );
       })}
