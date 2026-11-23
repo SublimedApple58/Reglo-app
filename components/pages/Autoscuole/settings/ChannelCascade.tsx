@@ -77,7 +77,7 @@ export function ChannelCascade({
     <SettingsSection
       title="Canali"
       icon={Send}
-      description="In quest'ordine, fino al primo che arriva. Ognuno riceve il messaggio una volta sola."
+      description="Valgono per tutti i messaggi di questa scheda, tranne quelli «Solo nell'app». Si prova in quest'ordine e ci si ferma al primo che arriva."
       testId="channel-cascade"
     >
       <SettingsRow

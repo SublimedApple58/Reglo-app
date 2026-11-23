@@ -109,12 +109,14 @@ l'inbox mobile ricostruisce il sottotitolo da lì, non dal testo del push.
 
 ## Web settings (pane "Promemoria e notifiche")
 
-`components/pages/Autoscuole/tabs/SettingsTab.tsx`, sezione `reminders` (overlay Impostazioni, auto-save). **Rifatto il 24/11/2026 (REG-767)** sull'impianto di «Prenotazioni e allievi», coi mattoni di `settings/settings-rows.tsx` (`SettingsSection`, `SettingsRow`, `SettingsReveal`, `SettingsSubRow`): sezioni con titolo, righe titolo + riga grigia + controllo, divisori sottili, glifo a un colore accanto ai titoli, niente card né pillole. Sezioni:
-- **Allievi** — promemoria prima della guida (select), «La mattina della guida» e «Il giorno prima» (toggle; acceso, compare l'orario con `TimePickerInput`), «Guida fissata» (REG-758), «Posti liberi per domani» (ex «Notifica slot disponibili domani»: toggle; acceso, compaiono «A chi», «Orari» e «Invia ora» → `triggerEmptySlotNotification`; `emptySlotNotificationEnabled/Target/Times`; spostato qui da «Prenotazioni e allievi > App allievi» il 2026-07-12).
-- **Istruttori** — promemoria prima della guida, con «Non inviare».
-- **Canali** — `ChannelCascade` (REG-500): App sempre, WhatsApp, Email; una scelta scrive i canali di allievi e istruttori.
-- **Ultimi invii** — `RecentDeliveries`, lista senza riquadro.
-- **Messaggio di benvenuto** — `WhatsAppWelcomeSection` (REG-767, vedi `whatsapp-welcome.md`).
+`components/pages/Autoscuole/tabs/SettingsTab.tsx`, sezione `reminders` (overlay Impostazioni, auto-save). **Rifatto a novembre 2026 (REG-767)** con tre schede come «Prenotazioni e allievi» e i mattoni di `settings/settings-rows.tsx` (`SettingsSection`, `SettingsRow`, `SettingsReveal`, `SettingsSubRow`): righe titolo + riga grigia + controllo, glifo a un colore accanto ai titoli, divisori sottili, niente card né pillole.
+- **Automatici**
+  - **Canali** (`ChannelCascade`, REG-500) in cima: valgono per tutta la scheda, tranne «Solo nell'app». Una scelta scrive i canali di allievi e istruttori.
+  - **Allievi**: promemoria prima della guida; «La mattina della guida» e «Il giorno prima» (acceso, compare l'orario); «Guida fissata» (REG-758).
+  - **Istruttori**: promemoria prima della guida, con «Non inviare».
+  - **Solo nell'app**: «Posti liberi per domani» (`emptySlotNotificationEnabled/Target/Times`, «Invia ora» → `triggerEmptySlotNotification`) e una riga descrittiva per le offerte fisse (posto liberato, inviti di gruppo, sostituzioni: `OFFER_CHANNELS`).
+- **A mano**: «Messaggio di benvenuto» (`WhatsAppWelcomeSection`, vedi `whatsapp-welcome.md`; con l'ancora `#messaggio-di-benvenuto` si apre direttamente questa scheda) e il rimando a «Invia comunicato».
+- **Ultimi invii**: `RecentDeliveries`.
 Comportamento e chiavi dei limits invariati rispetto a prima del redesign.
 
 ## Checklist for adding a new notification kind
