@@ -154,7 +154,10 @@ import {
 } from "@/lib/actions/affiliate.actions";
 import { useAtomValue } from "jotai";
 import { companyAtom } from "@/atoms/company.store";
-import { StudentWhatsAppButton } from "@/components/pages/Autoscuole/StudentWhatsAppButton";
+import {
+  StudentAddedWelcomeStep,
+  StudentWhatsAppButton,
+} from "@/components/pages/Autoscuole/StudentWhatsAppButton";
 import { LicenseCategorySelectItems } from "./LicenseCategorySelectItems";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FadeIn } from "@/components/ui/fade-in";
@@ -1063,6 +1066,14 @@ export function AutoscuoleStudentsPage({
   const company = useAtomValue(companyAtom);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [createSaving, setCreateSaving] = React.useState(false);
+  // REG-767: allievo appena creato col telefono → la modale resta aperta sulla
+  // conferma col messaggio di benvenuto (solo titolare e segreteria).
+  const [createdWelcome, setCreatedWelcome] = React.useState<{
+    firstName: string;
+    lastName: string;
+    phone: string;
+    licenseCategory: string;
+  } | null>(null);
   const emptyCreateForm = React.useMemo(
     () => ({
       firstName: "",
@@ -2404,6 +2415,23 @@ export function AutoscuoleStudentsPage({
         toast.error({ description: res.message ?? "Creazione non riuscita." });
         return;
       }
+      if (withPhone && company?.role === "admin") {
+        setCreatedWelcome({
+          firstName,
+          lastName,
+          phone: createForm.phone.trim(),
+          licenseCategory: createForm.licenseCategory,
+        });
+        // Come accede all'app resta nel toast: la conferma parla solo del benvenuto.
+        toast.success({
+          title: "Allievo creato",
+          description: `${formatStudentName({ firstName, lastName }, studentNameOrder)} entra nell'app da «Primo accesso» con il numero ${formatLoginPhone(loginPhone ?? createForm.phone.trim())}.`,
+        });
+        setCreateForm(emptyCreateForm);
+        void load(true);
+        if (createForm.studentPhase === "TEORIA") void refreshQuizCtx();
+        return;
+      }
       toast.success({
         title: "Allievo creato",
         description: loginPhone
@@ -2415,7 +2443,7 @@ export function AutoscuoleStudentsPage({
       void load(true);
       if (createForm.studentPhase === "TEORIA") void refreshQuizCtx();
     },
-    [affiliate, company?.id, createForm, createSaving, emptyCreateForm, load, refreshQuizCtx, toast, studentNameOrder],
+    [affiliate, company?.id, company?.role, createForm, createSaving, emptyCreateForm, load, refreshQuizCtx, toast, studentNameOrder],
   );
 
   const initialRef = React.useRef(true);
@@ -4554,8 +4582,32 @@ export function AutoscuoleStudentsPage({
       </Dialog>
 
       {/* ── Dialog: crea account allievo ── */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(next) => {
+          setCreateOpen(next);
+          if (!next) setCreatedWelcome(null);
+        }}
+      >
         <DialogContent className="sm:max-w-md">
+          {createdWelcome ? (
+            <>
+              <DialogTitle className="sr-only">Allievo aggiunto</DialogTitle>
+              <DialogDescription className="sr-only">
+                {formatStudentName(createdWelcome, studentNameOrder)} entra nell&apos;app da «Primo accesso» con il suo numero.
+              </DialogDescription>
+              <StudentAddedWelcomeStep
+                className="pb-1 pt-4"
+                canWrite
+                student={createdWelcome}
+                onDone={() => {
+                  setCreateOpen(false);
+                  setCreatedWelcome(null);
+                }}
+              />
+            </>
+          ) : (
+          <>
           <DialogHeader>
             <DialogTitle>{affiliate ? "Aggiungi allievo" : "Nuovo allievo"}</DialogTitle>
             <DialogDescription>
@@ -4774,6 +4826,8 @@ export function AutoscuoleStudentsPage({
               </Button>
             </DialogFooter>
           </form>
+          </>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -4939,15 +4993,17 @@ export function AutoscuoleStudentsPage({
               <p className="mt-0.5 text-[13px] font-medium text-[#929292]">
                 {register?.student.email || register?.student.phone || selectedStudent?.email || ""}
               </p>
-              {/* REG-767: presa in carico su WhatsApp, solo titolare e segreteria. */}
+              {/* REG-767: messaggio di benvenuto su WhatsApp, solo titolare e segreteria. */}
               {register && !affiliate ? (
                 <StudentWhatsAppButton
-                  className="mt-3.5"
+                  className="mt-3"
                   canWrite={company?.role === "admin"}
-                  phone={register.student.phone}
-                  firstName={register.student.firstName}
-                  lastName={register.student.lastName}
-                  licenseCategory={activeLicensePath?.licenseCategory ?? register.licenseCategory}
+                  student={{
+                    phone: register.student.phone,
+                    firstName: register.student.firstName,
+                    lastName: register.student.lastName,
+                    licenseCategory: activeLicensePath?.licenseCategory ?? register.licenseCategory,
+                  }}
                   onAddPhone={() => {
                     setDrawerTab("summary");
                     startEditPhone();

@@ -21,6 +21,7 @@ import { TRANSMISSIONS, TRANSMISSION_LABELS } from "@/lib/autoscuole/license";
 import { cn } from "@/lib/utils";
 import { WhatsAppConsentField } from "@/components/pages/Autoscuole/WhatsAppConsentField";
 import { useAtomValue } from "jotai";
+import { StudentAddedWelcomeStep } from "@/components/pages/Autoscuole/StudentWhatsAppButton";
 
 /**
  * "Aggiungi allievo" del consorzio (dal dettaglio autoscuola consorziata).
@@ -134,6 +135,15 @@ export function ConsorzioStudentCreateDialog({
   const [codesOpen, setCodesOpen] = React.useState(false);
   const [appOpen, setAppOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  // REG-767: dopo «Aggiungi allievo» la modale resta aperta sulla conferma col
+  // messaggio di benvenuto (solo titolare e segreteria).
+  const [added, setAdded] = React.useState<{
+    firstName: string;
+    lastName: string;
+    phone: string;
+    licenseCategory: string;
+  } | null>(null);
+  const canWelcome = company?.role === "admin";
   const [instructors, setInstructors] = React.useState<Array<{ id: string; name: string }>>([]);
 
   // Reset a ogni apertura: la modale non deve mai riproporre i dati
@@ -152,6 +162,7 @@ export function ConsorzioStudentCreateDialog({
     setPassword("");
     setCodesOpen(false);
     setAppOpen(false);
+    setAdded(null);
   }, [open, defaultLicenseCategory]);
 
   React.useEffect(() => {
@@ -204,12 +215,21 @@ export function ConsorzioStudentCreateDialog({
         accountingCodeIds: selectedCodeIds,
       });
       if (!res.success) throw new Error(res.message ?? "Errore nella creazione.");
+      onCreated?.();
+      if (canWelcome) {
+        setAdded({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          phone: phone.trim(),
+          licenseCategory,
+        });
+        return;
+      }
       toast.success({
         title: "Allievo aggiunto",
         description: `${firstName.trim()} ${lastName.trim()} è ora fra gli allievi di ${schoolName}.`,
       });
       onOpenChange(false);
-      onCreated?.();
     } catch (error) {
       toast.error({
         description: error instanceof Error ? error.message : "Errore nella creazione.",
@@ -225,6 +245,19 @@ export function ConsorzioStudentCreateDialog({
         data-testid="consorzio-student-create"
         className="max-w-[520px] gap-0 overflow-hidden rounded-[20px] p-0 [&>button:last-child]:hidden"
       >
+        {added ? (
+          <>
+            <DialogTitle className="sr-only">Allievo aggiunto</DialogTitle>
+            <DialogDescription className="sr-only">
+              {added.firstName} {added.lastName} è ora fra gli allievi di {schoolName}.
+            </DialogDescription>
+            <StudentAddedWelcomeStep
+              canWrite={canWelcome}
+              student={{ ...added, schoolName }}
+              onDone={() => onOpenChange(false)}
+            />
+          </>
+        ) : (
         <form onSubmit={handleSubmit}>
           {/* Header */}
           <div className="px-7 pb-5 pt-7">
@@ -466,6 +499,7 @@ export function ConsorzioStudentCreateDialog({
             </button>
           </div>
         </form>
+        )}
       </DialogContent>
     </Dialog>
   );

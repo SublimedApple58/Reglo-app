@@ -131,7 +131,7 @@ export type SettingsTabProps = {
   studentReminderDayBeforeTime: string;
   /** REG-758: avviso «guida fissata» all'allievo. */
   studentCreationNoticeEnabled: boolean;
-  /** REG-767: testo di presa in carico per «Scrivi su WhatsApp» (già risolto). */
+  /** REG-767: testo del «Messaggio di benvenuto» (già risolto). */
   studentWelcomeWhatsappTemplate: string;
   saveStudentWelcomeWhatsappTemplate: (next: string | null) => Promise<boolean>;
   instructorReminderMinutes: string;
@@ -691,7 +691,7 @@ function SettingsTab({
               <RecentDeliveries />
             </div>
 
-            {/* REG-767: testo del tasto «Scrivi su WhatsApp» della scheda allievo. */}
+            {/* REG-767: «Messaggio di benvenuto» (scheda allievo e conferma di creazione). */}
             <div className="mt-4">
               <WhatsAppWelcomeSection
                 value={studentWelcomeWhatsappTemplate}

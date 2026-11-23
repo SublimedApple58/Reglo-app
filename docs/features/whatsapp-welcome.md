@@ -1,22 +1,27 @@
-# Scrivi su WhatsApp — presa in carico (REG-767)
+# Messaggio di benvenuto su WhatsApp (REG-767)
 
-Richiesta di Federica (consorzio Riunite Car): quando un allievo passa a loro, la segreteria gli scrive su WhatsApp che da adesso lo seguono loro. Il tasto lo apre già scritto.
+Richiesta di Federica (consorzio Riunite Car): quando un allievo arriva, la segreteria gli scrive su WhatsApp che da adesso lo seguono loro. Il tasto apre WhatsApp col messaggio già scritto.
 
-## Cosa fa
-- Nell'intestazione della scheda allievo (autoscuola: `AutoscuoleStudentsPage`; consorzio: `ConsorzioStudentDrawer`) c'è **«Scrivi su WhatsApp»**: un link `wa.me/<numero>?text=…` che apre l'app o WhatsApp Web col messaggio pronto. Lo manda chi lo apre, dal suo numero.
-- **Niente API WhatsApp Business** (quella è REG-500, promemoria automatici) e **niente registro «inviato»**: Reglo non sa se il messaggio è partito.
-- Solo **titolare e segreteria** (`canManageSettings`: `role === "admin"` o `isOwner`). Gli istruttori non lo vedono. Nella vista ridotta della consorziata (`affiliate`) il tasto non c'è.
-- Numero assente → **«Aggiungi il numero»**: porta al Riepilogo col campo Telefono già in modifica. Numero ambiguo, troppo corto o fisso italiano → **«Numero non valido per WhatsApp · Correggi»**. Normalizzazione con `normalizeToE164` + `isWhatsAppCapable` (`lib/phone-e164.ts`), non con `normalizeItalianWaNumber` del megafono.
+## Dove sta il tasto «Messaggio di benvenuto»
+1. **Conferma dopo la creazione** (il gesto naturale): la modale «Nuovo allievo» dell'autoscuola (`AutoscuoleStudentsPage`, solo con accesso tramite telefono) e «Aggiungi allievo» del consorzio (`ConsorzioStudentCreateDialog`) non si chiudono più: mostrano «Allievo aggiunto», il tasto principale (nero, `variant="primary"`) e «Fatto». Senza permesso, o con accesso tramite email (nessun numero), comportamento di prima: toast e chiusura.
+2. **Intestazione della scheda allievo** (ripiego, discreto): autoscuola (`AutoscuoleStudentsPage`) e consorzio (`ConsorzioStudentDrawer`). Mai nella vista ridotta della consorziata (`affiliate`).
+
+Sotto il tasto, link grigio «Modifica messaggio» → `?tab=settings&pane=reminders#messaggio-di-benvenuto` (`WELCOME_SECTION_ANCHOR`): il blocco si porta in vista da solo.
+
+## Regole
+- È un link `wa.me/<numero>?text=…`: lo manda chi lo apre, dal suo numero. **Niente API WhatsApp Business** (quella è REG-500) e **niente registro «inviato»**.
+- Solo **titolare e segreteria** (`canManageSettings`: `role === "admin"` o `isOwner`), lato client (`company.role`) e lato server (`getWhatsAppWelcomeContext` → `allowed`).
+- Numero assente (scheda) → «Aggiungi il numero», porta al campo Telefono in modifica. Ambiguo, troppo corto o fisso → «Numero non valido per WhatsApp · Correggi». `normalizeToE164` + `isWhatsAppCapable` (`lib/phone-e164.ts`).
 
 ## Il testo
-- Uno per azienda (autoscuola o consorzio), nei limits del CompanyService: `studentWelcomeWhatsappTemplate` (null = default). Nessuna migrazione.
+- Uno per azienda, `limits.studentWelcomeWhatsappTemplate` (null = default). Nessuna migrazione.
 - Default: «Ciao {nome}! Sono {staff} di {autoscuola}, abbiamo preso in carico la tua iscrizione per {categoria}: da adesso ti seguiamo noi».
-- Segnaposto: `{nome}`, `{cognome}`, `{staff}` (primo nome di chi scrive), `{autoscuola}` (l'azienda di chi scrive: per il consorzio, il consorzio), `{categoria}` con l'articolo («la patente B», «la CQC persone», «il patentino ADR»; il percorso aperto, altrimenti la categoria dell'allievo), `{scuola}` (solo consorzio: la consorziata; altrove vale come `{autoscuola}`). Un segnaposto sconosciuto resta scritto com'è.
-- Si cambia in **Impostazioni → Promemoria e notifiche → Messaggio di presa in carico** (`WhatsAppWelcomeSection`): salva quando il campo perde il fuoco, anteprima dal vivo, «Ripristina il testo predefinito». Max 1000 caratteri.
+- Segnaposto: `{nome}`, `{cognome}`, `{staff}` (primo nome di chi scrive), `{autoscuola}` (azienda di chi scrive; per il consorzio il consorzio), `{categoria}` con l'articolo («la patente B», «la CQC persone», «il patentino ADR»), `{scuola}` (solo consorzio: la consorziata; altrove = `{autoscuola}`). Sconosciuti restano scritti com'è.
+- **Impostazioni → Promemoria e notifiche → Messaggio di benvenuto** (`WhatsAppWelcomeSection`): campo che salva quando perde il fuoco, menu «Inserisci» per i segnaposto, «Ripristina», anteprima compatta. Max 1000 caratteri.
 
 ## File
-- `lib/autoscuole/whatsapp-welcome.ts` — default, segnaposto, `renderWelcomeMessage`, `licenseCategoryWithArticle`, `buildWhatsAppLink` (puro, testato in `tests/unit/autoscuole/whatsapp-welcome.test.ts`)
-- `lib/actions/autoscuole-settings.actions.ts` — `getWhatsAppWelcomeContext()` (testo, nome di chi scrive, nome azienda; `allowed: false` per chi non può) + campo nello schema di `updateAutoscuolaSettings` e in `AutoscuolaSettingsData`
-- `components/pages/Autoscuole/StudentWhatsAppButton.tsx` — il tasto (contesto in cache per pagina, `invalidateWhatsAppWelcomeContext()` dopo il salvataggio)
-- `components/pages/Autoscuole/settings/WhatsAppWelcomeSection.tsx` — il campo nelle impostazioni
-- `NeverAccessedNudge.tsx` esporta `WhatsAppGlyph` (logo a un colore)
+- `lib/autoscuole/whatsapp-welcome.ts` — default, segnaposto, ancora, `renderWelcomeMessage`, `licenseCategoryWithArticle`, `buildWhatsAppLink` (puro; `tests/unit/autoscuole/whatsapp-welcome.test.ts`)
+- `lib/actions/autoscuole-settings.actions.ts` — `getWhatsAppWelcomeContext()` + campo in schema/`AutoscuolaSettingsData`
+- `components/pages/Autoscuole/StudentWhatsAppButton.tsx` — `StudentWhatsAppButton` (header/primary), `StudentAddedWelcomeStep`, cache del contesto (`invalidateWhatsAppWelcomeContext()` dopo il salvataggio)
+- `components/pages/Autoscuole/settings/WhatsAppWelcomeSection.tsx` — il blocco nelle impostazioni
+- `NeverAccessedNudge.tsx` esporta `WhatsAppGlyph`

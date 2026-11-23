@@ -1,5 +1,6 @@
 /**
- * REG-767 — «Scrivi su WhatsApp» dalla scheda allievo.
+ * REG-767 — «Messaggio di benvenuto» su WhatsApp (scheda allievo e conferma
+ * dopo la creazione).
  *
  * Il tasto apre WhatsApp (app o Web) con un link `wa.me` e il testo di presa in
  * carico già scritto: lo manda la segreteria dal suo telefono. Niente API
@@ -17,24 +18,27 @@ import { QUALIFICATION_BASE_VEHICLES, licenseCategoryShort } from "@/lib/autoscu
 export const DEFAULT_WELCOME_TEMPLATE =
   "Ciao {nome}! Sono {staff} di {autoscuola}, abbiamo preso in carico la tua iscrizione per {categoria}: da adesso ti seguiamo noi";
 
+/** Ancora del blocco nelle impostazioni: «Modifica messaggio» ci porta dritto. */
+export const WELCOME_SECTION_ANCHOR = "messaggio-di-benvenuto";
+
 /** Oltre questa lunghezza il testo non si salva (un messaggio, non una lettera). */
 export const WELCOME_TEMPLATE_MAX_LENGTH = 1000;
 
 export type WelcomePlaceholder = {
   token: string;
-  /** Cosa diventa, detto in parole per il pane delle impostazioni. */
-  description: string;
+  /** La voce del menu «Inserisci» delle impostazioni. */
+  label: string;
   /** Solo per il consorzio: l'autoscuola consorziata da cui arriva l'allievo. */
   consortiumOnly?: boolean;
 };
 
 export const WELCOME_PLACEHOLDERS: WelcomePlaceholder[] = [
-  { token: "{nome}", description: "nome dell'allievo" },
-  { token: "{cognome}", description: "cognome dell'allievo" },
-  { token: "{staff}", description: "il tuo nome" },
-  { token: "{autoscuola}", description: "il nome della tua azienda" },
-  { token: "{categoria}", description: "la patente, con l'articolo («la patente B»)" },
-  { token: "{scuola}", description: "l'autoscuola da cui arriva l'allievo", consortiumOnly: true },
+  { token: "{nome}", label: "Nome dell'allievo" },
+  { token: "{cognome}", label: "Cognome dell'allievo" },
+  { token: "{staff}", label: "Il tuo nome" },
+  { token: "{autoscuola}", label: "Nome della tua autoscuola" },
+  { token: "{categoria}", label: "Patente («la patente B»)" },
+  { token: "{scuola}", label: "Autoscuola di provenienza", consortiumOnly: true },
 ];
 
 export type WelcomeValues = {

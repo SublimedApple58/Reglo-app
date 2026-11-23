@@ -1237,7 +1237,7 @@ export async function getAutoscuolaSettings() {
 }
 
 /**
- * REG-767: cosa serve al tasto «Scrivi su WhatsApp» della scheda allievo — il
+ * REG-767: cosa serve al tasto «Messaggio di benvenuto» (scheda allievo e conferma di creazione) — il
  * testo dell'azienda, il nome di chi scrive e quello dell'azienda. Solo titolare
  * e segreteria (gli stessi che cambiano le impostazioni): per gli altri
  * `allowed: false` e il tasto non c'è.

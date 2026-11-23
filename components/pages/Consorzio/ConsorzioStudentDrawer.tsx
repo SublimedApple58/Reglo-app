@@ -795,15 +795,18 @@ export function ConsorzioStudentDrawer({
                       {studentPhaseLabel(detail.studentPhase)}
                     </Pill>
                   </div>
-                  {/* REG-767: presa in carico su WhatsApp, solo titolare e segreteria. */}
+                  {/* REG-767: messaggio di benvenuto su WhatsApp, solo titolare e segreteria. */}
                   <StudentWhatsAppButton
-                    className="mt-3.5"
+                    className="mt-3"
                     canWrite={company?.role === "admin"}
-                    phone={detail.phone}
-                    firstName={nameParts.firstName}
-                    lastName={nameParts.lastName}
-                    licenseCategory={openPath(detail.licensePaths ?? [])?.licenseCategory ?? detail.licenseCategory}
-                    schoolName={detail.schoolName}
+                    student={{
+                      phone: detail.phone,
+                      firstName: nameParts.firstName,
+                      lastName: nameParts.lastName,
+                      licenseCategory:
+                        openPath(detail.licensePaths ?? [])?.licenseCategory ?? detail.licenseCategory,
+                      schoolName: detail.schoolName,
+                    }}
                     onAddPhone={() => {
                       setTab("summary");
                       setPhoneDraft(detail.phone ?? "");
