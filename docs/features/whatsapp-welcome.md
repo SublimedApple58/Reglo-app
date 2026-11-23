@@ -17,7 +17,9 @@ Sotto il tasto, link grigio «Modifica messaggio» → `?tab=settings&pane=remin
 - Uno per azienda, `limits.studentWelcomeWhatsappTemplate` (null = default). Nessuna migrazione.
 - Default: «Ciao {nome}! Sono {staff} di {autoscuola}, abbiamo preso in carico la tua iscrizione per {categoria}: da adesso ti seguiamo noi».
 - Segnaposto: `{nome}`, `{cognome}`, `{staff}` (primo nome di chi scrive), `{autoscuola}` (azienda di chi scrive; per il consorzio il consorzio), `{categoria}` con l'articolo («la patente B», «la CQC persone», «il patentino ADR»), `{scuola}` (solo consorzio: la consorziata; altrove = `{autoscuola}`). Sconosciuti restano scritti com'è.
-- **Impostazioni → Promemoria e notifiche → Messaggio di benvenuto** (`WhatsAppWelcomeSection`): campo che salva quando perde il fuoco, menu «Inserisci» per i segnaposto, «Ripristina», anteprima compatta. Max 1000 caratteri.
+- **Impostazioni → Promemoria e notifiche → Messaggio di benvenuto** (`WhatsAppWelcomeSection`): campo che salva quando perde il fuoco e cresce col testo, «Ripristina», anteprima compatta. Max 1000 caratteri.
+- **«Inserisci»** (REG-771 bis): parole tappabili sempre in vista (Nome, Cognome, Il tuo nome, Autoscuola/Consorzio, Patente, + Scuola di provenienza per il consorzio). `onMouseDown` → `preventDefault`, quindi il campo non perde il fuoco: niente salvataggio a ogni inserimento e il segnaposto entra al cursore (`insertToken`, spazi solo dove servono). Il valore salvato rientra nel campo solo se il campo non è attivo. Prima era un menu che salvava a ogni apertura e poteva cancellare il segnaposto appena inserito.
+- L'anteprima usa il nome di chi scrive (`staffFirstName`): sull'account di prova di staging esce «Titolare» perché l'utente si chiama «Titolare E2E».
 
 ## File
 - `lib/autoscuole/whatsapp-welcome.ts` — default, segnaposto, ancora, `renderWelcomeMessage`, `licenseCategoryWithArticle`, `buildWhatsAppLink` (puro; `tests/unit/autoscuole/whatsapp-welcome.test.ts`)

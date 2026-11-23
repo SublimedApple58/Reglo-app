@@ -116,7 +116,8 @@ l'inbox mobile ricostruisce il sottotitolo da lì, non dal testo del push.
   - **Allievi** — Promemoria: prima della guida (minuti), la mattina (orario), il giorno prima (orario); Avvisi sulle guide: guida fissata (REG-758), annullata, spostata, cambio di luogo, esame fissato; **Solo nell'app** (icona app fissa + «Solo app»): «Posti liberi per domani» (`emptySlotNotificationEnabled/Target/Times`, «Invia ora» → `triggerEmptySlotNotification`) e una riga descrittiva per le offerte fisse (posto liberato, inviti di gruppo: `OFFER_CHANNELS`).
   - **Istruttori**: promemoria prima della guida (minuti; tutti i canali spenti = «non inviare»), guida spostata (REG-771, `appointment_rescheduled_instructor`, App ed Email), guida annullata (REG-771, `appointment_cancelled_instructor`: oggi solo il ritiro di un allievo da una guida di gruppo), assenza settimanale (REG-771, `weekly_absence`, App ed Email), richieste di sostituzione (solo app, fisse).
   - La riga allievi «Guida spostata» vale anche per gli scambi di guida tra due allievi (REG-771).
-- **A mano**: «Messaggio di benvenuto» (`WhatsAppWelcomeSection`, vedi `whatsapp-welcome.md`; con l'ancora `#messaggio-di-benvenuto` si apre direttamente questa scheda) e il rimando a «Invia comunicato».
+- **Manuale** (era «A mano», REG-771 bis): «Messaggio di benvenuto» (`WhatsAppWelcomeSection`, vedi `whatsapp-welcome.md`; con l'ancora `#messaggio-di-benvenuto` si apre direttamente questa scheda) e la riga «Invia un comunicato ›» che apre `ComunicatoDialog` dalla pagina.
+- **Automatici** usa `SettingsDensity value="compact"` (`settings-rows.tsx`): righe 12px sopra e sotto, gruppi più vicini, sezioni a 28/48px.
 - **Ultimi invii**: `RecentDeliveries`.
 Comportamento e chiavi dei limits invariati rispetto a prima del redesign.
 

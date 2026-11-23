@@ -17,6 +17,7 @@ import {
   Repeat,
   Smartphone,
   ChevronDown,
+  ChevronRight,
   ClipboardList,
   MapPin,
   Plus,
@@ -46,6 +47,7 @@ import {
   ChannelToggles,
   type ChannelKey,
 } from "@/components/pages/Autoscuole/settings/ChannelToggles";
+import { ComunicatoDialog } from "@/components/Layout/ComunicatoDialog";
 import type { MessageChannelKey } from "@/lib/autoscuole/message-channels";
 import { RecentDeliveries } from "@/components/pages/Autoscuole/settings/RecentDeliveries";
 import { WELCOME_SECTION_ANCHOR } from "@/lib/autoscuole/whatsapp-welcome";
@@ -53,6 +55,7 @@ import { WhatsAppWelcomeSection } from "@/components/pages/Autoscuole/settings/W
 import {
   RowControls,
   SETTINGS_SELECT_TRIGGER,
+  SettingsDensity,
   SettingsGroupLabel,
   SettingsReveal,
   SettingsRow,
@@ -118,7 +121,7 @@ const DEFAULT_LESSON_CONSTRAINT: LessonConstraintState = {
 type ReminderTabKey = "auto" | "mano" | "log";
 const REMINDER_TABS: { key: ReminderTabKey; label: string }[] = [
   { key: "auto", label: "Automatici" },
-  { key: "mano", label: "A mano" },
+  { key: "mano", label: "Manuale" },
   { key: "log", label: "Ultimi invii" },
 ];
 
@@ -525,6 +528,7 @@ function SettingsTab({
   // «Modifica messaggio» (scheda allievo) arriva con l'ancora del benvenuto:
   // si apre direttamente la scheda «A mano».
   const [reminderTab, setReminderTab] = React.useState<ReminderTabKey>("auto");
+  const [comunicatoOpen, setComunicatoOpen] = React.useState(false);
   React.useEffect(() => {
     if (window.location.hash === `#${WELCOME_SECTION_ANCHOR}`) setReminderTab("mano");
   }, []);
@@ -570,7 +574,9 @@ function SettingsTab({
             </div>
 
             {/* ══ AUTOMATICI ══ (REG-767, schema B: canali su ogni riga) */}
-            <div className={cn("pt-6", reminderTab !== "auto" && "hidden")}>
+            {/* REG-771 bis: densità compatta, stile impostazioni iOS. */}
+            <SettingsDensity value="compact">
+            <div className={cn("pt-5", reminderTab !== "auto" && "hidden")}>
               <div className="max-w-[620px]">
                 <p className="text-[13.5px] font-medium leading-relaxed text-[#6a6a6a]">
                   Per ogni messaggio scegli i canali: arriva su{" "}
@@ -598,7 +604,7 @@ function SettingsTab({
               </div>
 
               {/* REG-771: il titolo dice a chi arrivano gli avvisi. */}
-              <SettingsSection title="Ai tuoi allievi" size="large" className="mt-12">
+              <SettingsSection title="Ai tuoi allievi" size="large" className="mt-7">
                 <SettingsGroupLabel>Promemoria</SettingsGroupLabel>
                 <SettingsRow
                   title="Prima della guida"
@@ -727,7 +733,7 @@ function SettingsTab({
                 />
               </SettingsSection>
 
-              <SettingsSection title="Ai tuoi istruttori" size="large" className="mt-[88px]">
+              <SettingsSection title="Ai tuoi istruttori" size="large" className="mt-12">
                 <SettingsRow
                   title="Prima della guida"
                   icon={Clock}
@@ -793,23 +799,37 @@ function SettingsTab({
               </SettingsSection>
             </div>
 
-            {/* ══ A MANO ══ */}
-            <div className={cn("space-y-10 pt-8", reminderTab !== "mano" && "hidden")}>
+            </SettingsDensity>
+
+            {/* ══ MANUALE ══ (REG-771 bis: era «A mano») */}
+            <div className={cn("pt-5", reminderTab !== "mano" && "hidden")}>
               <p className="max-w-[560px] text-[14px] font-medium leading-relaxed text-[#6a6a6a]">
                 Non partono da soli e non passano dai canali: li mandi tu, quando serve.
               </p>
               {/* REG-767: «Messaggio di benvenuto» (scheda allievo e conferma di creazione). */}
-              <WhatsAppWelcomeSection
-                value={studentWelcomeWhatsappTemplate}
-                consortium={consortium}
-                onSave={saveStudentWelcomeWhatsappTemplate}
-              />
-              <SettingsSection title="Comunicato" icon={Megaphone}>
-                <SettingsRow
-                  title="A tutti gli allievi"
-                  description="Dal menu, con «Invia comunicato»."
+              <div className="mt-7">
+                <WhatsAppWelcomeSection
+                  value={studentWelcomeWhatsappTemplate}
+                  consortium={consortium}
+                  onSave={saveStudentWelcomeWhatsappTemplate}
                 />
+              </div>
+              {/* REG-771 bis: una scorciatoia vera, apre direttamente l'invio. */}
+              <SettingsSection title="Comunicato" icon={Megaphone} className="mt-9">
+                <button
+                  type="button"
+                  data-testid="comunicato-shortcut"
+                  onClick={() => setComunicatoOpen(true)}
+                  className="group flex min-h-14 w-full cursor-pointer items-center justify-between gap-4 py-1.5 text-left outline-none focus-visible:underline"
+                >
+                  <span className="text-[15px] font-semibold text-[#222222]">Invia un comunicato</span>
+                  <ChevronRight
+                    className="size-4 shrink-0 text-[#929292] transition-transform duration-200 ease-out group-hover:translate-x-0.5"
+                    strokeWidth={2}
+                  />
+                </button>
               </SettingsSection>
+              <ComunicatoDialog open={comunicatoOpen} onOpenChange={setComunicatoOpen} />
             </div>
 
             {/* ══ ULTIMI INVII ══ */}

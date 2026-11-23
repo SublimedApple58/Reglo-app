@@ -15,6 +15,23 @@ import { cn } from "@/lib/utils";
 
 export type SettingsIcon = React.ComponentType<{ className?: string; strokeWidth?: string | number }>;
 
+/**
+ * REG-771 bis: densità delle righe. `compact` (scheda «Automatici») toglie
+ * aria fra righe e gruppi come nelle impostazioni di iOS; i controlli restano
+ * da 44px, quindi le righe non scendono sotto l'altezza di un tocco.
+ */
+const SettingsDensityContext = React.createContext<"default" | "compact">("default");
+
+export function SettingsDensity({
+  value,
+  children,
+}: {
+  value: "default" | "compact";
+  children: React.ReactNode;
+}) {
+  return <SettingsDensityContext.Provider value={value}>{children}</SettingsDensityContext.Provider>;
+}
+
 export function SettingsSection({
   title,
   icon: Icon,
@@ -96,11 +113,13 @@ export function SettingsRow({
   children?: React.ReactNode;
   testId?: string;
 }) {
+  const compact = React.useContext(SettingsDensityContext) === "compact";
   return (
-    <div className="py-5" data-testid={testId}>
+    <div className={compact ? "py-3" : "py-5"} data-testid={testId}>
       <div
         className={cn(
-          "flex justify-between gap-x-6 gap-y-3",
+          "flex justify-between gap-x-6",
+          compact ? "gap-y-1.5" : "gap-y-3",
           stackOnMobile ? "flex-col sm:flex-row sm:items-center" : "items-center",
         )}
       >
@@ -144,8 +163,14 @@ export function SettingsGroupLabel({
   children: React.ReactNode;
   note?: string;
 }) {
+  const compact = React.useContext(SettingsDensityContext) === "compact";
   return (
-    <div className="!border-b-0 pb-1 pt-6 first:pt-3">
+    <div
+      className={cn(
+        "!border-b-0",
+        compact ? "pb-0.5 pt-[18px] first:pt-1.5" : "pb-1 pt-6 first:pt-3",
+      )}
+    >
       <div className="text-[13px] font-semibold text-[#929292]">{children}</div>
       {note ? (
         <p className="mt-1 max-w-[560px] text-[13px] font-medium leading-relaxed text-[#6a6a6a]">{note}</p>

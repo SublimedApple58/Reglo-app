@@ -1,6 +1,7 @@
 import {
   DEFAULT_WELCOME_TEMPLATE,
   buildWhatsAppLink,
+  insertToken,
   licenseCategoryWithArticle,
   renderWelcomeMessage,
   resolveWelcomeTemplate,
@@ -98,5 +99,23 @@ describe("buildWhatsAppLink", () => {
     expect(buildWhatsAppLink("abc 123 4567", "x")).toEqual({ state: "invalid" });
     expect(buildWhatsAppLink("06 1234 5678", "x")).toEqual({ state: "invalid" });
     expect(buildWhatsAppLink("4471234567", "x")).toEqual({ state: "invalid" });
+  });
+});
+
+describe("REG-771 bis: insertToken", () => {
+  it("entra al punto del cursore senza spazi doppi", () => {
+    expect(insertToken("Ciao !", 5, 5, "{nome}")).toEqual({ text: "Ciao {nome}!", caret: 11 });
+  });
+
+  it("aggiunge lo spazio prima e dopo quando mancano", () => {
+    expect(insertToken("Ciaoda adesso", 4, 4, "{nome}").text).toBe("Ciao {nome} da adesso");
+  });
+
+  it("sostituisce la selezione", () => {
+    expect(insertToken("Sono Marco di X", 5, 10, "{staff}").text).toBe("Sono {staff} di X");
+  });
+
+  it("in un campo vuoto non aggiunge spazi", () => {
+    expect(insertToken("", 0, 0, "{nome}")).toEqual({ text: "{nome}", caret: 6 });
   });
 });

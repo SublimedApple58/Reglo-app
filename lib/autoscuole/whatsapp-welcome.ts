@@ -26,19 +26,26 @@ export const WELCOME_TEMPLATE_MAX_LENGTH = 1000;
 
 export type WelcomePlaceholder = {
   token: string;
-  /** La voce del menu «Inserisci» delle impostazioni. */
+  /** Descrizione completa (suggerimento al passaggio del mouse). */
   label: string;
+  /** La parola tappabile di «Inserisci» nelle impostazioni (REG-771 bis). */
+  short: string;
   /** Solo per il consorzio: l'autoscuola consorziata da cui arriva l'allievo. */
   consortiumOnly?: boolean;
 };
 
 export const WELCOME_PLACEHOLDERS: WelcomePlaceholder[] = [
-  { token: "{nome}", label: "Nome dell'allievo" },
-  { token: "{cognome}", label: "Cognome dell'allievo" },
-  { token: "{staff}", label: "Il tuo nome" },
-  { token: "{autoscuola}", label: "Nome della tua autoscuola" },
-  { token: "{categoria}", label: "Patente («la patente B»)" },
-  { token: "{scuola}", label: "Autoscuola di provenienza", consortiumOnly: true },
+  { token: "{nome}", label: "Nome dell'allievo", short: "Nome" },
+  { token: "{cognome}", label: "Cognome dell'allievo", short: "Cognome" },
+  { token: "{staff}", label: "Il tuo nome", short: "Il tuo nome" },
+  { token: "{autoscuola}", label: "Nome della tua autoscuola", short: "Autoscuola" },
+  { token: "{categoria}", label: "Patente («la patente B»)", short: "Patente" },
+  {
+    token: "{scuola}",
+    label: "Autoscuola di provenienza",
+    short: "Scuola di provenienza",
+    consortiumOnly: true,
+  },
 ];
 
 export type WelcomeValues = {
@@ -118,4 +125,22 @@ export function buildWhatsAppLink(phone: string | null | undefined, text: string
     e164: normalized.e164,
     href: `https://wa.me/${digits}?text=${encodeURIComponent(text)}`,
   };
+}
+
+/**
+ * REG-771 bis: inserisce un segnaposto fra `start` ed `end` (la selezione del
+ * campo) aggiungendo gli spazi solo dove servono.
+ */
+export function insertToken(
+  text: string,
+  start: number,
+  end: number,
+  token: string,
+): { text: string; caret: number } {
+  const before = text.slice(0, start);
+  const after = text.slice(end);
+  const pre = before && !/\s$/.test(before) ? " " : "";
+  const post = after && !/^[\s.,!?:;)]/.test(after) ? " " : "";
+  const head = `${before}${pre}${token}`;
+  return { text: `${head}${post}${after}`, caret: head.length };
 }

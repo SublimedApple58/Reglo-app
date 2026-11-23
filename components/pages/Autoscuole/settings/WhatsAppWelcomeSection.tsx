@@ -2,14 +2,7 @@
 
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronDown } from "lucide-react";
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { WhatsAppGlyph } from "@/components/pages/Autoscuole/NeverAccessedNudge";
 import { SettingsSection } from "@/components/pages/Autoscuole/settings/settings-rows";
 import { useWhatsAppWelcomeContext } from "@/components/pages/Autoscuole/StudentWhatsAppButton";
@@ -18,6 +11,7 @@ import {
   WELCOME_PLACEHOLDERS,
   WELCOME_SECTION_ANCHOR,
   WELCOME_TEMPLATE_MAX_LENGTH,
+  insertToken,
   licenseCategoryWithArticle,
   renderWelcomeMessage,
 } from "@/lib/autoscuole/whatsapp-welcome";
@@ -26,9 +20,17 @@ import { cn } from "@/lib/utils";
 /**
  * REG-767 — «Messaggio di benvenuto»: il testo che il tasto omonimo apre in
  * WhatsApp. Un testo per azienda; salva quando il campo perde il fuoco. I
- * segnaposto si inseriscono dal menu «Inserisci», l'anteprima sta sotto.
+ * segnaposto si inseriscono da «Inserisci», l'anteprima sta sotto.
  * «Modifica messaggio» (scheda allievo) arriva qui con l'ancora.
+ *
+ * REG-771 bis: «Inserisci» non è più un menu. Il menu toglieva il fuoco al
+ * campo, quindi partiva un salvataggio a ogni apertura, il cursore si perdeva,
+ * e se il salvataggio finiva dopo l'inserimento il testo vecchio tornava nel
+ * campo cancellando il segnaposto. Ora sono parole sempre in vista che non
+ * prendono il fuoco (`onMouseDown` → `preventDefault`): il segnaposto entra
+ * dove sta il cursore, con gli spazi giusti, e si salva una volta all'uscita.
  */
+
 /** Il logo WhatsApp a un colore, con la stessa firma delle icone lucide. */
 function WhatsAppSectionIcon({ className }: { className?: string }) {
   return (
@@ -56,7 +58,20 @@ export function WhatsAppWelcomeSection({
   const savedTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const context = useWhatsAppWelcomeContext();
 
-  React.useEffect(() => setDraft(value), [value]);
+  // Il valore salvato rientra nel campo solo se non ci si sta scrivendo: un
+  // salvataggio che torna mentre il campo è attivo non deve riscrivere il testo.
+  React.useEffect(() => {
+    if (document.activeElement === textareaRef.current) return;
+    setDraft(value);
+  }, [value]);
+
+  // Il campo cresce col testo (niente barra di scorrimento interna).
+  React.useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight + 3}px`;
+  }, [draft]);
   React.useEffect(
     () => () => {
       if (savedTimer.current) clearTimeout(savedTimer.current);
@@ -85,25 +100,34 @@ export function WhatsAppWelcomeSection({
     savedTimer.current = setTimeout(() => setSaved(false), 1800);
   };
 
-  const commit = () => {
+  const rememberSelection = () => {
     const el = textareaRef.current;
     if (el) selection.current = { start: el.selectionStart, end: el.selectionEnd };
+  };
+
+  const commit = () => {
+    rememberSelection();
     if (draft === value) return;
     void save(draft.trim() ? draft : null);
   };
 
   const insert = (token: string) => {
-    const start = selection.current?.start ?? draft.length;
-    const end = selection.current?.end ?? draft.length;
-    const next = `${draft.slice(0, start)}${token}${draft.slice(end)}`;
+    const el = textareaRef.current;
+    // Campo attivo: il cursore di adesso. Altrimenti dove lo si era lasciato,
+    // o in fondo se non lo si è mai toccato.
+    const focused = el != null && document.activeElement === el;
+    const start = focused ? el.selectionStart : (selection.current?.start ?? draft.length);
+    const end = focused ? el.selectionEnd : (selection.current?.end ?? draft.length);
+    const { text: next, caret } = insertToken(draft, start, end, token);
     if (next.length > WELCOME_TEMPLATE_MAX_LENGTH) return;
     setDraft(next);
-    const caret = start + token.length;
     selection.current = { start: caret, end: caret };
     requestAnimationFrame(() => {
-      const el = textareaRef.current;
-      el?.focus();
-      el?.setSelectionRange(caret, caret);
+      const field = textareaRef.current;
+      if (!field) return;
+      // `preventScroll`: a 390px il focus non deve far saltare la pagina.
+      if (document.activeElement !== field) field.focus({ preventScroll: true });
+      field.setSelectionRange(caret, caret);
     });
   };
 
@@ -134,40 +158,41 @@ export function WhatsAppWelcomeSection({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={commit}
+            onSelect={rememberSelection}
             rows={3}
             maxLength={WELCOME_TEMPLATE_MAX_LENGTH}
             placeholder={DEFAULT_WELCOME_TEMPLATE}
             aria-label="Messaggio di benvenuto"
             className={cn(
-              "block w-full resize-none rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 py-3",
+              "block min-h-[84px] w-full resize-none overflow-hidden rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 py-3",
               "text-[14px] font-medium leading-[1.5] text-[#222222] placeholder:text-[#b0b0b0]",
               "outline-none transition-[border-color] duration-200 hover:border-[#929292] focus:border-[#222222]",
             )}
           />
 
-          <div className="mt-2 flex min-h-7 items-center justify-between gap-3 text-[13px] font-medium">
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                data-testid="whatsapp-welcome-insert"
-                className="inline-flex cursor-pointer items-center gap-1 rounded-md py-1 font-semibold text-[#222222] outline-none transition-colors duration-200 hover:text-[#555555]"
-              >
-                Inserisci
-                <ChevronDown className="size-3.5" strokeWidth={2} />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="start"
-                className="z-[300] min-w-[220px]"
-                onCloseAutoFocus={(e) => e.preventDefault()}
-              >
-                {placeholders.map((p) => (
-                  <DropdownMenuItem key={p.token} onSelect={() => insert(p.token)}>
-                    {p.token === "{autoscuola}" && consortium ? "Nome del consorzio" : p.label}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+          <div className="mt-2 flex items-start justify-between gap-3 text-[13px] font-medium">
+            <div
+              data-testid="whatsapp-welcome-insert"
+              className="flex flex-wrap items-center gap-x-[18px] gap-y-0.5 text-[13.5px]"
+            >
+              <span className="font-medium text-[#929292]">Inserisci</span>
+              {placeholders.map((p) => (
+                <button
+                  key={p.token}
+                  type="button"
+                  data-token={p.token}
+                  title={p.token === "{autoscuola}" && consortium ? "Nome del consorzio" : p.label}
+                  // Il campo non perde il fuoco: niente salvataggio a metà, cursore intatto.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => insert(p.token)}
+                  className="min-h-8 cursor-pointer font-semibold text-[#222222] outline-none transition-[color,transform] duration-200 ease-out hover:text-[#555555] focus-visible:underline active:scale-[0.97]"
+                >
+                  {p.token === "{autoscuola}" && consortium ? "Consorzio" : p.short}
+                </button>
+              ))}
+            </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex min-h-8 shrink-0 items-center gap-3">
               <AnimatePresence initial={false}>
                 {saved ? (
                   <motion.span
