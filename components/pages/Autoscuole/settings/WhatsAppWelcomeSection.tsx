@@ -65,13 +65,28 @@ export function WhatsAppWelcomeSection({
     setDraft(value);
   }, [value]);
 
-  // Il campo cresce col testo (niente barra di scorrimento interna).
-  React.useLayoutEffect(() => {
+  // Il campo cresce col testo (niente barra di scorrimento interna). Si
+  // ricalcola anche quando cambia larghezza o diventa visibile: la scheda
+  // «Manuale» monta nascosta, e lì l'altezza del testo vale zero.
+  const fitHeight = React.useCallback(() => {
     const el = textareaRef.current;
-    if (!el) return;
+    if (!el || el.offsetParent === null) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight + 3}px`;
-  }, [draft]);
+  }, []);
+  React.useLayoutEffect(fitHeight, [draft, fitHeight]);
+  React.useEffect(() => {
+    const el = textareaRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let width = el.offsetWidth;
+    const observer = new ResizeObserver(() => {
+      if (el.offsetWidth === width && el.style.height !== "") return;
+      width = el.offsetWidth;
+      fitHeight();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [fitHeight]);
   React.useEffect(
     () => () => {
       if (savedTimer.current) clearTimeout(savedTimer.current);
