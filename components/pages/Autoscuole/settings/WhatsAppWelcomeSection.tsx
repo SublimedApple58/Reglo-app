@@ -170,7 +170,9 @@ export function WhatsAppWelcomeSection({
             )}
           />
 
-          <div className="mt-2 flex items-start justify-between gap-3 text-[13px] font-medium">
+          {/* A 390px «Salvato» e «Ripristina» vanno su una riga loro, a destra:
+              accanto alle parole da inserire sembrerebbero una di loro. */}
+          <div className="mt-2 flex flex-col gap-x-3 text-[13px] font-medium sm:flex-row sm:items-start sm:justify-between">
             <div
               data-testid="whatsapp-welcome-insert"
               className="flex flex-wrap items-center gap-x-[18px] gap-y-0.5 text-[13.5px]"
@@ -192,7 +194,7 @@ export function WhatsAppWelcomeSection({
               ))}
             </div>
 
-            <div className="flex min-h-8 shrink-0 items-center gap-3">
+            <div className="flex shrink-0 items-center gap-3 self-end empty:hidden sm:min-h-8 sm:self-auto">
               <AnimatePresence initial={false}>
                 {saved ? (
                   <motion.span
