@@ -65,6 +65,22 @@ export async function signOutUser() {
   await signOut();
 }
 
+/**
+ * REG-773: chiude la sessione di impersonazione («Accedi come titolare») e
+ * torna al backoffice. Il backoffice ha un cookie suo, separato dalla sessione
+ * NextAuth, quindi l'operatore ci rientra senza rifare il login. Fuori
+ * dall'impersonazione è un logout normale.
+ */
+export async function endImpersonation(locale: string) {
+  const session = await auth();
+  if (!session?.impersonation) {
+    await signOut();
+    return;
+  }
+  const safeLocale = /^[a-z]{2}$/.test(locale) ? locale : 'it';
+  await signOut({ redirectTo: `/${safeLocale}/backoffice` });
+}
+
 // Sign up user
 export async function signUpUser(prevState: unknown, formData: FormData) {
   try {

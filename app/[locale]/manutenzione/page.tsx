@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 
 import { getActiveCompanyContextUnchecked } from '@/lib/company-context';
 import { isMemberBlockedByMaintenance } from '@/lib/maintenance';
-import { signOutUser } from '@/lib/actions/user.actions';
+import { endImpersonation, signOutUser } from '@/lib/actions/user.actions';
 
 export const metadata: Metadata = {
   title: 'In manutenzione',
@@ -16,6 +16,9 @@ const SUPPORT_EMAIL = 'support@reglo.it';
  * REG-773 — schermata dell'account in manutenzione (web). Il testo è quello di
  * una manutenzione tecnica neutra: non deve MAI far capire che l'ha chiesta il
  * titolare, né l'ambito scelto. Vedi docs/features/maintenance-mode.md.
+ *
+ * Il backoffice in impersonazione vede la stessa schermata; al posto di «Esci»
+ * ha «Termina impersonazione», che lo riporta al backoffice.
  */
 export default async function MaintenancePage({
   params,
@@ -31,9 +34,11 @@ export default async function MaintenancePage({
     redirect(`/${locale}/sign-in`);
   }
   const { company, membership, session } = context;
-  const blocked =
-    !session?.impersonation &&
-    isMemberBlockedByMaintenance(company.maintenanceScope, membership.autoscuolaRole);
+  const blocked = isMemberBlockedByMaintenance(
+    company.maintenanceScope,
+    membership.autoscuolaRole,
+  );
+  const impersonating = Boolean(session?.impersonation);
   // Non (più) in manutenzione: niente schermata, si torna all'app.
   if (!blocked) redirect(`/${locale}/user/autoscuole`);
   const companyName = company.name;
@@ -48,12 +53,13 @@ export default async function MaintenancePage({
           height={30}
           className="select-none object-contain"
         />
-        <form action={signOutUser}>
+        <form action={impersonating ? endImpersonation.bind(null, locale) : signOutUser}>
           <button
             type="submit"
+            data-testid={impersonating ? 'maintenance-end-impersonation' : 'maintenance-sign-out'}
             className="reglo-focus-ring h-10 cursor-pointer rounded-full border border-black/[0.08] bg-white px-[18px] text-sm font-semibold text-foreground shadow-[0_10px_24px_-10px_rgba(0,0,0,0.16)] transition-transform duration-200 ease-out active:scale-[0.98]"
           >
-            Esci
+            {impersonating ? 'Termina impersonazione' : 'Esci'}
           </button>
         </form>
       </header>

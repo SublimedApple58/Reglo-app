@@ -16,10 +16,19 @@ Si sceglie all'attivazione. Dopo, solo il backoffice può cambiarlo.
 | OWNER, INSTRUCTOR_OWNER | bloccato (web + mobile) | bloccato |
 | INSTRUCTOR | normale | bloccato |
 | STUDENT | normale | bloccato |
-| Backoffice in impersonazione | entra comunque | entra comunque |
+| Backoffice in impersonazione | bloccato come il titolare | bloccato |
 
 Il blocco vale solo per quell'autoscuola: chi è membro di un'altra può passare
 all'altra.
+
+**Backoffice in impersonazione** («Accedi come titolare»): dal 2026-11-23
+(decisione di Tiziano) non c'è più eccezione. L'operatore entra come il
+titolare, quindi è bloccato in entrambi gli ambiti e vede la schermata di
+manutenzione. Lì il pulsante in alto è **«Termina impersonazione»**
+(`endImpersonation` in `lib/actions/user.actions.ts`), non «Esci»: chiude la
+sessione NextAuth e riporta a `/[locale]/backoffice`, che ha un cookie suo e
+quindi non chiede di rifare il login. Gestione e sblocco restano nel
+backoffice (sezione Manutenzione in «Gestisci»).
 
 ## Dati
 
@@ -118,7 +127,8 @@ niente «come hai chiesto», niente «tu», niente riepilogo dell'ambito, niente
 frase sui dati. Testo: «L'account è temporaneamente in manutenzione e tornerà
 disponibile il prima possibile.» (mobile: «…e l'app tornerà disponibile…»).
 Solo il backoffice (interno) mostra chi l'ha attivata. Web: CTA «Scrivi al
-supporto» (`support@reglo.it`) ed «Esci»; mobile: solo «Esci», uguale per tutti
+supporto» (`support@reglo.it`) ed «Esci» («Termina impersonazione» per il
+backoffice in impersonazione); mobile: solo «Esci», uguale per tutti
 i ruoli.
 
 ## File

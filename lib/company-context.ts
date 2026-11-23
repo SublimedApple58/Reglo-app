@@ -114,13 +114,14 @@ export const getActiveCompanyContextUnchecked = cache(async function getActiveCo
  * ogni route (web e mobile) il blocco vale per UI **e** API, ed è immediato: la
  * company si legge fresca dal DB a ogni richiesta, senza cache.
  *
- * Il backoffice in impersonazione passa comunque: il supporto deve poter
- * guardare dentro un account in manutenzione.
+ * Vale anche per il backoffice in impersonazione (decisione di Tiziano,
+ * 2026-11-23): l'operatore entra come il titolare e vede la stessa schermata di
+ * manutenzione. Da lì può terminare l'impersonazione (`endImpersonation`) e
+ * gestire o sbloccare l'account dal backoffice, che ha un cookie suo.
  */
 export const getActiveCompanyContext = cache(async function getActiveCompanyContext() {
   const context = await getActiveCompanyContextUnchecked();
   if (
-    !context.session?.impersonation &&
     isMemberBlockedByMaintenance(
       context.company.maintenanceScope,
       context.membership.autoscuolaRole,
