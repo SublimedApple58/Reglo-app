@@ -278,7 +278,7 @@ export function RoadSettingsPane() {
                     if (e.key === "Escape") setEditing(null);
                   }}
                   onBlur={() => void rename()}
-                  className="h-10 min-w-0 flex-1 rounded-[10px] border border-[#d9d9d9] bg-white px-3 text-[15px] text-[#222222] outline-none focus:border-[#111111]"
+                  className="h-10 min-w-0 flex-1 rounded-[14px] border-0 bg-white px-3 text-[15px] text-[#222222] shadow-clay-sink outline-none transition-shadow duration-200 focus:shadow-clay-focus"
                 />
               ) : (
                 <b className="min-w-0 flex-1 truncate text-[15px] font-medium text-[#222222]">{item.label}</b>
@@ -291,7 +291,7 @@ export function RoadSettingsPane() {
                   disabled={Boolean(saving)}
                   onMouseDown={(e) => isEditing && e.preventDefault()}
                   onClick={() => (isEditing ? void rename() : setEditing({ id: item.id, label: item.label }))}
-                  className="grid size-[34px] cursor-pointer place-items-center rounded-[10px] text-[#6a6a6a] transition-colors hover:bg-[#f2f2f2] hover:text-[#111111] disabled:cursor-default"
+                  className="grid size-[34px] cursor-pointer place-items-center rounded-full text-[#6a6a6a] transition-colors hover:bg-[#f2f2f2] hover:text-[#111111] disabled:cursor-default"
                 >
                   <Pencil className="size-4" strokeWidth={1.8} />
                 </button>
@@ -300,7 +300,7 @@ export function RoadSettingsPane() {
                   aria-label={`Togli ${item.label}`}
                   disabled={Boolean(saving)}
                   onClick={() => remove(item.id)}
-                  className="grid size-[34px] cursor-pointer place-items-center rounded-[10px] text-[#6a6a6a] transition-colors hover:bg-[#f2f2f2] hover:text-[#111111] disabled:cursor-default"
+                  className="grid size-[34px] cursor-pointer place-items-center rounded-full text-[#6a6a6a] transition-colors hover:bg-[#f2f2f2] hover:text-[#111111] disabled:cursor-default"
                 >
                   <X className="size-[18px]" strokeWidth={1.8} />
                 </button>
@@ -326,7 +326,7 @@ export function RoadSettingsPane() {
               disabled={full}
               placeholder={full ? `Hai già ${ROAD_CUSTOM_MARKERS_MAX} segnalazioni` : "Es. Uso del freno a mano"}
               aria-label="Nuova segnalazione"
-              className="h-11 min-w-0 flex-1 rounded-xl border border-[#d9d9d9] bg-white px-3.5 text-[14.5px] text-[#222222] outline-none placeholder:text-[#9a9a9a] focus:border-[#111111] disabled:bg-[#f7f7f7]"
+              className="h-11 min-w-0 flex-1 rounded-[14px] border-0 bg-white px-3.5 text-[14.5px] text-[#222222] shadow-clay-sink outline-none transition-shadow duration-200 placeholder:text-[#9a9a9a] focus:shadow-clay-focus disabled:bg-[#f7f7f7]"
             />
             <Button
               type="submit"

@@ -442,7 +442,7 @@ export function AutoscuoleAssistenzaPage() {
                   key={faq.question}
                   type="button"
                   onClick={() => setFaqLog((prev) => [...prev, faq])}
-                  className="cursor-pointer rounded-[20px] border border-[#e3e3e3] bg-white px-3.5 py-2 text-[13px] font-medium text-[#444444] transition-all hover:-translate-y-px hover:border-[#222222] hover:bg-[#f3f3f3] hover:text-foreground hover:shadow-[0_2px_6px_rgba(0,0,0,0.08)]"
+                  className="cursor-pointer rounded-full border border-[#e3e3e3] bg-white px-3.5 py-2 text-[13px] font-medium text-[#444444] transition-all hover:-translate-y-px hover:border-[#222222] hover:bg-[#f3f3f3] hover:text-foreground hover:shadow-[0_2px_6px_rgba(0,0,0,0.08)]"
                 >
                   {faq.question}
                 </button>

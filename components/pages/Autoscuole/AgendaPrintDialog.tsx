@@ -4,7 +4,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { X, Printer, ArrowLeft, NotebookPen } from "lucide-react";
-import { LoadingDots } from "@/components/ui/loading-dots";
+import { Button } from "@/components/ui/button";
 import {
   ExamPrintSetup,
   ExamPrintSheet,
@@ -215,7 +215,6 @@ export function AgendaPrintDialog({
   );
 
   const sheetMaxWidth = orientation === "landscape" ? 1120 : 800;
-  const canPreview = !!(rangeStart && rangeEnd) && !examLoading;
 
   return createPortal(
     <>
@@ -321,7 +320,7 @@ export function AgendaPrintDialog({
               <button
                 type="button"
                 onClick={() => setExamStep("setup")}
-                className="inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] px-3 py-[9px] text-[13px] font-semibold text-white transition-colors hover:bg-white/10"
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-[9px] text-[13px] font-semibold text-white transition-colors hover:bg-white/10"
               >
                 <ArrowLeft className="size-4" strokeWidth={1.9} />
                 Modifica
@@ -331,7 +330,7 @@ export function AgendaPrintDialog({
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="inline-flex cursor-pointer items-center gap-2 rounded-[10px] bg-white px-4 py-[9px] text-[13px] font-semibold text-[#111111] transition-opacity hover:opacity-90"
+                className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-white px-4 py-[9px] text-[13px] font-semibold text-[#111111] transition-opacity hover:opacity-90"
               >
                 <Printer className="size-4" strokeWidth={1.9} />
                 Stampa / Salva PDF
@@ -376,26 +375,24 @@ export function AgendaPrintDialog({
               <div className="mt-6 flex items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4">
                 <div className="text-[13px] text-[#b42318]">{examError}</div>
                 <div className="flex gap-2">
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setMode("agenda")}
-                    className="cursor-pointer rounded-[20px] border border-[#ddd] px-4 py-2 text-[13px] font-medium text-[#444]"
                   >
                     Annulla
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    disabled={!canPreview}
+                    size="sm"
+                    disabled={!(rangeStart && rangeEnd)}
+                    loading={examLoading}
                     onClick={() => void showExamPreview()}
-                    className={cn(
-                      "inline-flex min-w-[148px] items-center justify-center rounded-[20px] px-4 py-2 text-[13px] font-semibold transition-colors",
-                      canPreview
-                        ? "cursor-pointer bg-[#111111] text-white hover:bg-[#2a2a2a]"
-                        : "cursor-default bg-[#e0e0e0] text-[#aaa]",
-                    )}
+                    className="min-w-[148px]"
                   >
-                    {examLoading ? <LoadingDots className="min-h-5" /> : "Mostra anteprima"}
-                  </button>
+                    Mostra anteprima
+                  </Button>
                 </div>
               </div>
             </div>

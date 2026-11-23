@@ -102,7 +102,7 @@ function TimeColumn({
             disabled={isDisabled}
             onClick={() => onSelect(value)}
             className={cn(
-              "relative flex h-8 w-[52px] cursor-pointer select-none items-center justify-center rounded-[8px] text-sm font-medium",
+              "relative flex h-8 w-[52px] cursor-pointer select-none items-center justify-center rounded-full text-sm font-medium",
               !isSelected && !isDisabled && "hover:bg-[#f5f5f5]",
               isDisabled && "cursor-not-allowed",
             )}
@@ -110,7 +110,7 @@ function TimeColumn({
             {isSelected && (
               <motion.span
                 layoutId={layoutKey}
-                className="absolute inset-0 rounded-[8px] bg-[#222222]"
+                className="absolute inset-0 rounded-full bg-[#222222]"
                 transition={{ type: "spring", stiffness: 550, damping: 38 }}
               />
             )}
@@ -247,8 +247,9 @@ export function TimePickerInput({
           <button
             type="button"
             className={cn(
-              "flex h-11 cursor-pointer select-none items-center gap-2 rounded-lg border-[1.5px] bg-white px-3 text-sm font-medium text-[#222222] transition-colors",
-              open ? "border-[#222222]" : "border-[#dddddd] hover:border-[#929292]",
+              // REG-776: lo stesso campo incavato di Input/SelectTrigger.
+              "flex h-11 cursor-pointer select-none items-center gap-2 rounded-[14px] border-0 bg-white px-3.5 text-sm font-medium text-[#222222] shadow-clay-sink outline-none transition-colors duration-200",
+              open ? "shadow-clay-focus" : "hover:bg-[#fcfcfc]",
               className,
             )}
           >
@@ -294,8 +295,8 @@ export function TimePickerInput({
                 aria-invalid={typedError}
                 data-testid="time-picker-free-input"
                 className={cn(
-                  "h-9 w-full rounded-[8px] border-[1.5px] bg-white px-2.5 text-center text-sm font-semibold tabular-nums text-[#222222] outline-none transition-colors duration-200 placeholder:font-medium placeholder:text-[#a3a3a3]",
-                  typedError ? "border-[#C13515]" : "border-[#dddddd] focus:border-[#222222]",
+                  "h-9 w-full rounded-[14px] border-0 bg-white px-2.5 text-center text-sm font-semibold tabular-nums text-[#222222] outline-none transition-colors duration-200 placeholder:font-medium placeholder:text-[#a3a3a3]",
+                  typedError ? "shadow-[inset_0_0_0_1.5px_#C13515]" : "shadow-clay-sink focus:shadow-clay-focus",
                 )}
                 onFocus={(e) => e.currentTarget.select()}
                 onChange={(e) => {

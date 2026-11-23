@@ -185,7 +185,7 @@ export function CreateEventPopover({
           aria-label={title}
         >
           <div
-            className="flex flex-col overflow-hidden rounded-[20px] border border-[#dddddd] bg-white shadow-[0_24px_64px_rgba(0,0,0,0.18)]"
+            className="flex flex-col overflow-hidden rounded-clay bg-white shadow-clay-overlay"
             style={{
               width: size.w,
               // finché l'utente non ridimensiona, l'altezza è naturale (capped)
@@ -207,13 +207,13 @@ export function CreateEventPopover({
                   type="button"
                   onClick={onBack}
                   aria-label="Indietro"
-                  className="mt-px flex size-[30px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#f2f2f2] transition-colors hover:bg-[#e8e8e8]"
+                  className="reglo-focus-ring flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-white shadow-clay-raise-sm transition-[transform,background-color] duration-200 ease-out hover:bg-[#fafafa] active:scale-[0.92]"
                 >
-                  <ChevronLeft className="size-[13px] text-[#555555]" strokeWidth={2.4} />
+                  <ChevronLeft className="size-4 text-foreground" strokeWidth={2.2} />
                 </button>
               ) : null}
               <div className="min-w-0">
-                <div className="text-[17px] font-bold tracking-[-0.2px] text-[#222222]">{title}</div>
+                <div className="text-[17px] font-semibold tracking-[-0.2px] text-[#222222]">{title}</div>
                 {subtitle ? (
                   <div className="mt-0.5 text-[12.5px] font-medium text-[#929292]">{subtitle}</div>
                 ) : null}
@@ -222,9 +222,9 @@ export function CreateEventPopover({
             <button
               type="button"
               onClick={onClose}
-              className="mt-0.5 flex size-[30px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#f2f2f2] transition-colors hover:bg-[#e8e8e8]"
+              className="reglo-focus-ring flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-white shadow-clay-raise-sm transition-[transform,background-color] duration-200 ease-out hover:bg-[#fafafa] active:scale-[0.92]"
             >
-              <X className="size-3 text-[#555555]" strokeWidth={2} />
+              <X className="size-3.5 text-foreground" strokeWidth={2} />
             </button>
           </div>
           {/* Body */}

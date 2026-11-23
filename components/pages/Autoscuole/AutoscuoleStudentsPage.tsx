@@ -4,6 +4,7 @@ import React from "react";
 import { ArrowDownAZ, Ban, Camera, ChevronDown, ChevronLeft, ChevronRight, KeyRound, Lock, LockOpen, MapPin, Ticket, UserPlus, UserRoundPlus, Users, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { SELECTABLE_CARD, SELECTABLE_CARD_OFF, SELECTABLE_CARD_ON } from "@/components/ui/proto-styles";
 import {
   evaluationSummary,
   evaluationSummaryLabel,
@@ -424,7 +425,7 @@ function EvaluationRecap({
         type="button"
         onClick={() => onToggle(lessonId)}
         aria-expanded={open}
-        className="flex cursor-pointer items-center gap-1.5 rounded-[6px] border border-[#ececec] bg-[#fbfbfc] px-2 py-1 text-[12px] font-semibold text-[#6a6a6a] transition-colors hover:border-[#dcdcdc] hover:text-foreground"
+        className="flex cursor-pointer items-center gap-1.5 rounded-full border border-[#ececec] bg-[#fbfbfc] px-2.5 py-1 text-[12px] font-semibold text-[#6a6a6a] transition-colors hover:border-[#dcdcdc] hover:text-foreground"
       >
         <span className="text-yellow-400">★</span>
         Pagellino
@@ -3082,9 +3083,15 @@ export function AutoscuoleStudentsPage({
                 {register.byLessonType.length > 0 ? (
                   <DetailRow
                     label="Tipi completati"
-                    value={register.byLessonType
-                      .map((item) => `${formatLessonType(item.type)} ${item.count}`)
-                      .join(" · ")}
+                    value={register.byLessonType.map((item, index) => (
+                      // Ogni tipo resta intero: si va a capo solo fra un tipo e l'altro.
+                      <React.Fragment key={item.type}>
+                        {index > 0 ? " · " : null}
+                        <span className="whitespace-nowrap">
+                          {formatLessonType(item.type)} {item.count}
+                        </span>
+                      </React.Fragment>
+                    ))}
                   />
                 ) : null}
               </DetailRows>
@@ -3898,13 +3905,13 @@ export function AutoscuoleStudentsPage({
                     {canSetOutcome ? (
                       <>
                         <p className="mb-1.5 text-[12px] font-medium text-[#929292]">Esito</p>
-                        <div className="mb-3 grid grid-cols-2 gap-1.5 rounded-xl bg-[#f2f2f4] p-1">
+                        <div className="mb-3 grid grid-cols-2 gap-1.5 rounded-full bg-white p-[3px] shadow-clay-sink">
                           <button
                             type="button"
                             onClick={() => setEsitoDraft(esitoDraft === "checked_in" ? null : "checked_in")}
                             className={cn(
-                              "cursor-pointer rounded-lg py-2 text-[13px] font-semibold transition-colors",
-                              esitoDraft === "checked_in" ? "bg-white text-emerald-700 shadow-sm" : "text-[#8a8a8f] hover:text-foreground",
+                              "cursor-pointer rounded-full py-2 text-[13px] font-semibold transition-colors duration-200 ease-out",
+                              esitoDraft === "checked_in" ? "bg-[#1e1e1e] text-white shadow-clay-ink-sm" : "text-[#6a6a6a] hover:bg-[#f2f2f2]",
                             )}
                           >
                             Presente
@@ -3913,8 +3920,8 @@ export function AutoscuoleStudentsPage({
                             type="button"
                             onClick={() => setEsitoDraft(esitoDraft === "no_show" ? null : "no_show")}
                             className={cn(
-                              "cursor-pointer rounded-lg py-2 text-[13px] font-semibold transition-colors",
-                              esitoDraft === "no_show" ? "bg-white text-red-700 shadow-sm" : "text-[#8a8a8f] hover:text-foreground",
+                              "cursor-pointer rounded-full py-2 text-[13px] font-semibold transition-colors duration-200 ease-out",
+                              esitoDraft === "no_show" ? "bg-[#1e1e1e] text-white shadow-clay-ink-sm" : "text-[#6a6a6a] hover:bg-[#f2f2f2]",
                             )}
                           >
                             Assente
@@ -3936,7 +3943,7 @@ export function AutoscuoleStudentsPage({
                       placeholder="Aggiungi note operative o osservazioni."
                       disabled={noteSaving === lesson.id}
                       rows={3}
-                      className="w-full resize-none rounded-lg border border-[#e2e2e6] bg-white px-3 py-2 text-[13px] leading-relaxed text-foreground outline-none focus:border-foreground/40 disabled:opacity-60"
+                      className="w-full resize-none rounded-[14px] border-0 bg-white px-3 py-2 text-[13px] leading-relaxed text-foreground shadow-clay-sink outline-none transition-shadow duration-200 focus:shadow-clay-focus disabled:opacity-60"
                     />
                     <div className="mt-2 flex items-center gap-3">
                       <button type="button" className={noteLinkClass} disabled={noteSaving === lesson.id} onClick={() => void saveNote(lesson)}>
@@ -4052,42 +4059,20 @@ export function AutoscuoleStudentsPage({
                 />
                 {phaseTab === "pratica" && !affiliate && (
                   <>
-                    <div className="mx-1 h-5 w-px shrink-0 bg-[#dddddd]" />
-                    {([
-                      { key: "lista" as const, label: "Lista", badge: null },
-                      {
-                        key: "cancellazioni" as const,
-                        label: "Cancellazioni tardive",
-                        badge: lateCancellationsCount > 0 ? lateCancellationsCount : null,
-                      },
-                    ]).map((sub) => {
-                      const active = praticaSubTab === sub.key;
-                      return (
-                        <button
-                          key={sub.key}
-                          type="button"
-                          onClick={() => setPraticaSubTab(sub.key)}
-                          className={cn(
-                            "flex cursor-pointer select-none items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-[13px] transition-colors",
-                            active
-                              ? "bg-[#222222] font-semibold text-white"
-                              : "border border-[#dddddd] font-medium text-foreground hover:bg-[#f7f7f7]",
-                          )}
-                        >
-                          {sub.label}
-                          {sub.badge != null && (
-                            <span
-                              className={cn(
-                                "rounded-full px-1.5 text-[11px] font-semibold",
-                                active ? "bg-white/20 text-white" : "bg-[#f2f2f2] text-[#6a6a6a]",
-                              )}
-                            >
-                              {sub.badge}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
+                    <div className="mx-1 hidden h-5 w-px shrink-0 bg-[#dddddd] sm:block" />
+                    {/* REG-776: lo stesso segmentato delle fasi, non due bottoni sciolti. */}
+                    <SegmentedPill
+                      value={praticaSubTab}
+                      onChange={(next) => setPraticaSubTab(next)}
+                      options={[
+                        { value: "lista" as const, label: "Lista" },
+                        {
+                          value: "cancellazioni" as const,
+                          label: "Cancellazioni tardive",
+                          count: lateCancellationsCount > 0 ? lateCancellationsCount : undefined,
+                        },
+                      ]}
+                    />
                   </>
                 )}
 
@@ -4103,7 +4088,7 @@ export function AutoscuoleStudentsPage({
                     setPages({ attesa: 1, teoria: 1, pratica: 1, patentati: 1, ex: 1 });
                   }}
                   className={cn(
-                    "flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors",
+                    "flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors",
                     sortMode === "name"
                       ? "bg-[#f0f0f0] text-foreground"
                       : "text-[#929292] hover:text-foreground",
@@ -4300,10 +4285,9 @@ export function AutoscuoleStudentsPage({
                     type="button"
                     onClick={() => setBulkUntilMode(option.key)}
                     className={cn(
-                      "flex w-full cursor-pointer items-start gap-3 rounded-[14px] border px-4 py-3 text-left transition-colors",
-                      active
-                        ? "border-[#111111] bg-[#fafafa]"
-                        : "border-[#e4e4e4] hover:bg-[#fafafa]",
+                      SELECTABLE_CARD,
+                      "flex w-full items-start gap-3 px-4 py-3",
+                      active ? SELECTABLE_CARD_ON : SELECTABLE_CARD_OFF,
                     )}
                   >
                     <span

@@ -1,6 +1,7 @@
 "use client";
 
 import type { SalesMonthRow, SalesMonthSummary } from "@/lib/finance/finance-sales";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import { Pill, euroSmart, fullDate } from "./finance-ui";
@@ -62,13 +63,15 @@ export function SalesMonthTable({
               <div className="mt-1 pl-[38px] text-[12.5px] text-[#71717a]">fisso pagato il {shortDate(row.fixedPaid.paidOn)}</div>
             ) : withStatus && !row.agent.archived && row.agent.monthlyFixedCents > 0 && !isFutureMonth ? (
               <div className="mt-2 pl-[38px]" onClick={(e) => e.stopPropagation()}>
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="bare"
                   onClick={() => onPayFixed?.(row)}
-                  className="cursor-pointer rounded-lg border border-[#e9e9eb] bg-white px-2.5 py-1 text-[12.5px] font-semibold text-[#111111]"
+                  className="h-7 px-3 text-[12.5px] text-[#111111]"
                 >
                   Segna pagato il fisso
-                </button>
+                </Button>
               </div>
             ) : null}
           </div>
@@ -132,13 +135,15 @@ export function SalesMonthTable({
                   ) : isFutureMonth ? (
                     <span className="text-[12.5px] text-[#a1a1aa]">previsto</span>
                   ) : (
-                    <button
+                    <Button
                       type="button"
+                      variant="outline"
+                      size="bare"
                       onClick={() => onPayFixed?.(row)}
-                      className="cursor-pointer rounded-lg border border-[#e9e9eb] bg-white px-2.5 py-1 text-[12.5px] font-semibold text-[#111111] hover:border-[#d4d4d8] hover:bg-[#fafafa]"
+                      className="h-7 px-3 text-[12.5px] text-[#111111]"
                     >
                       Segna pagato
-                    </button>
+                    </Button>
                   )}
                 </div>
               ) : null}

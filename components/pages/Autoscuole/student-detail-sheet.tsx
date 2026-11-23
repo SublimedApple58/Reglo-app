@@ -191,9 +191,18 @@ export function DetailRows({ children, className }: { children: React.ReactNode;
 
 const rowBase = "flex min-h-[60px] w-full items-center gap-3.5 py-3 text-left";
 
-function RowText({ label, description }: { label: React.ReactNode; description?: React.ReactNode }) {
+function RowText({
+  label,
+  description,
+  hasValue = false,
+}: {
+  label: React.ReactNode;
+  description?: React.ReactNode;
+  /** Con un valore accanto l'etichetta tiene la sua larghezza (REG-776): è il valore ad andare a capo. */
+  hasValue?: boolean;
+}) {
   return (
-    <span className="min-w-0 flex-1">
+    <span className={hasValue ? "max-w-[60%] shrink-0" : "min-w-0 flex-1"}>
       <span className="block text-[15px] font-medium leading-[1.3] text-foreground">{label}</span>
       {description ? (
         <span className="mt-0.5 block text-[13px] font-medium leading-[1.35] text-[#6a6a6a]">{description}</span>
@@ -202,7 +211,8 @@ function RowText({ label, description }: { label: React.ReactNode; description?:
   );
 }
 
-const rowValueClass = "min-w-0 text-right text-[15px] font-medium text-[#6a6a6a]";
+// Il valore lungo va a capo restando allineato a destra, mai sotto l'etichetta.
+const rowValueClass = "min-w-0 flex-1 text-right text-[15px] font-medium leading-[1.35] text-[#6a6a6a] [overflow-wrap:anywhere]";
 
 const Chevron = () => (
   <ChevronRight aria-hidden className="size-4 shrink-0 text-[#b8b8b8]" strokeWidth={2} />
@@ -231,10 +241,11 @@ export function DetailRow({
   testId?: string;
   className?: string;
 }) {
+  const hasValue = value != null && value !== "";
   const content = (
     <>
-      <RowText label={label} description={description} />
-      {value != null && value !== "" ? <span className={rowValueClass}>{value}</span> : null}
+      <RowText label={label} description={description} hasValue={hasValue} />
+      {hasValue ? <span className={rowValueClass}>{value}</span> : null}
       {right}
       {onClick ? <Chevron /> : null}
     </>
@@ -322,7 +333,7 @@ export function DetailSelectRow({
         "cursor-pointer outline-none transition-opacity duration-200 hover:opacity-75 focus-visible:opacity-75 disabled:cursor-default disabled:opacity-50",
       )}
     >
-      <RowText label={label} description={description} />
+      <RowText label={label} description={description} hasValue />
       <span className={cn(rowValueClass, "truncate")}>
         <SelectPrimitive.Value placeholder={placeholder} />
       </span>

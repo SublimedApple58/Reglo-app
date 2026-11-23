@@ -7,7 +7,6 @@ import { Play, Upload } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { submitProductFeedback } from "@/lib/actions/support.actions";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { LoadingDots } from "@/components/ui/loading-dots";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -152,7 +151,7 @@ export function FeedbackDialog({
                           )
                         }
                         className={cn(
-                          "cursor-pointer rounded-[20px] border-[1.5px] px-3.5 py-1.5 text-[13px] font-semibold transition-all",
+                          "cursor-pointer rounded-full border-[1.5px] px-3.5 py-1.5 text-[13px] font-semibold transition-all",
                           selected
                             ? "border-navy-900 bg-[#f0f0f0] text-navy-900"
                             : "border-[#dddddd] bg-white text-[#444444] hover:border-[#c1c1c1]",
@@ -173,17 +172,18 @@ export function FeedbackDialog({
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder={RATING_PLACEHOLDERS[rating]}
-                className="min-h-[100px] w-full resize-none rounded-lg border border-[#e5e5e5] bg-[#f7f7f7] px-4 py-3 text-[15px] font-medium leading-normal text-foreground outline-none transition focus:border-navy-900 focus:bg-white"
+                className="min-h-[100px] w-full resize-none rounded-[14px] border-0 bg-white px-4 py-3 text-[15px] font-medium leading-normal text-foreground shadow-clay-sink outline-none transition-shadow duration-200 focus:shadow-clay-focus"
               />
             </div>
-            <button
+            <Button
               type="button"
               onClick={() => void submit()}
-              disabled={rating === 0 || submitting}
-              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-[12px] bg-gradient-to-br from-[#2b2b2b] to-[#111111] py-3.5 text-[15px] font-semibold text-white shadow-[0_6px_18px_rgba(17, 17, 17,0.35)] transition-opacity hover:opacity-95 disabled:cursor-default disabled:opacity-50"
+              disabled={rating === 0}
+              loading={submitting}
+              className="w-full"
             >
-              {submitting ? <LoadingDots className="min-h-[1.5em]" /> : "Invia feedback"}
-            </button>
+              Invia feedback
+            </Button>
           </>
         ) : rating === 5 ? (
           /* ── Esito 5 stelle: richiesta video testimonial ── */
@@ -214,19 +214,21 @@ export function FeedbackDialog({
                 target="_blank"
                 rel="noreferrer"
                 onClick={close}
-                className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-[12px] bg-[#25d366] py-3 text-sm font-semibold text-white shadow-[0_4px_14px_rgba(37,211,102,0.30)] transition-colors hover:bg-[#1fb455]"
+                className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-full bg-[#25d366] py-3 text-sm font-semibold text-white shadow-[0_4px_14px_rgba(37,211,102,0.30)] transition-colors hover:bg-[#1fb455]"
               >
                 <WhatsAppIcon />
                 Invia su WhatsApp
               </a>
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="bare"
                 onClick={close}
-                className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-[12px] border-[1.5px] border-[#e0e0e0] bg-white py-3 text-sm font-semibold text-[#333333] transition-colors hover:border-[#bdbdbd] hover:bg-[#fafafa]"
+                className="flex-1 py-3 text-sm"
               >
                 <Upload className="size-4" strokeWidth={1.8} />
                 Carica video
-              </button>
+              </Button>
             </div>
             <div className="mt-4 text-center">
               <button
@@ -282,18 +284,20 @@ export function FeedbackDialog({
                 target="_blank"
                 rel="noreferrer"
                 onClick={close}
-                className="flex cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-[#25d366] px-[22px] py-3 text-sm font-semibold text-white shadow-[0_4px_14px_rgba(37,211,102,0.30)] transition-colors hover:bg-[#1fb455]"
+                className="flex cursor-pointer items-center justify-center gap-2 rounded-full bg-[#25d366] px-[22px] py-3 text-sm font-semibold text-white shadow-[0_4px_14px_rgba(37,211,102,0.30)] transition-colors hover:bg-[#1fb455]"
               >
                 <WhatsAppIcon />
                 Contattaci
               </a>
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="bare"
                 onClick={close}
-                className="inline-flex cursor-pointer items-center rounded-[10px] border-[1.5px] border-[#e0e0e0] bg-white px-[22px] py-3 text-sm font-semibold text-[#333333] transition-colors hover:border-[#bdbdbd] hover:bg-[#fafafa]"
+                className="px-[22px] py-3 text-sm"
               >
                 Chiudi
-              </button>
+              </Button>
             </div>
           </div>
         )}

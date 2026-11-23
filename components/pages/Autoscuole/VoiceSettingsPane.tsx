@@ -11,6 +11,8 @@ import {
 } from "@/lib/actions/autoscuole-settings.actions";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { InlineToggle } from "@/components/ui/inline-toggle";
+import { Button } from "@/components/ui/button";
+import { SELECTABLE_CARD, SELECTABLE_CARD_OFF, SELECTABLE_CARD_ON } from "@/components/ui/proto-styles";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { TimePickerInput } from "@/components/ui/time-picker";
@@ -469,13 +471,14 @@ export function VoiceSettingsPane() {
             allievi. Attiva la linea ora per alleggerire la segreteria e non perdere nessun contatto.
           </div>
           {isReady ? (
-            <button
+            <Button
               type="button"
+              size="bare"
               onClick={() => setTutorialOpen(true)}
-              className="mt-6 inline-flex cursor-pointer items-center justify-center rounded-[10px] bg-navy-900 px-[26px] py-3 text-[15px] font-semibold text-white transition-colors hover:bg-navy-800"
+              className="mt-6 px-[26px] py-3 text-[15px]"
             >
               Attiva linea
-            </button>
+            </Button>
           ) : (
             <div className="mt-6 rounded-[10px] border border-[#f0e060] bg-[#fffce0] px-4 py-3">
               <p className="text-xs font-medium text-[#7a6a00]">
@@ -533,24 +536,27 @@ export function VoiceSettingsPane() {
                   onChange={(e) => setHandoffDraft(e.target.value)}
                   placeholder="+39..."
                   autoFocus
-                  className="mt-3 w-full max-w-[420px] rounded-[12px] border-[1.5px] border-[#222222] bg-white px-3.5 py-3 text-[15px] font-medium text-foreground outline-none"
+                  className="mt-3 w-full max-w-[420px] rounded-[14px] border-0 bg-white px-3.5 py-3 text-[15px] font-medium text-foreground shadow-clay-sink outline-none transition-shadow duration-200 focus:shadow-clay-focus"
                 />
                 <div className="mt-3.5 flex items-center gap-2.5">
-                  <button
+                  <Button
                     type="button"
+                    size="bare"
                     onClick={saveHandoff}
-                    disabled={savingKey === "handoff"}
-                    className="inline-flex min-h-10 min-w-[78px] cursor-pointer items-center justify-center gap-2 rounded-[8px] bg-navy-900 px-[18px] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
+                    loading={savingKey === "handoff"}
+                    className="min-h-10 min-w-[78px] px-[18px] py-2.5 text-sm"
                   >
-                    {savingKey === "handoff" ? <LoadingDots /> : "Salva"}
-                  </button>
-                  <button
+                    Salva
+                  </Button>
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="bare"
                     onClick={() => setHandoffEditing(false)}
-                    className="cursor-pointer rounded-[8px] px-[18px] py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-[#f2f2f2]"
+                    className="px-[18px] py-2.5 text-sm"
                   >
                     Annulla
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -592,19 +598,13 @@ export function VoiceSettingsPane() {
                   onClick={() => toggleAction(option.value)}
                   disabled={saving}
                   className={cn(
-                    "cursor-pointer rounded-[12px] border-[1.5px] px-3.5 py-3 text-left transition-all",
-                    active
-                      ? "border-navy-900 bg-white"
-                      : "border-[#dddddd] bg-white hover:border-[#c1c1c1]",
+                    SELECTABLE_CARD,
+                    "px-3.5 py-3",
+                    active ? SELECTABLE_CARD_ON : SELECTABLE_CARD_OFF,
                     saving && "opacity-60",
                   )}
                 >
-                  <div
-                    className={cn(
-                      "mb-0.5 text-[13px] font-semibold",
-                      active ? "text-navy-900" : "text-foreground",
-                    )}
-                  >
+                  <div className="mb-0.5 text-[13px] font-semibold text-foreground">
                     {option.label}
                   </div>
                   <div className="text-[11px] font-medium text-[#929292]">{option.description}</div>
@@ -851,21 +851,25 @@ export function VoiceSettingsPane() {
                 riceveranno risposta finché non riattivi la linea.
               </div>
               <div className="flex gap-3">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="bare"
                   onClick={() => setDeactivateOpen(false)}
-                  className="flex-1 cursor-pointer rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-5 py-3 text-sm font-semibold text-[#333333] transition-colors hover:border-[#c1c1c1]"
+                  className="flex-1 px-5 py-3 text-sm"
                 >
                   Annulla
-                </button>
-                <button
+                </Button>
+                {/* REG-776: capsula rossa (azione distruttiva), attesa con i puntini */}
+                <Button
                   type="button"
+                  size="bare"
                   onClick={handleDeactivate}
-                  disabled={savingKey === "linea"}
-                  className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-[#c13515] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#a92d10] disabled:opacity-60"
+                  loading={savingKey === "linea"}
+                  className="flex-1 bg-[#c13515] px-5 py-3 text-sm shadow-none hover:bg-[#a92d10]"
                 >
-                  {savingKey === "linea" ? <LoadingDots className="min-h-[1.5em]" /> : "Disattiva"}
-                </button>
+                  Disattiva
+                </Button>
               </div>
             </motion.div>
           </motion.div>

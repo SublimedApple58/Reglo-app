@@ -103,12 +103,12 @@ export function MonthNav({
   onNext: () => void;
 }) {
   return (
-    <div className="flex items-center gap-1 rounded-xl border border-[#e9e9eb] bg-white p-1">
+    <div className="flex items-center gap-1 rounded-full border border-[#e9e9eb] bg-white p-1">
       <button
         type="button"
         aria-label="Mese precedente"
         onClick={onPrev}
-        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-[#3f3f46] hover:bg-[#f4f4f5]"
+        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-[#3f3f46] hover:bg-[#f4f4f5]"
       >
         <ChevronLeft className="h-4 w-4" />
       </button>
@@ -119,7 +119,7 @@ export function MonthNav({
         type="button"
         aria-label="Mese successivo"
         onClick={onNext}
-        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-[#3f3f46] hover:bg-[#f4f4f5]"
+        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-[#3f3f46] hover:bg-[#f4f4f5]"
       >
         <ChevronRight className="h-4 w-4" />
       </button>
@@ -229,7 +229,7 @@ export function Field({
 }
 
 export const inputClass =
-  "flex h-11 w-full rounded-lg border border-[#e4e4e7] bg-white px-3 text-[15px] text-[#111111] outline-none transition-colors placeholder:text-[#a1a1aa] focus:border-[#111111]";
+  "flex h-11 w-full rounded-[14px] border-0 bg-white px-3 text-[15px] text-[#111111] shadow-clay-sink outline-none transition-shadow duration-200 placeholder:text-[#a1a1aa] focus:shadow-clay-focus";
 
 export function Segmented<T extends string>({
   value,
@@ -241,16 +241,16 @@ export function Segmented<T extends string>({
   options: Array<{ value: T; label: ReactNode }>;
 }) {
   return (
-    <div className="flex gap-1 rounded-xl bg-[#f1f1f2] p-1">
+    <div className="flex gap-1 rounded-full bg-white p-[3px] shadow-clay-sink">
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
           className={cn(
-            "flex-1 cursor-pointer rounded-[9px] px-3 py-1.5 text-sm transition-colors",
+            "flex-1 cursor-pointer rounded-full px-3 py-1.5 text-sm transition-colors duration-200",
             o.value === value
-              ? "bg-white font-semibold text-[#111111] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+              ? "bg-[#1e1e1e] font-semibold text-white shadow-clay-ink-sm"
               : "text-[#71717a] hover:text-[#111111]",
           )}
         >
@@ -292,8 +292,9 @@ export function FilterSelect({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={cn(
-        "h-10 cursor-pointer rounded-xl border bg-white px-3 pr-8 text-sm outline-none focus:border-[#111111]",
-        value === "all" ? "border-[#e9e9eb] text-[#3f3f46]" : "border-[#111111] font-medium text-[#111111]",
+        // REG-776: filtro in toolbar = capsula incavata come la ricerca; filtro attivo = bordo interno nero.
+        "h-10 cursor-pointer rounded-full border-0 bg-white px-3.5 pr-8 text-sm outline-none transition-shadow duration-200 focus:shadow-clay-focus",
+        value === "all" ? "text-[#3f3f46] shadow-clay-sink" : "font-medium text-[#111111] shadow-clay-focus",
       )}
     >
       {options.map(([v, label]) => (

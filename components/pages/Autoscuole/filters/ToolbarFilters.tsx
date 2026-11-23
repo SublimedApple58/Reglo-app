@@ -73,7 +73,7 @@ export function ToolbarFilters({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="relative flex h-[34px] shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 transition-colors hover:bg-[#f0f0f0]"
+            className="relative flex h-[34px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 transition-colors hover:bg-[#f0f0f0]"
           >
             <SlidersHorizontal className="size-4 text-[#888888]" strokeWidth={1.6} />
             <span className="text-[13px] font-medium text-[#555555]">{buttonLabel}</span>
@@ -196,15 +196,16 @@ export function ToolbarFilters({
                 )}
               </div>
               <DialogFooter className="items-center gap-2">
-                <button
+                <Button
                   type="button"
-                  className="mr-auto cursor-pointer text-sm font-semibold text-foreground underline underline-offset-2 hover:opacity-70"
+                  variant="ghost"
+                  className="mr-auto"
                   onClick={() =>
                     setEditor((current) => (current ? { ...current, value: [] } : current))
                   }
                 >
                   Azzera
-                </button>
+                </Button>
                 <Button type="button" variant="outline" onClick={() => setEditor(null)}>
                   Chiudi
                 </Button>

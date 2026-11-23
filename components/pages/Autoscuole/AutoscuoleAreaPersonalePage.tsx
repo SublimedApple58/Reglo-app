@@ -43,7 +43,7 @@ const PANES: Array<{ key: PaneKey; label: string; icon: React.ReactNode }> = [
 ];
 
 const RESET_INPUT_CLASS =
-  "h-11 w-full rounded-lg border-[1.5px] border-[#dddddd] bg-white px-3.5 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] hover:border-[#929292] focus:border-[#222222]";
+  "h-11 w-full rounded-[14px] border-0 bg-white px-3.5 text-sm font-medium text-foreground shadow-clay-sink outline-none transition-shadow duration-200 placeholder:text-[#c1c1c1] focus:shadow-clay-focus";
 
 /** Pane unica "Il tuo profilo": foto personale (cerchio 132px con badge
  * Modifica, stesso pattern della foto autoscuola) + sezione Credenziali:
@@ -249,14 +249,16 @@ function ProfiloPane() {
                     ••••••••••••
                   </div>
                 </div>
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="bare"
                   onClick={requestResetCode}
-                  disabled={resetRequesting}
-                  className="flex shrink-0 cursor-pointer select-none items-center gap-2 rounded-[10px] border border-[#dddddd] px-4 py-2.5 text-[13.5px] font-semibold text-foreground transition-colors hover:bg-[#f7f7f7] disabled:pointer-events-none disabled:opacity-60"
+                  loading={resetRequesting}
+                  className="select-none px-4 py-2.5 text-[13.5px]"
                 >
-                  {resetRequesting ? <LoadingDots className="min-h-5" /> : "Reimposta password"}
-                </button>
+                  Reimposta password
+                </Button>
               </div>
             ) : (
               <div className="pt-[11px]">
@@ -309,13 +311,15 @@ function ProfiloPane() {
                   </div>
                 </div>
                 <div className="mt-4 flex items-center gap-2.5">
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="bare"
                     onClick={cancelReset}
-                    className="cursor-pointer select-none rounded-[10px] border border-[#dddddd] px-4 py-2.5 text-[13.5px] font-semibold text-foreground transition-colors hover:bg-[#f7f7f7]"
+                    className="select-none px-4 py-2.5 text-[13.5px]"
                   >
                     Annulla
-                  </button>
+                  </Button>
                   <Button
                     type="button"
                     size="bare"
@@ -397,7 +401,7 @@ function DocumentiPane() {
       onClick={() => void download(doc)}
       disabled={downloadingId === doc.id}
       title="Scarica"
-      className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-[10px] border border-[#dddddd] text-[#444444] transition-colors hover:border-[#929292] hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+      className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#dddddd] text-[#444444] transition-colors hover:border-[#929292] hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
     >
       {downloadingId === doc.id ? (
         <LoadingDots className="scale-[0.6]" />

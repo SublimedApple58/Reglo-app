@@ -25,7 +25,7 @@ import { DatePickerInput } from "@/components/ui/date-picker";
 import { TimePickerInput } from "@/components/ui/time-picker";
 import { PROTO_INPUT, PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { LoadingDots } from "@/components/ui/loading-dots";
+import { Button } from "@/components/ui/button";
 import { UserPhotoCircle } from "@/components/ui/user-photo";
 import { SuccessOverlay } from "@/components/ui/success-overlay";
 import {
@@ -355,7 +355,7 @@ function LocatedRangeList({
                   type="button"
                   onClick={() => onRemove(i)}
                   aria-label={`Rimuovi la fascia ${span}${dayLabel ? ` di ${dayLabel}` : ""}`}
-                  className="grid size-8 cursor-pointer place-items-center rounded-[8px] text-[#9a9a9a] transition-colors duration-200 hover:bg-[#f4f4f4] hover:text-[#222222]"
+                  className="grid size-8 cursor-pointer place-items-center rounded-full text-[#9a9a9a] transition-colors duration-200 hover:bg-[#f4f4f4] hover:text-[#222222]"
                 >
                   <X className="size-3.5" strokeWidth={1.8} />
                 </button>
@@ -403,7 +403,7 @@ function Seg<T extends string>({
   small?: boolean;
 }) {
   return (
-    <div className={cn("flex shrink-0 gap-1 rounded-[10px] bg-[#f4f4f6]", small ? "rounded-[9px] p-[3px]" : "p-1")}>
+    <div className="flex shrink-0 gap-1 rounded-full bg-white p-[3px] shadow-clay-sink">
       {options.map((o) => {
         const on = o.v === value;
         return (
@@ -412,9 +412,9 @@ function Seg<T extends string>({
             type="button"
             onClick={() => onChange(o.v)}
             className={cn(
-              "cursor-pointer font-semibold transition-all",
-              small ? "rounded-[7px] px-[11px] py-1.5 text-[12.5px]" : "flex-1 rounded-[8px] px-2 py-[9px] text-center text-[13.5px]",
-              on ? "bg-white text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.1)]" : "bg-transparent text-[#999999] hover:text-[#666666]",
+              "cursor-pointer rounded-full font-semibold transition-colors duration-200 ease-out",
+              small ? "px-[11px] py-1.5 text-[12.5px]" : "flex-1 px-2 py-[9px] text-center text-[13.5px]",
+              on ? "bg-[#1e1e1e] text-white shadow-clay-ink-sm" : "bg-transparent text-[#6a6a6a] hover:bg-[#f2f2f2]",
             )}
           >
             {o.l}
@@ -1523,14 +1523,15 @@ function CalendarOverrides({
                   : "Applica ai giorni della settimana selezionati, da ogni data in poi"}
               </div>
             </div>
-            <button
+            <Button
               type="button"
-              disabled={applyingRec}
+              size="bare"
+              loading={applyingRec}
               onClick={() => void applyRecurring()}
-              className="flex shrink-0 cursor-pointer items-center gap-2 rounded-[10px] bg-navy-900 px-5 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
+              className="px-5 py-2.5 text-[13.5px]"
             >
-              {applyingRec ? <LoadingDots className="min-h-[1.5em]" /> : "Applica"}
-            </button>
+              Applica
+            </Button>
           </div>
           <div className="mt-2">
             <button
@@ -1711,14 +1712,15 @@ function MalattiaTab({
         </div>
       )}
 
-      <button
+      <Button
         type="button"
-        disabled={saving}
+        size="bare"
+        loading={saving}
         onClick={() => void save()}
-        className="mt-[18px] flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-navy-900 p-[13px] text-sm font-semibold text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
+        className="mt-[18px] w-full p-[13px] text-sm"
       >
-        {saving ? <LoadingDots className="min-h-5" /> : "Aggiungi assenza"}
-      </button>
+        Aggiungi assenza
+      </Button>
 
       {loaded && (
         <AnimatePresence initial={false}>
@@ -1924,14 +1926,15 @@ function FerieTab({
         </div>
       )}
 
-      <button
+      <Button
         type="button"
-        disabled={saving}
+        size="bare"
+        loading={saving}
         onClick={() => void save()}
-        className="mt-[18px] flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-navy-900 p-[13px] text-sm font-semibold text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
+        className="mt-[18px] w-full p-[13px] text-sm"
       >
-        {saving ? <LoadingDots className="min-h-5" /> : "Aggiungi ferie"}
-      </button>
+        Aggiungi ferie
+      </Button>
 
       {loaded && (
         <AnimatePresence initial={false}>
@@ -2667,10 +2670,12 @@ function AutonomaTab({
                   })
                 )}
               </div>
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="bare"
                 onClick={() => setParcoOpen(true)}
-                className="mt-2.5 flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] border-[1.5px] border-navy-900 bg-white px-3 py-[11px] text-[13.5px] font-semibold text-navy-900 transition-colors hover:bg-navy-50"
+                className="mt-2.5 w-full gap-2 px-3 py-[11px] text-[13.5px]"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <circle cx="4.5" cy="4.5" r="2.2" stroke="currentColor" strokeWidth="1.3" />
@@ -2678,7 +2683,7 @@ function AutonomaTab({
                   <circle cx="8" cy="10.5" r="2.2" stroke="currentColor" strokeWidth="1.3" />
                 </svg>
                 Apri Parco Allievi
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2948,10 +2953,10 @@ function ParcoAllievi({
             type="button"
             onClick={() => onToggle(detail.id)}
             className={cn(
-              "flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] p-[13px] text-sm font-semibold transition-colors",
+              "flex w-full cursor-pointer items-center justify-center gap-2 rounded-full p-[13px] text-sm font-semibold transition-colors duration-200",
               assignedIds.includes(detail.id)
                 ? "bg-[#f4f4f4] text-[#c13515] hover:bg-[#eeeeee]"
-                : "bg-navy-900 text-white hover:bg-navy-800",
+                : "bg-[#1e1e1e] text-white shadow-clay-cta hover:bg-[#2a2a2a]",
             )}
           >
             {assignedIds.includes(detail.id) ? "Rimuovi dall'istruttore" : "Assegna all'istruttore"}

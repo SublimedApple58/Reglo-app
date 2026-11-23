@@ -240,14 +240,16 @@ export function BandLocationMenu({
                     Le guide già prenotate non si spostano. Il nuovo luogo vale per le prossime prenotazioni.
                   </p>
                   <div className="mt-2.5 flex justify-end gap-1.5">
-                    <button
+                    <Button
                       type="button"
-                      className="h-[30px] cursor-pointer rounded-[9px] px-3 text-[12.5px] font-medium text-[#222222] transition-colors duration-150 hover:bg-black/[0.04]"
+                      variant="ghost"
+                      size="bare"
+                      className="h-[30px] px-3 text-[12.5px] text-[#222222]"
                       onClick={() => setPending(undefined)}
                       disabled={busy}
                     >
                       Annulla
-                    </button>
+                    </Button>
                     <Button
                       type="button"
                       size="bare"

@@ -156,7 +156,7 @@ function StatusPill({ status }: { status: "active" | "invited" }) {
 }
 
 const panelInputClass =
-  "w-full rounded-lg border-[1.5px] border-[#dddddd] bg-white px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition focus:border-[#222222]";
+  "w-full rounded-[14px] border-0 bg-white px-3.5 py-2.5 text-sm font-medium text-foreground shadow-clay-sink outline-none transition focus:shadow-clay-focus";
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
@@ -324,7 +324,7 @@ export function AdminUsersPage({
             title={sort === "name" ? "Ordina per più recenti" : "Ordina A-Z"}
             aria-pressed={sort === "name"}
             className={cn(
-              "relative flex h-[34px] shrink-0 cursor-pointer select-none items-center justify-center gap-1.5 rounded-lg px-2 transition-colors hover:bg-[#f0f0f0]",
+              "relative flex h-[34px] shrink-0 cursor-pointer select-none items-center justify-center gap-1.5 rounded-full px-3 transition-colors hover:bg-[#f0f0f0]",
               sort === "name" && "bg-[#f0f0f0]",
             )}
           >
@@ -340,7 +340,7 @@ export function AdminUsersPage({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="relative flex h-[34px] shrink-0 cursor-pointer select-none items-center justify-center gap-1.5 rounded-lg px-2 transition-colors hover:bg-[#f0f0f0]"
+                className="relative flex h-[34px] shrink-0 cursor-pointer select-none items-center justify-center gap-1.5 rounded-full px-3 transition-colors hover:bg-[#f0f0f0]"
               >
                 <ListFilter className="size-4 text-[#888888]" strokeWidth={1.7} />
                 <span className="text-[13px] font-medium text-[#555555]">Filtri</span>
@@ -510,13 +510,15 @@ export function AdminUsersPage({
                   <StatusPill status={user.status} />
                 </div>
                 <div className="flex justify-end">
-                  <button
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="sm"
                     onClick={() => openDetail(user)}
-                    className="cursor-pointer select-none whitespace-nowrap rounded-[8px] border border-[#dddddd] px-3.5 py-[7px] text-[13px] font-medium text-foreground transition-colors hover:border-[#cdcdcd] hover:bg-[#f2f2f2]"
+                    className="select-none text-[13px] font-medium"
                   >
                     Dettaglio
-                  </button>
+                  </Button>
                 </div>
               </div>
             ))
@@ -625,15 +627,9 @@ export function AdminUsersPage({
               />
             </div>
             <DialogFooter>
-              <Button type="submit" disabled={pushSending} className="w-full sm:w-auto">
-                {pushSending ? (
-                  <LoadingDots />
-                ) : (
-                  <>
-                    <Bell className="mr-2 h-4 w-4" />
-                    Invia notifica
-                  </>
-                )}
+              <Button type="submit" loading={pushSending} className="w-full sm:w-auto">
+                <Bell className="h-4 w-4" />
+                Invia notifica
               </Button>
             </DialogFooter>
           </form>
@@ -823,22 +819,23 @@ function UserDetailPanelContent({
             </div>
             {isAdmin && (
               <div className="flex flex-col gap-2">
-                <button
+                <Button
                   type="button"
                   onClick={handleResendInvite}
-                  disabled={resending}
-                  className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-navy-900 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
+                  loading={resending}
+                  className="w-full"
                 >
-                  {resending ? <LoadingDots className="min-h-5" /> : "Reinvia invito"}
-                </button>
-                <button
+                  Reinvia invito
+                </Button>
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => setCancelOpen(true)}
                   disabled={cancelling}
-                  className="w-full cursor-pointer rounded-[10px] border border-[#dddddd] bg-white px-6 py-3 text-sm font-medium text-foreground transition-colors hover:border-[#222222] disabled:opacity-60"
+                  className="w-full"
                 >
                   Annulla invito
-                </button>
+                </Button>
               </div>
             )}
           </>
@@ -872,7 +869,7 @@ function UserDetailPanelContent({
                     onValueChange={(v) => setRole(v as AutoscuolaRole)}
                     disabled={!isAdmin}
                   >
-                    <SelectTrigger className="h-11 w-full rounded-lg border-[1.5px] border-[#dddddd] text-sm font-medium">
+                    <SelectTrigger className="h-11 w-full rounded-[14px] border-0 bg-white text-sm font-medium shadow-clay-sink focus-visible:shadow-clay-focus data-[state=open]:shadow-clay-focus">
                       <SelectValue />
                     </SelectTrigger>
                     {/* Il DetailPanel è z-[200]: col default z-50 il menu si apre
@@ -891,14 +888,15 @@ function UserDetailPanelContent({
                   )}
                 </div>
                 {isAdmin && (
-                  <button
+                  <Button
                     type="button"
                     onClick={handleSave}
-                    disabled={saving || !dirty}
-                    className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-navy-900 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-navy-800 disabled:opacity-50"
+                    loading={saving}
+                    disabled={!saving && !dirty}
+                    className="w-full"
                   >
-                    {saving ? <LoadingDots className="min-h-5" /> : "Salva modifiche"}
-                  </button>
+                    Salva modifiche
+                  </Button>
                 )}
               </div>
             </div>

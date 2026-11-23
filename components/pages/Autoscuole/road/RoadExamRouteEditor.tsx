@@ -28,6 +28,7 @@ import {
 } from "@/lib/autoscuole/road/exam-routes";
 import { ROAD_IMAGES } from "@/lib/autoscuole/road/symbols";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { Button } from "@/components/ui/button";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { cn } from "@/lib/utils";
 import { addHtmlMarker, htmlElement, lineBounds, placeMarkerElement, toLngLat, useRoadMap } from "./road-map";
@@ -589,21 +590,20 @@ export function RoadExamRouteEditor({ source }: { source: ExamRouteEditorSource 
           </p>
         </div>
         <div className="flex items-center gap-2.5">
-          <Link
-            href={backHref}
-            className="grid h-11 place-items-center rounded-[22px] bg-[#f2f2f2] px-[18px] text-[14.5px] font-semibold text-[#111111] transition-colors duration-200 hover:bg-[#e8e8e8]"
-          >
-            Annulla
-          </Link>
-          <button
+          <Button asChild variant="ghost" size="bare" className="h-11 px-[18px] text-[14.5px] font-semibold">
+            <Link href={backHref}>Annulla</Link>
+          </Button>
+          <Button
             type="button"
+            size="bare"
             onClick={() => void save()}
-            disabled={saving || !loaded}
+            disabled={!loaded}
+            loading={saving}
             data-testid="road-exam-save"
-            className="grid h-11 min-w-[150px] cursor-pointer place-items-center rounded-[22px] bg-[#111111] px-[18px] text-[14.5px] font-semibold text-white transition-colors duration-200 hover:bg-[#2a2a2a] disabled:cursor-default disabled:opacity-40"
+            className="h-11 min-w-[150px] px-[18px] text-[14.5px]"
           >
-            {saving ? <LoadingDots /> : "Salva percorso"}
-          </button>
+            Salva percorso
+          </Button>
         </div>
       </div>
 
@@ -662,7 +662,7 @@ export function RoadExamRouteEditor({ source }: { source: ExamRouteEditorSource 
                 setDirty(true);
               }}
               placeholder="Es. Giro della Motorizzazione"
-              className="mt-1.5 h-11 w-full rounded-xl border border-[#d9d9d9] bg-white px-3.5 text-[15px] text-[#222222] outline-none transition-colors duration-200 placeholder:text-[#9a9a9a] focus:border-[#111111]"
+              className="mt-1.5 h-11 w-full rounded-[14px] border-0 bg-white px-3.5 text-[15px] text-[#222222] shadow-clay-sink outline-none transition-shadow duration-200 placeholder:text-[#9a9a9a] focus:shadow-clay-focus"
             />
             <label className="mt-4 block text-[13px] font-medium text-[#6a6a6a]" htmlFor="er-site">
               Sede d&apos;esame <span className="font-normal text-[#9a9a9a]">(facoltativa)</span>
@@ -676,7 +676,7 @@ export function RoadExamRouteEditor({ source }: { source: ExamRouteEditorSource 
                 setDirty(true);
               }}
               placeholder="Es. Motorizzazione, via Bertola"
-              className="mt-1.5 h-11 w-full rounded-xl border border-[#d9d9d9] bg-white px-3.5 text-[15px] text-[#222222] outline-none transition-colors duration-200 placeholder:text-[#9a9a9a] focus:border-[#111111]"
+              className="mt-1.5 h-11 w-full rounded-[14px] border-0 bg-white px-3.5 text-[15px] text-[#222222] shadow-clay-sink outline-none transition-shadow duration-200 placeholder:text-[#9a9a9a] focus:shadow-clay-focus"
             />
             <div className="mt-4 text-[13px] font-medium text-[#6a6a6a]">Patenti</div>
             <div className="mt-1.5 flex flex-wrap gap-2" role="group" aria-label="Patenti">
@@ -692,7 +692,7 @@ export function RoadExamRouteEditor({ source }: { source: ExamRouteEditorSource 
                       setDirty(true);
                     }}
                     className={cn(
-                      "flex h-10 min-w-[64px] cursor-pointer items-center justify-center gap-1.5 rounded-xl border px-3 text-[14px] font-semibold transition-colors duration-200",
+                      "flex h-10 min-w-[64px] cursor-pointer items-center justify-center gap-1.5 rounded-full border px-3 text-[14px] font-semibold transition-colors duration-200",
                       on
                         ? "border-[#111111] bg-[#111111] text-white"
                         : "border-[#d9d9d9] bg-white text-[#222222] hover:border-[#9a9a9a]",
@@ -788,7 +788,7 @@ export function RoadExamRouteEditor({ source }: { source: ExamRouteEditorSource 
                         type="button"
                         aria-label={`Togli ${label}`}
                         onClick={() => remove(w.id)}
-                        className="grid size-[34px] cursor-pointer place-items-center rounded-[10px] text-[#6a6a6a] transition-colors duration-200 hover:bg-[#ececec] hover:text-[#111111]"
+                        className="grid size-[34px] cursor-pointer place-items-center rounded-full text-[#6a6a6a] transition-colors duration-200 hover:bg-[#ececec] hover:text-[#111111]"
                       >
                         <X className="size-[18px]" strokeWidth={1.8} />
                       </button>

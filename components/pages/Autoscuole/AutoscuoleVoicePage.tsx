@@ -21,6 +21,7 @@ import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions
 import { Skeleton } from "@/components/ui/skeleton";
 import { FadeIn } from "@/components/ui/fade-in";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { Button } from "@/components/ui/button";
 import { UserPhotoCircle } from "@/components/ui/user-photo";
 import { VoiceInactiveState } from "./VoiceInactiveState";
 import { cn } from "@/lib/utils";
@@ -488,14 +489,16 @@ function AutoscuoleVoicePageInner() {
               loading ? (
                 <Skeleton className="h-10 w-[150px] rounded-3xl" />
               ) : voiceFeatureEnabled ? (
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="bare"
                   onClick={openSettings}
-                  className="flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-3xl border border-[#dddddd] bg-white px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:border-[#222222]"
+                  className="gap-2 px-5 py-2.5 text-sm"
                 >
                   <Settings className="size-4" strokeWidth={1.8} />
                   Impostazioni
-                </button>
+                </Button>
               ) : undefined
             }
           />
@@ -516,13 +519,14 @@ function AutoscuoleVoicePageInner() {
                   <div className="text-sm font-medium text-[#444444]">
                     La linea è spenta: la segretaria non sta rispondendo alle chiamate.
                   </div>
-                  <button
+                  <Button
                     type="button"
+                    size="bare"
                     onClick={openSettings}
-                    className="cursor-pointer whitespace-nowrap rounded-[20px] bg-navy-900 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-navy-800"
+                    className="px-4 py-2 text-[13px]"
                   >
                     Attiva linea
-                  </button>
+                  </Button>
                 </div>
               )}
 
@@ -578,21 +582,17 @@ function AutoscuoleVoicePageInner() {
                       </span>
                     )}
                   </div>
-                  <button
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="bare"
                     onClick={loadCallbacks}
-                    disabled={loadingCallbacks}
-                    className="flex cursor-pointer items-center gap-2 rounded-[20px] border border-[#ebebeb] bg-[#f7f7f7] px-4 py-2 text-[13px] font-semibold text-foreground transition-colors hover:bg-[#f0f0f0] disabled:opacity-60"
+                    loading={loadingCallbacks}
+                    className="gap-2 px-4 py-2 text-[13px]"
                   >
-                    {loadingCallbacks ? (
-                      <LoadingDots className="min-h-[1.5em] scale-[0.8]" />
-                    ) : (
-                      <>
-                        <RefreshCw className="size-3.5" strokeWidth={1.6} />
-                        Aggiorna
-                      </>
-                    )}
-                  </button>
+                    <RefreshCw className="size-3.5" strokeWidth={1.6} />
+                    Aggiorna
+                  </Button>
                 </div>
                 {!callbacksLoaded ? (
                   <CallbackRowsSkeleton />

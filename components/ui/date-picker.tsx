@@ -58,7 +58,7 @@ function CalendarGrid({
             type="button"
             aria-label="Mese precedente"
             onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-gray-100 transition-colors"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-gray-100 transition-colors"
           >
             <ChevronLeft className="size-4" />
           </button>
@@ -66,7 +66,7 @@ function CalendarGrid({
             type="button"
             aria-label="Mese successivo"
             onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-gray-100 transition-colors"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-gray-100 transition-colors"
           >
             <ChevronRight className="size-4" />
           </button>
@@ -183,8 +183,9 @@ export function DatePickerInput({
         <button
           type="button"
           className={cn(
-            "flex h-11 w-full cursor-pointer items-center gap-2 rounded-lg border bg-white px-3 text-sm transition-colors",
-            open ? "border-[#222222]" : "border-border hover:border-[#929292]",
+            // REG-776: lo stesso campo incavato di Input/SelectTrigger.
+            "flex h-11 w-full cursor-pointer items-center gap-2 rounded-[14px] border-0 bg-white px-3.5 text-sm font-medium shadow-clay-sink outline-none transition-colors duration-200",
+            open ? "shadow-clay-focus" : "hover:bg-[#fcfcfc]",
             value ? "text-foreground" : "text-muted-foreground",
             className,
           )}

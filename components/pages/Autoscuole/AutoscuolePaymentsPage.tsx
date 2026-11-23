@@ -794,10 +794,10 @@ export function AutoscuolePaymentsPage({
 
               <div className="grid gap-3 sm:grid-cols-2 max-w-lg">
                 <FieldGroup label="Prezzo guida 30m">
-                  <input className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm text-foreground outline-none focus:border-primary/40" value={lessonPrice30} onChange={(e) => setLessonPrice30(e.target.value)} inputMode="decimal" />
+                  <input className="h-10 w-full rounded-[14px] border-0 bg-white px-3 text-sm text-foreground shadow-clay-sink outline-none transition-shadow duration-200 focus:shadow-clay-focus" value={lessonPrice30} onChange={(e) => setLessonPrice30(e.target.value)} inputMode="decimal" />
                 </FieldGroup>
                 <FieldGroup label="Prezzo guida 60m">
-                  <input className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm text-foreground outline-none focus:border-primary/40" value={lessonPrice60} onChange={(e) => setLessonPrice60(e.target.value)} inputMode="decimal" />
+                  <input className="h-10 w-full rounded-[14px] border-0 bg-white px-3 text-sm text-foreground shadow-clay-sink outline-none transition-shadow duration-200 focus:shadow-clay-focus" value={lessonPrice60} onChange={(e) => setLessonPrice60(e.target.value)} inputMode="decimal" />
                 </FieldGroup>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 max-w-lg">
@@ -1208,7 +1208,7 @@ export function AutoscuolePaymentsPage({
               <div className="grid grid-cols-2 gap-3">
                 <FieldGroup label="Importo (€)" required>
                   <input
-                    className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm text-foreground outline-none focus:border-primary/40"
+                    className="h-10 w-full rounded-[14px] border-0 bg-white px-3 text-sm text-foreground shadow-clay-sink outline-none transition-shadow duration-200 focus:shadow-clay-focus"
                     value={testAmount}
                     onChange={(e) => setTestAmount(e.target.value)}
                     inputMode="decimal"

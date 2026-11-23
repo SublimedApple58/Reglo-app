@@ -258,7 +258,7 @@ function HeadquartersRequired({ sedeName, onSaved }: { sedeName: string; onSaved
           </div>
         ) : (
           <div className="relative">
-            <div className="flex items-center gap-2.5 rounded-[12px] border-[1.5px] border-[#ededed] bg-[#f7f8fa] px-[15px] transition-colors duration-200 focus-within:border-[#222222] focus-within:bg-white">
+            <div className="flex items-center gap-2.5 rounded-[14px] bg-white px-[15px] shadow-clay-sink transition-shadow duration-200 focus-within:shadow-clay-focus">
               <Search className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
               <input
                 data-testid="road-hq-address"
@@ -301,22 +301,18 @@ function HeadquartersRequired({ sedeName, onSaved }: { sedeName: string; onSaved
               oppure
               <div className="h-px flex-1 bg-[#ededed]" />
             </div>
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="bare"
               data-testid="road-hq-locate"
               onClick={locate}
-              disabled={locating}
-              className="flex h-12 w-full cursor-pointer select-none items-center justify-center gap-2 rounded-[50px] border-[1.5px] border-[#e4e4e4] bg-white text-[14px] font-semibold text-foreground transition-colors duration-200 hover:border-[#222222]"
+              loading={locating}
+              className="h-12 w-full select-none text-[14px]"
             >
-              {locating ? (
-                <LoadingDots className="text-foreground" />
-              ) : (
-                <>
-                  <LocateFixed className="size-4" strokeWidth={1.8} />
-                  Usa la mia posizione attuale
-                </>
-              )}
-            </button>
+              <LocateFixed className="size-4" strokeWidth={1.8} />
+              Usa la mia posizione attuale
+            </Button>
             {locateError && (
               <div className="mt-2 text-center text-[12px] font-medium text-[#7a7a7a]">{locateError}</div>
             )}

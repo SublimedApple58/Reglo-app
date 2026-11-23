@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { LoadingDots } from "@/components/ui/loading-dots";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -128,7 +128,7 @@ function ItemRow({
           disabled={disabled}
           onValueChange={(v) => onChange({ ...item, scaleMax: Number(v) as EvaluationScale })}
         >
-          <SelectTrigger className="h-[34px] rounded-[9px] border-[1.5px] border-[#e4e4e4] bg-[#fbfbfb] text-[12.5px] font-semibold text-[#6a6a6a]">
+          <SelectTrigger className="h-[34px] rounded-[14px] border-0 bg-white text-[12.5px] font-semibold text-[#6a6a6a] shadow-clay-sink focus-visible:shadow-clay-focus data-[state=open]:shadow-clay-focus">
             <SelectValue />
           </SelectTrigger>
           {/* L'overlay Impostazioni è sopra la pagina: il dropdown deve stargli sopra. */}
@@ -146,7 +146,7 @@ function ItemRow({
           onClick={onRemove}
           disabled={disabled}
           aria-label={`Togli ${item.label || "voce"}`}
-          className="flex size-7 cursor-pointer items-center justify-center rounded-[8px] text-[#b0b0b0] transition-colors hover:bg-[#f7f7f7] hover:text-[#6a6a6a] disabled:opacity-50"
+          className="flex size-7 cursor-pointer items-center justify-center rounded-full text-[#b0b0b0] transition-colors hover:bg-[#f7f7f7] hover:text-[#6a6a6a] disabled:opacity-50"
         >
           <X className="size-4" strokeWidth={2} />
         </button>
@@ -277,20 +277,23 @@ export function EvaluationSheetPane() {
           ))}
         </div>
         <div className="mt-4 flex items-center justify-center gap-2">
-          <button
+          <Button
             type="button"
+            size="bare"
             onClick={useTemplate}
-            className="cursor-pointer rounded-[10px] bg-navy-900 px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-navy-800"
+            className="px-4 py-2.5 text-[13px]"
           >
             Usa il modello base
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="outline"
+            size="bare"
             onClick={addItem}
-            className="cursor-pointer rounded-[10px] border-[1.5px] border-[#e4e4e4] bg-white px-4 py-2.5 text-[13px] font-semibold text-foreground transition-colors hover:border-[#cdcdcd]"
+            className="px-4 py-2.5 text-[13px]"
           >
             Parti da zero
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -354,14 +357,15 @@ export function EvaluationSheetPane() {
         )}
 
         <div className="mt-[22px] flex items-center gap-3.5">
-          <button
+          <Button
             type="button"
+            size="bare"
             onClick={handleSave}
-            disabled={saving}
-            className="flex min-w-[150px] cursor-pointer items-center justify-center rounded-[10px] bg-navy-900 px-[22px] py-[11px] text-[13.5px] font-semibold text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
+            loading={saving}
+            className="min-w-[150px] px-[22px] py-[11px] text-[13.5px]"
           >
-            {saving ? <LoadingDots className="min-h-5" /> : "Salva pagellino"}
-          </button>
+            Salva pagellino
+          </Button>
           <span className="text-[12.5px] font-medium text-[#b0b0b0]">
             {items.length === 0
               ? "Nessuna voce: gli istruttori vedranno solo le stelle complessive"

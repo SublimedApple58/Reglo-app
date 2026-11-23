@@ -181,7 +181,7 @@ export function FinanceSalesPage({
                         key={a.id}
                         type="button"
                         onClick={() => setAgentSheet({ open: true, agent: a })}
-                        className="cursor-pointer rounded-lg border border-[#e9e9eb] px-2.5 py-1 text-[12.5px] font-medium text-[#3f3f46] hover:border-[#d4d4d8]"
+                        className="cursor-pointer rounded-full border border-[#e9e9eb] px-3 py-1 text-[12.5px] font-medium text-[#3f3f46] hover:border-[#d4d4d8]"
                       >
                         {a.name}
                       </button>

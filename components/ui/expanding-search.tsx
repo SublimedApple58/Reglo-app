@@ -37,7 +37,7 @@ export function ExpandingSearch({
           animate={{ width, opacity: 1 }}
           exit={{ width: 34, opacity: 0, transition: { duration: 0.2, ease: [0.4, 0, 0.7, 0.2] } }}
           transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-          className="flex h-[38px] shrink-0 items-center gap-2 overflow-hidden rounded-full border-[1.5px] border-[#111111] bg-white px-3.5 shadow-[0_2px_8px_rgba(17, 17, 17,0.15)]"
+          className="flex h-[38px] shrink-0 items-center gap-2 overflow-hidden rounded-full bg-white px-3.5 shadow-clay-focus"
         >
           <Search className="size-[15px] shrink-0 text-[#111111]" strokeWidth={1.8} />
           <motion.div
@@ -74,7 +74,7 @@ export function ExpandingSearch({
           exit={{ opacity: 0, transition: { duration: 0.08 } }}
           transition={{ duration: 0.15, ease: "easeOut" }}
           onClick={() => onOpenChange(true)}
-          className="flex size-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+          className="flex size-[34px] shrink-0 cursor-pointer items-center justify-center rounded-full text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
         >
           <Search className="size-[17px]" strokeWidth={1.6} />
         </motion.button>

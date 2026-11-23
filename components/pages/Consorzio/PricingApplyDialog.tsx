@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { LoadingDots } from "@/components/ui/loading-dots";
+import { SELECTABLE_CARD, SELECTABLE_CARD_OFF, SELECTABLE_CARD_ON } from "@/components/ui/proto-styles";
 import type { PricingChange } from "@/lib/consorzio/pricing-change";
 import { cn } from "@/lib/utils";
 
@@ -104,10 +104,9 @@ function Option({
       aria-checked={active}
       onClick={onSelect}
       className={cn(
-        "flex w-full cursor-pointer items-start gap-3 rounded-[14px] border-[1.5px] p-4 text-left transition-colors",
-        active
-          ? "border-[#222222] bg-[#fafafa] shadow-[0_2px_10px_rgba(0,0,0,0.06)]"
-          : "border-[#dddddd] bg-white hover:border-[#bdbdbd] hover:bg-[#fafafa]",
+        SELECTABLE_CARD,
+        "flex w-full items-start gap-3 p-4",
+        active ? SELECTABLE_CARD_ON : SELECTABLE_CARD_OFF,
       )}
     >
       <span
@@ -242,22 +241,18 @@ export function PricingApplyDialog({
         <DialogFooter className="gap-2">
           <Button
             type="button"
-            variant="outline"
-            size="sm"
+            variant="ghost"
             disabled={saving}
             onClick={onCancel}
-            className="cursor-pointer"
           >
             Annulla
           </Button>
           <Button
             type="button"
-            size="sm"
-            disabled={saving}
+            loading={saving}
             onClick={() => onConfirm(applyTo)}
-            className="cursor-pointer"
           >
-            {saving ? <LoadingDots /> : "Salva le tariffe"}
+            Salva le tariffe
           </Button>
         </DialogFooter>
       </DialogContent>

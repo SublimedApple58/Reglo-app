@@ -11,6 +11,7 @@ import { companyAtom } from "@/atoms/company.store";
 import { roadApi, type RoadExamRoute } from "@/lib/autoscuole/road/client";
 import { groupExamRoutesByExaminer, NO_EXAMINER_KEY } from "@/lib/autoscuole/road/road-exam";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { Button } from "@/components/ui/button";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -142,7 +143,7 @@ export function RoadExamRoutesSection() {
                       onClick={() => setAssigning((cur) => (cur === r.id ? null : r.id))}
                       aria-expanded={assigning === r.id}
                       className={cn(
-                        "h-[34px] cursor-pointer rounded-[10px] px-2.5 text-[13.5px] font-semibold text-[#111111] transition-colors duration-200 hover:bg-[#f2f2f2]",
+                        "h-[34px] cursor-pointer rounded-full px-2.5 text-[13.5px] font-semibold text-[#111111] transition-colors duration-200 hover:bg-[#f2f2f2]",
                         assigning === r.id && "bg-[#f2f2f2]",
                       )}
                       data-testid="road-exam-assign"
@@ -165,7 +166,7 @@ export function RoadExamRoutesSection() {
             <Link
               href={`${editorBase}/${r.id}`}
               aria-label={`Modifica ${r.name}`}
-              className="grid size-[34px] place-items-center rounded-[10px] text-[#6a6a6a] transition-colors duration-200 hover:bg-[#f2f2f2] hover:text-[#111111]"
+              className="grid size-[34px] place-items-center rounded-full text-[#6a6a6a] transition-colors duration-200 hover:bg-[#f2f2f2] hover:text-[#111111]"
             >
               <Pencil className="size-4" strokeWidth={1.8} />
             </Link>
@@ -174,7 +175,7 @@ export function RoadExamRoutesSection() {
               aria-label={`Archivia ${r.name}`}
               disabled={Boolean(busy)}
               onClick={() => void act(r, "archive")}
-              className="grid size-[34px] cursor-pointer place-items-center rounded-[10px] text-[#6a6a6a] transition-colors duration-200 hover:bg-[#f2f2f2] hover:text-[#111111] disabled:cursor-default"
+              className="grid size-[34px] cursor-pointer place-items-center rounded-full text-[#6a6a6a] transition-colors duration-200 hover:bg-[#f2f2f2] hover:text-[#111111] disabled:cursor-default"
             >
               {busy === r.id ? <LoadingDots /> : <Archive className="size-4" strokeWidth={1.8} />}
             </button>
@@ -219,7 +220,7 @@ export function RoadExamRoutesSection() {
                 aria-label={`Ripristina ${r.name}`}
                 disabled={Boolean(busy)}
                 onClick={() => void act(r, "restore")}
-                className="flex h-[34px] cursor-pointer items-center gap-1.5 rounded-[10px] px-2.5 text-[13.5px] font-medium text-[#6a6a6a] transition-colors duration-200 hover:bg-[#f2f2f2] hover:text-[#111111] disabled:cursor-default"
+                className="flex h-[34px] cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[13.5px] font-medium text-[#6a6a6a] transition-colors duration-200 hover:bg-[#f2f2f2] hover:text-[#111111] disabled:cursor-default"
               >
                 {busy === r.id ? <LoadingDots /> : <RotateCcw className="size-4" strokeWidth={1.8} />}
                 <span className="hidden sm:inline">Ripristina</span>
@@ -343,7 +344,7 @@ function AssignExaminers({
         onKeyDown={(e) => e.key === "Enter" && void save()}
         maxLength={80}
         placeholder="Scrivi un nome…"
-        className="mt-3 h-[42px] w-full rounded-xl border border-[#dcdcdc] px-3 text-[14px] text-[#111111] outline-none transition-colors duration-200 placeholder:text-[#9a9a9a] focus:border-[#111111]"
+        className="mt-3 h-[42px] w-full rounded-[14px] border-0 bg-white px-3 text-[14px] text-[#111111] shadow-clay-sink outline-none transition-shadow duration-200 placeholder:text-[#9a9a9a] focus:shadow-clay-focus"
       />
       {known.length ? (
         <>
@@ -365,21 +366,25 @@ function AssignExaminers({
         </>
       ) : null}
       <div className="mt-3 flex justify-end gap-2">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="bare"
           onClick={onClose}
-          className="h-[34px] cursor-pointer rounded-[17px] px-3.5 text-[13.5px] font-semibold text-[#111111] shadow-[0_0_0_1px_#e3e3e3] transition-colors duration-200 hover:bg-[#f6f6f6]"
+          className="h-[34px] px-3.5 text-[13.5px] font-semibold"
         >
           Annulla
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          size="bare"
           onClick={() => void save()}
-          disabled={saving || (!picked.length && !typed.trim())}
-          className="flex h-[34px] min-w-[64px] cursor-pointer items-center justify-center rounded-[17px] bg-[#111111] px-3.5 text-[13.5px] font-semibold text-white transition-colors duration-200 hover:bg-[#2a2a2a] disabled:cursor-default disabled:opacity-50"
+          disabled={!picked.length && !typed.trim()}
+          loading={saving}
+          className="h-[34px] min-w-[64px] px-3.5 text-[13.5px]"
         >
-          {saving ? <LoadingDots /> : "Salva"}
-        </button>
+          Salva
+        </Button>
       </div>
     </div>
   );

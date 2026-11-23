@@ -258,7 +258,7 @@ export function InstructorPublicationEditor({
               type="button"
               onClick={() => setSelWeek(w)}
               className={cn(
-                "shrink-0 rounded-2xl border px-3 py-2 text-left transition-colors",
+                "shrink-0 rounded-full border px-3.5 py-2 text-left transition-colors",
                 sel
                   ? "border-[#111111] bg-[#111111]"
                   : pub
@@ -390,7 +390,7 @@ export function InstructorPublicationEditor({
                               />
                             ) : null}
                             {draftRanges.length > 1 && (
-                              <button type="button" aria-label="Rimuovi fascia" onClick={() => setDraftRanges((prev) => prev.filter((_, xi) => xi !== ri))} className="flex size-6 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-500">
+                              <button type="button" aria-label="Rimuovi fascia" onClick={() => setDraftRanges((prev) => prev.filter((_, xi) => xi !== ri))} className="flex size-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-500">
                                 ×
                               </button>
                             )}

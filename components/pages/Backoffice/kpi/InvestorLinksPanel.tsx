@@ -11,7 +11,7 @@ import {
 } from "@/lib/actions/investor-links.actions";
 import { Input } from "@/components/ui/input";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { LoadingDots } from "@/components/ui/loading-dots";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -101,15 +101,17 @@ export function InvestorLinksPanel() {
           placeholder="Per chi è questo link (es. Studio Rossi)"
           className="h-10 w-full max-w-[320px]"
         />
-        <button
+        <Button
           type="button"
+          size="bare"
           onClick={() => void create()}
-          disabled={!label.trim() || creating}
-          className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-[#111111] px-3.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-default disabled:opacity-40"
+          loading={creating}
+          disabled={!creating && !label.trim()}
+          className="h-10 px-4 text-[13px]"
         >
-          {creating ? <LoadingDots className="text-white" /> : <Plus className="size-4" strokeWidth={2.5} />}
+          <Plus className="size-4" strokeWidth={2.5} />
           Crea link
-        </button>
+        </Button>
       </div>
 
       <div className="mt-5">
@@ -166,10 +168,12 @@ export function InvestorLinksPanel() {
 
                   {!dead && (
                     <div className="flex shrink-0 items-center gap-1.5">
-                      <button
+                      <Button
                         type="button"
+                        variant="outline"
+                        size="bare"
                         onClick={() => void copy(link)}
-                        className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-white px-3 text-[12.5px] font-semibold text-foreground transition-colors hover:border-[#929292]"
+                        className="h-9 gap-1.5 px-3.5 text-[12.5px]"
                       >
                         {copiedId === link.id ? (
                           <>
@@ -182,14 +186,14 @@ export function InvestorLinksPanel() {
                             Copia
                           </>
                         )}
-                      </button>
+                      </Button>
                       {/* Conferma inline a due passi: niente window.confirm. */}
                       {confirmRevokeId === link.id ? (
                         <>
                           <button
                             type="button"
                             onClick={() => void revoke(link)}
-                            className="inline-flex h-9 cursor-pointer items-center rounded-lg bg-[#b42318] px-3 text-[12.5px] font-semibold text-white transition-opacity hover:opacity-90"
+                            className="inline-flex h-9 cursor-pointer items-center rounded-full bg-[#b42318] px-3.5 text-[12.5px] font-semibold text-white transition-opacity hover:opacity-90"
                           >
                             Conferma
                           </button>
@@ -197,7 +201,7 @@ export function InvestorLinksPanel() {
                             type="button"
                             onClick={() => setConfirmRevokeId(null)}
                             aria-label="Annulla"
-                            className="inline-flex size-9 cursor-pointer items-center justify-center rounded-lg text-[#9a9a9a] transition-colors hover:bg-[#f7f7f7]"
+                            className="inline-flex size-9 cursor-pointer items-center justify-center rounded-full text-[#9a9a9a] transition-colors hover:bg-[#f7f7f7]"
                           >
                             <X className="size-4" strokeWidth={2} />
                           </button>
@@ -206,7 +210,7 @@ export function InvestorLinksPanel() {
                         <button
                           type="button"
                           onClick={() => setConfirmRevokeId(link.id)}
-                          className="inline-flex h-9 cursor-pointer items-center rounded-lg px-3 text-[12.5px] font-semibold text-[#9a9a9a] transition-colors hover:bg-[#f7f7f7] hover:text-[#b42318]"
+                          className="inline-flex h-9 cursor-pointer items-center rounded-full px-3.5 text-[12.5px] font-semibold text-[#9a9a9a] transition-colors hover:bg-[#f7f7f7] hover:text-[#b42318]"
                         >
                           Revoca
                         </button>

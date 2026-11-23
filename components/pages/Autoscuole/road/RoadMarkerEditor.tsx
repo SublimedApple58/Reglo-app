@@ -104,7 +104,7 @@ export function RoadMarkerEditor({
         </button>
       </div>
 
-      <div className="mt-3.5 flex rounded-xl bg-[#f2f2f2] p-[3px]" role="radiogroup" aria-label="Giudizio">
+      <div className="mt-3.5 flex rounded-full bg-white p-[3px] shadow-clay-sink" role="radiogroup" aria-label="Giudizio">
         {(
           [
             ["bad", "Da migliorare"],
@@ -121,8 +121,8 @@ export function RoadMarkerEditor({
               disabled={Boolean(busy)}
               onClick={() => !on && void patch("sentiment", { sentiment: v })}
               className={cn(
-                "flex h-9 flex-1 cursor-pointer items-center justify-center rounded-[9px] text-[13.5px] font-medium transition-colors duration-200",
-                on ? "bg-[#111111] font-semibold text-white" : "text-[#3a3a3c] hover:text-[#111111]",
+                "flex h-9 flex-1 cursor-pointer items-center justify-center rounded-full text-[13.5px] font-medium transition-colors duration-200",
+                on ? "bg-[#1e1e1e] font-semibold text-white shadow-clay-ink-sm" : "text-[#3a3a3c] hover:text-[#111111]",
               )}
             >
               {busy === "sentiment" && !on ? <LoadingDots /> : label}
@@ -139,7 +139,7 @@ export function RoadMarkerEditor({
         value={marker.kind}
         disabled={Boolean(busy)}
         onChange={(e) => void patch("kind", { kind: e.target.value })}
-        className="mt-1.5 h-[42px] w-full cursor-pointer rounded-xl border border-[#dcdcdc] bg-white px-3 text-[14px] text-[#111111] outline-none transition-colors duration-200 focus:border-[#111111]"
+        className="mt-1.5 h-[42px] w-full cursor-pointer rounded-[14px] border-0 bg-white px-3 text-[14px] text-[#111111] shadow-clay-sink outline-none transition-shadow duration-200 focus:shadow-clay-focus"
       >
         {kinds.map((k) => (
           <option key={k.value} value={k.value}>
@@ -160,12 +160,12 @@ export function RoadMarkerEditor({
         onBlur={saveNote}
         placeholder="Aggiungi una nota"
         rows={2}
-        className="mt-1.5 w-full resize-none rounded-xl border border-[#dcdcdc] bg-white px-3 py-2.5 text-[14px] text-[#111111] outline-none transition-colors duration-200 placeholder:text-[#9a9a9a] focus:border-[#111111]"
+        className="mt-1.5 w-full resize-none rounded-[14px] border-0 bg-white px-3 py-2.5 text-[14px] text-[#111111] shadow-clay-sink outline-none transition-shadow duration-200 placeholder:text-[#9a9a9a] focus:shadow-clay-focus"
       />
 
       {/* R7: punto o tratto della strada percorsa (Tiziano 10/11/2026). */}
       <span className="mt-3.5 block text-[12.5px] font-semibold text-[#6a6a6a]">Dove</span>
-      <div className="mt-1.5 flex rounded-xl bg-[#f2f2f2] p-[3px]" role="radiogroup" aria-label="Punto o tratto">
+      <div className="mt-1.5 flex rounded-full bg-white p-[3px] shadow-clay-sink" role="radiogroup" aria-label="Punto o tratto">
         {([null, 50, 100, 200] as const).map((v) => {
           const on = (marker.extentM ?? null) === v;
           return (
@@ -177,8 +177,8 @@ export function RoadMarkerEditor({
               disabled={Boolean(busy)}
               onClick={() => !on && void patch("extent", { extentM: v })}
               className={cn(
-                "flex h-9 flex-1 cursor-pointer items-center justify-center rounded-[9px] text-[13.5px] font-medium transition-colors duration-200",
-                on ? "bg-[#111111] font-semibold text-white" : "text-[#3a3a3c] hover:text-[#111111]",
+                "flex h-9 flex-1 cursor-pointer items-center justify-center rounded-full text-[13.5px] font-medium transition-colors duration-200",
+                on ? "bg-[#1e1e1e] font-semibold text-white shadow-clay-ink-sm" : "text-[#3a3a3c] hover:text-[#111111]",
               )}
             >
               {busy === "extent" && !on ? <LoadingDots /> : v == null ? "Punto" : `${v} m`}
@@ -194,7 +194,7 @@ export function RoadMarkerEditor({
           disabled={Boolean(busy)}
           aria-pressed={moving}
           className={cn(
-            "flex h-9 cursor-pointer items-center gap-2 rounded-[18px] border px-3.5 text-[13.5px] font-semibold transition-colors duration-200",
+            "flex h-9 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-[13.5px] font-semibold transition-colors duration-200",
             moving ? "border-[#111111] bg-[#111111] text-white" : "border-[#dcdcdc] text-[#111111] hover:bg-[#f6f6f6]",
           )}
         >

@@ -207,9 +207,9 @@ export function FinanceMovementsPage({
                 setCategoryId("all");
               }}
               className={cn(
-                "cursor-pointer rounded-[9px] px-3 py-1.5 text-sm",
+                "cursor-pointer rounded-full px-3 py-1.5 text-sm transition-colors duration-200",
                 direction === value
-                  ? "bg-white font-semibold text-[#111111] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                  ? "bg-[#1e1e1e] font-semibold text-white shadow-clay-ink-sm"
                   : "text-[#71717a] hover:text-[#111111]",
               )}
             >
@@ -243,7 +243,7 @@ export function FinanceMovementsPage({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Cerca descrizione, autoscuola, fattura"
-            className="h-10 w-full rounded-xl border border-[#e9e9eb] bg-white pl-9 pr-3 text-sm outline-none placeholder:text-[#a1a1aa] focus:border-[#111111]"
+            className="h-10 w-full rounded-full border-0 bg-white pl-9 pr-3 text-sm shadow-clay-sink outline-none transition-shadow duration-200 placeholder:text-[#a1a1aa] focus:shadow-clay-focus"
           />
         </div>
       </div>
@@ -340,7 +340,7 @@ export function FinanceMovementsPage({
                           ev.stopPropagation();
                           settle(e);
                         }}
-                        className="cursor-pointer whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-[#111111] opacity-0 underline-offset-2 transition-opacity hover:underline group-hover:opacity-100"
+                        className="cursor-pointer whitespace-nowrap rounded-full px-1.5 py-0.5 text-[11px] font-semibold text-[#111111] opacity-0 underline-offset-2 transition-opacity hover:underline group-hover:opacity-100"
                       >
                         {e.direction === "in" ? "Incassato" : "Pagato"} ✓
                       </button>

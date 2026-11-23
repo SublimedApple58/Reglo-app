@@ -479,14 +479,16 @@ export function ConsorzioSchoolDetailPage({ schoolId }: { schoolId: string }) {
                 ]}
               />
             )}
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="bare"
               onClick={() => setAddStudentOpen(true)}
-              className="flex cursor-pointer items-center gap-1.5 rounded-full border border-[#dddddd] bg-white px-4 py-[9px] text-[14px] font-semibold text-[#222222] transition-colors hover:bg-[#f7f7f7]"
+              className="gap-1.5 px-4 py-[10px] text-[14px]"
             >
               <Plus className="h-4 w-4" />
               Aggiungi allievo
-            </button>
+            </Button>
           </div>
         </div>
 

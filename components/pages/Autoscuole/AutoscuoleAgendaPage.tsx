@@ -97,6 +97,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { SELECTABLE_CARD, SELECTABLE_CARD_OFF, SELECTABLE_CARD_ON } from "@/components/ui/proto-styles";
 import {
   FollowCarConflictPane,
   countCreatable,
@@ -155,7 +156,6 @@ import { ExpandingSearch } from "@/components/ui/expanding-search";
 import { LockedToolbarTip } from "@/components/pages/Autoscuole/locked/LockedToolbarTip";
 import { LockedPlusItem, type PlusTipKey } from "@/components/pages/Autoscuole/locked/LockedPlusTip";
 import { ToolbarFilters } from "./filters/ToolbarFilters";
-import { LoadingDots } from "@/components/ui/loading-dots";
 import {
   OutOfAvailabilitySheet,
   type OutOfAvailabilityAppointment,
@@ -843,7 +843,7 @@ export function StudentSearchSelect({
     <div className="relative">
       <input
         ref={inputRef}
-        className="h-11 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none transition focus:border-primary"
+        className="h-11 w-full rounded-[14px] border-0 bg-white px-3.5 text-sm font-medium shadow-clay-sink outline-none transition-colors duration-200 placeholder:text-[#b0b0b0] focus:shadow-clay-focus"
         placeholder={placeholder}
         value={open ? query : selected ? formatStudentName(selected, nameOrder) : query}
         onChange={(e) => {
@@ -4255,7 +4255,7 @@ export function AutoscuoleAgendaPage({
               type="button"
               title="Legenda"
               onClick={() => setLegendOpen(true)}
-              className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+              className="flex size-[34px] shrink-0 cursor-pointer items-center justify-center rounded-full text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
             >
               <Info className="size-4" strokeWidth={1.6} />
             </button>
@@ -4273,7 +4273,7 @@ export function AutoscuoleAgendaPage({
                 <button
                   type="button"
                   title="Visualizzazione"
-                  className="relative flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+                  className="relative flex size-[34px] shrink-0 cursor-pointer items-center justify-center rounded-full text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
                 >
                   <LayoutGrid className="size-4" strokeWidth={1.6} />
                   {(viewPrefs.days.length < 7 || viewPrefs.startHour !== 0 || viewPrefs.endHour !== 24 || viewPrefs.weekMode !== "classic" || columnsByVehicle) && (
@@ -4296,7 +4296,7 @@ export function AutoscuoleAgendaPage({
                     {consortium && (
                       <div className="space-y-2">
                         <div className="text-[12.5px] font-semibold text-foreground">Visualizza per</div>
-                        <div className="flex gap-1.5">
+                        <div className="flex gap-1 rounded-full bg-white p-[3px] shadow-clay-sink">
                           {([
                             { key: "instructor", label: "Istruttori" },
                             { key: "vehicle", label: "Veicoli" },
@@ -4308,8 +4308,8 @@ export function AutoscuoleAgendaPage({
                                 type="button"
                                 onClick={() => setViewPrefs((p) => ({ ...p, columnsBy: opt.key }))}
                                 className={cn(
-                                  "h-8 flex-1 cursor-pointer rounded-lg px-2 text-[12px] font-semibold transition-colors",
-                                  on ? "bg-[#111111] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
+                                  "h-7 flex-1 cursor-pointer rounded-full px-2 text-[12px] font-semibold transition-colors duration-200 ease-out",
+                                  on ? "bg-[#1e1e1e] text-white shadow-clay-ink-sm" : "text-[#6a6a6a] hover:bg-[#f2f2f2]",
                                 )}
                               >
                                 {opt.label}
@@ -4326,7 +4326,7 @@ export function AutoscuoleAgendaPage({
                     )}
                     <div className="space-y-2">
                       <div className="text-[12.5px] font-semibold text-foreground">Settimana</div>
-                      <div className="flex gap-1.5">
+                      <div className="flex gap-1 rounded-full bg-white p-[3px] shadow-clay-sink">
                         {([
                           { key: "classic", label: "Classica (lun–dom)" },
                           { key: "rolling", label: "7 giorni da oggi" },
@@ -4341,8 +4341,8 @@ export function AutoscuoleAgendaPage({
                                 setWeekStart(weekAnchor(new Date(), opt.key));
                               }}
                               className={cn(
-                                "h-8 flex-1 cursor-pointer rounded-lg px-2 text-[12px] font-semibold transition-colors",
-                                on ? "bg-[#111111] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
+                                "h-7 flex-1 cursor-pointer rounded-full px-2 text-[12px] font-semibold transition-colors duration-200 ease-out",
+                                on ? "bg-[#1e1e1e] text-white shadow-clay-ink-sm" : "text-[#6a6a6a] hover:bg-[#f2f2f2]",
                               )}
                             >
                               {opt.label}
@@ -4372,7 +4372,7 @@ export function AutoscuoleAgendaPage({
                                 })
                               }
                               className={cn(
-                                "h-8 min-w-[44px] cursor-pointer rounded-lg px-2.5 text-[12.5px] font-semibold transition-colors",
+                                "h-8 min-w-[44px] cursor-pointer rounded-full px-2.5 text-[12.5px] font-semibold transition-colors",
                                 on ? "bg-[#111111] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
                               )}
                             >
@@ -4405,16 +4405,18 @@ export function AutoscuoleAgendaPage({
                       </div>
                     </div>
                     <div className="flex items-center justify-end border-t border-[#f0f0f0] pt-3">
-                      <button
+                      <Button
                         type="button"
-                        className="cursor-pointer text-[13px] font-semibold text-[#111111] underline underline-offset-2 hover:opacity-70"
+                        variant="ghost"
+                        size="sm"
+                        className="text-[13px] font-semibold"
                         onClick={() => {
                           setViewPrefs(DEFAULT_VIEW_PREFS);
                           setWeekStart(weekAnchor(new Date(), DEFAULT_VIEW_PREFS.weekMode));
                         }}
                       >
                         Ripristina
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </PopoverPrimitive.Content>
@@ -4424,19 +4426,19 @@ export function AutoscuoleAgendaPage({
 
           {/* Zoom verticale: altezza righe orarie, persistito (vista normale + fullscreen) */}
           {source?.toolbarLocked ? (
-            <LockedToolbarTip tip="zoom" className="gap-1 rounded-lg border border-[#eeeeee] px-2">
+            <LockedToolbarTip tip="zoom" className="gap-1 rounded-full border border-[#eeeeee] px-2">
               <ZoomOut className="size-4" strokeWidth={1.7} />
               <span className="select-none text-[12px] font-semibold tabular-nums">100%</span>
               <ZoomIn className="size-4" strokeWidth={1.7} />
             </LockedToolbarTip>
           ) : (
-          <div className="flex h-[34px] shrink-0 items-center gap-0.5 rounded-lg border border-[#eeeeee] px-1">
+          <div className="flex h-[34px] shrink-0 items-center gap-0.5 rounded-full border border-[#eeeeee] px-1">
             <button
               type="button"
               title="Riduci altezza righe (agenda più compatta)"
               onClick={() => setAgendaZoom((z) => z - AGENDA_ZOOM_STEP)}
               disabled={agendaZoom <= AGENDA_ZOOM_MIN}
-              className="flex size-7 cursor-pointer items-center justify-center rounded-md text-[#555] transition-colors hover:bg-[#f2f2f2] disabled:cursor-default disabled:opacity-40"
+              className="flex size-7 cursor-pointer items-center justify-center rounded-full text-[#555] transition-colors hover:bg-[#f2f2f2] disabled:cursor-default disabled:opacity-40"
             >
               <ZoomOut className="size-4" strokeWidth={1.7} />
             </button>
@@ -4448,7 +4450,7 @@ export function AutoscuoleAgendaPage({
               title="Aumenta altezza righe"
               onClick={() => setAgendaZoom((z) => z + AGENDA_ZOOM_STEP)}
               disabled={agendaZoom >= AGENDA_ZOOM_MAX}
-              className="flex size-7 cursor-pointer items-center justify-center rounded-md text-[#555] transition-colors hover:bg-[#f2f2f2] disabled:cursor-default disabled:opacity-40"
+              className="flex size-7 cursor-pointer items-center justify-center rounded-full text-[#555] transition-colors hover:bg-[#f2f2f2] disabled:cursor-default disabled:opacity-40"
             >
               <ZoomIn className="size-4" strokeWidth={1.7} />
             </button>
@@ -4465,7 +4467,7 @@ export function AutoscuoleAgendaPage({
               type="button"
               title={isAgendaFullscreen ? "Esci da schermo intero" : "Schermo intero"}
               onClick={toggleAgendaFullscreen}
-              className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+              className="flex size-[34px] shrink-0 cursor-pointer items-center justify-center rounded-full text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
             >
               {isAgendaFullscreen ? <Minimize2 className="size-4" strokeWidth={1.6} /> : <Maximize2 className="size-4" strokeWidth={1.6} />}
             </button>
@@ -4481,7 +4483,7 @@ export function AutoscuoleAgendaPage({
               type="button"
               title="Stampa agenda"
               onClick={() => setPrintOpen(true)}
-              className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+              className="flex size-[34px] shrink-0 cursor-pointer items-center justify-center rounded-full text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
             >
               <Printer className="size-4" strokeWidth={1.6} />
             </button>
@@ -4563,14 +4565,17 @@ export function AutoscuoleAgendaPage({
           <div>
             <DropdownMenu open={plusMenuOpen} onOpenChange={setPlusMenuOpen}>
               <DropdownMenuTrigger asChild>
-                <button
+                {/* REG-776: la CTA dell'agenda è un Button come le altre (capsula nera con volume). */}
+                <Button
                   type="button"
+                  size="bare"
                   ref={plusBtnRef}
                   title="Inserisci a mano"
-                  className="flex size-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-navy-900 text-white transition-colors hover:bg-navy-800"
+                  aria-label="Inserisci a mano"
+                  className="size-[38px]"
                 >
                   <Plus className="size-[18px]" strokeWidth={2.2} />
-                </button>
+                </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52 rounded-[12px] shadow-dropdown">
                 {source?.menu ? (
@@ -6293,50 +6298,41 @@ export function AutoscuoleAgendaPage({
         footer={
           conflictStep ? (
             <>
-              <button
-                type="button"
-                className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50"
-                disabled={creating}
-                onClick={closeConflictStep}
-              >
+              <Button type="button" variant="ghost" disabled={creating} onClick={closeConflictStep}>
                 Indietro
-              </button>
+              </Button>
               <div className="flex items-center gap-2.5">
                 {/* Senza nemmeno una data libera la scorciatoia non ha senso:
                     "Crea solo le 0 libere" e' un pulsante che non fa niente. */}
                 {conflictStep.freeCount > 0 ? (
-                  <button
+                  <Button
                     type="button"
+                    variant="outline"
                     disabled={creating}
                     onClick={() => handleConflictConfirm(true)}
-                    className="cursor-pointer rounded-[10px] border border-[#dddddd] bg-white px-4 py-2.5 text-[13.5px] font-semibold text-[#555555] transition-colors hover:border-[#929292] disabled:opacity-40"
                   >
                     {`Crea solo le ${conflictStep.freeCount} liber${conflictStep.freeCount === 1 ? "a" : "e"}`}
-                  </button>
+                  </Button>
                 ) : null}
-                <button
+                <Button
                   type="button"
-                  disabled={creating || conflictPending > 0 || conflictKeptCount === 0}
+                  loading={creating}
+                  disabled={conflictPending > 0 || conflictKeptCount === 0}
                   onClick={() => handleConflictConfirm(false)}
-                  className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
                 >
-                  {creating ? (
-                    <LoadingDots className="min-h-5" />
-                  ) : (
-                    `Crea ${conflictCreatableCount} guid${conflictCreatableCount === 1 ? "a" : "e"}`
-                  )}
-                </button>
+                  {`Crea ${conflictCreatableCount} guid${conflictCreatableCount === 1 ? "a" : "e"}`}
+                </Button>
               </div>
             </>
           ) : (
           <>
-            <button type="button" className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50" disabled={creating} onClick={() => setCreateOpen(false)}>
+            <Button type="button" variant="ghost" disabled={creating} onClick={() => setCreateOpen(false)}>
               Annulla
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              loading={creating}
               disabled={
-                creating ||
                 !form.studentId ||
                 !form.instructorId ||
                 (vehiclesEnabled && !form.vehicleId) ||
@@ -6346,16 +6342,9 @@ export function AutoscuoleAgendaPage({
                   : !form.day || !form.time)
               }
               onClick={() => (multiMode ? handleCreateBatch() : handleCreate())}
-              className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
             >
-              {creating ? (
-                <LoadingDots className="min-h-5" />
-              ) : multiMode ? (
-                `Crea ${entries.length} guid${entries.length === 1 ? "a" : "e"}`
-              ) : (
-                "Crea guida"
-              )}
-            </button>
+              {multiMode ? `Crea ${entries.length} guid${entries.length === 1 ? "a" : "e"}` : "Crea guida"}
+            </Button>
           </>
           )
         }
@@ -6392,7 +6381,7 @@ export function AutoscuoleAgendaPage({
               Giorno/Orario/Durata lasciano il posto alla lista delle guide;
               tutto il resto del form resta condiviso fra tutte. */}
           <div
-            className="flex cursor-pointer items-center justify-between gap-3 rounded-[10px] bg-[#f8f8f8] px-3.5 py-2.5"
+            className="flex cursor-pointer items-center justify-between gap-3 rounded-[14px] bg-[#f7f7f7] px-3.5 py-2.5"
             onClick={() => setMulti(!multiMode)}
           >
             <span className="flex min-w-0 items-center gap-2.5">
@@ -6442,7 +6431,7 @@ export function AutoscuoleAgendaPage({
                   key={entry.id}
                   data-testid="multi-entry"
                   className={cn(
-                    "rounded-[10px] border bg-white p-2.5 transition-colors",
+                    "rounded-[14px] border bg-white p-2.5 transition-colors",
                     overlappingEntryIds.has(entry.id) ? "border-[#C13515] bg-[#FFF8F7]" : "border-[#dddddd]",
                   )}
                 >
@@ -6459,7 +6448,7 @@ export function AutoscuoleAgendaPage({
                         type="button"
                         aria-label={`Rimuovi la guida ${idx + 1}`}
                         onClick={() => setEntries((prev) => prev.filter((e) => e.id !== entry.id))}
-                        className="cursor-pointer rounded-md p-1 text-[#929292] transition-colors hover:bg-[#FFF1F0] hover:text-[#C13515]"
+                        className="flex size-7 cursor-pointer items-center justify-center rounded-full text-[#929292] transition-colors hover:bg-[#FFF1F0] hover:text-[#C13515]"
                       >
                         <Trash2 className="size-3.5" />
                       </button>
@@ -6493,7 +6482,7 @@ export function AutoscuoleAgendaPage({
                       onChange={(e) => updateEntry(entry.id, { notes: e.target.value })}
                       placeholder={form.notes.trim() ? `Nota comune: ${form.notes.trim()}` : "Nota per questa guida"}
                       className={cn(
-                        "h-8 w-full rounded-[8px] border pl-7 pr-2.5 text-[12px] text-[#222222] outline-none transition-[border-color,background-color,box-shadow] placeholder:truncate placeholder:text-[#a8a8a8] focus:border-[#222222] focus:bg-white focus:shadow-[0_0_0_3px_rgba(0,0,0,0.06)]",
+                        "h-8 w-full rounded-full border pl-7 pr-2.5 text-[12px] text-[#222222] outline-none transition-[border-color,background-color,box-shadow] placeholder:truncate placeholder:text-[#a8a8a8] focus:border-[#222222] focus:bg-white focus:shadow-[0_0_0_3px_rgba(0,0,0,0.06)]",
                         entry.notes?.trim() ? "border-[#cfcfcf] bg-white font-medium" : "border-transparent bg-[#f5f5f5] hover:bg-[#efefef]",
                       )}
                     />
@@ -6510,7 +6499,7 @@ export function AutoscuoleAgendaPage({
                 <button
                   type="button"
                   onClick={addEntry}
-                  className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-[#dddddd] px-3 py-2 text-[12px] font-semibold text-[#555555] transition-colors hover:border-[#929292] hover:text-[#222222]"
+                  className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full border border-dashed border-[#dddddd] px-3 py-2 text-[12px] font-semibold text-[#555555] transition-colors hover:border-[#929292] hover:text-[#222222]"
                 >
                   <Plus className="size-3.5" />
                   Aggiungi guida
@@ -6534,7 +6523,7 @@ export function AutoscuoleAgendaPage({
                       createVehicleTouchedRef.current = false;
                       setForm((prev) => ({ ...prev, bookingMode: opt.value, studentId: "", vehicleId: "", followVehicleId: "", extraMotoVehicleIds: [], motoLessonType: null }));
                     }}
-                      className={cn("flex cursor-pointer items-center gap-2 rounded-[10px] border-[1.5px] px-3 py-2 text-left transition-colors", active ? "border-[#222222] bg-[#f7f7f7]" : "border-[#dddddd] hover:border-[#929292]")}>
+                      className={cn(SELECTABLE_CARD, "flex items-center gap-2 px-3 py-2", active ? SELECTABLE_CARD_ON : SELECTABLE_CARD_OFF)}>
                       <Icon className={cn("size-4 shrink-0", active ? "text-[#222222]" : "text-[#929292]")} />
                       <span className="flex min-w-0 items-baseline gap-1.5">
                         <span className="text-sm font-semibold text-[#222222]">{opt.label}</span>
@@ -6556,7 +6545,7 @@ export function AutoscuoleAgendaPage({
                   return (
                     <button key={value} type="button"
                       onClick={() => setForm((prev) => ({ ...prev, motoLessonType: active ? null : value }))}
-                      className={cn("flex cursor-pointer items-center gap-2 rounded-[10px] border-[1.5px] px-3 py-2 text-left transition-colors", active ? "border-[#222222] bg-[#f7f7f7]" : "border-[#dddddd] hover:border-[#929292]")}>
+                      className={cn(SELECTABLE_CARD, "flex items-center gap-2 px-3 py-2", active ? SELECTABLE_CARD_ON : SELECTABLE_CARD_OFF)}>
                       <Icon className={cn("size-4 shrink-0", active ? "text-[#222222]" : "text-[#929292]")} />
                       <span className="flex min-w-0 flex-col">
                         <span className="text-sm font-semibold text-[#222222]">{MOTO_LESSON_TYPE_LABELS[value]}</span>
@@ -7305,7 +7294,7 @@ export function AutoscuoleAgendaPage({
                         value={examDraftInstructorId ?? "__none__"}
                         onValueChange={(v) => setExamDraftInstructorId(v === "__none__" ? null : v)}
                       >
-                        <SelectTrigger className="h-auto w-full rounded-lg border-[1.5px] border-[#dddddd] px-3.5 py-[11px]" disabled={examPanelPending}>
+                        <SelectTrigger className="h-auto w-full rounded-[14px] border-0 bg-white px-3.5 py-[11px] shadow-clay-sink focus-visible:shadow-clay-focus data-[state=open]:shadow-clay-focus" disabled={examPanelPending}>
                           <SelectValue placeholder="Nessuno" />
                         </SelectTrigger>
                         <SelectContent>
@@ -7453,7 +7442,7 @@ export function AutoscuoleAgendaPage({
                       maxLength={2000}
                       disabled={examPanelPending}
                       placeholder="Es: Esame pratico patente B, sede Motorizzazione…"
-                      className="w-full resize-y rounded-lg border-[1.5px] border-[#dddddd] px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222] disabled:opacity-60"
+                      className="w-full resize-y rounded-[14px] border-0 bg-white px-3.5 py-2.5 text-sm font-medium text-foreground shadow-clay-sink outline-none transition-shadow duration-200 placeholder:text-[#c1c1c1] focus:shadow-clay-focus disabled:opacity-60"
                     />
                   </div>
                 </div>
@@ -7524,7 +7513,7 @@ export function AutoscuoleAgendaPage({
                           />
                         </div>
                       )}
-                      <div className="mt-3 flex items-center gap-2.5 rounded-lg border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+                      <div className="mt-3 flex items-center gap-2.5 rounded-[14px] bg-white px-3.5 shadow-clay-sink transition-shadow duration-200 focus-within:shadow-clay-focus">
                         <Search className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
                         <input
                           value={examPanelStudentSearch}
@@ -7639,7 +7628,7 @@ export function AutoscuoleAgendaPage({
                   />
                 </div>
               )}
-              <div className="mt-3 flex items-center gap-2.5 rounded-lg border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+              <div className="mt-3 flex items-center gap-2.5 rounded-[14px] bg-white px-3.5 shadow-clay-sink transition-shadow duration-200 focus-within:shadow-clay-focus">
                 <Search className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
                 <input
                   value={examStudentSearch}
@@ -7773,7 +7762,7 @@ export function AutoscuoleAgendaPage({
             )}
           </div>
           <div
-            className="flex cursor-pointer items-center justify-between rounded-[10px] bg-[#f8f8f8] px-3.5 py-2.5"
+            className="flex cursor-pointer items-center justify-between rounded-[14px] bg-[#f7f7f7] px-3.5 py-2.5"
             onClick={() => setExamForm((f) => ({ ...f, timeSet: !f.timeSet }))}
           >
             <span className="text-[13px] font-medium text-[#555555]">{examForm.timeSet ? "Orario specificato" : "Orario da definire"}</span>
@@ -7888,9 +7877,9 @@ export function AutoscuoleAgendaPage({
         anchor={popoverAnchor}
         footer={
           <>
-            <button type="button" className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50" disabled={blockCreating} onClick={() => { setBlockDialogOpen(false); setBlockEditId(null); }}>
+            <Button type="button" variant="ghost" disabled={blockCreating} onClick={() => { setBlockDialogOpen(false); setBlockEditId(null); }}>
               Annulla
-            </button>
+            </Button>
             <Button
               type="button"
               size="bare"
@@ -8013,7 +8002,7 @@ export function AutoscuoleAgendaPage({
           {!blockEditId && (
             <div className="space-y-2">
               <div
-                className="flex cursor-pointer items-center justify-between rounded-[10px] bg-[#f8f8f8] px-3.5 py-2.5"
+                className="flex cursor-pointer items-center justify-between rounded-[14px] bg-[#f7f7f7] px-3.5 py-2.5"
                 onClick={() => setBlockForm((f) => ({ ...f, recurring: !f.recurring }))}
               >
                 <span className="text-[13px] font-medium text-[#555555]">Evento ricorrente</span>

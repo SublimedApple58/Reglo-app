@@ -10,10 +10,10 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { InlineToggle } from "@/components/ui/inline-toggle";
-import { LoadingDots } from "@/components/ui/loading-dots";
 import { cn } from "@/lib/utils";
 import { useStudentNameOrder } from "@/components/pages/Autoscuole/student-name-order-context";
 import { formatStoredName } from "@/lib/autoscuole/student-name-order";
+import { SELECTABLE_CARD, SELECTABLE_CARD_ON, SELECTABLE_CARD_OFF } from "@/components/ui/proto-styles";
 
 /**
  * Dialogo unico "Annulla / Rimuovi guida", context-aware.
@@ -87,8 +87,9 @@ function OptionRow({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex w-full items-start gap-3 rounded-[12px] border p-3 text-left transition-colors",
-        selected ? "border-foreground bg-[#fafafb]" : "border-[#ececf1] hover:border-[#d6d6de]",
+        SELECTABLE_CARD,
+        "flex w-full items-start gap-3 p-3",
+        selected ? SELECTABLE_CARD_ON : SELECTABLE_CARD_OFF,
       )}
     >
       <span
@@ -183,10 +184,11 @@ export function CancelAppointmentDialog({
       </Button>
       <Button
         onClick={onConfirm}
-        disabled={busy || disabled}
+        disabled={disabled}
+        loading={busy}
         className={danger ? "bg-[#dc2626] text-white hover:bg-[#b91c1c]" : undefined}
       >
-        {busy ? <LoadingDots className="scale-[0.6]" /> : confirmLabel}
+        {confirmLabel}
       </Button>
     </DialogFooter>
   );

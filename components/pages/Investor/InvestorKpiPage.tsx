@@ -329,7 +329,7 @@ export function InvestorKpiPage({
         </div>
         <nav
           aria-label="Periodo"
-          className="mt-5 flex gap-1.5 rounded-[14px] bg-[#f4f4f6] p-1.5"
+          className="mt-5 flex gap-1.5 rounded-full bg-white p-[3px] shadow-clay-sink"
         >
           {INVESTOR_PERIODS.map((period) => {
             const active = period.key === kpis.period.key;
@@ -342,15 +342,15 @@ export function InvestorKpiPage({
                 aria-current={active ? "page" : undefined}
                 aria-busy={loading}
                 className={cn(
-                  "flex min-h-[44px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-[10px] text-[14.5px] font-semibold transition-all duration-200",
+                  "flex min-h-[44px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-full text-[14.5px] font-semibold transition-colors duration-200",
                   active
-                    ? "bg-white text-[#12121c] shadow-[0_1px_3px_rgba(18,18,28,0.12)]"
+                    ? "bg-[#1e1e1e] text-white shadow-clay-ink-sm"
                     : "text-[#7a7a88] hover:text-[#12121c]",
                 )}
               >
                 {period.label}
                 {loading && (
-                  <span className="size-1.5 animate-pulse rounded-full bg-[#12121c]" />
+                  <span className="size-1.5 animate-pulse rounded-full bg-current" />
                 )}
               </button>
             );

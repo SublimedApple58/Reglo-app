@@ -219,7 +219,7 @@ function FieldBlock({ label, children }: { label: string; children: React.ReactN
 }
 
 const SELECT_TRIGGER_CLASS =
-  "h-11 max-w-full rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 text-sm font-medium text-foreground shadow-none hover:border-[#929292] focus:border-[#222222] focus:ring-0";
+  "h-11 max-w-full rounded-[14px] border-0 bg-white px-3.5 text-sm font-medium text-foreground shadow-clay-sink focus:ring-0 focus-visible:shadow-clay-focus data-[state=open]:shadow-clay-focus";
 
 /** Input numerico auto-save: modifica libera, commit (clamp + save) su blur/Invio. */
 function NumberField({
@@ -257,7 +257,7 @@ function NumberField({
       onKeyDown={(e) => {
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
       }}
-      className="w-[120px] rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 py-[11px] text-sm font-medium text-foreground outline-none transition-colors focus:border-[#222222]"
+      className="w-[120px] rounded-[14px] border-0 bg-white px-3.5 py-[11px] text-sm font-medium text-foreground shadow-clay-sink outline-none transition-shadow duration-200 focus:shadow-clay-focus"
     />
   );
 }
@@ -547,7 +547,7 @@ function LastMinuteHoursInput({ value, onCommit }: { value: number; onCommit: (v
           if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         }}
         aria-label="Ore dell'ultimo minuto"
-        className="h-11 w-[96px] rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 text-[15px] font-medium text-foreground outline-none transition focus:border-[#222222]"
+        className="h-11 w-[96px] rounded-[14px] border-0 bg-white px-3.5 text-[15px] font-medium text-foreground shadow-clay-sink outline-none transition-shadow duration-200 focus:shadow-clay-focus"
       />
       <span className="text-[14px] font-medium text-[#6a6a6a]">ore prima della guida</span>
     </div>
@@ -1024,9 +1024,9 @@ export default function BookingsTab({
                   value={bookingMinStartDate}
                   onChange={setBookingMinStartDate}
                   placeholder="Lascia vuoto per nessun limite."
-                  // Stessa metrica delle select del pane (h-11, radius 10, bordo 1.5)
+                  // Stessa metrica delle select del pane (h-11, campo incavato 14px)
                   className={cn(
-                    "h-11 w-[270px] rounded-[10px] border-[1.5px] px-3.5",
+                    "h-11 w-[270px] px-3.5",
                     bookingMinStartDate && "pr-[76px]",
                   )}
                 />

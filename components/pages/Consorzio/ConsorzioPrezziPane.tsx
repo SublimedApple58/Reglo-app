@@ -297,7 +297,7 @@ export function ConsorzioPrezziPane() {
                 persist((current) => ({ ...current, guideRequestMinLeadHours: Number(value) }))
               }
             >
-              <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-[12px] border-[#e6e6e6] bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-none">
+              <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-[14px] border-0 bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-clay-sink data-[state=open]:shadow-clay-focus">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -329,7 +329,7 @@ export function ConsorzioPrezziPane() {
                 persist((current) => ({ ...current, lateCancellationCutoffHours: Number(value) }))
               }
             >
-              <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-[12px] border-[#e6e6e6] bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-none">
+              <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-[14px] border-0 bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-clay-sink data-[state=open]:shadow-clay-focus">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -347,7 +347,7 @@ export function ConsorzioPrezziPane() {
               <div
                 role="radiogroup"
                 aria-label="Criterio del costo assenza"
-                className="ml-auto flex h-[34px] items-center gap-1 rounded-[10px] bg-[#f0f0f2] p-1"
+                className="ml-auto flex h-[34px] items-center gap-1 rounded-full bg-white p-[3px] shadow-clay-sink"
               >
                 {ABSENCE_MODE_OPTIONS.map((option) => {
                   const selected = option.value === pricing.lateCancellationMode;
@@ -365,9 +365,9 @@ export function ConsorzioPrezziPane() {
                         }))
                       }
                       className={cn(
-                        "h-full cursor-pointer select-none rounded-[8px] px-2.5 text-[12.5px] leading-none transition-all duration-150",
+                        "h-full cursor-pointer select-none rounded-full px-2.5 text-[12.5px] leading-none transition-colors duration-200",
                         selected
-                          ? "bg-white font-semibold text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.12)]"
+                          ? "bg-[#1e1e1e] font-semibold text-white shadow-clay-ink-sm"
                           : "font-medium text-[#6a6a6a] hover:text-[#222222]",
                       )}
                     >
@@ -394,7 +394,7 @@ export function ConsorzioPrezziPane() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                   }}
-                  className="h-[49px] w-full rounded-[12px] border-[1.5px] border-[#e2e2e2] bg-white pl-[18px] pr-[112px] text-[15px] font-semibold text-[#222222] outline-none transition-colors focus:border-[#222222]"
+                  className="h-[49px] w-full rounded-[14px] border-0 bg-white shadow-clay-sink pl-[18px] pr-[112px] text-[15px] font-semibold text-[#222222] outline-none transition-shadow duration-200 focus:shadow-clay-focus"
                 />
                 <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-[#a0a0a0]">
                   € / assenza
@@ -407,7 +407,7 @@ export function ConsorzioPrezziPane() {
                   persist((current) => ({ ...current, lateCancellationPenaltyPct: Number(value) }))
                 }
               >
-                <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-[12px] border-[#e6e6e6] bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-none">
+                <SelectTrigger className="h-[49px] w-full cursor-pointer rounded-[14px] border-0 bg-white px-[18px] text-[15px] font-medium text-[#222222] shadow-clay-sink data-[state=open]:shadow-clay-focus">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -461,7 +461,7 @@ export function ConsorzioPrezziPane() {
                 if (e.key === "Enter") (e.target as HTMLInputElement).blur();
               }}
               placeholder="—"
-              className="h-[46px] w-full rounded-[12px] border-[1.5px] border-[#e2e2e2] bg-white pl-4 pr-[92px] text-[15px] font-semibold text-[#222222] outline-none transition-colors focus:border-[#222222]"
+              className="h-[46px] w-full rounded-[14px] border-0 bg-white shadow-clay-sink pl-4 pr-[92px] text-[15px] font-semibold text-[#222222] outline-none transition-shadow duration-200 focus:shadow-clay-focus"
             />
             <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-[#a0a0a0]">
               € / esame
@@ -512,7 +512,7 @@ export function ConsorzioPrezziPane() {
                   <div
                     role="radiogroup"
                     aria-label={`Criterio di fatturazione ${licenseCategoryShort(category)}`}
-                    className="flex h-[46px] items-center gap-1 rounded-[12px] bg-[#f0f0f2] p-1"
+                    className="flex h-[46px] items-center gap-1 rounded-full bg-white p-[3px] shadow-clay-sink"
                   >
                     {MODE_OPTIONS.map((option) => {
                       const selected = option.value === mode;
@@ -525,9 +525,9 @@ export function ConsorzioPrezziPane() {
                           data-testid={`tariff-mode-${category}-${option.value}`}
                           onClick={() => setMode(category, option.value)}
                           className={cn(
-                            "h-full cursor-pointer select-none rounded-[9px] px-3 text-[13px] leading-none transition-all duration-150",
+                            "h-full cursor-pointer select-none rounded-full px-3 text-[13px] leading-none transition-colors duration-200",
                             selected
-                              ? "bg-white font-semibold text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.12)]"
+                              ? "bg-[#1e1e1e] font-semibold text-white shadow-clay-ink-sm"
                               : "font-medium text-[#6a6a6a] hover:text-[#222222]",
                           )}
                         >
@@ -552,7 +552,7 @@ export function ConsorzioPrezziPane() {
                         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                       }}
                       placeholder="—"
-                      className="h-[46px] w-full rounded-[12px] border-[1.5px] border-[#e2e2e2] bg-white pl-4 pr-[84px] text-[15px] font-semibold text-[#222222] outline-none transition-colors focus:border-[#222222]"
+                      className="h-[46px] w-full rounded-[14px] border-0 bg-white shadow-clay-sink pl-4 pr-[84px] text-[15px] font-semibold text-[#222222] outline-none transition-shadow duration-200 focus:shadow-clay-focus"
                     />
                     <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-[#a0a0a0]">
                       {mode === "course" ? "€ totali" : "€ / ora"}

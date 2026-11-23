@@ -63,14 +63,15 @@ export function DurationField({
           unico controllo. Si adatta alla larghezza DEL CAMPO (container query,
           non dello schermo): sotto i 440px la fine scende su una riga sua,
           separata da una linea sottile, invece di schiacciare le chip. */}
-      <div
+      {/* REG-776: binario incavato a capsula come i segmentati; quando la
+          fine scende su una riga sua il binario resta tondo ma non a capsula. */}
+      <div className="@container" data-testid="duration-field">
+       <div
         className={cn(
-          "@container rounded-[12px] border-[1.5px] border-[#e6e6e8] bg-white p-1",
-          sm && "rounded-[10px] border p-[3px]",
+          "flex flex-col rounded-[20px] bg-white shadow-clay-sink @[440px]:flex-row @[440px]:items-center @[440px]:gap-1 @[440px]:rounded-full",
+          sm ? "p-[3px]" : "p-1",
         )}
-        data-testid="duration-field"
-      >
-       <div className="flex flex-col @[440px]:flex-row @[440px]:items-center @[440px]:gap-1">
+       >
         <div className="flex min-w-0 flex-1 items-center gap-0.5">
           {chips.map((m) => {
             const active = durationMin === m;
@@ -82,7 +83,7 @@ export function DurationField({
                 aria-pressed={active}
                 onClick={() => onDurationChange(m)}
                 className={cn(
-                  "relative min-w-0 flex-1 cursor-pointer rounded-[8px] font-semibold tabular-nums transition-colors duration-200",
+                  "relative min-w-0 flex-1 cursor-pointer rounded-full font-semibold tabular-nums transition-colors duration-200",
                   sm ? "py-[5px] text-[11.5px]" : "py-[7px] text-[12.5px]",
                   active ? "text-white" : "text-[#8a8a8f] hover:bg-[#f5f5f5] hover:text-[#222222]",
                 )}
@@ -90,7 +91,7 @@ export function DurationField({
                 {active ? (
                   <motion.span
                     layoutId={`duration-active-${indicatorId}`}
-                    className="absolute inset-0 rounded-[8px] bg-[#222222]"
+                    className="absolute inset-0 rounded-full bg-[#1e1e1e] shadow-clay-ink-sm"
                     transition={{ type: "tween", duration: 0.22, ease: EASE_OUT }}
                   />
                 ) : null}
@@ -111,7 +112,7 @@ export function DurationField({
             maxTime="24:00"
             minuteStep={15}
             className={cn(
-              "shrink-0 gap-1.5 border-0 px-2 font-semibold tabular-nums transition-colors duration-200 hover:bg-[#f5f5f5]",
+              "h-auto shrink-0 gap-1.5 rounded-full px-2.5 font-semibold tabular-nums shadow-none transition-colors duration-200 hover:bg-[#f5f5f5]",
               sm ? "py-[5px] text-[11.5px]" : "py-[7px] text-[12.5px]",
               customDuration ? "bg-[#f2f2f4] text-[#222222]" : "bg-transparent",
             )}

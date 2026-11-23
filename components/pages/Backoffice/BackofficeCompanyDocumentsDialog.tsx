@@ -65,7 +65,7 @@ function DocumentRow({
         type="button"
         onClick={onDownload}
         title="Scarica"
-        className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-gray-100 hover:text-foreground"
+        className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-gray-100 hover:text-foreground"
       >
         <Download className="h-4 w-4" strokeWidth={1.8} />
       </button>
@@ -74,7 +74,7 @@ function DocumentRow({
         onClick={onDelete}
         disabled={deleting}
         title="Elimina"
-        className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 disabled:pointer-events-none disabled:opacity-50"
+        className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 disabled:pointer-events-none disabled:opacity-50"
       >
         {deleting ? (
           <LoadingDots className="scale-[0.6]" />

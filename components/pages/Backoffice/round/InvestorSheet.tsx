@@ -402,7 +402,7 @@ export function InvestorSheet({
                 value={draft.notes}
                 onChange={(e) => set("notes", e.target.value)}
                 placeholder="Cosa sappiamo, cosa ci siamo detti"
-                className="w-full resize-y rounded-xl bg-[#f7f7f8] px-4 py-3 text-[14.5px] leading-relaxed text-[#111111] outline-none transition-colors placeholder:text-[#b4b4b9] focus:bg-white focus:shadow-[inset_0_0_0_1px_#111111]"
+                className="w-full resize-y rounded-[14px] border-0 bg-white px-4 py-3 text-[14.5px] leading-relaxed text-[#111111] shadow-clay-sink outline-none transition-shadow duration-200 placeholder:text-[#b4b4b9] focus:shadow-clay-focus"
               />
             </Section>
 

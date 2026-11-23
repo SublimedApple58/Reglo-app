@@ -3,6 +3,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   InstructorQrCard,
   QR_CARD_FILMS,
@@ -160,10 +161,10 @@ export function InstructorQrCardDialog({
 
   const segClass = (selected: boolean) =>
     cn(
-      "flex-1 cursor-pointer select-none rounded-[9px] px-2 py-[9px] text-center text-[13px] leading-[normal] transition-all duration-[120ms]",
+      "flex-1 cursor-pointer select-none rounded-full px-2 py-[9px] text-center text-[13px] leading-[normal] transition-colors duration-200 ease-out",
       selected
-        ? "bg-white font-semibold text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.12)]"
-        : "bg-transparent font-medium text-[#6a6a6a]",
+        ? "bg-[#1e1e1e] font-semibold text-white shadow-clay-ink-sm"
+        : "bg-transparent font-medium text-[#6a6a6a] hover:bg-[#f2f2f2]",
     );
 
   const cutLabel = "absolute items-center gap-1.5 bg-white px-2.5 text-[12px] font-bold uppercase tracking-[0.4px] text-[#6f6f7c]";
@@ -198,7 +199,7 @@ export function InstructorQrCardDialog({
             Card QR — {instructorName}
           </div>
 
-          <div className="flex w-[328px] gap-1 self-center rounded-[12px] bg-[#f0f0f2] p-1">
+          <div className="flex w-[328px] gap-1 self-center rounded-full bg-white p-[3px] shadow-clay-sink">
             <button type="button" onClick={() => setFormat("vert")} className={segClass(format === "vert")}>
               Verticale
             </button>
@@ -270,10 +271,11 @@ export function InstructorQrCardDialog({
           </div>
 
           <div className="flex justify-center gap-3">
-            <button
+            <Button
               type="button"
+              size="bare"
               onClick={() => void downloadPng()}
-              className="flex h-[46px] cursor-pointer select-none items-center justify-center gap-2 rounded-[12px] bg-[#111111] px-[26px] text-[14px] font-semibold leading-[normal] text-white transition-[background] duration-150 hover:bg-[#2b2b2b]"
+              className="h-12 select-none gap-2 px-[26px] text-[14px] leading-[normal]"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M12 3v12" />
@@ -281,11 +283,13 @@ export function InstructorQrCardDialog({
                 <path d="M4 21h16" />
               </svg>
               {downloadLabel}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="outline"
+              size="bare"
               onClick={printCard}
-              className="flex h-12 cursor-pointer select-none items-center justify-center gap-2 rounded-[12px] border border-[#d4d4d4] bg-[#f0f0f0] px-[26px] text-[14px] font-semibold leading-[normal] text-[#111111] transition-[background] duration-150 hover:bg-[#e2e2ea]"
+              className="h-12 select-none gap-2 px-[26px] text-[14px] leading-[normal] text-[#111111]"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111111" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M7 8V4.5A1.5 1.5 0 0 1 8.5 3h7A1.5 1.5 0 0 1 17 4.5V8" />
@@ -293,7 +297,7 @@ export function InstructorQrCardDialog({
                 <rect x="7" y="13" width="10" height="8" rx="1.5" />
               </svg>
               Stampa
-            </button>
+            </Button>
           </div>
         </div>
       </div>
