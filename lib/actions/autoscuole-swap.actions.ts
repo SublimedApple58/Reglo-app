@@ -29,7 +29,13 @@ import {
   PUSH_ONLY,
 } from "@/lib/autoscuole/notify";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
-import { adjustStudentLessonCredits } from "@/lib/autoscuole/payments";
+import {
+  consumeLessonCreditIfAvailable,
+  getAutoscuolaPaymentConfig,
+  getStudentLessonCredits,
+  refundAppointmentCredit,
+} from "@/lib/autoscuole/payments";
+import { creditCost, formatCredits } from "@/lib/autoscuole/lesson-credit-unit";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
@@ -826,6 +832,26 @@ export async function respondSwapOffer(
       }
     }
 
+    // Crediti obbligatori (REG-783, caso 10): chi accetta deve poter pagare la
+    // guida per intero, nell'unità di adesso.
+    if (payload.response === "accept" && offer.appointment.creditApplied) {
+      const payConfig = await getAutoscuolaPaymentConfig({ companyId: membership.companyId });
+      if (payConfig.lessonCreditFlowEnabled && payConfig.lessonCreditsRequired) {
+        const cost = creditCost(payConfig.lessonCreditUnit, offer.appointment.startsAt, offer.appointment.endsAt);
+        const credits = await getStudentLessonCredits({
+          companyId: membership.companyId,
+          studentId: payload.studentId,
+          limit: 1,
+        });
+        if (credits.unit !== payConfig.lessonCreditUnit || credits.availableCredits < cost) {
+          return {
+            success: false,
+            message: `Per prendere questa guida ti servono ${formatCredits(payConfig.lessonCreditUnit, cost)} di credito: ne hai ${credits.availableCreditsLabel}.`,
+          };
+        }
+      }
+    }
+
     if (payload.response === "decline") {
       await prisma.autoscuolaSwapResponse.create({
         data: {
@@ -880,24 +906,38 @@ export async function respondSwapOffer(
         },
       });
 
-      // Credit transfer
+      // Credit transfer (REG-783): chi cede riceve la guida come in un
+      // annullamento in tempo (nell'unità di adesso), chi prende paga il costo
+      // pieno nell'unità di adesso. Se non gli basta, la guida resta da pagare
+      // (con i crediti obbligatori lo scambio è già stato rifiutato sopra).
       const settings = await getAutoscuolaSettingsForCompany(membership.companyId);
       if (settings.lessonCreditFlowEnabled && offer.appointment.creditApplied) {
-        await adjustStudentLessonCredits({
-          prisma: tx,
+        await refundAppointmentCredit({
+          prisma: tx as never,
           companyId: membership.companyId,
           studentId: offer.requestingStudentId,
-          delta: +1,
+          appointment: offer.appointment,
           reason: "swap_refund",
-          appointmentId: offer.appointmentId,
         });
-        await adjustStudentLessonCredits({
-          prisma: tx,
+        const { lessonCreditUnit } = await getAutoscuolaPaymentConfig({
+          prisma: tx as never,
+          companyId: membership.companyId,
+        });
+        const cost = creditCost(lessonCreditUnit, offer.appointment.startsAt, offer.appointment.endsAt);
+        const consumed = await consumeLessonCreditIfAvailable({
+          prisma: tx as never,
           companyId: membership.companyId,
           studentId: payload.studentId,
-          delta: -1,
+          cost,
+          unit: lessonCreditUnit,
           reason: "swap_consume",
           appointmentId: offer.appointmentId,
+        });
+        await tx.autoscuolaAppointment.update({
+          where: { id: offer.appointmentId },
+          data: consumed.consumed
+            ? { creditAmount: cost, creditUnit: lessonCreditUnit }
+            : { creditApplied: false, creditAmount: null, creditUnit: null, manualPaymentStatus: "unpaid" },
         });
       }
 

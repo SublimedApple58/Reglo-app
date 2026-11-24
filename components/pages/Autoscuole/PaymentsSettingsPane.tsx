@@ -20,6 +20,8 @@ import {
   SETTING_SELECT_TRIGGER_CLASS,
   SettingRow,
 } from "@/components/pages/Autoscuole/settings/SettingRow";
+import { CreditUnitSwitchDialog } from "@/components/pages/Autoscuole/settings/CreditUnitSwitchDialog";
+import type { LessonCreditUnit } from "@/lib/autoscuole/lesson-credit-unit";
 
 /**
  * Sotto-scheda «Crediti e annullamenti» di Prenotazioni e allievi.
@@ -30,6 +32,9 @@ import {
  * I valori salvati (`lessonPrice30/60`, `penaltyPercentPreset`) restano nel DB:
  * la percentuale tornerà con i crediti a tempo (REG-779, punto 5).
  * Stripe è dismesso.
+ *
+ * REG-783: «Un credito vale» (una guida o il tempo di guida). Non si salva da
+ * qui: cambiare voce apre il dialogo di passaggio, che converte i saldi.
  *
  * Stesse righe piatte delle altre sotto-schede (`SettingRow`, REG-780 redesign).
  * Auto-save come le pane Veicoli/Promemoria: ogni modifica persiste subito
@@ -51,6 +56,10 @@ function PaymentsSettingsPane() {
   const [creditFlowEnabled, setCreditFlowEnabled] = React.useState(false);
   const [creditsRequired, setCreditsRequired] = React.useState(true);
   const [cutoffHours, setCutoffHours] = React.useState("24");
+  const [creditUnit, setCreditUnit] = React.useState<LessonCreditUnit>("lessons");
+  // Il dialogo tiene l'unità di arrivo anche mentre si chiude (niente titolo che cambia).
+  const [switchOpen, setSwitchOpen] = React.useState(false);
+  const [switchTo, setSwitchTo] = React.useState<LessonCreditUnit>("minutes");
 
   React.useEffect(() => {
     let active = true;
@@ -61,6 +70,7 @@ function PaymentsSettingsPane() {
         setCreditFlowEnabled(Boolean(res.data.lessonCreditFlowEnabled));
         setCreditsRequired(res.data.lessonCreditsRequired !== false);
         setCutoffHours(String(res.data.penaltyCutoffHoursPreset));
+        setCreditUnit(res.data.lessonCreditUnit);
       } else {
         toast.error({
           description: res.message ?? "Impossibile caricare crediti e annullamenti.",
@@ -120,6 +130,40 @@ function PaymentsSettingsPane() {
             onToggle={() => save({ lessonCreditsRequired: !creditsRequired })}
           />
         )}
+        {creditFlowEnabled && (
+          <div className="mt-5">
+            <SettingRow
+              stack
+              title="Un credito vale"
+              description={
+                creditUnit === "minutes"
+                  ? "Ogni guida scala la sua durata: una da 30 minuti scala mezz'ora."
+                  : "Ogni guida scala un credito, qualunque sia la durata."
+              }
+              control={
+                <Select
+                  value={creditUnit}
+                  onValueChange={(value) => {
+                    if (value === creditUnit) return;
+                    setSwitchTo(value as LessonCreditUnit);
+                    setSwitchOpen(true);
+                  }}
+                >
+                  <SelectTrigger
+                    className={cn(SETTING_SELECT_TRIGGER_CLASS, "w-full shrink-0 sm:w-[200px]")}
+                    data-testid="lesson-credit-unit"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="lessons">Una guida</SelectItem>
+                    <SelectItem value="minutes">Tempo di guida</SelectItem>
+                  </SelectContent>
+                </Select>
+              }
+            />
+          </div>
+        )}
       </div>
       <div className="py-6">
         <SettingRow
@@ -150,6 +194,12 @@ function PaymentsSettingsPane() {
           }
         />
       </div>
+      <CreditUnitSwitchDialog
+        open={switchOpen}
+        toUnit={switchTo}
+        onOpenChange={setSwitchOpen}
+        onSwitched={setCreditUnit}
+      />
     </div>
   );
 }

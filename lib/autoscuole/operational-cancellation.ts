@@ -13,7 +13,7 @@ import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
-import { refundLessonCreditIfEligible, adjustStudentLessonCredits } from "@/lib/autoscuole/payments";
+import { refundLessonCreditIfEligible, refundAppointmentCredit } from "@/lib/autoscuole/payments";
 
 // Operational cancellation. When a lesson can no longer take place for an
 // organizational reason (owner deletes it, the instructor/vehicle is made
@@ -406,6 +406,8 @@ export async function removeAppointmentFromRecord({
       cancellationKind: true,
       creditApplied: true,
       creditRefundedAt: true,
+      creditAmount: true,
+      creditUnit: true,
     },
   });
 
@@ -454,14 +456,12 @@ export async function removeAppointmentFromRecord({
       appointment.creditApplied &&
       appointment.creditRefundedAt === null
     ) {
-      await adjustStudentLessonCredits({
+      await refundAppointmentCredit({
         prisma: tx as never,
         companyId,
         studentId: appointment.studentId,
-        delta: 1,
-        reason: "cancel_refund",
+        appointment,
         actorUserId: actorUserId ?? null,
-        appointmentId: appointment.id,
       });
       await tx.autoscuolaAppointment.update({
         where: { id: appointment.id },
@@ -543,6 +543,8 @@ export async function annulFutureAppointment({
       type: true,
       creditApplied: true,
       creditRefundedAt: true,
+      creditAmount: true,
+      creditUnit: true,
       penaltyCutoffAt: true,
       paymentRequired: true,
       paymentStatus: true,
@@ -644,14 +646,12 @@ export async function annulFutureAppointment({
       appointment.creditApplied &&
       appointment.creditRefundedAt === null
     ) {
-      await adjustStudentLessonCredits({
+      await refundAppointmentCredit({
         prisma: tx as never,
         companyId,
         studentId: appointment.studentId,
-        delta: 1,
-        reason: "cancel_refund",
+        appointment,
         actorUserId: actorUserId ?? null,
-        appointmentId: appointment.id,
       });
       await tx.autoscuolaAppointment.update({
         where: { id: appointment.id },

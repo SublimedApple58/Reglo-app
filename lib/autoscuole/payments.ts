@@ -9,6 +9,13 @@ import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 // REG-604: punto di invio unico (i canali restano paymentNotificationChannels).
 import { notifyAutoscuolaUser } from "@/lib/autoscuole/notify";
 import { getAutoscuolaStripeDestinationAccountId } from "@/lib/autoscuole/stripe-connect";
+import {
+  creditCost,
+  formatCredits,
+  parseLessonCreditUnit,
+  refundAmount,
+  type LessonCreditUnit,
+} from "@/lib/autoscuole/lesson-credit-unit";
 import { generateAndUploadReceipt } from "@/lib/autoscuole/receipt";
 
 type PrismaClientLike = typeof defaultPrisma | Prisma.TransactionClient;
@@ -30,6 +37,8 @@ type AutoscuolaPaymentConfig = {
   enabled: boolean;
   lessonCreditFlowEnabled: boolean;
   lessonCreditsRequired: boolean;
+  /** REG-783: crediti a guide o a minuti. */
+  lessonCreditUnit: LessonCreditUnit;
   lessonPrice30: number;
   lessonPrice60: number;
   penaltyCutoffHours: (typeof AUTOSCUOLA_PAYMENT_CUTOFF_PRESETS)[number];
@@ -48,6 +57,9 @@ type AppointmentPricingSnapshot = {
   paidAmount: Prisma.Decimal;
   invoiceStatus: string | null;
   creditApplied: boolean;
+  /** REG-783: quanto ha consumato la guida e in che unità (null se non a credito). */
+  creditAmount: number | null;
+  creditUnit: LessonCreditUnit | null;
   manualPaymentStatus: "unpaid" | null;
 };
 
@@ -57,7 +69,10 @@ export type LessonCreditLedgerReason =
   | "booking_consume"
   | "cancel_refund"
   | "swap_refund"
-  | "swap_consume";
+  | "swap_consume"
+  // REG-783: passaggio di unità (guide ↔ minuti) e ricalcolo al cambio di durata.
+  | "unit_conversion"
+  | "duration_change";
 
 let stripeSingleton: Stripe | null = null;
 
@@ -605,6 +620,7 @@ export async function getAutoscuolaPaymentConfig({
     enabled: Boolean(limits.autoPaymentsEnabled),
     lessonCreditFlowEnabled: Boolean(limits.lessonCreditFlowEnabled),
     lessonCreditsRequired: limits.lessonCreditsRequired !== false,
+    lessonCreditUnit: parseLessonCreditUnit(limits.lessonCreditUnit),
     lessonPrice30: normalizePrice(limits.lessonPrice30, 25),
     lessonPrice60: normalizePrice(limits.lessonPrice60, 50),
     penaltyCutoffHours: normalizeCutoffPreset(limits.penaltyCutoffHoursPreset),
@@ -923,10 +939,13 @@ const getOrCreateStudentLessonCreditBalance = async ({
   prisma,
   companyId,
   studentId,
+  unit,
 }: {
   prisma: PrismaClientLike;
   companyId: string;
   studentId: string;
+  /** Unità dell'autoscuola: serve solo se il saldo non esiste ancora. */
+  unit: LessonCreditUnit;
 }) => {
   const existing = await prisma.autoscuolaStudentLessonCreditBalance.findUnique({
     where: {
@@ -942,42 +961,57 @@ const getOrCreateStudentLessonCreditBalance = async ({
       companyId,
       studentId,
       availableCredits: 0,
+      unit,
     },
   });
 };
 
-const consumeLessonCreditIfAvailable = async ({
+/**
+ * Scala il costo di una guida (1 guida, o la sua durata in minuti) se il saldo
+ * basta tutto: niente pagamenti parziali (REG-783). Il saldo deve essere
+ * nell'unità attesa: se l'autoscuola ha appena cambiato unità non scala niente.
+ */
+export const consumeLessonCreditIfAvailable = async ({
   prisma,
   companyId,
   studentId,
-  appointmentId,
+  cost,
+  unit,
   actorUserId,
+  reason = "booking_consume",
+  appointmentId = null,
 }: {
   prisma: PrismaClientLike;
   companyId: string;
   studentId: string;
-  appointmentId?: string | null;
+  cost: number;
+  unit: LessonCreditUnit;
   actorUserId?: string | null;
+  reason?: LessonCreditLedgerReason;
+  /** Solo se la guida esiste già (scambio, cambio di durata). */
+  appointmentId?: string | null;
 }) => {
   const balance = await getOrCreateStudentLessonCreditBalance({
     prisma,
     companyId,
     studentId,
+    unit,
   });
-  if (balance.availableCredits <= 0) {
+  if (cost <= 0 || balance.unit !== unit || balance.availableCredits < cost) {
     return {
       consumed: false,
-      availableCredits: 0,
+      availableCredits: Math.max(0, balance.availableCredits),
     };
   }
 
   const decremented = await prisma.autoscuolaStudentLessonCreditBalance.updateMany({
     where: {
       id: balance.id,
-      availableCredits: { gt: 0 },
+      unit,
+      availableCredits: { gte: cost },
     },
     data: {
-      availableCredits: { decrement: 1 },
+      availableCredits: { decrement: cost },
     },
   });
 
@@ -1002,11 +1036,12 @@ const consumeLessonCreditIfAvailable = async ({
       companyId,
       studentId,
       balanceId: balance.id,
-      // Booking flow computes the snapshot before the appointment row exists.
-      // Keep appointmentId null here to avoid FK violations on immediate checks.
-      appointmentId: null,
-      delta: -1,
-      reason: "booking_consume",
+      // Booking flow computes the snapshot before the appointment row exists:
+      // there appointmentId stays null to avoid FK violations.
+      appointmentId,
+      delta: -cost,
+      unit,
+      reason,
       actorUserId: actorUserId ?? null,
     },
   });
@@ -1040,6 +1075,8 @@ export async function applyLessonCreditToExistingAppointment({
       creditApplied: true,
       manualPaymentStatus: true,
       type: true,
+      startsAt: true,
+      endsAt: true,
     },
   });
 
@@ -1066,13 +1103,15 @@ export async function applyLessonCreditToExistingAppointment({
     return { applied: false };
   }
 
+  const cost = creditCost(config.lessonCreditUnit, appointment.startsAt, appointment.endsAt);
   const credit = await consumeLessonCreditIfAvailable({
     prisma,
     companyId: appointment.companyId,
     // Non-null: the `type === "esame"` guard above already excluded studentless
     // exam placeholders.
     studentId: appointment.studentId!,
-    appointmentId,
+    cost,
+    unit: config.lessonCreditUnit,
     actorUserId,
   });
 
@@ -1084,6 +1123,8 @@ export async function applyLessonCreditToExistingAppointment({
     where: { id: appointmentId },
     data: {
       creditApplied: true,
+      creditAmount: cost,
+      creditUnit: config.lessonCreditUnit,
       manualPaymentStatus: null,
     },
   });
@@ -1113,6 +1154,7 @@ export async function getStudentLessonCredits({
       },
       select: {
         availableCredits: true,
+        unit: true,
       },
     }),
     prisma.autoscuolaStudentLessonCreditLedger.findMany({
@@ -1124,8 +1166,10 @@ export async function getStudentLessonCredits({
         id: true,
         appointmentId: true,
         delta: true,
+        unit: true,
         reason: true,
         actorUserId: true,
+        appointment: { select: { startsAt: true, endsAt: true } },
         actor: {
           select: {
             id: true,
@@ -1139,9 +1183,17 @@ export async function getStudentLessonCredits({
     }),
   ]);
 
+  // Senza saldo l'allievo è nell'unità dell'autoscuola.
+  const unit = balance
+    ? parseLessonCreditUnit(balance.unit)
+    : (await getAutoscuolaPaymentConfig({ prisma, companyId })).lessonCreditUnit;
+  const availableCredits = Math.max(0, balance?.availableCredits ?? 0);
   return {
-    availableCredits: Math.max(0, balance?.availableCredits ?? 0),
-    ledger,
+    availableCredits,
+    unit,
+    /** REG-783: il saldo a parole («5 ore e 30», «3 guide»). */
+    availableCreditsLabel: formatCredits(unit, availableCredits),
+    ledger: ledger.map((entry) => ({ ...entry, unit: parseLessonCreditUnit(entry.unit) })),
   };
 }
 
@@ -1153,6 +1205,7 @@ export async function adjustStudentLessonCredits({
   reason,
   actorUserId,
   appointmentId,
+  unit,
 }: {
   prisma?: PrismaClientLike;
   companyId: string;
@@ -1161,6 +1214,12 @@ export async function adjustStudentLessonCredits({
   reason: LessonCreditLedgerReason;
   actorUserId?: string | null;
   appointmentId?: string | null;
+  /**
+   * REG-783: unità in cui è espresso `delta`. Se il saldo è in un'altra unità
+   * (l'autoscuola ha appena cambiato) il movimento viene rifiutato. Senza,
+   * vale l'unità del saldo.
+   */
+  unit?: LessonCreditUnit;
 }) {
   if (!Number.isInteger(delta) || delta === 0) {
     throw new Error("Delta crediti non valido.");
@@ -1170,7 +1229,16 @@ export async function adjustStudentLessonCredits({
     prisma,
     companyId,
     studentId,
+    unit: unit ?? (await getAutoscuolaPaymentConfig({ prisma, companyId })).lessonCreditUnit,
   });
+  const balanceUnit = parseLessonCreditUnit(balance.unit);
+  if (unit && unit !== balanceUnit) {
+    throw new Error(
+      balanceUnit === "minutes"
+        ? "L'autoscuola è passata ai crediti a tempo: riprova in ore e minuti."
+        : "L'autoscuola è passata ai crediti a guide: riprova in guide.",
+    );
+  }
 
   const appliedDelta =
     delta > 0
@@ -1180,6 +1248,7 @@ export async function adjustStudentLessonCredits({
   if (appliedDelta === 0) {
     return {
       appliedDelta: 0,
+      unit: balanceUnit,
       availableCredits: Math.max(0, balance.availableCredits),
     };
   }
@@ -1201,6 +1270,7 @@ export async function adjustStudentLessonCredits({
       balanceId: balance.id,
       appointmentId: appointmentId ?? null,
       delta: appliedDelta,
+      unit: balanceUnit,
       reason,
       actorUserId: actorUserId ?? null,
     },
@@ -1208,8 +1278,125 @@ export async function adjustStudentLessonCredits({
 
   return {
     appliedDelta,
+    unit: balanceUnit,
     availableCredits: Math.max(0, updated.availableCredits),
   };
+}
+
+/**
+ * REG-783 — rende il credito di una guida nell'unità di adesso: quanto aveva
+ * consumato se l'unità è la stessa, altrimenti la durata attuale (a minuti) o
+ * 1 guida (a guide). Non segna `creditRefundedAt`: lo fa chi chiama.
+ */
+export async function refundAppointmentCredit({
+  prisma = defaultPrisma,
+  companyId,
+  studentId,
+  appointment,
+  reason = "cancel_refund",
+  actorUserId,
+}: {
+  prisma?: PrismaClientLike;
+  companyId: string;
+  studentId: string;
+  appointment: {
+    id: string;
+    startsAt: Date;
+    endsAt: Date | null;
+    creditAmount?: number | null;
+    creditUnit?: string | null;
+  };
+  reason?: LessonCreditLedgerReason;
+  actorUserId?: string | null;
+}) {
+  const { lessonCreditUnit } = await getAutoscuolaPaymentConfig({ prisma, companyId });
+  return adjustStudentLessonCredits({
+    prisma,
+    companyId,
+    studentId,
+    delta: refundAmount({ currentUnit: lessonCreditUnit, appointment }),
+    unit: lessonCreditUnit,
+    reason,
+    actorUserId: actorUserId ?? null,
+    appointmentId: appointment.id,
+  });
+}
+
+/**
+ * REG-783 (caso 11) — una guida pagata a minuti che cambia durata: si scalano
+ * i minuti in più o si rendono quelli di meno. Se il saldo non basta per i
+ * minuti in più non si scala niente (mai saldo negativo): la guida resta
+ * pagata per quanto aveva consumato. Una guida pagata a guide, o in un'unità
+ * che non è più quella dell'autoscuola, non si ricalcola (caso 12).
+ */
+export async function syncAppointmentCreditToDuration({
+  prisma = defaultPrisma,
+  appointmentId,
+  actorUserId,
+}: {
+  prisma?: PrismaClientLike;
+  appointmentId: string;
+  actorUserId?: string | null;
+}): Promise<{ delta: number }> {
+  const appointment = await prisma.autoscuolaAppointment.findUnique({
+    where: { id: appointmentId },
+    select: {
+      id: true,
+      companyId: true,
+      studentId: true,
+      startsAt: true,
+      endsAt: true,
+      creditApplied: true,
+      creditRefundedAt: true,
+      creditAmount: true,
+      creditUnit: true,
+    },
+  });
+  if (
+    !appointment?.studentId ||
+    !appointment.creditApplied ||
+    appointment.creditRefundedAt ||
+    appointment.creditUnit !== "minutes" ||
+    appointment.creditAmount == null
+  ) {
+    return { delta: 0 };
+  }
+  const { lessonCreditUnit } = await getAutoscuolaPaymentConfig({ prisma, companyId: appointment.companyId });
+  if (lessonCreditUnit !== "minutes") return { delta: 0 };
+
+  const cost = creditCost("minutes", appointment.startsAt, appointment.endsAt);
+  const diff = cost - appointment.creditAmount;
+  if (diff === 0) return { delta: 0 };
+
+  if (diff < 0) {
+    await adjustStudentLessonCredits({
+      prisma,
+      companyId: appointment.companyId,
+      studentId: appointment.studentId,
+      delta: -diff,
+      unit: "minutes",
+      reason: "duration_change",
+      actorUserId: actorUserId ?? null,
+      appointmentId: appointment.id,
+    });
+  } else {
+    const consumed = await consumeLessonCreditIfAvailable({
+      prisma,
+      companyId: appointment.companyId,
+      studentId: appointment.studentId,
+      cost: diff,
+      unit: "minutes",
+      reason: "duration_change",
+      actorUserId: actorUserId ?? null,
+      appointmentId: appointment.id,
+    });
+    if (!consumed.consumed) return { delta: 0 };
+  }
+  await prisma.autoscuolaAppointment.update({
+    where: { id: appointment.id },
+    data: { creditAmount: cost },
+  });
+  return { delta: -diff };
 }
 
 export async function refundLessonCreditIfEligible({
@@ -1234,6 +1421,10 @@ export async function refundLessonCreditIfEligible({
       status: true,
       creditApplied: true,
       creditRefundedAt: true,
+      creditAmount: true,
+      creditUnit: true,
+      startsAt: true,
+      endsAt: true,
       penaltyCutoffAt: true,
       cancelledAt: true,
     },
@@ -1273,16 +1464,14 @@ export async function refundLessonCreditIfEligible({
       return { refunded: false, reason: "already_refunded" as const };
     }
 
-    const adjustment = await adjustStudentLessonCredits({
+    const adjustment = await refundAppointmentCredit({
       prisma: tx as never,
       companyId: appointment.companyId,
       // Non-null: refunds only run on credit-applied lessons; studentless exam
       // placeholders never consume a credit.
       studentId: appointment.studentId!,
-      delta: 1,
-      reason: "cancel_refund",
+      appointment,
       actorUserId: actorUserId ?? null,
-      appointmentId: appointment.id,
     });
 
     return {
@@ -1334,6 +1523,8 @@ export async function prepareAppointmentPaymentSnapshot({
       paidAmount: toDecimal(0),
       invoiceStatus: null,
       creditApplied: false,
+      creditAmount: null,
+      creditUnit: null,
       manualPaymentStatus: null,
     };
   }
@@ -1351,11 +1542,13 @@ export async function prepareAppointmentPaymentSnapshot({
     throw new Error("Hai pagamenti insoluti. Salda prima di prenotare una nuova guida.");
   }
 
+  const creditAmount = creditCost(config.lessonCreditUnit, startsAt, endsAt);
   const creditConsumption = await consumeLessonCreditIfAvailable({
     prisma,
     companyId,
     studentId,
-    appointmentId,
+    cost: creditAmount,
+    unit: config.lessonCreditUnit,
     actorUserId,
   });
   if (creditConsumption.consumed) {
@@ -1368,6 +1561,8 @@ export async function prepareAppointmentPaymentSnapshot({
       paidAmount: toDecimal(0),
       invoiceStatus: "not_required",
       creditApplied: true,
+      creditAmount,
+      creditUnit: config.lessonCreditUnit,
       manualPaymentStatus: null,
     };
   }
@@ -1383,6 +1578,8 @@ export async function prepareAppointmentPaymentSnapshot({
       paidAmount: toDecimal(0),
       invoiceStatus: null,
       creditApplied: false,
+      creditAmount: null,
+      creditUnit: null,
       manualPaymentStatus: !config.lessonCreditsRequired ? "unpaid" as const : null,
     };
   }
@@ -1426,6 +1623,8 @@ export async function prepareAppointmentPaymentSnapshot({
     paidAmount: toDecimal(0),
     invoiceStatus: "pending",
     creditApplied: false,
+    creditAmount: null,
+    creditUnit: null,
     manualPaymentStatus: null,
   };
 }
@@ -2428,6 +2627,10 @@ export async function getMobileStudentPaymentProfile({
     blockedByInsoluti: outstanding.length > 0,
     outstanding,
     lessonCreditsAvailable: Math.max(0, creditsBalance?.availableCredits ?? 0),
+    // REG-783: unità del saldo e saldo già scritto («5 ore e 30», «3 guide»),
+    // così un'app che non conosce i minuti non mostra «330 crediti».
+    lessonCreditsUnit: config.lessonCreditUnit,
+    lessonCreditsLabel: formatCredits(config.lessonCreditUnit, Math.max(0, creditsBalance?.availableCredits ?? 0)),
   };
 }
 

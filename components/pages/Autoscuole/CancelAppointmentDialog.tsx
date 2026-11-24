@@ -240,7 +240,7 @@ export function CancelAppointmentDialog({
                     Restituisci anche il credito a {student}
                   </p>
                   <p className="mt-0.5 text-[12.5px] font-medium text-[#6a6a76]">
-                    Se la guida non doveva contare (es. inserita per sbaglio), le rendi 1 credito.
+                    Se la guida non doveva contare (es. inserita per sbaglio), le rendi il credito.
                   </p>
                 </div>
               </div>
@@ -373,7 +373,7 @@ export function CancelAppointmentDialog({
                 title={coverage === "credit" ? "Restituisci il credito" : "Non addebitare"}
                 sub={
                   coverage === "credit"
-                    ? `Condoni: ${student} riavrà 1 credito guida.`
+                    ? `Condoni: ${student} riavrà il credito della guida.`
                     : `Condoni: niente a carico di ${student}.`
                 }
               />

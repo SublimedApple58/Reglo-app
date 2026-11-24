@@ -180,6 +180,8 @@ import { useAtomValue as useAtomValueRoad } from "jotai";
 import { companyAtom as companyAtomRoad } from "@/atoms/company.store";
 import { isRoadEnabled } from "@/lib/services";
 import { StudentRoadLine, StudentRoadTab, useStudentRoad } from "./road/StudentRoad";
+import { formatCreditDelta, formatCredits, type LessonCreditUnit } from "@/lib/autoscuole/lesson-credit-unit";
+import { lessonMinutes, parseHoursInput } from "@/lib/autoscuole/weekly-limit";
 import { usePathname as useRoadPathname, useRouter as useRoadRouter, useSearchParams as useRoadSearchParams } from "next/navigation";
 import {
   blockUntilDateToInstant,
@@ -649,10 +651,15 @@ type StudentRegister = {
 type StudentCredits = {
   student: StudentProfile;
   availableCredits: number;
+  /** REG-783: unità del saldo e saldo a parole («5 ore e 30», «3 guide»). */
+  unit: LessonCreditUnit;
+  availableCreditsLabel: string;
   ledger: Array<{
     id: string;
     appointmentId: string | null;
+    appointment?: { startsAt: string | Date; endsAt: string | Date | null } | null;
     delta: number;
+    unit: LessonCreditUnit;
     reason: string;
     actorUserId: string | null;
     actorName: string | null;
@@ -722,14 +729,71 @@ const formatStatus = (value: string) =>
   STATUS_LABELS[value] ?? formatLabel(value);
 
 const CREDIT_REASON_LABELS: Record<string, string> = {
-  manual_grant: "Assegnazione manuale",
-  manual_revoke: "Storno manuale",
-  booking_consume: "Prenotazione guida",
-  cancel_refund: "Rimborso annullamento",
+  manual_grant: "Ricarica",
+  manual_revoke: "Storno",
+  booking_consume: "Guida prenotata",
+  cancel_refund: "Guida annullata",
+  swap_refund: "Guida ceduta in uno scambio",
+  swap_consume: "Guida presa in uno scambio",
+  duration_change: "Durata cambiata",
 };
 
 const formatCreditReason = (value: string) =>
   CREDIT_REASON_LABELS[value] ?? formatLabel(value);
+
+type CreditLedgerRow = {
+  id: string;
+  label: string;
+  description: string;
+  value: string;
+  positive: boolean;
+};
+
+/**
+ * REG-783: righe dello storico crediti. I due movimenti di un passaggio di
+ * unità (−prima, +dopo) diventano una riga sola «3 guide → 3 ore».
+ */
+const buildCreditLedgerRows = (ledger: StudentCredits["ledger"]): CreditLedgerRow[] => {
+  const rows: CreditLedgerRow[] = [];
+  const when = (entry: StudentCredits["ledger"][number]) =>
+    `${formatDate(entry.createdAt, true)}${entry.actorName ? ` · ${entry.actorName}` : ""}`;
+  for (let i = 0; i < ledger.length; i += 1) {
+    const entry = ledger[i];
+    if (entry.reason === "unit_conversion") {
+      const next = ledger[i + 1];
+      const pair =
+        next?.reason === "unit_conversion" &&
+        new Date(next.createdAt).getTime() === new Date(entry.createdAt).getTime()
+          ? next
+          : null;
+      if (pair) i += 1;
+      const from = [entry, pair].find((e) => e && e.delta < 0) ?? null;
+      const to = [entry, pair].find((e) => e && e.delta > 0) ?? null;
+      const fromUnit = from?.unit ?? (to?.unit === "minutes" ? "lessons" : "minutes");
+      const toUnit: LessonCreditUnit = to?.unit ?? (fromUnit === "minutes" ? "lessons" : "minutes");
+      rows.push({
+        id: entry.id,
+        label: toUnit === "minutes" ? "Passaggio alle ore" : "Passaggio alle guide",
+        description: when(entry),
+        value: `${formatCredits(fromUnit, Math.abs(from?.delta ?? 0))} → ${formatCredits(toUnit, to?.delta ?? 0)}`,
+        positive: true,
+      });
+      continue;
+    }
+    const duration =
+      entry.appointment && entry.appointment.endsAt
+        ? lessonMinutes(new Date(entry.appointment.startsAt), new Date(entry.appointment.endsAt))
+        : null;
+    rows.push({
+      id: entry.id,
+      label: formatCreditReason(entry.reason),
+      description: `${duration && entry.reason !== "duration_change" ? `Guida da ${duration} minuti · ` : ""}${when(entry)}`,
+      value: formatCreditDelta(entry.unit, entry.delta),
+      positive: entry.delta >= 0,
+    });
+  }
+  return rows;
+};
 
 const formatDate = (value: string | Date, withTime = false) => {
   const date = value instanceof Date ? value : new Date(value);
@@ -2065,17 +2129,30 @@ export function AutoscuoleStudentsPage({
   const handleAdjustCredits = React.useCallback(
     async (direction: "grant" | "revoke") => {
       if (!selectedStudentId || creditsSaving) return;
-      const parsedValue = Number(creditsInput);
-      if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-        toast.error({ description: "Inserisci un numero crediti valido." });
-        return;
+      // REG-783: a tempo si scrive in ore e minuti («2:30», «1,5») e si salva in minuti.
+      const unit = credits?.unit ?? "lessons";
+      let delta: number;
+      if (unit === "minutes") {
+        const minutes = parseHoursInput(creditsInput);
+        if (!minutes) {
+          toast.error({ description: "Scrivi le ore, per esempio 2 oppure 2:30." });
+          return;
+        }
+        delta = minutes;
+      } else {
+        const parsedValue = Number(creditsInput);
+        if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+          toast.error({ description: "Inserisci un numero crediti valido." });
+          return;
+        }
+        delta = Math.max(1, Math.trunc(parsedValue));
       }
-      const delta = Math.max(1, Math.trunc(parsedValue));
       setCreditsSaving(direction);
       const res = await adjustAutoscuolaStudentLessonCredits({
         studentId: selectedStudentId,
         delta,
         reason: direction === "grant" ? "manual_grant" : "manual_revoke",
+        unit,
       });
       if (!res.success || !res.data) {
         toast.error({
@@ -2092,7 +2169,7 @@ export function AutoscuoleStudentsPage({
       await loadCredits(selectedStudentId);
       setCreditsSaving(null);
     },
-    [creditsInput, creditsSaving, loadCredits, selectedStudentId, toast],
+    [credits?.unit, creditsInput, creditsSaving, loadCredits, selectedStudentId, toast],
   );
 
   const handleToggleBlock = React.useCallback(
@@ -3274,21 +3351,50 @@ export function AutoscuoleStudentsPage({
               ) : (
                 <>
                   <div className="py-3">
-                    <DetailFigure
-                      value={credits?.availableCredits ?? 0}
-                      label={(credits?.availableCredits ?? 0) === 1 ? "credito disponibile" : "crediti disponibili"}
-                    />
-                    <div className="mt-4 flex flex-wrap items-center gap-2.5">
-                      <Input
-                        type="number"
-                        min={1}
-                        step={1}
-                        value={creditsInput}
-                        onChange={(event) => setCreditsInput(event.target.value)}
-                        className="h-12 min-w-0 flex-1 basis-[120px]"
-                        placeholder="Crediti"
-                        aria-label="Crediti da assegnare o stornare"
+                    {credits?.unit === "minutes" ? (
+                      <DetailFigure value={credits.availableCreditsLabel} label="di guida" />
+                    ) : (
+                      <DetailFigure
+                        value={credits?.availableCredits ?? 0}
+                        label={(credits?.availableCredits ?? 0) === 1 ? "credito disponibile" : "crediti disponibili"}
                       />
+                    )}
+                    <div className="mt-4 flex flex-wrap items-start gap-2.5">
+                      {credits?.unit === "minutes" ? (
+                        <div className="min-w-0 flex-1 basis-[140px]">
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={creditsInput}
+                            onChange={(event) => setCreditsInput(event.target.value)}
+                            className="h-12"
+                            placeholder="Ore, es. 2:30"
+                            aria-label="Ore da assegnare o stornare"
+                            data-testid="student-credits-hours"
+                          />
+                          <p className="mt-1.5 text-xs font-medium text-[#929292]">
+                            {(() => {
+                              const minutes = parseHoursInput(creditsInput);
+                              if (!minutes) return "Scrivi le ore: 2, 1,5 oppure 2:30";
+                              const h = Math.floor(minutes / 60);
+                              const m = minutes % 60;
+                              const hours = h === 0 ? "" : h === 1 ? "1 ora" : `${h} ore`;
+                              return [hours, m ? `${m} minuti` : ""].filter(Boolean).join(" e ");
+                            })()}
+                          </p>
+                        </div>
+                      ) : (
+                        <Input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={creditsInput}
+                          onChange={(event) => setCreditsInput(event.target.value)}
+                          className="h-12 min-w-0 flex-1 basis-[120px]"
+                          placeholder="Crediti"
+                          aria-label="Crediti da assegnare o stornare"
+                        />
+                      )}
                       <div className="flex gap-2.5">
                         <Button
                           onClick={() => void handleAdjustCredits("grant")}
@@ -3310,20 +3416,19 @@ export function AutoscuoleStudentsPage({
                   </div>
                   {credits?.ledger.length ? (
                     <DetailRows className="border-t border-[#efefef]">
-                      {credits.ledger.slice(0, 8).map((entry) => (
+                      {buildCreditLedgerRows(credits.ledger).slice(0, 8).map((row) => (
                         <DetailRow
-                          key={entry.id}
-                          label={formatCreditReason(entry.reason)}
-                          description={`${formatDate(entry.createdAt, true)}${entry.actorName ? ` · ${entry.actorName}` : ""}`}
+                          key={row.id}
+                          label={row.label}
+                          description={row.description}
                           value={
                             <span
                               className={cn(
                                 "tabular-nums",
-                                entry.delta >= 0 ? "font-semibold text-foreground" : "text-[#6a6a6a]",
+                                row.positive ? "font-semibold text-foreground" : "text-[#6a6a6a]",
                               )}
                             >
-                              {entry.delta >= 0 ? "+" : "−"}
-                              {Math.abs(entry.delta)}
+                              {row.value}
                             </span>
                           }
                         />
@@ -3694,7 +3799,7 @@ export function AutoscuoleStudentsPage({
                           {paymentSaving === lesson.id ? "Salvo…" : "Segna pagata"}
                         </button>
                       )}
-                      {lesson.manualPaymentStatus !== "paid" && !isExam && (credits?.availableCredits ?? 0) > 0 && (
+                      {lesson.manualPaymentStatus !== "paid" && !isExam && (credits?.availableCredits ?? 0) >= (credits?.unit === "minutes" ? Math.max(1, lesson.durationMinutes) : 1) && (
                         <button
                           type="button"
                           className={cn(inlineLinkClass, "ml-1")}

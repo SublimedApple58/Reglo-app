@@ -8,7 +8,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 
 ### Appointments
 - → **Pausa tra le guide (REG-484)**: ogni guida prenotata crea subito dopo di sé un `AutoscuolaInstructorBlock` `reason="lesson_buffer"` sull'istruttore (`createLessonBufferBlock`, chiamato da `createAutoscuolaAppointment`, `createAutoscuolaAppointmentBatch`, `createBookingRequest`, `respondWaitlistOffer`). **Il blocco non segue la guida**: annullo/spostamento/rimozione lo lasciano orfano, va tolto a mano. Vedi `features/lesson-buffer.md`
-- → **Payments**: cancel refunds credits (`refundLessonCreditIfEligible`; l'annullo web `annulFutureAppointment` rende il credito via `adjustStudentLessonCredits` o azzera l'importo `waived`), confirm consumes credits, settlement charges Stripe, `coverAppointmentWithLessonCredit` applica 1 credito a una guida da pagare
+- → **Payments**: cancel refunds credits (`refundLessonCreditIfEligible`; l'annullo web `annulFutureAppointment` rende il credito via `adjustStudentLessonCredits` o azzera l'importo `waived`), confirm consumes credits, settlement charges Stripe, `coverAppointmentWithLessonCredit` applica il credito (1 guida o la durata in minuti, REG-783) a una guida da pagare
 - → **Blocchi guide annullate (REG-623)**: con `cancelledLessonBlocks` acceso, ogni annullata `manual_cancel` (o `operational_cancel` + `school_fault`) resta in agenda come blocco finché **una riga attiva dello stesso istruttore** (anche co-istruttore) non copre l'orario. Derivato, non salvato (`findCancelledLessonBlocks`): chi cambia `cancellationKind`, i motivi di `operational_cancel` o l'appartenenza alla colonna istruttore cambia anche quali blocchi compaiono. La X scrive solo `agendaDismissedAt`. REG-624: la nota dell'ufficio (`agendaNote`) passa dalla rotta **bootstrap condivisa con il mobile**, che la toglie se manca `officeNotes=1` o il ruolo non è titolare/admin (`withOfficeNotes`): chi tocca quella rotta o la sua cache non deve far trapelare la nota all'app. Vedi `features/cancelled-lesson-blocks.md`. Lo stesso filtro toglie le **note del giorno** (REG-632, `dayNotes`): vedi `features/day-notes.md`
 - → **Repositioning (rimosso 2026-06-09)**: l'annullo annulla e basta; il vecchio motore e la route `/reposition` non esistono più (vedi `operational-cancellation.ts`)
 - → **Notifications**: push on create/cancel/reschedule/propose (l'annullo web via `annulFutureAppointment` notifica con reason `owner_delete`)
@@ -87,7 +87,9 @@ Each entry: **Feature** → list of features it connects to, with reason.
 
 ### Payments & Credits
 - → **Appointments**: settlement/retry/penalty reads appointment data; refund on cancel
-- → **Swaps**: `adjustStudentLessonCredits(swap_consume/swap_refund)`
+- → **Swaps**: `refundAppointmentCredit(swap_refund)` + `consumeLessonCreditIfAvailable(swap_consume)`, nell'unità dei crediti dell'autoscuola (REG-783)
+- → **Appointments (REG-783)**: spostamento e modifica dettagli chiamano `syncAppointmentCreditToDuration` (crediti a minuti); ogni rimborso passa da `refundAppointmentCredit`
+- → **Settings (REG-783)**: `limits.lessonCreditUnit` si cambia solo con `switchLessonCreditUnit`, mai da `updateAutoscuolaSettings`
 - → **Holidays**: bulk cancel refunds credits
 - → **Communications**: background jobs call payment functions (settlement, retry, penalty, invoice)
 - → **Cache**: invalidates PAYMENTS + FIC

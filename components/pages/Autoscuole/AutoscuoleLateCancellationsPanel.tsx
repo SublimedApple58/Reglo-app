@@ -219,7 +219,7 @@ export function AutoscuoleLateCancellationsPanel({
             {item.creditApplied && (
               <p className="mb-3 text-[12px] font-medium text-[#929292]">
                 Guida coperta da un credito · <span className="text-[#222222]">Trattieni</span> = l&apos;allievo lo perde ·{" "}
-                <span className="text-[#222222]">Restituisci</span> = gli torna 1 credito
+                <span className="text-[#222222]">Restituisci</span> = gli torna il credito della guida
               </p>
             )}
             <div className="flex items-center gap-2.5">
