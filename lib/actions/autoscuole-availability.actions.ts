@@ -1,6 +1,13 @@
 "use server";
 
-import { countStudentWeeklyLessons, weeklyLimitCountsGroupLessons } from "@/lib/autoscuole/weekly-lessons";
+import {
+  countStudentWeeklyLessons,
+  exceedsWeeklyLimit,
+  formatWeeklyLimit,
+  lessonMinutes,
+  weeklyLimitCountsGroupLessons,
+  weeklyLimitFrom,
+} from "@/lib/autoscuole/weekly-lessons";
 import {
   applyRangeLocations,
   loadValidRangeLocationIds,
@@ -2533,17 +2540,26 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             : null;
 
         if (!isLimitExempt && !examPriorityBypass && effectiveWeeklyLimit !== null) {
-          const { lessons: weekCount } = await countStudentWeeklyLessons({
+          const usage = await countStudentWeeklyLessons({
             companyId: membership.companyId,
             studentId: payload.studentId,
             at: new Date(candidate.start),
             includeGroupLessons: weeklyLimitCountsGroupLessons(preServiceLimits),
           });
+          // REG-782: limite a guide o a ore, secondo l'autoscuola o il cluster.
+          const weeklyLimit = weeklyLimitFrom({
+            ...clusterBookingSettings,
+            weeklyBookingLimit: effectiveWeeklyLimit,
+          });
+          const adding = {
+            lessons: 1,
+            minutes: lessonMinutes(new Date(candidate.start), new Date(candidate.end)),
+          };
 
-          if (weekCount >= effectiveWeeklyLimit) {
+          if (exceedsWeeklyLimit(weeklyLimit, usage, adding)) {
             return {
               success: false,
-              message: `Hai raggiunto il limite massimo di ${effectiveWeeklyLimit} guide settimanali. Non puoi prenotare altre guide per questa settimana.`,
+              message: `Hai raggiunto il limite di ${formatWeeklyLimit(weeklyLimit)} a settimana. Non puoi prenotare altre guide per questa settimana.`,
               code: "WEEKLY_LIMIT_REACHED" as const,
             };
           }
@@ -2980,7 +2996,10 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
 
     let weeklyLimitReached = false;
     let weeklyBookingCount = 0;
+    let weeklyBookingMinutes = 0;
     const effectiveLimit = weeklyBookingLimit;
+    // REG-782: limite a guide o a ore (minuti), secondo l'autoscuola o il cluster.
+    const weeklyLimit = weeklyLimitFrom({ ...clusterSettings, weeklyBookingLimit: effectiveLimit });
 
     if (weeklyBookingLimitEnabled) {
       const memberRecord = await prisma.companyMember.findFirst({
@@ -2990,14 +3009,18 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
       // Bypass weekly limit: exempt members OR students with exam priority
       if (!memberRecord?.weeklyBookingLimitExempt && !studentHasExamPriority) {
         // Guide di guida della settimana corrente (lun–dom), REG-781.
-        const { lessons } = await countStudentWeeklyLessons({
+        const usage = await countStudentWeeklyLessons({
           companyId: membership.companyId,
           studentId: payload.studentId,
           at: new Date(),
           includeGroupLessons: weeklyLimitCountsGroupLessons(limits),
         });
-        weeklyBookingCount = lessons;
-        weeklyLimitReached = weeklyBookingCount >= effectiveLimit;
+        weeklyBookingCount = usage.lessons;
+        weeklyBookingMinutes = usage.minutes;
+        // A ore: raggiunto se non ci sta più nemmeno la guida più corta.
+        const durations = clusterSettings.bookingSlotDurations;
+        const shortest = durations.length ? Math.min(...durations) : 60;
+        weeklyLimitReached = exceedsWeeklyLimit(weeklyLimit, usage, { lessons: 1, minutes: shortest });
       }
     }
 
@@ -3010,8 +3033,13 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
         instructorPreferenceEnabled,
         weeklyBookingLimit: weeklyBookingLimitEnabled ? {
           enabled: true,
+          // REG-782: `limit`/`current` restano in guide (app già pubblicate);
+          // con `unit: "minutes"` contano `limitMinutes`/`currentMinutes`.
+          unit: weeklyLimit.unit,
           limit: effectiveLimit,
           current: weeklyBookingCount,
+          limitMinutes: weeklyLimit.minutes,
+          currentMinutes: weeklyBookingMinutes,
           reached: weeklyLimitReached,
           examPriority: examPriorityInfo,
         } : { enabled: false },

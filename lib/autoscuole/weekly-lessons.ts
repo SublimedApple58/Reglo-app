@@ -1,5 +1,7 @@
 import { prisma as defaultPrisma } from "@/db/prisma";
 
+import { lessonMinutes } from "./weekly-limit";
+
 /**
  * REG-781 — il conteggio settimanale delle guide di un allievo, in un posto
  * solo. Prima era copiato in sei punti (prenotazione da app, opzioni di
@@ -15,9 +17,6 @@ import { prisma as defaultPrisma } from "@/db/prisma";
  *
  * La settimana va da lunedì 00:00 a lunedì 00:00 in UTC, come prima.
  */
-
-/** Durata assunta per le guide senza fine registrata. */
-export const DEFAULT_LESSON_MINUTES = 60;
 
 const EXAM_TYPE = "esame";
 
@@ -86,9 +85,8 @@ export async function countStudentWeeklyLessons({
     select: { startsAt: true, endsAt: true },
   });
   let minutes = 0;
-  for (const row of rows) {
-    const span = row.endsAt ? Math.round((row.endsAt.getTime() - row.startsAt.getTime()) / 60000) : 0;
-    minutes += span > 0 ? span : DEFAULT_LESSON_MINUTES;
-  }
+  for (const row of rows) minutes += lessonMinutes(row.startsAt, row.endsAt);
   return { lessons: rows.length, minutes };
 }
+
+export * from "./weekly-limit";

@@ -66,6 +66,7 @@ import { DatePickerInput } from "@/components/ui/date-picker";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { PROTO_INPUT, PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 import { UnderlineTabs } from "@/components/ui/underline-tabs";
+import type { WeeklyLimitUnit } from "@/lib/autoscuole/weekly-limit";
 import {
   SettingsPaneActiveContext,
   writeSettingsUrl,
@@ -578,6 +579,9 @@ export function AutoscuoleResourcesPage({
   const [weeklyBookingLimit, setWeeklyBookingLimit] = React.useState(3);
   // REG-781: i posti nelle guide di gruppo contano nel limite settimanale (default sì).
   const [weeklyLimitCountsGroupLessons, setWeeklyLimitCountsGroupLessons] = React.useState(true);
+  // REG-782: limite a guide o a ore (minuti).
+  const [weeklyBookingLimitUnit, setWeeklyBookingLimitUnit] = React.useState<WeeklyLimitUnit>("lessons");
+  const [weeklyBookingLimitMinutes, setWeeklyBookingLimitMinutes] = React.useState(240);
   const [autoBookingBlockEnabled, setAutoBookingBlockEnabled] = React.useState(false);
   const [autoBookingBlockThreshold, setAutoBookingBlockThreshold] = React.useState(3);
   const [examPriorityEnabled, setExamPriorityEnabled] = React.useState(false);
@@ -859,6 +863,8 @@ export function AutoscuoleResourcesPage({
     setWeeklyBookingLimitEnabled(res.data.weeklyBookingLimitEnabled ?? false);
     setWeeklyBookingLimit(res.data.weeklyBookingLimit ?? 3);
     setWeeklyLimitCountsGroupLessons(res.data.weeklyLimitCountsGroupLessons !== false);
+    setWeeklyBookingLimitUnit(res.data.weeklyBookingLimitUnit ?? "lessons");
+    setWeeklyBookingLimitMinutes(res.data.weeklyBookingLimitMinutes ?? 240);
     setAutoBookingBlockEnabled(res.data.autoBookingBlockEnabled ?? false);
     setAutoBookingBlockThreshold(res.data.autoBookingBlockThreshold ?? 3);
     setExamPriorityEnabled(res.data.examPriorityEnabled ?? false);
@@ -1079,6 +1085,16 @@ export function AutoscuoleResourcesPage({
   const saveWeeklyBookingLimit = persistField(weeklyBookingLimit, setWeeklyBookingLimit, (v) => ({
     weeklyBookingLimit: v,
   }));
+  const saveWeeklyBookingLimitUnit = persistField(
+    weeklyBookingLimitUnit,
+    setWeeklyBookingLimitUnit,
+    (v) => ({ weeklyBookingLimitUnit: v }),
+  );
+  const saveWeeklyBookingLimitMinutes = persistField(
+    weeklyBookingLimitMinutes,
+    setWeeklyBookingLimitMinutes,
+    (v) => ({ weeklyBookingLimitMinutes: v }),
+  );
   const saveWeeklyLimitCountsGroupLessons = persistField(
     weeklyLimitCountsGroupLessons,
     setWeeklyLimitCountsGroupLessons,
@@ -2577,6 +2593,10 @@ export function AutoscuoleResourcesPage({
             setWeeklyBookingLimitEnabled={saveWeeklyBookingLimitEnabled}
             weeklyBookingLimit={weeklyBookingLimit}
             setWeeklyBookingLimit={saveWeeklyBookingLimit}
+            weeklyBookingLimitUnit={weeklyBookingLimitUnit}
+            setWeeklyBookingLimitUnit={saveWeeklyBookingLimitUnit}
+            weeklyBookingLimitMinutes={weeklyBookingLimitMinutes}
+            setWeeklyBookingLimitMinutes={saveWeeklyBookingLimitMinutes}
             weeklyLimitCountsGroupLessons={weeklyLimitCountsGroupLessons}
             setWeeklyLimitCountsGroupLessons={saveWeeklyLimitCountsGroupLessons}
             autoBookingBlockEnabled={autoBookingBlockEnabled}

@@ -7,7 +7,15 @@ import {
 import { OFFER_CHANNELS } from "@/lib/autoscuole/channel-cascade";
 import { z } from "zod";
 import { prisma } from "@/db/prisma";
-import { countStudentWeeklyLessons, weeklyLimitCountsGroupLessons } from "@/lib/autoscuole/weekly-lessons";
+import {
+  countStudentWeeklyLessons,
+  exceedsWeeklyLimit,
+  formatWeeklyLimit,
+  formatWeeklyUsage,
+  lessonMinutes,
+  weeklyLimitCountsGroupLessons,
+  weeklyLimitFrom,
+} from "@/lib/autoscuole/weekly-lessons";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { sendDynamicEmail } from "@/email";
@@ -794,17 +802,23 @@ export async function respondSwapOffer(
           }
           if (!bypass) {
             // Guide di guida della settimana della guida scambiata, REG-781.
-            const { lessons: weekCount } = await countStudentWeeklyLessons({
+            const usage = await countStudentWeeklyLessons({
               companyId: membership.companyId,
               studentId: payload.studentId,
               at: offer.appointment.startsAt,
               excludeAppointmentId: offer.appointmentId,
               includeGroupLessons: weeklyLimitCountsGroupLessons(limits),
             });
-            if (weekCount + 1 > effective.weeklyBookingLimit) {
+            // REG-782: guide o ore (minuti), secondo l'autoscuola o il cluster.
+            const limit = weeklyLimitFrom(effective);
+            const adding = {
+              lessons: 1,
+              minutes: lessonMinutes(offer.appointment.startsAt, offer.appointment.endsAt),
+            };
+            if (exceedsWeeklyLimit(limit, usage, adding)) {
               return {
                 success: false,
-                message: `Hai già ${weekCount} guide in questa settimana: accettando questo scambio supereresti il limite di ${effective.weeklyBookingLimit} guide settimanali.`,
+                message: `Hai già ${formatWeeklyUsage(limit, usage)} in questa settimana: accettando questo scambio supereresti il limite di ${formatWeeklyLimit(limit)} a settimana.`,
               };
             }
           }

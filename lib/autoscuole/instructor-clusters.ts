@@ -1,5 +1,11 @@
 import { prisma } from "@/db/prisma";
 import { normalizeBookingSlotDurations } from "@/lib/autoscuole/lesson-policy";
+import {
+  DEFAULT_WEEKLY_LIMIT_MINUTES,
+  parseWeeklyLimitMinutes,
+  parseWeeklyLimitUnit,
+  type WeeklyLimitUnit,
+} from "@/lib/autoscuole/weekly-lessons";
 import type {
   AppBookingActors,
   AppBookingActorsByPath,
@@ -44,6 +50,9 @@ export type InstructorSettings = {
   // Limite settimanale
   weeklyBookingLimitEnabled?: boolean;
   weeklyBookingLimit?: number;
+  /** REG-782: limite a guide o a ore (minuti). */
+  weeklyBookingLimitUnit?: WeeklyLimitUnit;
+  weeklyBookingLimitMinutes?: number;
   // Notifiche slot vuoti
   emptySlotNotificationEnabled?: boolean;
   emptySlotNotificationTarget?: "all" | "availability_matching";
@@ -85,6 +94,8 @@ export type EffectiveBookingSettings = {
   // Limite settimanale
   weeklyBookingLimitEnabled: boolean;
   weeklyBookingLimit: number;
+  weeklyBookingLimitUnit: WeeklyLimitUnit;
+  weeklyBookingLimitMinutes: number;
   // Notifiche slot vuoti
   emptySlotNotificationEnabled: boolean;
   emptySlotNotificationTarget: "all" | "availability_matching";
@@ -152,6 +163,11 @@ export function parseInstructorSettings(raw: unknown): InstructorSettings {
   if (typeof obj.weeklyBookingLimit === "number" && Number.isInteger(obj.weeklyBookingLimit) && obj.weeklyBookingLimit >= 1 && obj.weeklyBookingLimit <= 50) {
     result.weeklyBookingLimit = obj.weeklyBookingLimit;
   }
+  if (obj.weeklyBookingLimitUnit === "lessons" || obj.weeklyBookingLimitUnit === "minutes") {
+    result.weeklyBookingLimitUnit = obj.weeklyBookingLimitUnit;
+  }
+  const clusterLimitMinutes = parseWeeklyLimitMinutes(obj.weeklyBookingLimitMinutes);
+  if (clusterLimitMinutes !== null) result.weeklyBookingLimitMinutes = clusterLimitMinutes;
 
   // Notifiche slot vuoti
   if (typeof obj.emptySlotNotificationEnabled === "boolean") result.emptySlotNotificationEnabled = obj.emptySlotNotificationEnabled;
@@ -210,6 +226,8 @@ export type CompanyBookingDefaults = {
   bookingCutoffTime: string;
   weeklyBookingLimitEnabled: boolean;
   weeklyBookingLimit: number;
+  weeklyBookingLimitUnit: WeeklyLimitUnit;
+  weeklyBookingLimitMinutes: number;
   emptySlotNotificationEnabled: boolean;
   emptySlotNotificationTarget: "all" | "availability_matching";
   emptySlotNotificationTimes: string[];
@@ -236,6 +254,8 @@ export function buildCompanyBookingDefaults(limits: Record<string, unknown>): Co
     bookingCutoffTime: typeof limits.bookingCutoffTime === "string" && BOOKING_CUTOFF_TIME_RE.test(limits.bookingCutoffTime) ? limits.bookingCutoffTime : "18:00",
     weeklyBookingLimitEnabled: limits.weeklyBookingLimitEnabled === true,
     weeklyBookingLimit: typeof limits.weeklyBookingLimit === "number" && limits.weeklyBookingLimit >= 1 ? limits.weeklyBookingLimit : 3,
+    weeklyBookingLimitUnit: parseWeeklyLimitUnit(limits.weeklyBookingLimitUnit),
+    weeklyBookingLimitMinutes: parseWeeklyLimitMinutes(limits.weeklyBookingLimitMinutes) ?? DEFAULT_WEEKLY_LIMIT_MINUTES,
     emptySlotNotificationEnabled: limits.emptySlotNotificationEnabled === true,
     emptySlotNotificationTarget: limits.emptySlotNotificationTarget === "availability_matching" ? "availability_matching" : "all",
     emptySlotNotificationTimes: Array.isArray(limits.emptySlotNotificationTimes) ? limits.emptySlotNotificationTimes.filter((t): t is string => typeof t === "string" && HH_MM_RE.test(t)) : ["08:00"],
@@ -265,6 +285,8 @@ export async function resolveEffectiveBookingSettings(
         bookingCutoffTime: "18:00",
         weeklyBookingLimitEnabled: false,
         weeklyBookingLimit: 3,
+        weeklyBookingLimitUnit: "lessons" as const,
+        weeklyBookingLimitMinutes: DEFAULT_WEEKLY_LIMIT_MINUTES,
         emptySlotNotificationEnabled: false,
         emptySlotNotificationTarget: "all" as const,
         emptySlotNotificationTimes: ["08:00"],
@@ -294,6 +316,8 @@ export async function resolveEffectiveBookingSettings(
     bookingCutoffTime: defaults.bookingCutoffTime,
     weeklyBookingLimitEnabled: defaults.weeklyBookingLimitEnabled,
     weeklyBookingLimit: defaults.weeklyBookingLimit,
+    weeklyBookingLimitUnit: defaults.weeklyBookingLimitUnit,
+    weeklyBookingLimitMinutes: defaults.weeklyBookingLimitMinutes,
     emptySlotNotificationEnabled: defaults.emptySlotNotificationEnabled,
     emptySlotNotificationTarget: defaults.emptySlotNotificationTarget,
     emptySlotNotificationTimes: defaults.emptySlotNotificationTimes,
@@ -377,6 +401,8 @@ export async function resolveEffectiveBookingSettings(
   if (settings.bookingCutoffTime !== undefined) base.bookingCutoffTime = settings.bookingCutoffTime;
   if (typeof settings.weeklyBookingLimitEnabled === "boolean") base.weeklyBookingLimitEnabled = settings.weeklyBookingLimitEnabled;
   if (settings.weeklyBookingLimit !== undefined) base.weeklyBookingLimit = settings.weeklyBookingLimit;
+  if (settings.weeklyBookingLimitUnit !== undefined) base.weeklyBookingLimitUnit = settings.weeklyBookingLimitUnit;
+  if (settings.weeklyBookingLimitMinutes !== undefined) base.weeklyBookingLimitMinutes = settings.weeklyBookingLimitMinutes;
   if (typeof settings.emptySlotNotificationEnabled === "boolean") base.emptySlotNotificationEnabled = settings.emptySlotNotificationEnabled;
   if (settings.emptySlotNotificationTarget !== undefined) base.emptySlotNotificationTarget = settings.emptySlotNotificationTarget;
   if (settings.emptySlotNotificationTimes?.length) base.emptySlotNotificationTimes = settings.emptySlotNotificationTimes;
@@ -425,6 +451,8 @@ export async function resolveEffectiveSettingsForInstructor(
   if (settings.bookingCutoffTime !== undefined) result.bookingCutoffTime = settings.bookingCutoffTime;
   if (typeof settings.weeklyBookingLimitEnabled === "boolean") result.weeklyBookingLimitEnabled = settings.weeklyBookingLimitEnabled;
   if (settings.weeklyBookingLimit !== undefined) result.weeklyBookingLimit = settings.weeklyBookingLimit;
+  if (settings.weeklyBookingLimitUnit !== undefined) result.weeklyBookingLimitUnit = settings.weeklyBookingLimitUnit;
+  if (settings.weeklyBookingLimitMinutes !== undefined) result.weeklyBookingLimitMinutes = settings.weeklyBookingLimitMinutes;
   if (typeof settings.emptySlotNotificationEnabled === "boolean") result.emptySlotNotificationEnabled = settings.emptySlotNotificationEnabled;
   if (settings.emptySlotNotificationTarget !== undefined) result.emptySlotNotificationTarget = settings.emptySlotNotificationTarget;
   if (settings.emptySlotNotificationTimes?.length) result.emptySlotNotificationTimes = settings.emptySlotNotificationTimes;

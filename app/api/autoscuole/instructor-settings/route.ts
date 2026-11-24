@@ -209,6 +209,9 @@ const patchSchema = z.object({
   bookingCutoffTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   weeklyBookingLimitEnabled: z.boolean().optional(),
   weeklyBookingLimit: z.number().int().min(1).max(50).optional(),
+  // REG-782: limite a guide o a ore (minuti).
+  weeklyBookingLimitUnit: z.enum(["lessons", "minutes"]).optional(),
+  weeklyBookingLimitMinutes: z.number().int().min(30).max(3000).optional(),
   emptySlotNotificationEnabled: z.boolean().optional(),
   emptySlotNotificationTarget: z.enum(["all", "availability_matching"]).optional(),
   emptySlotNotificationTimes: z.array(z.string().regex(/^\d{2}:\d{2}$/)).optional(),

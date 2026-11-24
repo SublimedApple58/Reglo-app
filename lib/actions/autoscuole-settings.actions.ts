@@ -1,6 +1,14 @@
 "use server";
 
-import { weeklyLimitCountsGroupLessons } from "@/lib/autoscuole/weekly-lessons";
+import {
+  DEFAULT_WEEKLY_LIMIT_MINUTES,
+  WEEKLY_LIMIT_MINUTES_MAX,
+  WEEKLY_LIMIT_MINUTES_MIN,
+  parseWeeklyLimitMinutes,
+  parseWeeklyLimitUnit,
+  weeklyLimitCountsGroupLessons,
+  type WeeklyLimitUnit,
+} from "@/lib/autoscuole/weekly-lessons";
 import {
   LAST_MINUTE_HOURS_MAX,
   LAST_MINUTE_HOURS_MIN,
@@ -431,6 +439,14 @@ const autoscuolaSettingsPatchSchema = z
       .optional(),
     weeklyBookingLimitEnabled: z.boolean().optional(),
     weeklyBookingLimit: z.number().int().min(1).max(50).optional(),
+    // REG-782: limite a guide o a ore; in ore il valore è in minuti.
+    weeklyBookingLimitUnit: z.enum(["lessons", "minutes"]).optional(),
+    weeklyBookingLimitMinutes: z
+      .number()
+      .int()
+      .min(WEEKLY_LIMIT_MINUTES_MIN)
+      .max(WEEKLY_LIMIT_MINUTES_MAX)
+      .optional(),
     // REG-781: i posti nelle guide di gruppo contano nel limite settimanale (default sì).
     weeklyLimitCountsGroupLessons: z.boolean().optional(),
     autoBookingBlockEnabled: z.boolean().optional(),
@@ -726,6 +742,8 @@ export type AutoscuolaSettingsData = {
   emptySlotNotificationTimes: string[];
   weeklyBookingLimitEnabled: boolean;
   weeklyBookingLimit: number;
+  weeklyBookingLimitUnit: WeeklyLimitUnit;
+  weeklyBookingLimitMinutes: number;
   weeklyLimitCountsGroupLessons: boolean;
   autoBookingBlockEnabled: boolean;
   autoBookingBlockThreshold: number;
@@ -1152,6 +1170,9 @@ const resolveAutoscuolaSettingsData = async (
     emptySlotNotificationTimes,
     weeklyBookingLimitEnabled,
     weeklyBookingLimit,
+    weeklyBookingLimitUnit: parseWeeklyLimitUnit(limits.weeklyBookingLimitUnit),
+    weeklyBookingLimitMinutes:
+      parseWeeklyLimitMinutes(limits.weeklyBookingLimitMinutes) ?? DEFAULT_WEEKLY_LIMIT_MINUTES,
     weeklyLimitCountsGroupLessons: weeklyLimitCountsGroupLessons(limits),
     autoBookingBlockEnabled,
     autoBookingBlockThreshold,
@@ -1975,6 +1996,12 @@ export async function updateAutoscuolaSettings(
       emptySlotNotificationTimes: nextEmptySlotNotificationTimes,
       weeklyBookingLimitEnabled: nextWeeklyBookingLimitEnabled,
       weeklyBookingLimit: nextWeeklyBookingLimit,
+      weeklyBookingLimitUnit:
+        payload.weeklyBookingLimitUnit ?? parseWeeklyLimitUnit(limits.weeklyBookingLimitUnit),
+      weeklyBookingLimitMinutes:
+        payload.weeklyBookingLimitMinutes ??
+        parseWeeklyLimitMinutes(limits.weeklyBookingLimitMinutes) ??
+        DEFAULT_WEEKLY_LIMIT_MINUTES,
       weeklyLimitCountsGroupLessons:
         payload.weeklyLimitCountsGroupLessons ?? weeklyLimitCountsGroupLessons(limits),
       autoBookingBlockEnabled: nextAutoBookingBlockEnabled,
@@ -2202,6 +2229,8 @@ export async function updateAutoscuolaSettings(
         emptySlotNotificationTimes: nextLimits.emptySlotNotificationTimes,
         weeklyBookingLimitEnabled: nextLimits.weeklyBookingLimitEnabled,
         weeklyBookingLimit: nextLimits.weeklyBookingLimit,
+        weeklyBookingLimitUnit: nextLimits.weeklyBookingLimitUnit,
+        weeklyBookingLimitMinutes: nextLimits.weeklyBookingLimitMinutes,
         weeklyLimitCountsGroupLessons: nextLimits.weeklyLimitCountsGroupLessons,
         autoBookingBlockEnabled: nextLimits.autoBookingBlockEnabled,
         autoBookingBlockThreshold: nextLimits.autoBookingBlockThreshold,
