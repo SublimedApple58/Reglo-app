@@ -1,10 +1,26 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { markNewsSeen } from "./news-seen";
 
 const userEmail = process.env.E2E_USER_EMAIL;
 const userPassword = process.env.E2E_USER_PASSWORD;
 
 const missingCredentials = !userEmail || !userPassword;
+
+/**
+ * Un titolare con più autoscuole (su staging) dopo il login atterra su «Scegli
+ * l'autoscuola da aprire»: entra nella prima, come farebbe chiunque.
+ */
+async function enterSchoolIfAsked(page: Page) {
+  const enter = page.getByRole("button", { name: "Entra nell'autoscuola" }).first();
+  const asked = await enter
+    .waitFor({ state: "visible", timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (asked) {
+    await enter.click();
+    await page.waitForURL(/\/user\/autoscuole/, { timeout: 90_000 });
+  }
+}
 
 test.describe("Autoscuole smoke", () => {
   test.skip(
@@ -63,7 +79,8 @@ test.describe("Autoscuole smoke", () => {
     await emailInput.first().fill(userEmail!);
     await passwordInput.first().fill(userPassword!);
     await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
-    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+    await page.waitForURL((url) => !url.pathname.includes("sign-in"), { timeout: 90_000 });
+    await enterSchoolIfAsked(page);
 
     // Redesign 2026-07: la Dashboard è stata ritirata — la landing è l'Agenda.
     await page.goto("/it/user/autoscuole");
@@ -86,7 +103,8 @@ test.describe("Autoscuole smoke", () => {
     await emailInput.first().fill(userEmail!);
     await passwordInput.first().fill(userPassword!);
     await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
-    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+    await page.waitForURL((url) => !url.pathname.includes("sign-in"), { timeout: 90_000 });
+    await enterSchoolIfAsked(page);
 
     await page.goto("/it/user/autoscuole?tab=students");
     await expect(page.getByTestId("autoscuole-students-page")).toBeVisible({ timeout: 60000 });
@@ -126,7 +144,8 @@ test.describe("Autoscuole smoke", () => {
     await emailInput.first().fill(userEmail!);
     await passwordInput.first().fill(userPassword!);
     await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
-    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+    await page.waitForURL((url) => !url.pathname.includes("sign-in"), { timeout: 90_000 });
+    await enterSchoolIfAsked(page);
 
     await page.goto("/it/admin/users");
     // .first(): in dev, durante la transizione di route, Next monta per un
@@ -166,7 +185,8 @@ test.describe("Autoscuole smoke", () => {
     await emailInput.first().fill(userEmail!);
     await passwordInput.first().fill(userPassword!);
     await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
-    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+    await page.waitForURL((url) => !url.pathname.includes("sign-in"), { timeout: 90_000 });
+    await enterSchoolIfAsked(page);
 
     // Area personale: overlay + navigazione pane
     await page.goto("/it/user/autoscuole/area-personale");
@@ -192,7 +212,8 @@ test.describe("Autoscuole smoke", () => {
     await emailInput.first().fill(userEmail!);
     await passwordInput.first().fill(userPassword!);
     await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
-    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+    await page.waitForURL((url) => !url.pathname.includes("sign-in"), { timeout: 90_000 });
+    await enterSchoolIfAsked(page);
 
     await page.goto("/it/user/autoscuole/voice");
     await expect(page.getByTestId("autoscuole-voice-page")).toBeVisible({ timeout: 60000 });
@@ -233,7 +254,8 @@ test.describe("Autoscuole smoke", () => {
     await emailInput.first().fill(userEmail!);
     await passwordInput.first().fill(userPassword!);
     await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
-    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+    await page.waitForURL((url) => !url.pathname.includes("sign-in"), { timeout: 90_000 });
+    await enterSchoolIfAsked(page);
 
     // Il vecchio deep-link pane=students deve atterrare sul pane unificato
     await page.goto("/it/user/autoscuole?tab=settings&pane=students");
@@ -335,7 +357,8 @@ test.describe("Autoscuole smoke", () => {
     await emailInput.first().fill(userEmail!);
     await passwordInput.first().fill(userPassword!);
     await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
-    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+    await page.waitForURL((url) => !url.pathname.includes("sign-in"), { timeout: 90_000 });
+    await enterSchoolIfAsked(page);
 
     await page.goto("/it/user/autoscuole?tab=settings&pane=instructors");
     const pane = page.getByTestId("instructors-pane");
