@@ -1,5 +1,5 @@
 import { cellsAround, decodeCell, encodeCell, onewayFromTags, type OsmWay } from "@/lib/autoscuole/road/osm-cells";
-import { cutCells, wayFromOsm } from "@/lib/autoscuole/road/osm-cells-build";
+import { cutCells, osmCellBlocks, wayFromOsm } from "@/lib/autoscuole/road/osm-cells-build";
 import { RoadGraph, RoadMatcher, matchTrack, type MatchPoint } from "@/lib/autoscuole/road/osm-match";
 
 const LAT0 = 42.61;
@@ -68,6 +68,27 @@ describe("REG-722 celle OSM", () => {
 
   it("le celle attorno alla sede coprono il raggio", () => {
     expect(cellsAround(42.6117, 13.7282, 20_000).length).toBeGreaterThanOrEqual(56);
+  });
+
+  it("blocchi del job: da fromLat riparte dalla fascia che la contiene, senza buchi né doppioni", () => {
+    const BOX = { south: 35.2, west: 6.5, north: 47.2, east: 18.7 };
+    const all = osmCellBlocks(BOX, 20, 14);
+    const rows = [...new Set(all.map((b) => b.by))];
+    expect(rows[0]).toBe(704);
+    expect(rows.at(-1)).toBe(944);
+    expect(new Set(all.map((b) => b.bx)).size * rows.length).toBe(all.length);
+
+    // Giro del 24/11 interrotto dopo la fascia 804 (40,2°–41,2°): si riparte da 824.
+    const from = osmCellBlocks(BOX, 20, 14, 41.2);
+    expect(from[0].by).toBe(824);
+    expect(from[0].bbox.split(",")[1]).toBe("41.20000");
+    expect(all.filter((b) => b.by >= 824)).toEqual(from);
+
+    // Una latitudine a metà fascia non lascia buchi: si parte dall'inizio della fascia.
+    expect(osmCellBlocks(BOX, 20, 14, 41.7)[0].by).toBe(824);
+    // Fuori dal riquadro: tutto, oppure niente.
+    expect(osmCellBlocks(BOX, 20, 14, 10)).toEqual(all);
+    expect(osmCellBlocks(BOX, 20, 14, 50)).toEqual([]);
   });
 });
 

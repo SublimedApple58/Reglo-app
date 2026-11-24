@@ -19,6 +19,40 @@ import {
 export const OSM_CELLS_PREFIX = `road/osm/v${OSM_CELLS_VERSION}`;
 export const osmCellObjectKey = (key: string) => `${OSM_CELLS_PREFIX}/${key}.bin`;
 
+export type OsmCellBlock = {
+  /** Prima riga e prima colonna di celle del blocco. */
+  by: number;
+  bx: number;
+  /** `ovest,sud,est,nord` per `osmium extract -b`. */
+  bbox: string;
+};
+
+/**
+ * I blocchi di `rows` × `cols` celle che coprono `box`, da sud a nord e da
+ * ovest a est (l'ordine del job). Con `fromLat` si parte dalla fascia di
+ * blocchi che contiene quella latitudine: un giro interrotto riparte da lì
+ * senza buchi (le fasce restano allineate alla griglia del riquadro).
+ */
+export function osmCellBlocks(
+  box: { south: number; west: number; north: number; east: number },
+  rows: number,
+  cols: number,
+  fromLat?: number,
+): OsmCellBlock[] {
+  const iy0 = Math.floor(box.south / CELL_LAT), iy1 = Math.floor(box.north / CELL_LAT);
+  const ix0 = Math.floor(box.west / CELL_LNG), ix1 = Math.floor(box.east / CELL_LNG);
+  const fromIy = fromLat == null ? iy0 : Math.max(iy0, Math.floor(fromLat / CELL_LAT));
+  const startBy = iy0 + Math.floor((fromIy - iy0) / rows) * rows;
+  const out: OsmCellBlock[] = [];
+  for (let by = startBy; by <= iy1; by += rows) {
+    for (let bx = ix0; bx <= ix1; bx += cols) {
+      const bbox = [bx * CELL_LNG, by * CELL_LAT, (bx + cols) * CELL_LNG, (by + rows) * CELL_LAT].map((v) => v.toFixed(5)).join(",");
+      out.push({ by, bx, bbox });
+    }
+  }
+  return out;
+}
+
 /** Filtro OSM delle strade percorribili in auto (per Overpass e osmium). */
 export const DRIVABLE_HIGHWAYS = ROAD_KINDS;
 
