@@ -1,6 +1,12 @@
 "use client";
 
 import {
+  WEEKLY_LIMIT_MINUTES_MAX,
+  WEEKLY_LIMIT_MINUTES_MIN,
+  minutesToHoursInput,
+  parseHoursInput,
+} from "@/lib/autoscuole/weekly-limit";
+import {
   LEGACY_INSTRUCTORS_EXCEPTIONS,
   parseStudentBookingExceptions,
   parseStudentBookingExceptionsByPath,
@@ -2490,26 +2496,67 @@ function AutonomaTab({
                       </div>
                     )}
                     {g.key === "limite" && (
-                      <div>
-                        <div className={LBL}>Max guide a settimana</div>
-                        <input
-                          type="number"
-                          min={1}
-                          max={50}
-                          placeholder="es. 10"
-                          className={PROTO_INPUT}
-                          defaultValue={typeof settings.weeklyBookingLimit === "number" ? settings.weeklyBookingLimit : ""}
-                          onBlur={(e) =>
-                            saveSetting(
-                              "weeklyBookingLimit",
-                              e.target.value ? Math.max(1, Math.min(50, Number(e.target.value))) : undefined,
-                            )
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                          }}
-                        />
-                      </div>
+                      <>
+                        {/* REG-782: il limite del gruppo, a guide o a ore (minuti). */}
+                        <div>
+                          <div className={LBL}>Conta in</div>
+                          <OptField
+                            value={(settings.weeklyBookingLimitUnit as string) ?? "default"}
+                            onChange={(v) => saveSetting("weeklyBookingLimitUnit", v === "default" ? undefined : v)}
+                            options={[
+                              { v: "default", l: "Default autoscuola" },
+                              { v: "lessons", l: "Guide" },
+                              { v: "minutes", l: "Ore" },
+                            ]}
+                          />
+                        </div>
+                        <div className="mt-4">
+                          <div className={LBL}>Max guide a settimana</div>
+                          <input
+                            type="number"
+                            min={1}
+                            max={50}
+                            placeholder="es. 10"
+                            className={PROTO_INPUT}
+                            defaultValue={typeof settings.weeklyBookingLimit === "number" ? settings.weeklyBookingLimit : ""}
+                            onBlur={(e) =>
+                              saveSetting(
+                                "weeklyBookingLimit",
+                                e.target.value ? Math.max(1, Math.min(50, Number(e.target.value))) : undefined,
+                              )
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                            }}
+                          />
+                        </div>
+                        <div className="mt-4">
+                          <div className={LBL}>Max ore a settimana</div>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="es. 4,5"
+                            className={PROTO_INPUT}
+                            defaultValue={
+                              typeof settings.weeklyBookingLimitMinutes === "number"
+                                ? minutesToHoursInput(settings.weeklyBookingLimitMinutes)
+                                : ""
+                            }
+                            onBlur={(e) => {
+                              const minutes = e.target.value ? parseHoursInput(e.target.value) : null;
+                              saveSetting(
+                                "weeklyBookingLimitMinutes",
+                                minutes === null
+                                  ? undefined
+                                  : Math.max(WEEKLY_LIMIT_MINUTES_MIN, Math.min(WEEKLY_LIMIT_MINUTES_MAX, minutes)),
+                              );
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                            }}
+                          />
+                        </div>
+                      </>
                     )}
                     {g.key === "notifiche" && (
                       <>

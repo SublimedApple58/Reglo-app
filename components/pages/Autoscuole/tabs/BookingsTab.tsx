@@ -3,6 +3,14 @@
 import { UnderlineTabs } from "@/components/ui/underline-tabs";
 import { useSettingsSubTab } from "@/components/pages/Autoscuole/settings/settings-url";
 import { SettingRow, SETTING_SELECT_TRIGGER_CLASS } from "@/components/pages/Autoscuole/settings/SettingRow";
+import {
+  WEEKLY_LIMIT_MINUTES_MAX,
+  WEEKLY_LIMIT_MINUTES_MIN,
+  formatDrivingMinutes,
+  minutesToHoursInput,
+  parseHoursInput,
+  type WeeklyLimitUnit,
+} from "@/lib/autoscuole/weekly-limit";
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown, Loader2 } from "lucide-react";
@@ -94,6 +102,10 @@ export type BookingsTabProps = {
   setWeeklyBookingLimitEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   weeklyBookingLimit: number;
   setWeeklyBookingLimit: (v: number) => void;
+  weeklyBookingLimitUnit: WeeklyLimitUnit;
+  setWeeklyBookingLimitUnit: (v: WeeklyLimitUnit) => void;
+  weeklyBookingLimitMinutes: number;
+  setWeeklyBookingLimitMinutes: (v: number) => void;
   weeklyLimitCountsGroupLessons: boolean;
   setWeeklyLimitCountsGroupLessons: React.Dispatch<React.SetStateAction<boolean>>;
   autoBookingBlockEnabled: boolean;
@@ -224,6 +236,36 @@ function NumberField({
       onKeyDown={(e) => {
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
       }}
+      className="w-[120px] rounded-[14px] border-0 bg-white px-3.5 py-[11px] text-sm font-medium text-foreground shadow-clay-sink outline-none transition-shadow duration-200 focus:shadow-clay-focus"
+    />
+  );
+}
+
+/** REG-782: ore del limite settimanale («4», «4,5», «4:30») → minuti, commit su blur/Invio. */
+function HoursField({ value, onCommit }: { value: number; onCommit: (minutes: number) => void }) {
+  const [draft, setDraft] = React.useState(minutesToHoursInput(value));
+  React.useEffect(() => setDraft(minutesToHoursInput(value)), [value]);
+  const commit = () => {
+    const parsed = parseHoursInput(draft);
+    if (parsed === null) {
+      setDraft(minutesToHoursInput(value));
+      return;
+    }
+    const clamped = Math.max(WEEKLY_LIMIT_MINUTES_MIN, Math.min(WEEKLY_LIMIT_MINUTES_MAX, parsed));
+    setDraft(minutesToHoursInput(clamped));
+    if (clamped !== value) onCommit(clamped);
+  };
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      data-testid="weekly-limit-hours"
       className="w-[120px] rounded-[14px] border-0 bg-white px-3.5 py-[11px] text-sm font-medium text-foreground shadow-clay-sink outline-none transition-shadow duration-200 focus:shadow-clay-focus"
     />
   );
@@ -849,6 +891,10 @@ export default function BookingsTab({
   setWeeklyBookingLimitEnabled,
   weeklyBookingLimit,
   setWeeklyBookingLimit,
+  weeklyBookingLimitUnit,
+  setWeeklyBookingLimitUnit,
+  weeklyBookingLimitMinutes,
+  setWeeklyBookingLimitMinutes,
   weeklyLimitCountsGroupLessons,
   setWeeklyLimitCountsGroupLessons,
   autoBookingBlockEnabled,
@@ -1095,20 +1141,53 @@ export default function BookingsTab({
 
         <div className="py-6">
           <SettingRow
-            title="Massimo di guide a settimana"
-            description="Quante guide può prenotare un allievo in una settimana (lun–dom). Tu e gli istruttori potete sempre superarlo confermando."
+            title="Limite settimanale"
+            description="Quanto può prenotare un allievo in una settimana (lun–dom). Tu e gli istruttori potete sempre superarlo confermando."
             checked={weeklyBookingLimitEnabled}
             onToggle={() => setWeeklyBookingLimitEnabled((prev) => !prev)}
           />
           {weeklyBookingLimitEnabled && (
             <>
-              <FieldBlock label="Guide a settimana per allievo">
-                <NumberField value={weeklyBookingLimit} min={1} max={50} onCommit={setWeeklyBookingLimit} />
+              {/* REG-782: lo stesso limite, a guide o a ore (minuti). */}
+              <FieldBlock label="Massimo per allievo">
+                <div className="flex items-center gap-3">
+                  {weeklyBookingLimitUnit === "minutes" ? (
+                    <HoursField value={weeklyBookingLimitMinutes} onCommit={setWeeklyBookingLimitMinutes} />
+                  ) : (
+                    <NumberField value={weeklyBookingLimit} min={1} max={50} onCommit={setWeeklyBookingLimit} />
+                  )}
+                  <Select
+                    value={weeklyBookingLimitUnit}
+                    onValueChange={(v) => setWeeklyBookingLimitUnit(v as WeeklyLimitUnit)}
+                  >
+                    <SelectTrigger
+                      className={cn(SELECT_TRIGGER_CLASS, "w-[150px]")}
+                      data-testid="weekly-limit-unit"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="lessons">guide</SelectItem>
+                      <SelectItem value="minutes">ore</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {weeklyBookingLimitUnit === "minutes" && (
+                  <div className="mt-2 text-xs font-medium text-[#929292]">
+                    {formatDrivingMinutes(weeklyBookingLimitMinutes)
+                      .replace(/ e (\d+)$/, " e $1 minuti")}
+                    . Conta la durata di ogni guida.
+                  </div>
+                )}
               </FieldBlock>
               <SettingRow
                 nested
                 title="Le guide di gruppo contano"
-                description="Un posto in una guida di gruppo vale come una guida. Gli esami non contano mai."
+                description={
+                  weeklyBookingLimitUnit === "minutes"
+                    ? "Un posto in una guida di gruppo conta con la sua durata. Gli esami non contano mai."
+                    : "Un posto in una guida di gruppo vale come una guida. Gli esami non contano mai."
+                }
                 checked={weeklyLimitCountsGroupLessons}
                 onToggle={() => setWeeklyLimitCountsGroupLessons((prev) => !prev)}
               />

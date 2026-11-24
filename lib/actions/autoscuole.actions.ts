@@ -3,8 +3,13 @@
 import {
   countStudentWeeklyLessons,
   countsTowardWeeklyLimit,
+  exceedsWeeklyLimit,
+  formatWeeklyLimit,
+  formatWeeklyUsage,
+  lessonMinutes,
   weekBoundsUtc,
   weeklyLimitCountsGroupLessons,
+  weeklyLimitFrom,
 } from "@/lib/autoscuole/weekly-lessons";
 import { CAR_COLOR_KEYS } from "@/lib/autoscuole/road/car-colors";
 import { randomUUID } from "crypto";
@@ -3773,6 +3778,8 @@ export async function createAutoscuolaAppointment(
       const effective = await resolveEffectiveBookingSettings(companyId, payload.studentId, buildCompanyBookingDefaults(lim));
       const enabled = effective.weeklyBookingLimitEnabled;
       const limit = effective.weeklyBookingLimit;
+      // REG-782: guide o ore (minuti), secondo l'autoscuola o il cluster.
+      const weeklyLimit = weeklyLimitFrom(effective);
       // Exam priority is a company-wide policy (not cluster-overridable).
       const examPriorityEnabled = lim.examPriorityEnabled === true;
       const examPriorityDaysBeforeExam =
@@ -3785,6 +3792,7 @@ export async function createAutoscuolaAppointment(
         examPriorityEnabled,
         examPriorityDaysBeforeExam,
         countsGroupLessons: weeklyLimitCountsGroupLessons(lim),
+        weeklyLimit,
       };
     })();
 
@@ -3818,18 +3826,24 @@ export async function createAutoscuolaAppointment(
         } else {
 
         // Guide di guida della settimana (lun–dom) dello slot prenotato, REG-781.
-        const { lessons: weekCount } = await countStudentWeeklyLessons({
+        const usage = await countStudentWeeklyLessons({
           companyId,
           studentId: payload.studentId,
           at: new Date(payload.startsAt),
           includeGroupLessons: weeklyLimitSettings.countsGroupLessons,
         });
+        const limit = weeklyLimitSettings.weeklyLimit;
+        const startsAtDate = new Date(payload.startsAt);
+        const adding = {
+          lessons: 1,
+          minutes: lessonMinutes(startsAtDate, payload.endsAt ? new Date(payload.endsAt) : null),
+        };
 
-        if (weekCount >= effectiveLimit) {
+        if (exceedsWeeklyLimit(limit, usage, adding)) {
           if (isStudentActor) {
             return {
               success: false,
-              message: `Hai raggiunto il limite massimo di ${effectiveLimit} guide settimanali. Non puoi prenotare altre guide per questa settimana.`,
+              message: `Hai raggiunto il limite di ${formatWeeklyLimit(limit)} a settimana. Non puoi prenotare altre guide per questa settimana.`,
               code: "WEEKLY_LIMIT_REACHED" as const,
             };
           }
@@ -3837,9 +3851,15 @@ export async function createAutoscuolaAppointment(
           if (isInstructorActor || isOwnerOrAdminActor) {
             return {
               success: false,
-              message: `L'allievo ha già raggiunto il limite di ${effectiveLimit} guide settimanali (${weekCount} prenotate). Vuoi procedere comunque?`,
+              message: `L'allievo supera il limite di ${formatWeeklyLimit(limit)} a settimana (ne ha già ${formatWeeklyUsage(limit, usage)}). Vuoi procedere comunque?`,
               code: "WEEKLY_LIMIT_CONFIRM" as const,
-              weeklyLimitData: { current: weekCount, limit: effectiveLimit },
+              weeklyLimitData: {
+                current: usage.lessons,
+                limit: effectiveLimit,
+                unit: limit.unit,
+                currentMinutes: usage.minutes,
+                limitMinutes: limit.minutes,
+              },
             };
           }
         }
@@ -4721,37 +4741,49 @@ export async function createAutoscuolaAppointmentBatch(
 
           if (!bypassLimit) {
             // Group entries by ISO week and check each
-            const weekBuckets = new Map<string, number>();
+            // REG-782: guide o ore (minuti), secondo l'autoscuola o il cluster.
+            const limit = weeklyLimitFrom(effective);
+            const weekBuckets = new Map<string, { lessons: number; minutes: number }>();
             for (const entry of parsedEntries) {
               const key = weekBoundsUtc(entry.startsAt).weekStart.toISOString();
-              weekBuckets.set(key, (weekBuckets.get(key) ?? 0) + 1);
+              const bucket = weekBuckets.get(key) ?? { lessons: 0, minutes: 0 };
+              bucket.lessons += 1;
+              bucket.minutes += lessonMinutes(entry.startsAt, entry.endsAt);
+              weekBuckets.set(key, bucket);
             }
 
-            for (const [weekStartIso, newCount] of weekBuckets) {
+            for (const [weekStartIso, adding] of weekBuckets) {
               const weekStart = new Date(weekStartIso);
               // Guide di guida già in quella settimana, REG-781.
-              const { lessons: existingCount } = await countStudentWeeklyLessons({
+              const usage = await countStudentWeeklyLessons({
                 companyId,
                 studentId: payload.studentId,
                 at: weekStart,
                 includeGroupLessons: weeklyLimitCountsGroupLessons(lim),
               });
 
-              if (existingCount + newCount > weeklyLimit) {
+              if (exceedsWeeklyLimit(limit, usage, adding)) {
+                const weeklyLimitData = {
+                  current: usage.lessons,
+                  limit: weeklyLimit,
+                  unit: limit.unit,
+                  currentMinutes: usage.minutes,
+                  limitMinutes: limit.minutes,
+                };
                 if (isInstructorActor) {
                   return {
                     success: false,
-                    message: `L'allievo ha già ${existingCount} guide nella settimana del ${weekStart.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", timeZone: "Europe/Rome" })}. Con queste ${newCount} nuove si supera il limite di ${weeklyLimit}. Vuoi procedere comunque?`,
+                    message: `L'allievo ha già ${formatWeeklyUsage(limit, usage)} nella settimana del ${weekStart.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", timeZone: "Europe/Rome" })}. Con queste ${adding.lessons} nuove si supera il limite di ${formatWeeklyLimit(limit)}. Vuoi procedere comunque?`,
                     code: "WEEKLY_LIMIT_CONFIRM" as const,
-                    weeklyLimitData: { current: existingCount, limit: weeklyLimit },
+                    weeklyLimitData,
                   };
                 }
                 if (isOwnerOrAdminActor) {
                   return {
                     success: false,
-                    message: `L'allievo supererebbe il limite di ${weeklyLimit} guide settimanali. Vuoi procedere comunque?`,
+                    message: `L'allievo supererebbe il limite di ${formatWeeklyLimit(limit)} a settimana. Vuoi procedere comunque?`,
                     code: "WEEKLY_LIMIT_CONFIRM" as const,
-                    weeklyLimitData: { current: existingCount, limit: weeklyLimit },
+                    weeklyLimitData,
                   };
                 }
               }
@@ -5642,27 +5674,35 @@ export async function rescheduleAutoscuolaAppointment(
       }
 
       if (!isExempt && !bypassLimit) {
-        const { lessons: weekCount } = await countStudentWeeklyLessons({
+        const usage = await countStudentWeeklyLessons({
           companyId,
           studentId: appointment.studentId,
           at: newWeekStart,
           excludeAppointmentId: appointment.id,
           includeGroupLessons: weeklyLimitCountsGroupLessons(serviceLimits),
         });
-        if (weekCount >= weeklyLimit) {
+        // REG-782: guide o ore (minuti); la guida spostata porta la sua durata.
+        const limit = weeklyLimitFrom(rescheduleEffective);
+        if (exceedsWeeklyLimit(limit, usage, { lessons: 1, minutes: lessonMinutes(newStart, newEnd) })) {
           if (isInstructorActor) {
             return {
               success: false,
-              message: `L'allievo ha già raggiunto il limite di ${weeklyLimit} guide settimanali.`,
+              message: `L'allievo ha già raggiunto il limite di ${formatWeeklyLimit(limit)} a settimana.`,
               code: "WEEKLY_LIMIT_REACHED" as const,
             };
           }
           // OWNER/ADMIN: surface the confirm signal, matching createAutoscuolaAppointment.
           return {
             success: false,
-            message: `L'allievo ha già raggiunto il limite di ${weeklyLimit} guide settimanali (${weekCount} prenotate) nella settimana scelta.`,
+            message: `L'allievo supera il limite di ${formatWeeklyLimit(limit)} a settimana nella settimana scelta (ne ha già ${formatWeeklyUsage(limit, usage)}).`,
             code: "WEEKLY_LIMIT_CONFIRM" as const,
-            weeklyLimitData: { current: weekCount, limit: weeklyLimit },
+            weeklyLimitData: {
+              current: usage.lessons,
+              limit: weeklyLimit,
+              unit: limit.unit,
+              currentMinutes: usage.minutes,
+              limitMinutes: limit.minutes,
+            },
           };
         }
       }
