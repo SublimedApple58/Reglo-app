@@ -86,6 +86,13 @@ describe("REG-722 celle OSM", () => {
 
     // Una latitudine a metà fascia non lascia buchi: si parte dall'inizio della fascia.
     expect(osmCellBlocks(BOX, 20, 14, 41.7)[0].by).toBe(824);
+    // Secondo giro del 24/11 morto sul blocco 7 della fascia 824 (Roma, 12,32°–13,30°):
+    // con fromLng si salta solo l'inizio della PRIMA fascia, le altre restano intere.
+    const rome = osmCellBlocks(BOX, 20, 14, 41.2, 12.5);
+    expect(rome[0]).toEqual(from[6]);
+    expect(rome[0].bbox.split(",")[0]).toBe("12.32000");
+    expect(rome).toEqual(from.slice(6));
+
     // Fuori dal riquadro: tutto, oppure niente.
     expect(osmCellBlocks(BOX, 20, 14, 10)).toEqual(all);
     expect(osmCellBlocks(BOX, 20, 14, 50)).toEqual([]);

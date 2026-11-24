@@ -31,21 +31,26 @@ export type OsmCellBlock = {
  * I blocchi di `rows` × `cols` celle che coprono `box`, da sud a nord e da
  * ovest a est (l'ordine del job). Con `fromLat` si parte dalla fascia di
  * blocchi che contiene quella latitudine: un giro interrotto riparte da lì
- * senza buchi (le fasce restano allineate alla griglia del riquadro).
+ * senza buchi (le fasce restano allineate alla griglia del riquadro). Con
+ * anche `fromLng`, nella PRIMA fascia si parte dal blocco che contiene quella
+ * longitudine (le fasce dopo restano intere).
  */
 export function osmCellBlocks(
   box: { south: number; west: number; north: number; east: number },
   rows: number,
   cols: number,
   fromLat?: number,
+  fromLng?: number,
 ): OsmCellBlock[] {
   const iy0 = Math.floor(box.south / CELL_LAT), iy1 = Math.floor(box.north / CELL_LAT);
   const ix0 = Math.floor(box.west / CELL_LNG), ix1 = Math.floor(box.east / CELL_LNG);
   const fromIy = fromLat == null ? iy0 : Math.max(iy0, Math.floor(fromLat / CELL_LAT));
   const startBy = iy0 + Math.floor((fromIy - iy0) / rows) * rows;
+  const fromIx = fromLng == null ? ix0 : Math.max(ix0, Math.floor(fromLng / CELL_LNG));
+  const startBx = ix0 + Math.floor((fromIx - ix0) / cols) * cols;
   const out: OsmCellBlock[] = [];
   for (let by = startBy; by <= iy1; by += rows) {
-    for (let bx = ix0; bx <= ix1; bx += cols) {
+    for (let bx = by === startBy ? startBx : ix0; bx <= ix1; bx += cols) {
       const bbox = [bx * CELL_LNG, by * CELL_LAT, (bx + cols) * CELL_LNG, (by + rows) * CELL_LAT].map((v) => v.toFixed(5)).join(",");
       out.push({ by, bx, bbox });
     }
