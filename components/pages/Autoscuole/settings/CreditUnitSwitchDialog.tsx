@@ -250,9 +250,10 @@ export function CreditUnitSwitchDialog({
             {preview.paidFutureLessons === 1
               ? "La guida già pagata in agenda resta pagata."
               : `Le ${preview.paidFutureLessons} guide già pagate in agenda restano pagate.`}
+            {preview.paidFutureLessons === 1 ? " Se viene annullata in tempo" : " Se una viene annullata in tempo"}
             {toMinutes
-              ? " Se una viene annullata in tempo, all'allievo torna la sua durata: 90 minuti per una guida da 90."
-              : " Se una viene annullata in tempo, all'allievo torna una guida."}
+              ? ", all'allievo torna la sua durata: 90 minuti per una guida da 90."
+              : ", all'allievo torna una guida."}
           </p>
         ) : null}
 
