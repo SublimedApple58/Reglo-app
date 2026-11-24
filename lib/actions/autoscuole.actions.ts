@@ -3036,8 +3036,8 @@ export async function adjustAutoscuolaStudentLessonCredits(
         result.appliedDelta === 0 && payload.reason === "manual_revoke"
           ? "Nessun credito disponibile da stornare."
           : payload.reason === "manual_grant"
-            ? `Assegnati ${formatCredits(result.unit, Math.abs(result.appliedDelta))}.`
-            : `Stornati ${formatCredits(result.unit, Math.abs(result.appliedDelta))}.`,
+            ? `Ricarica fatta: +${formatCredits(result.unit, Math.abs(result.appliedDelta))}.`
+            : `Storno fatto: −${formatCredits(result.unit, Math.abs(result.appliedDelta))}.`,
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
