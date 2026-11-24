@@ -27,6 +27,7 @@ import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
 import { ATTIVA_REGLO_URL, SITE_URLS, VIDEO_ISTRUTTORI_URL } from "./locked-features";
+import { UnderlineTabs } from "@/components/ui/underline-tabs";
 
 const NERO = "#111111";
 
@@ -632,23 +633,7 @@ function InstructorDetail({
         <ColorDotWithPopover color={instructor.color} />
       </div>
 
-      <div className="my-5 mb-6 flex flex-wrap items-center gap-[26px] border-b border-[#e8e8e8]">
-        {TABS.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => setTab(item.key)}
-            className={cn(
-              "-mb-px cursor-pointer select-none whitespace-nowrap border-b-[2.5px] px-px pb-3 text-[15px] transition-colors",
-              tab === item.key
-                ? "border-[#111111] font-semibold text-[#222222]"
-                : "border-transparent font-medium text-[#6a6a6a] hover:text-foreground",
-            )}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <UnderlineTabs className="mb-6 mt-5 -mx-6 px-6 sm:mx-0 sm:px-0" items={TABS} value={tab} onChange={setTab} ariaLabel={instructor.name} />
 
       <div className="relative min-h-[460px]">
         <div

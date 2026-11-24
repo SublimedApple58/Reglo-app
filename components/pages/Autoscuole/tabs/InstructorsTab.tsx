@@ -71,6 +71,7 @@ import {
 import { getAutoscuolaLocations } from "@/lib/actions/autoscuola-locations.actions";
 import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
 import { availabilityByLocationEnabled } from "@/lib/autoscuole/location-availability";
+import { UnderlineTabs } from "@/components/ui/underline-tabs";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -607,21 +608,7 @@ export default function InstructorsTab({
         </div>
       </div>
 
-      <div className="mb-6 mt-5 flex flex-wrap items-center gap-[26px] border-b border-[#e8e8e8]">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={cn(
-              "-mb-px cursor-pointer select-none whitespace-nowrap border-b-[2.5px] px-px pb-3 text-[15px] transition-colors",
-              activeTab === t.key ? "border-[#222222] font-semibold text-[#222222]" : "border-transparent font-medium text-[#6a6a6a] hover:text-[#222222]",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <UnderlineTabs className="mb-6 mt-5 -mx-6 px-6 sm:mx-0 sm:px-0" items={TABS} value={activeTab} onChange={setTab} ariaLabel={selected.name} />
 
       <div className={activeTab === "codice" ? "max-w-[720px]" : "max-w-[680px]"}>
         {activeTab === "disp" && (

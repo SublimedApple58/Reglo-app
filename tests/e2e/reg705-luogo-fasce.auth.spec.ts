@@ -28,7 +28,7 @@ async function openAvailability(page: import("@playwright/test").Page) {
   const gestisci = page.getByRole("button", { name: "Gestisci" });
   await expect(gestisci.first()).toBeVisible({ timeout: 120_000 });
   await gestisci.first().click();
-  await page.getByRole("button", { name: "Disponibilità", exact: true }).click();
+  await page.getByRole("tab", { name: "Disponibilità", exact: true }).click();
 }
 
 test("luogo della fascia nella settimana tipo", async ({ page, request }) => {

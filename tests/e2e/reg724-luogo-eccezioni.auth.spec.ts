@@ -82,7 +82,7 @@ async function openAvailability(page: Page, name: string) {
   const gestisci = row.getByRole("button", { name: "Gestisci" });
   await expect(gestisci).toBeVisible({ timeout: 120_000 });
   await gestisci.click();
-  await page.getByRole("button", { name: "Disponibilità", exact: true }).click();
+  await page.getByRole("tab", { name: "Disponibilità", exact: true }).click();
 }
 
 async function pickLocation(page: Page, scope: ReturnType<Page["locator"]>, target: string) {

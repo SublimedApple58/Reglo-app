@@ -51,6 +51,8 @@ import { ComunicatoDialog } from "@/components/Layout/ComunicatoDialog";
 import type { MessageChannelKey } from "@/lib/autoscuole/message-channels";
 import { RecentDeliveries } from "@/components/pages/Autoscuole/settings/RecentDeliveries";
 import { WELCOME_SECTION_ANCHOR } from "@/lib/autoscuole/whatsapp-welcome";
+import { UnderlineTabs } from "@/components/ui/underline-tabs";
+import { useSettingsSubTab } from "@/components/pages/Autoscuole/settings/settings-url";
 import { WhatsAppWelcomeSection } from "@/components/pages/Autoscuole/settings/WhatsAppWelcomeSection";
 import {
   RowControls,
@@ -121,12 +123,13 @@ const DEFAULT_LESSON_CONSTRAINT: LessonConstraintState = {
 /** REG-767: le schede del pane Promemoria e notifiche. REG-772: «Automatici»
  *  non c'è più come livello, le sue due sezioni diventano schede piatte. */
 type ReminderTabKey = "allievi" | "istruttori" | "mano" | "log";
-const REMINDER_TABS: { key: ReminderTabKey; label: string }[] = [
+const REMINDER_TABS: { key: ReminderTabKey; label: string; testId?: string }[] = ([
   { key: "allievi", label: "Allievi" },
   { key: "istruttori", label: "Istruttori" },
   { key: "mano", label: "Manuale" },
   { key: "log", label: "Ultimi invii" },
-];
+] as const).map((tab) => ({ ...tab, testId: `reminders-tab-${tab.key}` }));
+const REMINDER_TAB_KEYS = REMINDER_TABS.map((tab) => tab.key);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -533,11 +536,11 @@ function SettingsTab({
   );
   // «Modifica messaggio» (scheda allievo) arriva con l'ancora del benvenuto:
   // si apre direttamente la scheda «Manuale».
-  const [reminderTab, setReminderTab] = React.useState<ReminderTabKey>("allievi");
+  const [reminderTab, setReminderTab] = useSettingsSubTab(REMINDER_TAB_KEYS, "allievi");
   const [comunicatoOpen, setComunicatoOpen] = React.useState(false);
   React.useEffect(() => {
     if (window.location.hash === `#${WELCOME_SECTION_ANCHOR}`) setReminderTab("mano");
-  }, []);
+  }, [setReminderTab]);
   const show = (key: SettingsSectionKey) => !section || section === key;
   return (
     <>
@@ -559,29 +562,13 @@ function SettingsTab({
               Istruttori la legenda dei canali sta in cima e vale per la scheda,
               le righe che non li seguono lo dicono («Solo nell'app»). */}
           <div data-testid="reminders-pane">
-            <div
-              className="flex flex-wrap items-center gap-x-[22px] border-b border-[#e8e8e8] sm:gap-x-8"
-              role="tablist"
-            >
-              {REMINDER_TABS.map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={reminderTab === tab.key}
-                  data-testid={`reminders-tab-${tab.key}`}
-                  onClick={() => setReminderTab(tab.key)}
-                  className={cn(
-                    "-mb-px cursor-pointer select-none whitespace-nowrap border-b-[2.5px] px-px pb-3 text-[15px] transition-colors duration-200",
-                    reminderTab === tab.key
-                      ? "border-[#222222] font-semibold text-foreground"
-                      : "border-transparent font-medium text-[#6a6a6a] hover:text-foreground",
-                  )}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+            <UnderlineTabs
+              className="-mx-6 px-6 sm:mx-0 sm:px-0"
+              items={REMINDER_TABS}
+              value={reminderTab}
+              onChange={setReminderTab}
+              ariaLabel="Promemoria e notifiche"
+            />
 
             {/* ══ ALLIEVI / ISTRUTTORI ══ (REG-767, schema B: canali su ogni riga) */}
             {/* REG-771 bis: densità compatta, stile impostazioni iOS. */}

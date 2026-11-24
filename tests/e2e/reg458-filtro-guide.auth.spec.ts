@@ -34,7 +34,7 @@ const apri = async (page: Page, nome: string, email: string) => {
 
   // Il drawer e' davvero di questo allievo, e il registro ha finito di caricare.
   await expect(page.getByText(email, { exact: true }).last()).toBeVisible();
-  await page.getByRole("button", { name: "Guide", exact: true }).click();
+  await page.getByRole("tab", { name: "Guide", exact: true }).click();
   await expect(page.getByRole("tab", { name: /^Tutte/ })).toBeVisible({ timeout: 30_000 });
 };
 

@@ -81,7 +81,8 @@ export function AutoscuoleRoadPage() {
 
   return (
     <div className="w-full lg:-mt-1.5" data-testid="autoscuole-road-page">
-      <div className="border-b border-[#ebebeb]">
+      {/* La linea sotto le schede la disegna la tab bar (REG-778). */}
+      <div>
         <div className="flex items-start justify-between gap-4 pb-2 sm:items-end">
           <div className="min-w-0">
             <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.6px] text-[#111111]">Road</h1>

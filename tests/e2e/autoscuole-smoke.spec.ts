@@ -245,23 +245,23 @@ test.describe("Autoscuole smoke", () => {
     await expect(pane.getByText("Durata prenotazione allievo")).toBeVisible();
 
     // Sub-tab Limiti
-    await pane.getByRole("button", { name: "Limiti", exact: true }).click();
+    await pane.getByRole("tab", { name: "Limiti", exact: true }).click();
     await expect(pane.getByText("Stop alle prenotazioni last-minute")).toBeVisible();
     await expect(pane.getByText("Massimo di guide a settimana")).toBeVisible();
 
     // Sub-tab Guide
-    await pane.getByRole("button", { name: "Guide", exact: true }).click();
+    await pane.getByRole("tab", { name: "Guide", exact: true }).click();
     await expect(pane.getByText("Consenti scambi tra allievi")).toBeVisible();
     await expect(pane.getByText("Attiva guide di gruppo")).toBeVisible();
 
     // Sub-tab App allievi ("Notifica slot disponibili domani" è migrata nel
     // pane Promemoria e notifiche — verificata più sotto)
-    await pane.getByRole("button", { name: "App allievi", exact: true }).click();
+    await pane.getByRole("tab", { name: "App allievi", exact: true }).click();
     await expect(pane.getByText("Mostra note nell'app allievi")).toBeVisible();
     await expect(pane.getByText("Consenti scelta istruttore")).toBeVisible();
 
     // Sub-tab Crediti e prezzi (ex pane Fatturazione e pagamenti, auto-save)
-    await pane.getByRole("button", { name: "Crediti e prezzi", exact: true }).click();
+    await pane.getByRole("tab", { name: "Crediti e prezzi", exact: true }).click();
     await expect(pane.getByText("Crediti guida", { exact: true })).toBeVisible({ timeout: 20000 });
     await expect(pane.getByText("Cancellazioni tardive")).toBeVisible();
 
@@ -276,7 +276,7 @@ test.describe("Autoscuole smoke", () => {
       await expect(page.getByText("Impossibile salvare l'impostazione.")).toHaveCount(0);
     };
 
-    await pane.getByRole("button", { name: "Generali", exact: true }).click();
+    await pane.getByRole("tab", { name: "Generali", exact: true }).click();
 
     // 1) "Chi può prenotare dall'app": il backend pretende instructorBookingMode
     //    insieme a instructors/both — il patch deve allegarlo da solo.
@@ -353,10 +353,10 @@ test.describe("Autoscuole smoke", () => {
     // Settimana tipo: switch orari condivisi ⇄ orari indipendenti per giorno
     await expect(pane.getByText("Orari diversi per giorno")).toBeVisible();
 
-    await pane.getByRole("button", { name: "Malattia", exact: true }).click();
+    await pane.getByRole("tab", { name: "Malattia", exact: true }).click();
     await expect(pane.getByRole("button", { name: "Aggiungi assenza" })).toBeVisible();
 
-    await pane.getByRole("button", { name: "Gestione autonoma", exact: true }).click();
+    await pane.getByRole("tab", { name: "Gestione autonoma", exact: true }).click();
     await expect(pane.getByText("Orario di lavoro")).toBeVisible();
     await expect(pane.getByText("Modalità autonoma")).toBeVisible();
 
