@@ -23,8 +23,16 @@ Lesson credit ledger, Stripe payment processing, payment plans, penalties, invoi
 > - Scambio: chi cede riceve come in un annullamento in tempo, chi prende paga il costo pieno; con i crediti obbligatori lo scambio si rifiuta se non gli basta, altrimenti la guida resta da pagare.
 > - Ogni movimento ha `unit`; `adjustStudentLessonCredits({ unit })` rifiuta un movimento scritto in un'unità superata (ricarica da un form aperto prima del passaggio).
 > - API mobile `/api/mobile/payments/profile`: oltre a `lessonCreditsAvailable` manda `lessonCreditsUnit` e `lessonCreditsLabel` («5 ore e 30»).
-> - Noto e invariato: con «Servono crediti per prenotare» il server non blocca una prenotazione senza credito (la guida nasce senza credito e senza «da pagare»). In prod, 60 giorni al 24/11: nessun caso.
 > - Casi limite e decisioni: `plans/product/002-reg-783-crediti-minuti.md`.
+
+> **REG-784 (2026-11-24): «Servono crediti per prenotare» blocca davvero.**
+> - `checkLessonCredits` (payments.ts): costo pieno della guida (1 o la durata) contro il saldo nell'unità corrente. Gli esami non usano crediti.
+> - Allievo: `LESSON_CREDITS_REQUIRED` con `lessonCreditsData` (titolo corto «Crediti finiti» / «Mancano 30 minuti») da `createBookingRequest`, `respondWaitlistOffer`, `respondSwapOffer` (anche se la guida ceduta non era a credito) e `createAutoscuolaAppointment` con l'allievo come attore. `getBookingOptions` manda `lessonCredits { insufficient, title, … }` per la card dell'app.
+> - Staff: `LESSON_CREDITS_CONFIRM` con `title` («Vittoria non ha crediti») finché non manda `confirmLessonCredits` (singola, multipla con il costo sommato, route `instructor-bookings/confirm*`). Road «Avvia guida» passa sempre la conferma.
+> - Senza credito la guida nasce `manualPaymentStatus: "unpaid"` anche coi crediti obbligatori, e quando è fatta conta nel debito (`isLessonUnpaid`, solo guide singole: gruppi ed esami esclusi; gemello mobile `lessonPayments.ts`).
+> - Assistente vocale: stessa regola, messaggio da leggere a voce; ora consuma anche il credito (`createVoiceAppointment`, in transazione).
+> - Prenotazione multipla: uno snapshot per guida (prima uno solo copiato su tutte).
+> - Web: `LessonCreditsConfirmDialog` (salvadanaio ambra `public/images/3d/salvadanaio-ambra.png`); l'agenda accumula le conferme (limite, pausa, crediti).
 
 ## Key files
 - `lib/autoscuole/payments.ts` — 68 exported functions (88KB), core payment logic

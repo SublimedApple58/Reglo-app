@@ -90,6 +90,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Swaps**: `refundAppointmentCredit(swap_refund)` + `consumeLessonCreditIfAvailable(swap_consume)`, nell'unità dei crediti dell'autoscuola (REG-783)
 - → **Appointments (REG-783)**: spostamento e modifica dettagli chiamano `syncAppointmentCreditToDuration` (crediti a minuti); ogni rimborso passa da `refundAppointmentCredit`
 - → **Settings (REG-783)**: `limits.lessonCreditUnit` si cambia solo con `switchLessonCreditUnit`, mai da `updateAutoscuolaSettings`
+- → **Booking / Swaps / Voice (REG-784)**: `checkLessonCredits` blocca l'allievo (`LESSON_CREDITS_REQUIRED`) e avvisa lo staff (`LESSON_CREDITS_CONFIRM` + `confirmLessonCredits`); senza credito la guida è «da pagare» e conta nel debito (`lesson-unpaid.ts` + gemello mobile)
 - → **Holidays**: bulk cancel refunds credits
 - → **Communications**: background jobs call payment functions (settlement, retry, penalty, invoice)
 - → **Cache**: invalidates PAYMENTS + FIC
