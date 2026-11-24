@@ -34,7 +34,6 @@ export type CancelDialogTarget = {
   creditApplied: boolean;
   paymentRequired: boolean;
   penaltyCutoffAt: Date | null;
-  penaltyAmount: number | null;
   /** True se la guida attualmente conta nelle ore (completed/checked_in/no_show). */
   countsInHours: boolean;
 };
@@ -48,7 +47,6 @@ export type LateOutcome = "penalize" | "waive" | "defer";
  */
 export type CancelFault = "student" | "school";
 
-const formatEuro = (v: number) => `€ ${v.toFixed(2)}`;
 
 const formatCountdown = (from: Date, to: Date) => {
   const mins = Math.max(0, Math.round((to.getTime() - from.getTime()) / 60000));
@@ -280,7 +278,7 @@ export function CancelAppointmentDialog({
           )}
           {coverage === "money" && (
             <div className="mt-3 flex items-start gap-2.5 rounded-[11px] bg-[#F0FDF4] px-3 py-2.5 text-[13px] text-[#067647]">
-              <span>€</span>
+              <span>✓</span>
               <span>Non verrà addebitato nulla a {student}.</span>
             </div>
           )}
@@ -296,7 +294,7 @@ export function CancelAppointmentDialog({
     coverage === "credit"
       ? `Mancano ${formatCountdown(now, target.startsAt)} alla guida (sotto il limite di ${cutoffHours ?? "?"}h). Di norma l'allievo perde il credito.`
       : coverage === "money"
-        ? `Mancano ${formatCountdown(now, target.startsAt)} (sotto il limite di ${cutoffHours ?? "?"}h). L'allievo dovrebbe pagare comunque la guida${target.penaltyAmount != null ? ` (penale ${formatEuro(target.penaltyAmount)})` : ""}.`
+        ? `Mancano ${formatCountdown(now, target.startsAt)} (sotto il limite di ${cutoffHours ?? "?"}h). L'allievo dovrebbe pagare comunque la guida.`
         : `Mancano ${formatCountdown(now, target.startsAt)} alla guida (sotto il limite di ${cutoffHours ?? "?"}h). Di norma la guida viene addebitata all'allievo.`;
 
   return (
@@ -335,7 +333,7 @@ export function CancelAppointmentDialog({
 
         {schoolFault && (
           <div className="mt-3 flex items-start gap-2.5 rounded-[11px] bg-[#F0FDF4] px-3 py-2.5 text-[13px] text-[#067647]">
-            <span>{coverage === "credit" ? "↩︎" : coverage === "money" ? "€" : "✓"}</span>
+            <span>{coverage === "credit" ? "↩︎" : "✓"}</span>
             <span>
               {coverage === "credit" ? (
                 <>

@@ -93,9 +93,9 @@ export function AutoscuoleDashboardPage({
       },
       {
         key: "payments",
-        title: "Pagamenti",
-        description: "Stato addebiti, insoluti e fatture.",
-        href: `/${locale}/user/autoscuole?tab=payments`,
+        title: "Crediti e annullamenti",
+        description: "Crediti guida e preavviso per annullare.",
+        href: `/${locale}/user/autoscuole?tab=settings&pane=bookings&sub=crediti`,
         icon: WalletCards,
       },
     ],

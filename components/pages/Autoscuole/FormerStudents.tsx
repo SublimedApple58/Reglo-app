@@ -35,7 +35,6 @@ import { Button } from "@/components/ui/button";
 
 const NAMELESS = "Ex allievo senza nome";
 
-const euro = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" });
 
 const shortDate = (iso: string | null) =>
   iso
@@ -89,7 +88,9 @@ export function FormerReasonChip({ reason }: { reason: FormerStudentReason }) {
   );
 }
 
-function Balance({ row, align = "right" }: { row: Pick<FormerStudentRow, "unpaidCount" | "unpaidAmount">; align?: "right" | "left" }) {
+const lessonsLabel = (n: number) => `${n} ${n === 1 ? "guida" : "guide"}`;
+
+function Balance({ row, align = "right" }: { row: Pick<FormerStudentRow, "unpaidCount">; align?: "right" | "left" }) {
   if (row.unpaidCount === 0) {
     return (
       <div className={cn("flex items-center gap-1.5 text-[13px] font-semibold text-[#1a7f50]", align === "right" && "justify-end")}>
@@ -100,14 +101,8 @@ function Balance({ row, align = "right" }: { row: Pick<FormerStudentRow, "unpaid
   }
   return (
     <div className={align === "right" ? "text-right" : undefined} data-testid="former-balance">
-      <p className="text-[15px] font-bold tabular-nums text-[#c13515]">
-        {row.unpaidAmount > 0 ? euro.format(row.unpaidAmount) : `${row.unpaidCount} ${row.unpaidCount === 1 ? "guida" : "guide"}`}
-      </p>
-      <p className="text-[12px] font-medium text-[#929292]">
-        {row.unpaidAmount > 0
-          ? `${row.unpaidCount} ${row.unpaidCount === 1 ? "guida da pagare" : "guide da pagare"}`
-          : "da pagare, prezzo non indicato"}
-      </p>
+      <p className="text-[15px] font-semibold tabular-nums text-[#c13515]">{lessonsLabel(row.unpaidCount)}</p>
+      <p className="text-[12px] font-medium text-[#929292]">da pagare</p>
     </div>
   );
 }
@@ -115,7 +110,6 @@ function Balance({ row, align = "right" }: { row: Pick<FormerStudentRow, "unpaid
 /** Riepilogo in testa al tab: quanto c'è da recuperare e da quanti ex allievi. */
 export function FormerStudentsSummary({ rows }: { rows: FormerStudentRow[] }) {
   const debtors = rows.filter((r) => r.unpaidCount > 0);
-  const total = debtors.reduce((sum, r) => sum + r.unpaidAmount, 0);
   const lessons = debtors.reduce((sum, r) => sum + r.unpaidCount, 0);
   const nameless = rows.filter((r) => !r.name).length;
   return (
@@ -125,12 +119,12 @@ export function FormerStudentsSummary({ rows }: { rows: FormerStudentRow[] }) {
     >
       <div>
         <p className="text-[12px] font-semibold text-[#929292]">Da recuperare</p>
-        <p className="text-[26px] font-bold leading-tight tabular-nums text-foreground">{euro.format(total)}</p>
+        <p className="text-[26px] font-semibold leading-tight tabular-nums text-foreground">{lessonsLabel(lessons)}</p>
       </div>
       <p className="text-[13px] font-medium leading-relaxed text-[#6a6a6a] md:border-l md:border-[#e6e6e6] md:pl-5">
         {debtors.length === 0
           ? "Nessun ex allievo ha guide da pagare."
-          : `${debtors.length} ${debtors.length === 1 ? "ex allievo ha" : "ex allievi hanno"} ancora ${lessons} ${lessons === 1 ? "guida" : "guide"} da pagare.`}
+          : `Da pagare: ${debtors.length} ${debtors.length === 1 ? "ex allievo deve" : "ex allievi devono"} ancora saldare delle guide.`}
         {nameless > 0 && (
           <>
             {" "}
@@ -288,11 +282,6 @@ function LessonRow({
         />
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-        {lesson.amount > 0 && (lesson.unpaid || paid) && (
-          <span className={cn("text-[13px] font-bold tabular-nums", lesson.unpaid ? "text-[#c13515]" : "text-foreground")}>
-            {euro.format(lesson.amount)}
-          </span>
-        )}
         {lesson.unpaid && !automatic && (
           <button
             type="button"
@@ -554,10 +543,8 @@ export function FormerStudentPanel({
             <div>
               <p className="text-[12px] font-semibold text-[#929292]">Saldo</p>
               {detail.unpaidCount > 0 ? (
-                <p className="text-[26px] font-bold leading-tight tabular-nums text-[#c13515]">
-                  {detail.unpaidAmount > 0
-                    ? euro.format(detail.unpaidAmount)
-                    : `${detail.unpaidCount} ${detail.unpaidCount === 1 ? "guida" : "guide"}`}
+                <p className="text-[26px] font-semibold leading-tight tabular-nums text-[#c13515]">
+                  {lessonsLabel(detail.unpaidCount)}
                 </p>
               ) : (
                 <p className="flex items-center gap-2 text-[22px] font-bold leading-tight text-[#1a7f50]">
@@ -566,11 +553,7 @@ export function FormerStudentPanel({
               )}
             </div>
             <p className="pb-1 text-right text-[12px] font-medium text-[#929292]">
-              {detail.unpaidCount === 0
-                ? "Nessuna guida da pagare"
-                : detail.unpaidAmount > 0
-                  ? `${detail.unpaidCount} ${detail.unpaidCount === 1 ? "guida da pagare" : "guide da pagare"}`
-                  : "da pagare, prezzo non indicato"}
+              {detail.unpaidCount === 0 ? "Nessuna guida da pagare" : "da pagare"}
             </p>
           </section>
 

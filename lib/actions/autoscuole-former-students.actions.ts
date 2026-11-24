@@ -34,9 +34,8 @@ export type FormerStudentRow = {
   transmission: string | null;
   lessonsCount: number;
   lastLessonAt: string | null;
+  /** Guide ancora da pagare (REG-780: niente importi in euro). */
   unpaidCount: number;
-  /** Euro ancora da incassare (prezzo guida o penale). 0 = prezzo non noto. */
-  unpaidAmount: number;
 };
 
 export type FormerStudentLesson = {
@@ -53,7 +52,6 @@ export type FormerStudentLesson = {
   creditApplied: boolean;
   lateCancellationAction: string | null;
   isGroup: boolean;
-  amount: number;
   unpaid: boolean;
   /** REG-637: chi/quando sullo stato pagamento, dal più recente. */
   paymentHistory: PaymentHistoryEvent[];
@@ -87,8 +85,6 @@ const LESSON_SELECT = {
   creditApplied: true,
   lateCancellationAction: true,
   cancellationKind: true,
-  priceAmount: true,
-  penaltyAmount: true,
   groupLessonId: true,
 } as const;
 
@@ -98,14 +94,6 @@ type LessonRecord = {
   creditApplied: boolean;
   lateCancellationAction: string | null;
   cancellationKind: string | null;
-  priceAmount: unknown;
-  penaltyAmount: unknown;
-};
-
-/** Quanto vale la guida da incassare: la penale se è un annullamento addebitato. */
-const lessonAmount = (l: LessonRecord) => {
-  const penalty = ["cancelled", "no_show"].includes(l.status) && l.lateCancellationAction === "charged";
-  return Number(penalty ? l.penaltyAmount : l.priceAmount) || 0;
 };
 
 // Le guide tolte dallo storico dal titolare non contano, come nella scheda allievo.
@@ -113,16 +101,12 @@ const notCleanedUp = NOT_CLEANED_UP_WHERE;
 
 function summarize(lessons: Array<LessonRecord & { startsAt: Date }>, manualMode: boolean) {
   let unpaidCount = 0;
-  let unpaidAmount = 0;
   let lastLessonAt: Date | null = null;
   for (const l of lessons) {
-    if (isLessonUnpaid(l, manualMode)) {
-      unpaidCount += 1;
-      unpaidAmount += lessonAmount(l);
-    }
+    if (isLessonUnpaid(l, manualMode)) unpaidCount += 1;
     if (!lastLessonAt || l.startsAt > lastLessonAt) lastLessonAt = l.startsAt;
   }
-  return { unpaidCount, unpaidAmount: Math.round(unpaidAmount * 100) / 100, lastLessonAt };
+  return { unpaidCount, lastLessonAt };
 }
 
 /** Lista «Ex allievi» della pagina Allievi, i più recenti in cima. */
@@ -167,7 +151,7 @@ export async function getAutoscuolaFormerStudents() {
       .filter((f) => !rejoinedSet.has(f.userId))
       .map((f) => {
         const own = lessonsByStudent.get(f.userId) ?? [];
-        const { unpaidCount, unpaidAmount, lastLessonAt } = summarize(own, manualMode);
+        const { unpaidCount, lastLessonAt } = summarize(own, manualMode);
         return {
           userId: f.userId,
           name: f.name,
@@ -179,7 +163,6 @@ export async function getAutoscuolaFormerStudents() {
           lessonsCount: own.length,
           lastLessonAt: lastLessonAt ? lastLessonAt.toISOString() : null,
           unpaidCount,
-          unpaidAmount,
         };
       });
     return { success: true as const, data };
@@ -215,7 +198,7 @@ export async function getAutoscuolaFormerStudentDetail(userId: string) {
       getAutoscuolaPaymentConfig({ companyId }),
     ]);
     const manualMode = isCompanyManualMode(config);
-    const { unpaidCount, unpaidAmount, lastLessonAt } = summarize(lessons, manualMode);
+    const { unpaidCount, lastLessonAt } = summarize(lessons, manualMode);
     const paymentHistories = await loadPaymentHistories(companyId, lessons.map((l) => l.id));
 
     let completedCount = 0;
@@ -238,7 +221,6 @@ export async function getAutoscuolaFormerStudentDetail(userId: string) {
       lessonsCount: lessons.length,
       lastLessonAt: lastLessonAt ? lastLessonAt.toISOString() : null,
       unpaidCount,
-      unpaidAmount,
       manualMode,
       completedCount,
       drivenMinutes,
@@ -256,7 +238,6 @@ export async function getAutoscuolaFormerStudentDetail(userId: string) {
         creditApplied: l.creditApplied,
         lateCancellationAction: l.lateCancellationAction,
         isGroup: l.groupLessonId != null,
-        amount: lessonAmount(l),
         unpaid: isLessonUnpaid(l, manualMode),
         paymentHistory: paymentHistories.get(l.id) ?? [],
       })),

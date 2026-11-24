@@ -141,10 +141,10 @@ const SUB_TABS: Array<{ key: SubTab; label: string }> = [
   { key: "limiti", label: "Limiti" },
   { key: "guide", label: "Guide" },
   { key: "app", label: "App allievi" },
-  { key: "crediti", label: "Crediti e prezzi" },
+  { key: "crediti", label: "Crediti e annullamenti" },
 ];
 
-// Modalità consorzio: "Crediti e prezzi" (pagamenti allievo/Stripe) non esiste;
+// Modalità consorzio: "Crediti e annullamenti" (crediti allievo) non esiste;
 // al suo posto c'è "Prezzi" (tariffe orarie verso le autoscuole consorziate).
 const CONSORTIUM_SUB_TABS: Array<{ key: SubTab; label: string }> = [
   { key: "generali", label: "Generali" },

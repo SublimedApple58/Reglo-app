@@ -11,7 +11,7 @@ Late cancellation and no-show tracking with automatic penalty charges.
 
 ## Settings
 - `penaltyCutoffHours`: 1, 2, 4, 6, 12, 24, 48 hours before lesson
-- `penaltyPercent`: 25%, 50%, 75%, 100% of lesson price
+- `penaltyPercent`: 25%, 50%, 75%, 100% of lesson price — **non più impostabile dalla UI da REG-780**; il valore salvato resta, ma senza Stripe non ha effetto: una cancellazione tardiva trattiene la guida intera o la condona (decide il titolare)
 
 ## Flow
 1. Un annullamento tardivo popola la coda: (a) allievo che cancella dopo il cutoff (`cancelAutoscuolaAppointment`, mobile) oppure (b) il titolare che sceglie **"Decidi più tardi"** nel dialogo "Annulla guida" (`annulFutureAppointment` con `lateOutcome = "defer"` → `lateCancellationAction` resta `null`). L'istruttore non-titolare è sempre forzato a `defer`. No-show pure entrano in coda.

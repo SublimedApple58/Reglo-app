@@ -7,7 +7,6 @@ import {
   GraduationCap,
   CalendarDays,
   SlidersHorizontal,
-  WalletCards,
   ChevronsUpDown,
   Plus,
   PhoneCall,
@@ -55,7 +54,7 @@ type SidebarItem = {
   title: string;
   url: string;
   icon: React.ComponentType<{ className?: string }>;
-  tabKey?: "dashboard" | "students" | "agenda" | "settings" | "payments";
+  tabKey?: "dashboard" | "students" | "agenda" | "settings";
 };
 
 const autoscuoleSidebarItems: SidebarItem[] = [
@@ -82,12 +81,6 @@ const autoscuoleSidebarItems: SidebarItem[] = [
     url: "autoscuole?tab=settings",
     icon: SlidersHorizontal,
     tabKey: "settings",
-  },
-  {
-    title: "Pagamenti",
-    url: "autoscuole?tab=payments",
-    icon: WalletCards,
-    tabKey: "payments",
   },
   {
     title: "Segretaria",
@@ -166,8 +159,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     if (
       tab === "students" ||
       tab === "agenda" ||
-      tab === "settings" ||
-      tab === "payments"
+      tab === "settings"
     ) {
       return tab;
     }

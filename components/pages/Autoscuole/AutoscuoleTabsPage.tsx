@@ -38,13 +38,6 @@ const AutoscuoleResourcesPage = dynamic(
     })),
   { loading: () => <div className="h-40 w-full animate-pulse rounded-3xl bg-white/40" /> },
 );
-const AutoscuolePaymentsPage = dynamic(
-  () =>
-    import("./AutoscuolePaymentsPage").then((module) => ({
-      default: module.AutoscuolePaymentsPage,
-    })),
-  { loading: () => <div className="h-40 w-full animate-pulse rounded-3xl bg-white/40" /> },
-);
 const ConsorzioSchoolsPage = dynamic(
   () =>
     import("../Consorzio/ConsorzioSchoolsPage").then((module) => ({
@@ -68,7 +61,6 @@ type AutoscuoleTabKey =
   | "students"
   | "agenda"
   | "settings"
-  | "payments"
   | "scuole"
   | "fatturazione";
 
@@ -76,7 +68,6 @@ const TAB_KEYS: AutoscuoleTabKey[] = [
   "students",
   "agenda",
   "settings",
-  "payments",
   "scuole",
   "fatturazione",
 ];
@@ -84,7 +75,14 @@ const TAB_KEYS: AutoscuoleTabKey[] = [
 // Tab esclusive di una modalità: "scuole"/"fatturazione" esistono solo per il
 // consorzio; allievi/segretaria non esistono per il consorzio.
 const CONSORTIUM_ONLY_TABS: AutoscuoleTabKey[] = ["scuole", "fatturazione"];
-const AUTOSCUOLA_ONLY_TABS: AutoscuoleTabKey[] = ["students", "payments"];
+const AUTOSCUOLA_ONLY_TABS: AutoscuoleTabKey[] = ["students"];
+
+/**
+ * REG-780: la vecchia pagina «Pagamenti» (Stripe, prezzi, tabella in euro) è
+ * ritirata. Chi arriva da un vecchio link `?tab=payments` finisce su
+ * Impostazioni → Prenotazioni e allievi → Crediti e annullamenti.
+ */
+const PAYMENTS_REDIRECT = "?tab=settings&pane=bookings&sub=crediti";
 
 function normalizeTab(value: string | null): AutoscuoleTabKey {
   if (!value) return "agenda";
@@ -133,7 +131,9 @@ export function AutoscuoleTabsPage() {
   // la nav evidenzia l'Agenda, che è quella mostrata.
   React.useEffect(() => {
     const raw = searchParams.get("tab");
-    if (raw && raw !== "disponibilita" && !(TAB_KEYS as string[]).includes(raw)) {
+    if (raw === "payments") {
+      router.replace(`/${locale}/user/autoscuole${PAYMENTS_REDIRECT}`);
+    } else if (raw && raw !== "disponibilita" && !(TAB_KEYS as string[]).includes(raw)) {
       router.replace(`/${locale}/user/autoscuole`);
     }
   }, [searchParams, router, locale]);
@@ -173,7 +173,6 @@ export function AutoscuoleTabsPage() {
         () => import("./AutoscuoleResourcesPage"),
       ],
       settings: [() => import("./AutoscuoleAgendaPage")],
-      payments: [() => import("./AutoscuoleAgendaPage")],
       scuole: [() => import("./AutoscuoleAgendaPage")],
       fatturazione: [() => import("./AutoscuoleAgendaPage")],
     };
@@ -255,7 +254,6 @@ export function AutoscuoleTabsPage() {
         )
       ) : null}
       {activeTab === "settings" ? <AutoscuoleResourcesPage tabs={null} /> : null}
-      {activeTab === "payments" ? <AutoscuolePaymentsPage tabs={null} /> : null}
       {activeTab === "scuole" && consortium ? <ConsorzioSchoolsPage /> : null}
       {activeTab === "fatturazione" && consortium ? <ConsorzioBillingPage /> : null}
     </div>

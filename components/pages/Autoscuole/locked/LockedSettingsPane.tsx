@@ -90,14 +90,6 @@ export const FakeSelect = ({ children }: { children: React.ReactNode }) => (
   </div>
 );
 
-/** Come FakeSelect ma con l'unità a destra invece della freccia (prezzi). */
-const PriceField = ({ value, unit = "€" }: { value: string; unit?: string }) => (
-  <div className="flex items-center justify-between gap-2 rounded-[10px] border-[1.5px] border-[#e4e4ea] px-3 py-[9px]">
-    <span className="text-[13px] font-medium text-[#222222]">{value}</span>
-    <span className="text-[13px] font-medium text-[#929292]">{unit}</span>
-  </div>
-);
-
 /** Campo etichettato, la coppia che il prototipo ripete ovunque. */
 const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div>
@@ -540,38 +532,27 @@ export const LOCKED_PANE_CARDS: Record<string, LockedPaneCard> = {
       "Decidi tu cosa vedono gli allievi in app: note delle guide e scelta dell'istruttore.",
   },
 
-  /* ── Prenotazioni e allievi › Crediti e prezzi ────────────────────── */
+  /* ── Prenotazioni e allievi › Crediti e annullamenti (REG-780) ────── */
   "bookings:crediti": {
     scopriUrl: SITE_URLS.prezzi,
-    title: "Crediti e prezzi",
+    title: "Crediti e annullamenti",
     preview: (
       <>
         <div className="-mt-1.5 border-b border-[#efeff2]">
           <PreviewToggleRow
             title="Crediti guida"
-            note="Le guide si pagano con crediti caricati dall'autoscuola"
+            note="Le guide si pagano con i crediti che carichi all'allievo"
           />
         </div>
         <div className="mt-3.5 grid grid-cols-2 gap-2.5">
-          <Field label="Guida da 30 minuti">
-            <PriceField value="25" />
-          </Field>
-          <Field label="Guida da 60 minuti">
-            <PriceField value="50" />
-          </Field>
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-2.5">
-          <Field label="Cutoff annullamento">
-            <FakeSelect>48 ore prima</FakeSelect>
-          </Field>
-          <Field label="Penale">
-            <FakeSelect>100% del prezzo</FakeSelect>
+          <Field label="Preavviso minimo">
+            <FakeSelect>24 ore prima</FakeSelect>
           </Field>
         </div>
       </>
     ),
     description:
-      "Crediti, prezzi e penali si applicano da soli: annullamenti tardivi e guide senza credito risultano da pagare.",
+      "Crediti e annullamenti si applicano da soli: chi annulla all'ultimo momento e le guide senza credito restano da pagare.",
   },
 
   /* ── Policy tipi guida ────────────────────────────────────────────── */
@@ -897,7 +878,7 @@ const SUB_TABS: Record<string, Array<{ key: string; label: string }>> = {
     { key: "limiti", label: "Limiti" },
     { key: "guide", label: "Guide" },
     { key: "app", label: "App allievi" },
-    { key: "crediti", label: "Crediti e prezzi" },
+    { key: "crediti", label: "Crediti e annullamenti" },
   ],
   voice: [
     { key: "linea", label: "Linea" },

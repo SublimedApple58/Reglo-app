@@ -3635,7 +3635,6 @@ export function AutoscuoleAgendaPage({
       creditApplied: !!item.creditApplied,
       paymentRequired: !!item.paymentRequired,
       penaltyCutoffAt: item.penaltyCutoffAt ? toDate(item.penaltyCutoffAt) : null,
-      penaltyAmount: item.penaltyAmount ?? null,
       countsInHours: ["completed", "checked_in", "no_show"].includes(status),
     });
   };
