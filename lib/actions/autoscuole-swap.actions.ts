@@ -30,12 +30,13 @@ import {
 } from "@/lib/autoscuole/notify";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
+  checkLessonCredits,
   consumeLessonCreditIfAvailable,
   getAutoscuolaPaymentConfig,
-  getStudentLessonCredits,
+  lessonCreditsTitle,
   refundAppointmentCredit,
 } from "@/lib/autoscuole/payments";
-import { creditCost, formatCredits } from "@/lib/autoscuole/lesson-credit-unit";
+import { creditCost } from "@/lib/autoscuole/lesson-credit-unit";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
@@ -832,23 +833,23 @@ export async function respondSwapOffer(
       }
     }
 
-    // Crediti obbligatori (REG-783, caso 10): chi accetta deve poter pagare la
-    // guida per intero, nell'unità di adesso.
-    if (payload.response === "accept" && offer.appointment.creditApplied) {
+    // Crediti obbligatori (REG-783 caso 10, REG-784): chi accetta deve poter
+    // pagare la guida per intero, nell'unità di adesso, anche se chi la cede
+    // non l'aveva pagata a credito.
+    if (payload.response === "accept") {
       const payConfig = await getAutoscuolaPaymentConfig({ companyId: membership.companyId });
-      if (payConfig.lessonCreditFlowEnabled && payConfig.lessonCreditsRequired) {
-        const cost = creditCost(payConfig.lessonCreditUnit, offer.appointment.startsAt, offer.appointment.endsAt);
-        const credits = await getStudentLessonCredits({
-          companyId: membership.companyId,
-          studentId: payload.studentId,
-          limit: 1,
-        });
-        if (credits.unit !== payConfig.lessonCreditUnit || credits.availableCredits < cost) {
-          return {
-            success: false,
-            message: `Per prendere questa guida ti servono ${formatCredits(payConfig.lessonCreditUnit, cost)} di credito: ne hai ${credits.availableCreditsLabel}.`,
-          };
-        }
+      const check = await checkLessonCredits({
+        companyId: membership.companyId,
+        studentId: payload.studentId,
+        cost: creditCost(payConfig.lessonCreditUnit, offer.appointment.startsAt, offer.appointment.endsAt),
+      });
+      if (!check.enough) {
+        return {
+          success: false,
+          code: "LESSON_CREDITS_REQUIRED" as const,
+          message: `${lessonCreditsTitle(check)}. Ricarica in segreteria e prendi la guida.`,
+          lessonCreditsData: { ...check, title: lessonCreditsTitle(check) },
+        };
       }
     }
 
@@ -911,14 +912,17 @@ export async function respondSwapOffer(
       // pieno nell'unità di adesso. Se non gli basta, la guida resta da pagare
       // (con i crediti obbligatori lo scambio è già stato rifiutato sopra).
       const settings = await getAutoscuolaSettingsForCompany(membership.companyId);
-      if (settings.lessonCreditFlowEnabled && offer.appointment.creditApplied) {
-        await refundAppointmentCredit({
-          prisma: tx as never,
-          companyId: membership.companyId,
-          studentId: offer.requestingStudentId,
-          appointment: offer.appointment,
-          reason: "swap_refund",
-        });
+      if (settings.lessonCreditFlowEnabled) {
+        // Chi cede si riprende il credito solo se l'aveva pagata a credito.
+        if (offer.appointment.creditApplied) {
+          await refundAppointmentCredit({
+            prisma: tx as never,
+            companyId: membership.companyId,
+            studentId: offer.requestingStudentId,
+            appointment: offer.appointment,
+            reason: "swap_refund",
+          });
+        }
         const { lessonCreditUnit } = await getAutoscuolaPaymentConfig({
           prisma: tx as never,
           companyId: membership.companyId,
@@ -936,7 +940,7 @@ export async function respondSwapOffer(
         await tx.autoscuolaAppointment.update({
           where: { id: offer.appointmentId },
           data: consumed.consumed
-            ? { creditAmount: cost, creditUnit: lessonCreditUnit }
+            ? { creditApplied: true, creditAmount: cost, creditUnit: lessonCreditUnit, manualPaymentStatus: null }
             : { creditApplied: false, creditAmount: null, creditUnit: null, manualPaymentStatus: "unpaid" },
         });
       }

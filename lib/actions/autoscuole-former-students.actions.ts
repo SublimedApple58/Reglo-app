@@ -90,6 +90,7 @@ const LESSON_SELECT = {
 
 type LessonRecord = {
   status: string;
+  type: string;
   manualPaymentStatus: string | null;
   creditApplied: boolean;
   lateCancellationAction: string | null;

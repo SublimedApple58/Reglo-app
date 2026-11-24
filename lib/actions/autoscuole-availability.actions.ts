@@ -38,13 +38,17 @@ import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
   prepareAppointmentPaymentSnapshot,
   getGroupLessonPenaltySnapshot,
+  checkLessonCredits,
+  getAutoscuolaPaymentConfig,
+  lessonCreditsTitle,
 } from "@/lib/autoscuole/payments";
+import { creditCost } from "@/lib/autoscuole/lesson-credit-unit";
 import {
   getBookingGovernanceForInstructor,
   isStudentAppBookingEnabled,
   parseBookingGovernanceFromLimits,
 } from "@/lib/autoscuole/booking-governance";
-import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
+import { isInstructor, isOwner, isStudent } from "@/lib/autoscuole/roles";
 import { findBestAutoscuolaSlot } from "@/lib/autoscuole/slot-matcher";
 import {
   buildVehicleResolutionMaps,
@@ -823,6 +827,28 @@ const ensureStudentCanBookFromApp = async ({
   const bookableUntil = channel === "free" ? studentFreeBookingUntil(policy) : null;
   return { allowed: true as const, settings: effective, limits, policy, bookableUntil };
 };
+
+/**
+ * REG-784 — con «Servono crediti per prenotare» l'allievo che prenota da solo
+ * deve avere il costo pieno della guida. Restituisce l'errore da mandare
+ * all'app (codice `LESSON_CREDITS_REQUIRED`, titolo corto e una riga), oppure
+ * null se può prenotare. Lo staff non passa di qui: viene avvisato e conferma.
+ */
+async function studentLessonCreditsBlock(companyId: string, studentId: string, startsAt: Date, endsAt: Date | null) {
+  const config = await getAutoscuolaPaymentConfig({ companyId });
+  const check = await checkLessonCredits({
+    companyId,
+    studentId,
+    cost: creditCost(config.lessonCreditUnit, startsAt, endsAt),
+  });
+  if (check.enough) return null;
+  return {
+    success: false as const,
+    code: "LESSON_CREDITS_REQUIRED" as const,
+    message: `${lessonCreditsTitle(check)}. Ricarica in segreteria e prenoti.`,
+    lessonCreditsData: { ...check, title: lessonCreditsTitle(check) },
+  };
+}
 
 export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>) {
   try {
@@ -2566,6 +2592,17 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         }
       }
 
+      // REG-784: l'allievo senza crediti sufficienti non prenota da solo.
+      if (isStudent(membership.autoscuolaRole)) {
+        const creditsBlock = await studentLessonCreditsBlock(
+          membership.companyId,
+          payload.studentId,
+          new Date(candidate.start),
+          new Date(candidate.end),
+        );
+        if (creditsBlock) return creditsBlock;
+      }
+
       const appointmentId = randomUUID();
       const appointment = await prisma.$transaction(async (tx) => {
         const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
@@ -3026,6 +3063,27 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
       }
     }
 
+    // REG-784: crediti per prenotare. `insufficient` = non ci sta nemmeno la
+    // guida più corta; l'app mostra la card «Crediti finiti / Mancano 30 minuti».
+    const creditsConfig = await getAutoscuolaPaymentConfig({ companyId: membership.companyId });
+    const shortestDuration = clusterSettings.bookingSlotDurations.length
+      ? Math.min(...clusterSettings.bookingSlotDurations)
+      : 60;
+    const creditsCheck = await checkLessonCredits({
+      companyId: membership.companyId,
+      studentId: payload.studentId,
+      cost: creditsConfig.lessonCreditUnit === "minutes" ? shortestDuration : 1,
+    });
+    const lessonCredits = {
+      required: creditsCheck.required,
+      unit: creditsCheck.unit,
+      available: creditsCheck.available,
+      availableLabel: creditsCheck.availableLabel,
+      insufficient: !creditsCheck.enough,
+      missingLabel: creditsCheck.missingLabel,
+      title: creditsCheck.enough ? null : lessonCreditsTitle(creditsCheck),
+    };
+
     return {
       success: true,
       data: {
@@ -3033,6 +3091,7 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
         lessonTypeSelectionEnabled,
         availableLessonTypes,
         instructorPreferenceEnabled,
+        lessonCredits,
         weeklyBookingLimit: weeklyBookingLimitEnabled ? {
           enabled: true,
           // REG-782: `limit`/`current` restano in guide (app già pubblicate);
@@ -4498,6 +4557,17 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
     const assignedVehicleIds = [assignment.vehicleId, assignment.followVehicleId].filter(
       (id): id is string => !!id,
     );
+
+    // REG-784: anche il posto liberato si paga coi crediti.
+    if (isStudent(membership.autoscuolaRole)) {
+      const creditsBlock = await studentLessonCreditsBlock(
+        membership.companyId,
+        payload.studentId,
+        offer.slot.startsAt,
+        offer.slot.endsAt,
+      );
+      if (creditsBlock) return creditsBlock;
+    }
 
     const appointmentId = randomUUID();
     const appointment = await prisma.$transaction(async (tx) => {

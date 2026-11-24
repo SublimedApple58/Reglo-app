@@ -187,6 +187,9 @@ import {
   consumeLessonCreditIfAvailable,
   refundAppointmentCredit,
   syncAppointmentCreditToDuration,
+  checkLessonCredits,
+  lessonCreditsStaffTitle,
+  lessonCreditsTitle,
 } from "@/lib/autoscuole/payments";
 import {
   creditCost,
@@ -279,6 +282,9 @@ const createAppointmentSchema = z.object({
   // REG-484: lo staff ha confermato "Non avrai tempo per una pausa" e vuole
   // procedere lo stesso. Senza il flag l'azione si ferma e chiede conferma.
   confirmNoBuffer: z.boolean().optional(),
+  // REG-784: lo staff ha confermato di prenotare per un allievo senza crediti
+  // sufficienti (la guida nasce «da pagare»).
+  confirmLessonCredits: z.boolean().optional(),
 });
 
 const updateCaseStatusSchema = z.object({
@@ -1151,6 +1157,48 @@ const mapCaseStudent = (student: UserSnapshot | null) => {
     phone: student.phone ?? null,
   };
 };
+
+/**
+ * REG-784 — crediti obbligatori: l'allievo che prenota da sé riceve
+ * `LESSON_CREDITS_REQUIRED`; lo staff `LESSON_CREDITS_CONFIRM` finché non
+ * conferma (`confirmLessonCredits`). Null = si può procedere.
+ */
+async function lessonCreditsGate({
+  companyId,
+  studentId,
+  cost,
+  isStudentActor,
+  confirmed,
+}: {
+  companyId: string;
+  studentId: string;
+  cost: number;
+  isStudentActor: boolean;
+  confirmed: boolean;
+}) {
+  if (!isStudentActor && confirmed) return null;
+  const check = await checkLessonCredits({ companyId, studentId, cost });
+  if (check.enough) return null;
+  if (isStudentActor) {
+    return {
+      success: false as const,
+      code: "LESSON_CREDITS_REQUIRED" as const,
+      message: `${lessonCreditsTitle(check)}. Ricarica in segreteria e prenoti.`,
+      lessonCreditsData: { ...check, title: lessonCreditsTitle(check) },
+    };
+  }
+  const student = await prisma.user.findUnique({ where: { id: studentId }, select: { name: true } });
+  const firstName = student?.name?.trim().split(/\s+/)[0] ?? null;
+  const title = lessonCreditsStaffTitle(check, firstName);
+  return {
+    success: false as const,
+    code: "LESSON_CREDITS_CONFIRM" as const,
+    // Il titolo va nell'avviso, il messaggio è la riga sotto.
+    title,
+    message: "La guida resterà da pagare.",
+    lessonCreditsData: { ...check, title },
+  };
+}
 
 export async function getAutoscuolaOverview() {
   try {
@@ -3881,6 +3929,24 @@ export async function createAutoscuolaAppointment(
       }
     }
 
+    // REG-784: crediti obbligatori. L'allievo senza crediti non prenota; lo
+    // staff viene avvisato e può confermare (la guida nasce «da pagare»).
+    // Gli esami non usano crediti.
+    if (requestedType !== "esame") {
+      const creditsBlock = await lessonCreditsGate({
+        companyId,
+        studentId: payload.studentId,
+        cost: creditCost(
+          (await getAutoscuolaPaymentConfig({ companyId })).lessonCreditUnit,
+          new Date(payload.startsAt),
+          payload.endsAt ? new Date(payload.endsAt) : null,
+        ),
+        isStudentActor,
+        confirmed: payload.confirmLessonCredits === true,
+      });
+      if (creditsBlock) return creditsBlock;
+    }
+
     // Proposte ritirate: una guida creata dall'istruttore è sempre confermata,
     // non si invia più alcuna "proposta" da accettare.
     const appointmentStatus = payload.status ?? "scheduled";
@@ -4551,6 +4617,8 @@ const createAppointmentBatchSchema = z.object({
   // Vedi createAppointmentSchema.allowPast — consente di registrare slot passati
   // dopo conferma esplicita dell'utente.
   allowPast: z.boolean().optional(),
+  // REG-784: vedi createAppointmentSchema.confirmLessonCredits.
+  confirmLessonCredits: z.boolean().optional(),
   entries: z
     .array(
       z.object({
@@ -4877,6 +4945,19 @@ export async function createAutoscuolaAppointmentBatch(
       batchLocationId = defaultLoc?.id ?? null;
     }
 
+    // REG-784: crediti obbligatori — il costo è la somma delle guide.
+    if (resolvedTypes[0] !== "esame") {
+      const { lessonCreditUnit } = await getAutoscuolaPaymentConfig({ companyId });
+      const creditsBlock = await lessonCreditsGate({
+        companyId,
+        studentId: payload.studentId,
+        cost: parsedEntries.reduce((sum, e) => sum + creditCost(lessonCreditUnit, e.startsAt, e.endsAt), 0),
+        isStudentActor: false,
+        confirmed: payload.confirmLessonCredits === true,
+      });
+      if (creditsBlock) return creditsBlock;
+    }
+
     // ── Atomic creation via transaction ──
     const entryIds = parsedEntries.map(() => randomUUID());
     // REG-758: la prenotazione multipla è sempre dello staff. Le date finiscono
@@ -4888,20 +4969,20 @@ export async function createAutoscuolaAppointmentBatch(
     );
 
     const appointments = await prisma.$transaction(async (tx) => {
-      // Prepare payment snapshot once (same student/vehicle/instructor)
-      const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
-        prisma: tx as never,
-        companyId,
-        studentId: payload.studentId,
-        startsAt: parsedEntries[0].startsAt,
-        endsAt: parsedEntries[0].endsAt,
-        appointmentId: entryIds[0],
-        actorUserId: membership.userId,
-      });
-
       const results = [];
       for (let i = 0; i < parsedEntries.length; i++) {
         const entry = parsedEntries[i];
+        // REG-784: uno snapshot per guida. Prima era uno solo copiato su tutte:
+        // si scalava un credito e tutte risultavano pagate a credito.
+        const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
+          prisma: tx as never,
+          companyId,
+          studentId: payload.studentId,
+          startsAt: entry.startsAt,
+          endsAt: entry.endsAt,
+          appointmentId: entryIds[i],
+          actorUserId: membership.userId,
+        });
         const appt = await tx.autoscuolaAppointment.create({
           data: {
             id: entryIds[i],

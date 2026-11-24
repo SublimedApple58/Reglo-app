@@ -19,6 +19,8 @@ export async function POST(request: Request) {
     allowPast: payload.allowPast === true,
     // REG-484: l'istruttore ha confermato di rinunciare alla pausa.
     confirmNoBuffer: payload.confirmNoBuffer === true,
+    // REG-784: ha confermato di prenotare per un allievo senza crediti.
+    confirmLessonCredits: payload.confirmLessonCredits === true,
   });
   return NextResponse.json(res, { status: res.success ? 200 : 400 });
 }

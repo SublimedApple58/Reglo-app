@@ -1284,6 +1284,74 @@ export async function adjustStudentLessonCredits({
 }
 
 /**
+ * REG-784 — con «Servono crediti per prenotare» acceso, l'allievo deve avere
+ * il costo pieno della guida (1 guida, o la sua durata a minuti). Usato per
+ * bloccare l'allievo e per avvisare lo staff (che può prenotare lo stesso:
+ * la guida nasce «da pagare»). `extraCost` somma più guide (prenotazione
+ * multipla). Gli esami non usano crediti: chi chiama li esclude.
+ */
+export async function checkLessonCredits({
+  prisma = defaultPrisma,
+  companyId,
+  studentId,
+  cost,
+}: {
+  prisma?: PrismaClientLike;
+  companyId: string;
+  studentId: string;
+  /** Costo nell'unità corrente (`creditCost`, sommato se più guide). */
+  cost: number;
+}): Promise<LessonCreditsCheck> {
+  const config = await getAutoscuolaPaymentConfig({ prisma, companyId });
+  const unit = config.lessonCreditUnit;
+  const required = config.lessonCreditFlowEnabled && config.lessonCreditsRequired;
+  const balance = await prisma.autoscuolaStudentLessonCreditBalance.findUnique({
+    where: { companyId_studentId: { companyId, studentId } },
+    select: { availableCredits: true, unit: true },
+  });
+  const available =
+    balance && parseLessonCreditUnit(balance.unit) === unit ? Math.max(0, balance.availableCredits) : 0;
+  const need = Math.max(0, cost);
+  const missing = Math.max(0, need - available);
+  return {
+    required,
+    enough: !required || missing === 0,
+    unit,
+    available,
+    availableLabel: formatCredits(unit, available),
+    cost: need,
+    costLabel: formatCredits(unit, need),
+    missing,
+    missingLabel: formatCredits(unit, missing),
+  };
+}
+
+export type LessonCreditsCheck = {
+  required: boolean;
+  enough: boolean;
+  unit: LessonCreditUnit;
+  available: number;
+  availableLabel: string;
+  cost: number;
+  costLabel: string;
+  missing: number;
+  missingLabel: string;
+};
+
+/** Titolo corto per l'allievo bloccato: «Crediti finiti» o «Mancano 30 minuti». */
+export function lessonCreditsTitle(check: LessonCreditsCheck): string {
+  if (check.available === 0) return "Crediti finiti";
+  return check.unit === "minutes" ? `Mancano ${check.missingLabel}` : "Crediti finiti";
+}
+
+/** Titolo per lo staff: «Vittoria non ha crediti» o «A Vittoria mancano 30 minuti». */
+export function lessonCreditsStaffTitle(check: LessonCreditsCheck, firstName: string | null | undefined): string {
+  const who = firstName?.trim() || "L'allievo";
+  if (check.available === 0) return `${who} non ha crediti`;
+  return check.unit === "minutes" ? `A ${who} mancano ${check.missingLabel}` : `${who} non ha crediti`;
+}
+
+/**
  * REG-783 — rende il credito di una guida nell'unità di adesso: quanto aveva
  * consumato se l'unità è la stessa, altrimenti la durata attuale (a minuti) o
  * 1 guida (a guide). Non segna `creditRefundedAt`: lo fa chi chiama.
@@ -1580,7 +1648,9 @@ export async function prepareAppointmentPaymentSnapshot({
       creditApplied: false,
       creditAmount: null,
       creditUnit: null,
-      manualPaymentStatus: !config.lessonCreditsRequired ? "unpaid" as const : null,
+      // REG-784: senza credito la guida è sempre «da pagare», anche con i
+      // crediti obbligatori (lo staff ha confermato di prenotare lo stesso).
+      manualPaymentStatus: "unpaid" as const,
     };
   }
 

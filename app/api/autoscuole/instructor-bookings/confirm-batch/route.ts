@@ -17,6 +17,8 @@ export async function POST(request: Request) {
     types: payload.types,
     skipWeeklyLimitCheck: payload.skipWeeklyLimitCheck === true,
     allowPast: payload.allowPast === true,
+    // REG-784: ha confermato di prenotare per un allievo senza crediti.
+    confirmLessonCredits: payload.confirmLessonCredits === true,
   });
   return NextResponse.json(res, { status: res.success ? 200 : 400 });
 }

@@ -5,6 +5,12 @@ import { getTwilioClient } from "@/lib/twilio";
 import { TELNYX_WEBHOOK_BASE_URL } from "@/lib/telnyx";
 import { getAutoscuolaSettingsForCompany } from "@/lib/actions/autoscuole-settings.actions";
 import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
+import {
+  checkLessonCredits,
+  getAutoscuolaPaymentConfig,
+  prepareAppointmentPaymentSnapshot,
+} from "@/lib/autoscuole/payments";
+import { creditCost } from "@/lib/autoscuole/lesson-credit-unit";
 
 type PrismaClientLike = typeof defaultPrisma;
 
@@ -734,25 +740,62 @@ export async function createVoiceAppointment({
   // (decisione di Tiziano del 17/11).
   const creationNotice = await creationNoticeFor({ companyId, type: "urbano", startsAt });
 
-  const appointment = await prisma.autoscuolaAppointment.create({
-    data: {
-      companyId,
-      studentId,
-      bookingSource: BOOKING_SOURCE.voice,
-      creationNotice,
-      type: "urbano",
-      startsAt,
-      endsAt,
-      status: "scheduled",
-    },
-    select: {
-      id: true,
-      startsAt: true,
-      endsAt: true,
-      status: true,
-      type: true,
-    },
+  // REG-784: con «Servono crediti per prenotare» al telefono vale la stessa
+  // regola dell'app. Il messaggio è pensato per essere letto ad alta voce.
+  const { lessonCreditUnit } = await getAutoscuolaPaymentConfig({ prisma, companyId });
+  const credits = await checkLessonCredits({
+    prisma,
+    companyId,
+    studentId,
+    cost: creditCost(lessonCreditUnit, startsAt, endsAt),
   });
+  if (!credits.enough) {
+    throw new Error(
+      credits.available === 0 || lessonCreditUnit === "lessons"
+        ? "Non posso fissare la guida: i crediti sono finiti. Può ricaricarli in segreteria e poi prenotare."
+        : `Non posso fissare la guida: le mancano ${credits.missingLabel} di credito. Può ricaricarli in segreteria, oppure scegliere una guida più corta.`,
+    );
+  }
+
+  // Come in app: la guida consuma il credito (o nasce «da pagare»), nella
+  // stessa transazione della creazione.
+  const create = async (db: PrismaClientLike) => {
+    const snapshot = await prepareAppointmentPaymentSnapshot({ prisma: db as never, companyId, studentId, startsAt, endsAt });
+    return db.autoscuolaAppointment.create({
+      data: {
+        companyId,
+        studentId,
+        bookingSource: BOOKING_SOURCE.voice,
+        creationNotice,
+        type: "urbano",
+        startsAt,
+        endsAt,
+        status: "scheduled",
+        paymentRequired: snapshot.paymentRequired,
+        paymentStatus: snapshot.paymentStatus,
+        priceAmount: snapshot.priceAmount,
+        penaltyAmount: snapshot.penaltyAmount,
+        penaltyCutoffAt: snapshot.penaltyCutoffAt,
+        paidAmount: snapshot.paidAmount,
+        invoiceStatus: snapshot.invoiceStatus,
+        creditApplied: snapshot.creditApplied,
+        creditAmount: snapshot.creditAmount,
+        creditUnit: snapshot.creditUnit,
+        manualPaymentStatus: snapshot.manualPaymentStatus,
+      },
+      select: {
+        id: true,
+        startsAt: true,
+        endsAt: true,
+        status: true,
+        type: true,
+      },
+    });
+  };
+  const appointment =
+    "$transaction" in prisma && typeof prisma.$transaction === "function"
+      ? await prisma.$transaction((tx) => create(tx as never))
+      : await create(prisma);
 
   return {
     id: appointment.id,

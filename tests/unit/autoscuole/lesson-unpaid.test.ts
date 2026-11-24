@@ -73,8 +73,9 @@ type Where = Record<string, unknown>;
 const matchField = (value: unknown, cond: unknown): boolean => {
   if (cond === null) return value === null;
   if (typeof cond === "object" && cond !== null) {
-    const c = cond as { in?: unknown[]; not?: unknown };
+    const c = cond as { in?: unknown[]; notIn?: unknown[]; not?: unknown };
     if (c.in) return c.in.includes(value);
+    if (c.notIn) return value !== null && !c.notIn.includes(value); // semantica SQL
     if ("not" in c) return value !== null && value !== c.not; // semantica SQL
   }
   return value === cond;
@@ -97,7 +98,8 @@ describe("unpaidLessonCandidatesWhere", () => {
       for (const lateCancellationAction of actions)
         for (const cancellationKind of kinds)
           for (const creditApplied of [false, true])
-            rows.push({ status, manualPaymentStatus, lateCancellationAction, cancellationKind, creditApplied });
+            for (const type of ["guida", "group_lesson", "esame"])
+              rows.push({ status, manualPaymentStatus, lateCancellationAction, cancellationKind, creditApplied, type });
 
   it.each([true, false])("coincide con isLessonUnpaid (manualMode=%s)", (manualMode) => {
     const where = unpaidLessonCandidatesWhere(manualMode);
@@ -107,5 +109,22 @@ describe("unpaidLessonCandidatesWhere", () => {
         selected: isLessonUnpaid(row, manualMode),
       });
     }
+  });
+});
+
+describe("REG-784: crediti obbligatori", () => {
+  const base = { cancellationKind: null, creditApplied: false, lateCancellationAction: null };
+  it("una guida singola fatta e «da pagare» conta nel debito anche fuori dal pagamento manuale", () => {
+    expect(isLessonUnpaid({ ...base, status: "completed", manualPaymentStatus: "unpaid", type: "guida" }, false)).toBe(true);
+  });
+  it("i posti nelle guide di gruppo e gli esami no", () => {
+    expect(isLessonUnpaid({ ...base, status: "completed", manualPaymentStatus: "unpaid", type: "group_lesson" }, false)).toBe(false);
+    expect(isLessonUnpaid({ ...base, status: "completed", manualPaymentStatus: "unpaid", type: "esame" }, false)).toBe(false);
+  });
+  it("senza tipo noto la regola nuova non scatta", () => {
+    expect(isLessonUnpaid({ ...base, status: "completed", manualPaymentStatus: "unpaid" }, false)).toBe(false);
+  });
+  it("una guida futura non conta ancora", () => {
+    expect(isLessonUnpaid({ ...base, status: "scheduled", manualPaymentStatus: "unpaid", type: "guida" }, false)).toBe(false);
   });
 });

@@ -46,6 +46,8 @@ export type UnpaidLessonFields = {
   creditApplied?: boolean | null;
   lateCancellationAction?: string | null;
   cancellationKind: string | null;
+  /** REG-784: serve a riconoscere le guide singole «da pagare» coi crediti obbligatori. */
+  type?: string | null;
 };
 
 /** Select Prisma minimo per valutare `isLessonUnpaid`. */
@@ -55,7 +57,11 @@ export const UNPAID_LESSON_SELECT = {
   creditApplied: true,
   lateCancellationAction: true,
   cancellationKind: true,
+  type: true,
 } as const;
+
+/** Tipi che non usano mai crediti: posti in guida di gruppo ed esami. */
+const NO_CREDIT_TYPES = ["group_lesson", "esame"];
 
 export function isCompanyManualMode(config: {
   enabled: boolean;
@@ -75,6 +81,13 @@ export function isLessonUnpaid(l: UnpaidLessonFields, manualMode: boolean): bool
   const s = normalizeStatus(l.status);
   return (
     (DONE_STATUSES.includes(s) && manualMode) ||
+    // REG-784: coi crediti obbligatori una guida singola prenotata dallo staff
+    // senza credito nasce «da pagare» e conta nel debito quando è fatta.
+    (DONE_STATUSES.includes(s) &&
+      !manualMode &&
+      l.manualPaymentStatus === "unpaid" &&
+      l.type != null &&
+      !NO_CREDIT_TYPES.includes(l.type)) ||
     (MISSED_STATUSES.includes(s) &&
       l.lateCancellationAction === "charged" &&
       l.manualPaymentStatus === "unpaid")
@@ -96,6 +109,7 @@ export function unpaidLessonCandidatesWhere(manualMode: boolean) {
     },
   ];
   if (manualMode) branches.push({ status: { in: DONE_STATUSES } });
+  else branches.push({ status: { in: DONE_STATUSES }, manualPaymentStatus: "unpaid", type: { notIn: NO_CREDIT_TYPES } });
   return {
     creditApplied: false,
     AND: [

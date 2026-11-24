@@ -1814,6 +1814,8 @@ export async function startFreeRoadSession(input: {
       allowPast: true,
       skipWeeklyLimitCheck: input.confirmWeeklyLimit === true,
       confirmNoBuffer: input.confirmNoBuffer === true,
+      // REG-784: la guida parte adesso, niente domanda sui crediti: senza credito nasce «da pagare».
+      confirmLessonCredits: true,
       // REG-725: Road non ha il campo Luogo — resta la sede di sempre.
       locationOptional: true,
     });
