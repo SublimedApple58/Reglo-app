@@ -94,6 +94,8 @@ export type BookingsTabProps = {
   setWeeklyBookingLimitEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   weeklyBookingLimit: number;
   setWeeklyBookingLimit: (v: number) => void;
+  weeklyLimitCountsGroupLessons: boolean;
+  setWeeklyLimitCountsGroupLessons: React.Dispatch<React.SetStateAction<boolean>>;
   autoBookingBlockEnabled: boolean;
   setAutoBookingBlockEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   autoBookingBlockThreshold: number;
@@ -847,6 +849,8 @@ export default function BookingsTab({
   setWeeklyBookingLimitEnabled,
   weeklyBookingLimit,
   setWeeklyBookingLimit,
+  weeklyLimitCountsGroupLessons,
+  setWeeklyLimitCountsGroupLessons,
   autoBookingBlockEnabled,
   setAutoBookingBlockEnabled,
   autoBookingBlockThreshold,
@@ -1101,6 +1105,13 @@ export default function BookingsTab({
               <FieldBlock label="Guide a settimana per allievo">
                 <NumberField value={weeklyBookingLimit} min={1} max={50} onCommit={setWeeklyBookingLimit} />
               </FieldBlock>
+              <SettingRow
+                nested
+                title="Le guide di gruppo contano"
+                description="Un posto in una guida di gruppo vale come una guida. Gli esami non contano mai."
+                checked={weeklyLimitCountsGroupLessons}
+                onToggle={() => setWeeklyLimitCountsGroupLessons((prev) => !prev)}
+              />
               <SettingRow
                 nested
                 title="Precedenza a chi ha l'esame vicino"

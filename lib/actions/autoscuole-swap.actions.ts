@@ -7,6 +7,7 @@ import {
 import { OFFER_CHANNELS } from "@/lib/autoscuole/channel-cascade";
 import { z } from "zod";
 import { prisma } from "@/db/prisma";
+import { countStudentWeeklyLessons, weeklyLimitCountsGroupLessons } from "@/lib/autoscuole/weekly-lessons";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { sendDynamicEmail } from "@/email";
@@ -792,22 +793,13 @@ export async function respondSwapOffer(
             );
           }
           if (!bypass) {
-            const startsAt = offer.appointment.startsAt;
-            const dayOfWeek = startsAt.getUTCDay();
-            const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-            const weekStart = new Date(startsAt);
-            weekStart.setUTCDate(weekStart.getUTCDate() + mondayOffset);
-            weekStart.setUTCHours(0, 0, 0, 0);
-            const weekEnd = new Date(weekStart);
-            weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
-            const weekCount = await prisma.autoscuolaAppointment.count({
-              where: {
-                companyId: membership.companyId,
-                studentId: payload.studentId,
-                status: { notIn: ["cancelled"] },
-                startsAt: { gte: weekStart, lt: weekEnd },
-                id: { not: offer.appointmentId },
-              },
+            // Guide di guida della settimana della guida scambiata, REG-781.
+            const { lessons: weekCount } = await countStudentWeeklyLessons({
+              companyId: membership.companyId,
+              studentId: payload.studentId,
+              at: offer.appointment.startsAt,
+              excludeAppointmentId: offer.appointmentId,
+              includeGroupLessons: weeklyLimitCountsGroupLessons(limits),
             });
             if (weekCount + 1 > effective.weeklyBookingLimit) {
               return {

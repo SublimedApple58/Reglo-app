@@ -58,6 +58,13 @@ reali). Ora tutti e tre passano da `lib/autoscuole/slot-assignment.ts`:
 - `appBookingActors`: "students_only" | "instructors_only" | "both"
 - `instructorBookingMode`: "manual_full" | "manual_engine"
 - `weeklyBookingLimit`: max bookings per week
+- **Conteggio settimanale unico (REG-781, 2026-11-24)**: `lib/autoscuole/weekly-lessons.ts`.
+  - `countStudentWeeklyLessons` restituisce `{ lessons, minutes }`; i minuti sono pronti per il limite a ore.
+  - `weekBoundsUtc` calcola la settimana, da lunedì 00:00 UTC.
+  - `countsTowardWeeklyLimit` dice se un appuntamento conta.
+  - La usano tutti i punti che controllano il limite: prenotazione da app, opzioni di prenotazione, creazione dall'ufficio o dall'istruttore, guide in serie, spostamento, scambio.
+  - **Gli esami non contano mai**, e prenotare un esame non fa scattare il limite.
+  - I posti nelle guide di gruppo contano come una guida finché l'autoscuola non spegne «Le guide di gruppo contano» (Limiti, sotto il limite settimanale). La chiave è `weeklyLimitCountsGroupLessons` in `CompanyService.limits`, **default true**, senza migrazione. Non si può sovrascrivere per cluster.
 - `bookingCutoffTime`: no booking after this time
 - `bookingBlocked` / `weeklyBookingLimitExempt`: per-student flags
 

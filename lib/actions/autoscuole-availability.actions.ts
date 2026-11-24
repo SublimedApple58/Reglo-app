@@ -1,5 +1,6 @@
 "use server";
 
+import { countStudentWeeklyLessons, weeklyLimitCountsGroupLessons } from "@/lib/autoscuole/weekly-lessons";
 import {
   applyRangeLocations,
   loadValidRangeLocationIds,
@@ -2532,22 +2533,11 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             : null;
 
         if (!isLimitExempt && !examPriorityBypass && effectiveWeeklyLimit !== null) {
-          const slotDate = new Date(candidate.start);
-          const dayOfWeek = slotDate.getUTCDay();
-          const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-          const weekStart = new Date(slotDate);
-          weekStart.setUTCDate(weekStart.getUTCDate() + mondayOffset);
-          weekStart.setUTCHours(0, 0, 0, 0);
-          const weekEnd = new Date(weekStart);
-          weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
-
-          const weekCount = await prisma.autoscuolaAppointment.count({
-            where: {
-              companyId: membership.companyId,
-              studentId: payload.studentId,
-              status: { notIn: ["cancelled"] },
-              startsAt: { gte: weekStart, lt: weekEnd },
-            },
+          const { lessons: weekCount } = await countStudentWeeklyLessons({
+            companyId: membership.companyId,
+            studentId: payload.studentId,
+            at: new Date(candidate.start),
+            includeGroupLessons: weeklyLimitCountsGroupLessons(preServiceLimits),
           });
 
           if (weekCount >= effectiveWeeklyLimit) {
@@ -2999,24 +2989,14 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
       });
       // Bypass weekly limit: exempt members OR students with exam priority
       if (!memberRecord?.weeklyBookingLimitExempt && !studentHasExamPriority) {
-        // Count bookings for current week (Mon-Sun)
-        const now = new Date();
-        const dayOfWeek = now.getUTCDay();
-        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-        const weekStart = new Date(now);
-        weekStart.setUTCDate(weekStart.getUTCDate() + mondayOffset);
-        weekStart.setUTCHours(0, 0, 0, 0);
-        const weekEnd = new Date(weekStart);
-        weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
-
-        weeklyBookingCount = await prisma.autoscuolaAppointment.count({
-          where: {
-            companyId: membership.companyId,
-            studentId: payload.studentId,
-            status: { notIn: ["cancelled"] },
-            startsAt: { gte: weekStart, lt: weekEnd },
-          },
+        // Guide di guida della settimana corrente (lun–dom), REG-781.
+        const { lessons } = await countStudentWeeklyLessons({
+          companyId: membership.companyId,
+          studentId: payload.studentId,
+          at: new Date(),
+          includeGroupLessons: weeklyLimitCountsGroupLessons(limits),
         });
+        weeklyBookingCount = lessons;
         weeklyLimitReached = weeklyBookingCount >= effectiveLimit;
       }
     }
