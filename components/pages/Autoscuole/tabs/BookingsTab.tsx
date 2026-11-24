@@ -2,6 +2,7 @@
 
 import { UnderlineTabs } from "@/components/ui/underline-tabs";
 import { useSettingsSubTab } from "@/components/pages/Autoscuole/settings/settings-url";
+import { SettingRow, SETTING_SELECT_TRIGGER_CLASS } from "@/components/pages/Autoscuole/settings/SettingRow";
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown, Loader2 } from "lucide-react";
@@ -173,43 +174,6 @@ const INSTRUCTOR_BOOKING_MODE_OPTIONS = [
   { value: "manual_engine", label: "Manuale + motore annullamenti" },
 ] as const;
 
-/** Riga setting flat (stile lista Airbnb): titolo 600 + descrizione grigia,
- * toggle navy grande a destra. Solo il toggle è cliccabile. */
-function SettingRow({
-  title,
-  titleExtra,
-  description,
-  checked,
-  onToggle,
-  control,
-  nested,
-}: {
-  title: string;
-  titleExtra?: React.ReactNode;
-  description: string;
-  checked?: boolean;
-  onToggle?: () => void;
-  /** Sostituisce il toggle (es. select, bottone pausa) */
-  control?: React.ReactNode;
-  /** Riga annidata sotto un setting padre (spaziatura ridotta) */
-  nested?: boolean;
-}) {
-  return (
-    <div className={cn("flex items-center justify-between gap-6", nested && "mt-5")}>
-      <div className="min-w-0">
-        <div className="flex items-center gap-1.5 text-[15px] font-semibold text-foreground">
-          {title}
-          {titleExtra}
-        </div>
-        <div className="mt-0.5 max-w-[680px] text-[13.5px] font-medium leading-relaxed text-[#6a6a6a]">
-          {description}
-        </div>
-      </div>
-      {control ?? <InlineToggle checked={Boolean(checked)} onChange={onToggle} size="lg" />}
-    </div>
-  );
-}
-
 /** Campo con etichetta grigia sopra (select / input), come nei mock. */
 function FieldBlock({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -220,8 +184,7 @@ function FieldBlock({ label, children }: { label: string; children: React.ReactN
   );
 }
 
-const SELECT_TRIGGER_CLASS =
-  "h-11 max-w-full rounded-[14px] border-0 bg-white px-3.5 text-sm font-medium text-foreground shadow-clay-sink focus:ring-0 focus-visible:shadow-clay-focus data-[state=open]:shadow-clay-focus";
+const SELECT_TRIGGER_CLASS = SETTING_SELECT_TRIGGER_CLASS;
 
 /** Input numerico auto-save: modifica libera, commit (clamp + save) su blur/Invio. */
 function NumberField({
@@ -1379,7 +1342,7 @@ export default function BookingsTab({
       {/* ══ CREDITI E PREZZI ══ */}
       {/* Ex pane "Fatturazione e pagamenti": self-contained, auto-save. */}
       {!consortium && (
-        <div className={cn("pt-6", subTab !== "crediti" && "hidden")}>
+        <div className={cn(subTab !== "crediti" && "hidden")}>
           <PaymentsSettingsPane />
         </div>
       )}

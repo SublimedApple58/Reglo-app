@@ -92,7 +92,7 @@ test.describe("Autoscuole smoke", () => {
     // REG-780: la vecchia pagina Pagamenti porta a Impostazioni → Crediti e annullamenti.
     await page.goto("/it/user/autoscuole?tab=payments");
     await page.waitForURL(/tab=settings&pane=bookings&sub=crediti/, { timeout: 60000 });
-    await expect(page.getByText("Annullamenti all'ultimo momento")).toBeVisible({ timeout: 60000 });
+    await expect(page.getByText("Preavviso per annullare")).toBeVisible({ timeout: 60000 });
   });
 
   test("allievi: lista, dettaglio panel e cancellazioni tardive @smoke", async ({ page }) => {
@@ -287,7 +287,7 @@ test.describe("Autoscuole smoke", () => {
     // Sub-tab Crediti e annullamenti (REG-780: niente prezzi, auto-save)
     await pane.getByRole("tab", { name: "Crediti e annullamenti", exact: true }).click();
     await expect(pane.getByText("Crediti guida", { exact: true })).toBeVisible({ timeout: 20000 });
-    await expect(pane.getByText("Annullamenti all'ultimo momento")).toBeVisible();
+    await expect(pane.getByText("Preavviso per annullare")).toBeVisible();
     await expect(pane.getByText("Prezzi guida")).toHaveCount(0);
 
     // Tutte le impostazioni sono auto-save: la CTA "Salva configurazione" non esiste più

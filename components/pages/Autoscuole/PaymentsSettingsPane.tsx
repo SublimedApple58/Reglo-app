@@ -3,8 +3,8 @@
 import React from "react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { InlineToggle } from "@/components/ui/inline-toggle";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -16,7 +16,10 @@ import {
   getAutoscuolaSettings,
   updateAutoscuolaSettings,
 } from "@/lib/actions/autoscuole-settings.actions";
-import { PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
+import {
+  SETTING_SELECT_TRIGGER_CLASS,
+  SettingRow,
+} from "@/components/pages/Autoscuole/settings/SettingRow";
 
 /**
  * Sotto-scheda «Crediti e annullamenti» di Prenotazioni e allievi.
@@ -28,40 +31,19 @@ import { PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
  * la percentuale tornerà con i crediti a tempo (REG-779, punto 5).
  * Stripe è dismesso.
  *
+ * Stesse righe piatte delle altre sotto-schede (`SettingRow`, REG-780 redesign).
  * Auto-save come le pane Veicoli/Promemoria: ogni modifica persiste subito
  * il solo campo toccato, con rollback se il salvataggio fallisce.
  */
 
-const CUTOFF_PRESETS = [1, 2, 4, 6, 12, 24, 48] as const;
+// Stessi valori di AUTOSCUOLA_PAYMENT_CUTOFF_PRESETS (lib/autoscuole/payments.ts).
+const CUTOFF_PRESETS = [1, 2, 4, 6, 12, 24, 48, 50, 72] as const;
 
 type SettingsPatch = {
   lessonCreditFlowEnabled?: boolean;
   lessonCreditsRequired?: boolean;
   penaltyCutoffHoursPreset?: (typeof CUTOFF_PRESETS)[number];
 };
-
-/** Banner grigio proto con toggle (come la pane Promemoria). */
-function ToggleBanner({
-  title,
-  description,
-  checked,
-  onToggle,
-}: {
-  title: string;
-  description: string;
-  checked: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4">
-      <div>
-        <div className="text-sm font-semibold text-[#222222]">{title}</div>
-        <div className="mt-0.5 text-[13px] font-medium text-[#929292]">{description}</div>
-      </div>
-      <InlineToggle checked={checked} onChange={onToggle} size="lg" />
-    </div>
-  );
-}
 
 function PaymentsSettingsPane() {
   const toast = useFeedbackToast();
@@ -113,67 +95,61 @@ function PaymentsSettingsPane() {
 
   if (!loaded) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-[74px] w-full rounded-[10px]" />
-        <Skeleton className="h-[120px] w-full rounded-[10px]" />
+      <div className="space-y-4 pt-6">
+        <Skeleton className="h-[60px] w-full rounded-[10px]" />
+        <Skeleton className="h-[60px] w-full rounded-[10px]" />
       </div>
     );
   }
 
   return (
-    <div>
-      {/* Crediti guida */}
-      <div className="space-y-3">
-        <ToggleBanner
+    <div className="divide-y divide-[#ebebeb]">
+      <div className="py-6">
+        <SettingRow
           title="Crediti guida"
-          description="Le guide si pagano con i crediti che carichi all'allievo. Una guida senza credito resta da pagare."
+          description="Le guide si pagano con i crediti che carichi all'allievo."
           checked={creditFlowEnabled}
           onToggle={() => save({ lessonCreditFlowEnabled: !creditFlowEnabled })}
         />
         {creditFlowEnabled && (
-          <ToggleBanner
-            title="Crediti obbligatori per prenotare"
-            description="Se disattivato, gli allievi possono prenotare anche senza crediti: le guide senza credito restano da pagare."
+          <SettingRow
+            nested
+            title="Servono crediti per prenotare"
+            description="Senza crediti l'allievo non può prenotare. Se lo spegni, la guida resta da pagare."
             checked={creditsRequired}
             onToggle={() => save({ lessonCreditsRequired: !creditsRequired })}
           />
         )}
       </div>
-
-      {/* Annullamenti all'ultimo momento */}
-      <div className="mb-2.5 mt-5">
-        <div className="text-[13px] font-semibold text-[#222222]">Annullamenti all&apos;ultimo momento</div>
-        <div className="mt-0.5 text-xs font-medium text-[#929292]">
-          Chi annulla con meno preavviso paga comunque la guida: il credito resta usato, oppure la
-          guida resta da pagare.
-        </div>
+      <div className="py-6">
+        <SettingRow
+          stack
+          title="Preavviso per annullare"
+          description="Chi annulla più tardi paga comunque la guida. Puoi condonarla da Allievi → Cancellazioni tardive."
+          control={
+            <Select
+              value={cutoffHours}
+              onValueChange={(value) =>
+                save({ penaltyCutoffHoursPreset: Number(value) as (typeof CUTOFF_PRESETS)[number] })
+              }
+            >
+              <SelectTrigger
+                className={cn(SETTING_SELECT_TRIGGER_CLASS, "w-full shrink-0 sm:w-[200px]")}
+                data-testid="late-cancel-notice"
+              >
+                <SelectValue placeholder="Ore" />
+              </SelectTrigger>
+              <SelectContent>
+                {CUTOFF_PRESETS.map((hours) => (
+                  <SelectItem key={hours} value={String(hours)}>
+                    {hours === 1 ? "1 ora prima" : `${hours} ore prima`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
+        />
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <div className="mb-2 text-xs font-semibold text-[#555555]">Preavviso minimo</div>
-          <Select
-            value={cutoffHours}
-            onValueChange={(value) =>
-              save({ penaltyCutoffHoursPreset: Number(value) as (typeof CUTOFF_PRESETS)[number] })
-            }
-          >
-            <SelectTrigger className={PROTO_SELECT_TRIGGER} data-testid="late-cancel-notice">
-              <SelectValue placeholder="Ore" />
-            </SelectTrigger>
-            <SelectContent>
-              {CUTOFF_PRESETS.map((hours) => (
-                <SelectItem key={hours} value={String(hours)}>
-                  {hours === 1 ? "1 ora prima della guida" : `${hours} ore prima della guida`}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <p className="mt-3 text-xs font-medium leading-relaxed text-[#929292]">
-        Decidi tu, caso per caso, se trattenerla o condonarla: quando annulli dall&apos;agenda, oppure
-        dopo, da <span className="font-semibold text-[#222222]">Allievi → Cancellazioni tardive</span>.
-      </p>
     </div>
   );
 }

@@ -13,7 +13,8 @@ import { generateAndUploadReceipt } from "@/lib/autoscuole/receipt";
 
 type PrismaClientLike = typeof defaultPrisma | Prisma.TransactionClient;
 
-export const AUTOSCUOLA_PAYMENT_CUTOFF_PRESETS = [1, 2, 4, 6, 12, 24, 48] as const;
+// REG-780: aggiunti 50 e 72 ore.
+export const AUTOSCUOLA_PAYMENT_CUTOFF_PRESETS = [1, 2, 4, 6, 12, 24, 48, 50, 72] as const;
 export const AUTOSCUOLA_PAYMENT_PENALTY_PRESETS = [25, 50, 75, 100] as const;
 const DEFAULT_PAYMENT_CHANNELS = ["push", "email"] as const;
 

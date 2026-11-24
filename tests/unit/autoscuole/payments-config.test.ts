@@ -42,6 +42,21 @@ describe("autoscuole payment config parsing", () => {
     });
   });
 
+  // REG-780: il preavviso accetta anche 50 e 72 ore; un valore fuori lista torna a 24.
+  it.each([
+    [50, 50],
+    [72, 72],
+    [36, 24],
+  ])("penaltyCutoffHoursPreset %i → %i ore di preavviso", async (preset, expected) => {
+    const prisma = createPrismaMock({
+      companyService: {
+        findFirst: jest.fn().mockResolvedValue({ limits: { penaltyCutoffHoursPreset: preset } }),
+      },
+    });
+    const config = await getAutoscuolaPaymentConfig({ prisma: prisma as never, companyId: "company_test" });
+    expect(config.penaltyCutoffHours).toBe(expected);
+  });
+
   it("normalizes configured limits and removes invalid values", async () => {
     const prisma = createPrismaMock({
       companyService: {
