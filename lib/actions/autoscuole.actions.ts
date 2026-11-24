@@ -1169,12 +1169,14 @@ async function lessonCreditsGate({
   cost,
   isStudentActor,
   confirmed,
+  lessonsCount = 1,
 }: {
   companyId: string;
   studentId: string;
   cost: number;
   isStudentActor: boolean;
   confirmed: boolean;
+  lessonsCount?: number;
 }) {
   if (!isStudentActor && confirmed) return null;
   const check = await checkLessonCredits({ companyId, studentId, cost });
@@ -1195,7 +1197,7 @@ async function lessonCreditsGate({
     code: "LESSON_CREDITS_CONFIRM" as const,
     // Il titolo va nell'avviso, il messaggio è la riga sotto.
     title,
-    message: "La guida resterà da pagare.",
+    message: lessonsCount > 1 ? "Le guide resteranno da pagare." : "La guida resterà da pagare.",
     lessonCreditsData: { ...check, title },
   };
 }
@@ -4954,6 +4956,7 @@ export async function createAutoscuolaAppointmentBatch(
         cost: parsedEntries.reduce((sum, e) => sum + creditCost(lessonCreditUnit, e.startsAt, e.endsAt), 0),
         isStudentActor: false,
         confirmed: payload.confirmLessonCredits === true,
+        lessonsCount: parsedEntries.length,
       });
       if (creditsBlock) return creditsBlock;
     }

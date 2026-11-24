@@ -1,5 +1,6 @@
 "use client";
 
+import { useLessonCreditsConfirm } from "@/components/pages/Autoscuole/dialogs/LessonCreditsConfirmDialog";
 import React from "react";
 import Link from "next/link";
 import { useLocale } from "next-intl";
@@ -1028,6 +1029,8 @@ export function AutoscuoleAgendaPage({
 } = {}) {
   const studentNameOrder = useStudentNameOrder();
   const toast = useFeedbackToast();
+  // REG-784: avviso «allievo senza crediti» con «Prenota comunque».
+  const { ask: askLessonCredits, dialog: lessonCreditsDialog } = useLessonCreditsConfirm();
   const { toast: rawToast } = useToast();
   const [appointments, setAppointments] = React.useState<AppointmentRow[]>([]);
   const [manageGroupLessonId, setManageGroupLessonId] = React.useState<string | null>(null);
@@ -3200,7 +3203,7 @@ export function AutoscuoleAgendaPage({
     }
     setCreating(true);
     const endsAt = new Date(startDate.getTime() + Number(form.duration) * 60 * 1000);
-    const makePayload = (skip?: boolean, confirmNoBuffer?: boolean) => ({
+    const makePayload = (f: { skip: boolean; noBuffer: boolean; credits: boolean }) => ({
       studentId: form.studentId,
       type: form.types[0] || form.type,
       types: form.types,
@@ -3217,46 +3220,42 @@ export function AutoscuoleAgendaPage({
       motoLessonType: isMotoMode ? form.motoLessonType : null,
       locationId: form.locationId || null,
       notes: form.notes.trim() || undefined,
-      ...(skip ? { skipWeeklyLimitCheck: true } : {}),
-      ...(confirmNoBuffer ? { confirmNoBuffer: true } : {}),
+      ...(f.skip ? { skipWeeklyLimitCheck: true } : {}),
+      ...(f.noBuffer ? { confirmNoBuffer: true } : {}),
+      ...(f.credits ? { confirmLessonCredits: true } : {}),
       ...(opts?.allowPast ? { allowPast: true } : {}),
     });
-    const res = await createAutoscuolaAppointment(makePayload());
-    if (!res.success) {
+    // Le conferme si accumulano (limite settimanale, pausa, crediti REG-784):
+    // ogni «sì» resta nel tentativo successivo.
+    const flags = { skip: false, noBuffer: false, credits: false };
+    let res = await createAutoscuolaAppointment(makePayload(flags));
+    for (let round = 0; round < 3 && !res.success; round += 1) {
       const code = (res as { code?: string }).code;
       if (code === "WEEKLY_LIMIT_CONFIRM") {
         setCreating(false);
-        const confirmed = window.confirm(res.message ?? "L'allievo ha raggiunto il limite settimanale. Procedere comunque?");
-        if (!confirmed) return;
-        setCreating(true);
-        const retryRes = await createAutoscuolaAppointment(makePayload(true));
-        if (!retryRes.success) {
-          setCreating(false);
-          toast.error({ description: retryRes.message ?? "Impossibile creare l'appuntamento." });
-          return;
-        }
+        if (!window.confirm(res.message ?? "L'allievo ha raggiunto il limite settimanale. Procedere comunque?")) return;
+        flags.skip = true;
       } else if (code === "LESSON_BUFFER_CONFIRM") {
         // REG-484: la guida riempie esattamente il buco, dopo non resta il
         // tempo della pausa. Domanda secca; se conferma, si procede senza.
         setCreating(false);
-        const confirmed = window.confirm(
-          res.message ?? "Non avrai tempo per una pausa. Vuoi procedere comunque?",
-        );
-        if (!confirmed) return;
-        setCreating(true);
-        const retryRes = await createAutoscuolaAppointment(makePayload(false, true));
-        if (!retryRes.success) {
-          setCreating(false);
-          toast.error({ description: retryRes.message ?? "Impossibile creare l'appuntamento." });
-          return;
-        }
-      } else {
+        if (!window.confirm(res.message ?? "Non avrai tempo per una pausa. Vuoi procedere comunque?")) return;
+        flags.noBuffer = true;
+      } else if (code === "LESSON_CREDITS_CONFIRM") {
         setCreating(false);
-        toast.error({
-          description: res.message ?? "Impossibile creare l'appuntamento.",
-        });
-        return;
+        const title = (res as { title?: string }).title ?? "L'allievo non ha crediti";
+        if (!(await askLessonCredits(title, res.message ?? "La guida resterà da pagare."))) return;
+        flags.credits = true;
+      } else {
+        break;
       }
+      setCreating(true);
+      res = await createAutoscuolaAppointment(makePayload(flags));
+    }
+    if (!res.success) {
+      setCreating(false);
+      toast.error({ description: res.message ?? "Impossibile creare l'appuntamento." });
+      return;
     }
     setCreating(false);
     setCreateOpen(false);
@@ -3369,21 +3368,32 @@ export function AutoscuoleAgendaPage({
       return;
     }
     setCreating(true);
-    const makePayload = (skip?: boolean) => ({
+    const makePayload = (f: { skip: boolean; credits: boolean }) => ({
       ...batchSharedPayload(),
       entries: payloadEntries,
-      ...(skip ? { skipWeeklyLimitCheck: true } : {}),
+      ...(f.skip ? { skipWeeklyLimitCheck: true } : {}),
+      ...(f.credits ? { confirmLessonCredits: true } : {}),
       ...(opts.allowPast ? { allowPast: true } : {}),
     });
-    let res = await createAutoscuolaAppointmentBatch(makePayload());
-    if (!res.success && (res as { code?: string }).code === "WEEKLY_LIMIT_CONFIRM") {
-      setCreating(false);
-      const confirmed = window.confirm(
-        res.message ?? "L'allievo supererebbe il limite settimanale. Procedere comunque?",
-      );
-      if (!confirmed) return;
+    const flags = { skip: false, credits: false };
+    let res = await createAutoscuolaAppointmentBatch(makePayload(flags));
+    for (let round = 0; round < 2 && !res.success; round += 1) {
+      const code = (res as { code?: string }).code;
+      if (code === "WEEKLY_LIMIT_CONFIRM") {
+        setCreating(false);
+        if (!window.confirm(res.message ?? "L'allievo supererebbe il limite settimanale. Procedere comunque?")) return;
+        flags.skip = true;
+      } else if (code === "LESSON_CREDITS_CONFIRM") {
+        // REG-784: allievo senza crediti per tutte le guide scelte.
+        setCreating(false);
+        const title = (res as { title?: string }).title ?? "L'allievo non ha crediti";
+        if (!(await askLessonCredits(title, res.message ?? "Le guide resteranno da pagare."))) return;
+        flags.credits = true;
+      } else {
+        break;
+      }
       setCreating(true);
-      res = await createAutoscuolaAppointmentBatch(makePayload(true));
+      res = await createAutoscuolaAppointmentBatch(makePayload(flags));
     }
     if (!res.success) {
       setCreating(false);
@@ -8136,6 +8146,8 @@ export function AutoscuoleAgendaPage({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {lessonCreditsDialog}
 
       {/* ── Conferma prenotazione nel passato ── */}
       <AlertDialog open={pastConfirmOpen} onOpenChange={setPastConfirmOpen}>
