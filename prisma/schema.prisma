@@ -118,6 +118,7 @@ model User {
   autoscuolaLessonCreditBalances       AutoscuolaStudentLessonCreditBalance[]
   autoscuolaLessonCreditLedgerStudent  AutoscuolaStudentLessonCreditLedger[]  @relation("AutoscuolaCreditLedgerStudent")
   autoscuolaLessonCreditLedgerActor    AutoscuolaStudentLessonCreditLedger[]  @relation("AutoscuolaCreditLedgerActor")
+  autoscuolaCreditUnitSwitches         AutoscuolaCreditUnitSwitch[]           @relation("AutoscuolaCreditUnitSwitchActor")
   autoscuolaPaymentEventsActor         AutoscuolaAppointmentPaymentEvent[]    @relation("AutoscuolaPaymentEventActor")
   autoscuolaAppointmentPayments        AutoscuolaAppointmentPayment[]
   autoscuolaMessageLogs                AutoscuolaMessageLog[]
@@ -262,6 +263,7 @@ model Company {
   autoscuolaPaymentPlans               AutoscuolaPaymentPlan[]
   autoscuolaPaymentProfiles            AutoscuolaStudentPaymentProfile[]
   autoscuolaLessonCreditBalances       AutoscuolaStudentLessonCreditBalance[]
+  autoscuolaCreditUnitSwitches         AutoscuolaCreditUnitSwitch[]
   autoscuolaLessonCreditLedger         AutoscuolaStudentLessonCreditLedger[]
   autoscuolaPaymentEvents              AutoscuolaAppointmentPaymentEvent[]
   roadSessions                         RoadSession[]
@@ -637,6 +639,10 @@ model AutoscuolaAppointment {
   invoiceStatus                String?
   creditApplied                Boolean   @default(false)
   creditRefundedAt             DateTime? @db.Timestamp(6)
+  /// REG-783: quanto ha consumato la guida e in che unità ("lessons" | "minutes").
+  /// Null sulle guide pagate prima di REG-783 = 1 guida.
+  creditAmount                 Int?
+  creditUnit                   String?
   availabilityOverrideApproved Boolean   @default(false)
   manualPaymentStatus          String?
   lateCancellationAction       String?
@@ -1523,6 +1529,10 @@ model AutoscuolaStudentLessonCreditBalance {
   companyId        String   @db.Uuid
   studentId        String   @db.Uuid
   availableCredits Int      @default(0)
+  /// REG-783: unità di `availableCredits` ("lessons" | "minutes"). È sempre
+  /// quella dell'autoscuola (`limits.lessonCreditUnit`): il passaggio converte
+  /// tutti i saldi nella stessa transazione.
+  unit             String   @default("lessons")
   createdAt        DateTime @default(now()) @db.Timestamp(6)
   updatedAt        DateTime @updatedAt
 
@@ -1542,6 +1552,8 @@ model AutoscuolaStudentLessonCreditLedger {
   balanceId     String   @db.Uuid
   appointmentId String?  @db.Uuid
   delta         Int
+  /// REG-783: unità di `delta` ("lessons" | "minutes").
+  unit          String   @default("lessons")
   reason        String
   actorUserId   String?  @db.Uuid
   createdAt     DateTime @default(now()) @db.Timestamp(6)
@@ -1554,6 +1566,25 @@ model AutoscuolaStudentLessonCreditLedger {
 
   @@index([companyId, studentId, createdAt])
   @@index([appointmentId])
+}
+
+/// REG-783 — ogni passaggio di unità dei crediti dell'autoscuola (guide ↔ minuti).
+model AutoscuolaCreditUnitSwitch {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId        String   @db.Uuid
+  fromUnit         String
+  toUnit           String
+  minutesPerLesson Int
+  /// Solo da minuti a guide: "floor" | "ceil" | "round".
+  remainderPolicy  String?
+  studentsCount    Int      @default(0)
+  actorUserId      String?  @db.Uuid
+  createdAt        DateTime @default(now()) @db.Timestamp(6)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actor   User?   @relation("AutoscuolaCreditUnitSwitchActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
 }
 
 /// REG-637 — storico dei cambi MANUALI dello stato pagamento di una guida

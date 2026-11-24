@@ -31,6 +31,7 @@ import {
   type RoadCustomMarker,
 } from "@/lib/autoscuole/road/catalog";
 import { z } from "zod";
+import { parseLessonCreditUnit, type LessonCreditUnit } from "@/lib/autoscuole/lesson-credit-unit";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
 import { notifyStudentPhaseChange } from "@/lib/autoscuole/student-phase-notifications";
@@ -701,6 +702,8 @@ export type AutoscuolaSettingsData = {
   autoPaymentsEnabled: boolean;
   lessonCreditFlowEnabled: boolean;
   lessonCreditsRequired: boolean;
+  /** REG-783: si cambia solo con `switchLessonCreditUnit`, mai da qui. */
+  lessonCreditUnit: LessonCreditUnit;
   lessonPrice30: number;
   lessonPrice60: number;
   penaltyCutoffHoursPreset: (typeof PAYMENT_CUTOFF_PRESETS)[number];
@@ -1133,6 +1136,7 @@ const resolveAutoscuolaSettingsData = async (
     autoPaymentsEnabled,
     lessonCreditFlowEnabled,
     lessonCreditsRequired,
+    lessonCreditUnit: parseLessonCreditUnit(limits.lessonCreditUnit),
     lessonPrice30,
     lessonPrice60,
     penaltyCutoffHoursPreset,

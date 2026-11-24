@@ -184,7 +184,16 @@ import {
   prepareAppointmentPaymentSnapshot,
   refundLessonCreditIfEligible,
   applyLessonCreditToExistingAppointment,
+  consumeLessonCreditIfAvailable,
+  refundAppointmentCredit,
+  syncAppointmentCreditToDuration,
 } from "@/lib/autoscuole/payments";
+import {
+  creditCost,
+  formatCredits,
+  parseLessonCreditUnit,
+  refundAmount,
+} from "@/lib/autoscuole/lesson-credit-unit";
 import { generateAndUploadReceipt } from "@/lib/autoscuole/receipt";
 import {
   isCompanyManualMode,
@@ -498,6 +507,8 @@ const adjustStudentLessonCreditsSchema = z.object({
     message: "Delta crediti non valido.",
   }),
   reason: z.enum(["manual_grant", "manual_revoke"]),
+  /** REG-783: unità in cui il titolare ha scritto `delta` (minuti se a tempo). */
+  unit: z.enum(["lessons", "minutes"]).optional(),
 });
 
 const importStudentsSchema = z.object({
@@ -2956,6 +2967,8 @@ export async function getAutoscuolaStudentLessonCredits(studentId: string) {
       data: {
         student: toStudentProfile(studentMembership.user, studentMembership.createdAt),
         availableCredits: credits.availableCredits,
+        unit: credits.unit,
+        availableCreditsLabel: credits.availableCreditsLabel,
         ledger: credits.ledger.map((entry) => ({
           ...entry,
           actorName: entry.actor?.name ?? null,
@@ -3002,6 +3015,7 @@ export async function adjustAutoscuolaStudentLessonCredits(
       delta: normalizedDelta,
       reason: payload.reason,
       actorUserId: membership.userId,
+      unit: payload.unit,
     });
 
     await invalidateAutoscuoleCache({
@@ -3022,8 +3036,8 @@ export async function adjustAutoscuolaStudentLessonCredits(
         result.appliedDelta === 0 && payload.reason === "manual_revoke"
           ? "Nessun credito disponibile da stornare."
           : payload.reason === "manual_grant"
-            ? "Crediti assegnati."
-            : "Crediti stornati.",
+            ? `Assegnati ${formatCredits(result.unit, Math.abs(result.appliedDelta))}.`
+            : `Stornati ${formatCredits(result.unit, Math.abs(result.appliedDelta))}.`,
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -4258,6 +4272,8 @@ export async function createAutoscuolaAppointment(
           paidAmount: paymentSnapshot.paidAmount,
           invoiceStatus: paymentSnapshot.invoiceStatus,
           creditApplied: paymentSnapshot.creditApplied,
+          creditAmount: paymentSnapshot.creditAmount,
+          creditUnit: paymentSnapshot.creditUnit,
           manualPaymentStatus: paymentSnapshot.manualPaymentStatus ?? null,
           // Reserve every vehicle this lesson uses (primary moto + any extra
           // motos + follow car), de-duped by vehicleId.
@@ -4911,6 +4927,8 @@ export async function createAutoscuolaAppointmentBatch(
             paidAmount: paymentSnapshot.paidAmount,
             invoiceStatus: paymentSnapshot.invoiceStatus,
             creditApplied: paymentSnapshot.creditApplied,
+            creditAmount: paymentSnapshot.creditAmount,
+            creditUnit: paymentSnapshot.creditUnit,
             manualPaymentStatus: paymentSnapshot.manualPaymentStatus ?? null,
             // Riserva ogni mezzo di QUESTO slot (moto principale + moto
             // aggiuntive + auto al seguito), senza doppioni. REG-612: l'auto
@@ -5891,6 +5909,12 @@ export async function rescheduleAutoscuolaAppointment(
           rescheduledAt: new Date(),
           rescheduledFromStartsAt: oldStartsAt,
         },
+      });
+      // REG-783: se cambia la durata di una guida pagata a minuti.
+      await syncAppointmentCreditToDuration({
+        prisma: tx as never,
+        appointmentId: appointment.id,
+        actorUserId: membership.userId,
       });
 
       // Release the old slot row(s): anything booked in the old range for this
@@ -6999,6 +7023,14 @@ export async function updateAutoscuolaAppointmentDetails(
         : await tx.autoscuolaAppointment.findUniqueOrThrow({
             where: { id: payload.appointmentId },
           });
+      // REG-783: se cambia la durata di una guida pagata a minuti.
+      if (updateData.endsAt !== undefined) {
+        await syncAppointmentCreditToDuration({
+          prisma: tx as never,
+          appointmentId: appointment.id,
+          actorUserId: membership.userId,
+        });
+      }
       if (vehiclesNeedSync) {
         await reconcileAppointmentVehicles(
           tx,
@@ -13187,6 +13219,8 @@ export async function coverAppointmentWithLessonCredit(input: { appointmentId: s
         creditApplied: true,
         manualPaymentStatus: true,
         type: true,
+        startsAt: true,
+        endsAt: true,
       },
     });
     if (!appointment) {
@@ -13213,31 +13247,44 @@ export async function coverAppointmentWithLessonCredit(input: { appointmentId: s
       };
     }
 
+    // REG-783: a tempo scala la durata della guida (anche di gruppo), e solo
+    // se il saldo basta tutto.
     const studentId = appointment.studentId;
+    const unit = config.lessonCreditUnit;
+    const cost = creditCost(unit, appointment.startsAt, appointment.endsAt);
     const applied = await prisma.$transaction(async (tx) => {
-      const adjustment = await adjustStudentLessonCredits({
+      const consumed = await consumeLessonCreditIfAvailable({
         prisma: tx as never,
         companyId: membership.companyId,
         studentId,
-        delta: -1,
-        reason: "booking_consume",
+        cost,
+        unit,
         actorUserId: membership.userId,
         appointmentId: appointment.id,
       });
-      if (adjustment.appliedDelta === 0) return false;
+      if (!consumed.consumed) return false;
       await tx.autoscuolaAppointment.update({
         where: { id: appointment.id },
-        data: { creditApplied: true, manualPaymentStatus: null },
+        data: { creditApplied: true, creditAmount: cost, creditUnit: unit, manualPaymentStatus: null },
       });
       return true;
     });
 
     if (!applied) {
-      return { success: false, message: "L'allievo non ha crediti disponibili." };
+      return {
+        success: false,
+        message:
+          unit === "minutes"
+            ? `L'allievo non ha abbastanza crediti: servono ${formatCredits(unit, cost)}.`
+            : "L'allievo non ha crediti disponibili.",
+      };
     }
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
-    return { success: true, message: "Guida coperta da un credito." };
+    return {
+      success: true,
+      message: unit === "minutes" ? `Guida coperta con ${formatCredits(unit, cost)} di credito.` : "Guida coperta da un credito.",
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -13425,6 +13472,10 @@ export async function resolveLateCancellation(
         studentId: true,
         creditApplied: true,
         creditRefundedAt: true,
+        creditAmount: true,
+        creditUnit: true,
+        startsAt: true,
+        endsAt: true,
       },
     });
     if (!appointment) {
@@ -13441,13 +13492,12 @@ export async function resolveLateCancellation(
         appointment.creditApplied &&
         appointment.creditRefundedAt === null;
       if (refundCredit) {
-        await adjustStudentLessonCredits({
+        // REG-783: un condono vale come un annullamento in tempo (caso 2).
+        await refundAppointmentCredit({
           companyId: membership.companyId,
           studentId: appointment.studentId!,
-          delta: 1,
-          reason: "cancel_refund",
+          appointment,
           actorUserId: membership.userId,
-          appointmentId: appointment.id,
         });
         await prisma.autoscuolaAppointment.update({
           where: { id: appointment.id },
@@ -13481,16 +13531,26 @@ export async function resolveLateCancellation(
         data: { lateCancellationAction: "charged" },
       });
     } else if (config.lessonCreditFlowEnabled) {
-      // Credit flow: re-deduct 1 credit if it was refunded
+      // Credit flow: re-deduct the refunded credit. REG-783 (caso 4): esattamente
+      // quanto era stato reso, se l'unità non è cambiata nel frattempo.
       if (
         appointment.studentId &&
         appointment.creditApplied &&
         appointment.creditRefundedAt !== null
       ) {
+        const lastRefund = await prisma.autoscuolaStudentLessonCreditLedger.findFirst({
+          where: { appointmentId: appointment.id, reason: "cancel_refund", delta: { gt: 0 } },
+          orderBy: { createdAt: "desc" },
+          select: { delta: true, unit: true },
+        });
+        const rededuct =
+          lastRefund && parseLessonCreditUnit(lastRefund.unit) === config.lessonCreditUnit
+            ? lastRefund.delta
+            : refundAmount({ currentUnit: config.lessonCreditUnit, appointment });
         await adjustStudentLessonCredits({
           companyId: membership.companyId,
           studentId: appointment.studentId,
-          delta: -1,
+          delta: -rededuct,
           reason: "manual_revoke",
           actorUserId: membership.userId,
           appointmentId: appointment.id,

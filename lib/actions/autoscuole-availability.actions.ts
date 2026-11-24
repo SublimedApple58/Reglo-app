@@ -2720,6 +2720,8 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             paidAmount: paymentSnapshot.paidAmount,
             invoiceStatus: paymentSnapshot.invoiceStatus,
             creditApplied: paymentSnapshot.creditApplied,
+            creditAmount: paymentSnapshot.creditAmount,
+            creditUnit: paymentSnapshot.creditUnit,
             // Reserve every vehicle this lesson uses (primary + follow car).
             ...(candidate.vehicleId
               ? {
