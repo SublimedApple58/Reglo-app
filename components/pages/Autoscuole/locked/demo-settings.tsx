@@ -188,16 +188,13 @@ const BookingsApp = () => (
 
 const BookingsCrediti = () => (
   <div className="space-y-3">
-    <Card title="Crediti guida e penali" note="Gestisci crediti e penali per annullamenti tardivi.">
+    <Card title="Crediti e annullamenti" note="Crediti guida e preavviso minimo per annullare.">
       <PreviewToggleRow
         title="Crediti obbligatori per prenotare"
         note="Le guide senza credito risulteranno da pagare"
       />
       <div className="mt-3 grid grid-cols-2 gap-5">
-        <Field label="Prezzo guida 30m" value="25 €" />
-        <Field label="Prezzo guida 60m" value="50 €" />
-        <Field label="Cutoff penale" value="48 ore prima" />
-        <Field label="Penale" value="100% del prezzo" />
+        <Field label="Preavviso minimo" value="24 ore prima" />
       </div>
     </Card>
   </div>

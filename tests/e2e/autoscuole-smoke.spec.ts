@@ -89,8 +89,10 @@ test.describe("Autoscuole smoke", () => {
     await page.goto("/it/user/autoscuole?tab=agenda");
     await expect(page.getByTestId("autoscuole-agenda-page").first()).toBeVisible();
 
+    // REG-780: la vecchia pagina Pagamenti porta a Impostazioni → Crediti e annullamenti.
     await page.goto("/it/user/autoscuole?tab=payments");
-    await expect(page.getByTestId("autoscuole-payments-page")).toBeVisible();
+    await page.waitForURL(/tab=settings&pane=bookings&sub=crediti/, { timeout: 60000 });
+    await expect(page.getByText("Preavviso per annullare")).toBeVisible({ timeout: 60000 });
   });
 
   test("allievi: lista, dettaglio panel e cancellazioni tardive @smoke", async ({ page }) => {
@@ -282,10 +284,11 @@ test.describe("Autoscuole smoke", () => {
     await expect(pane.getByText("Mostra note nell'app allievi")).toBeVisible();
     await expect(pane.getByText("Consenti scelta istruttore")).toBeVisible();
 
-    // Sub-tab Crediti e prezzi (ex pane Fatturazione e pagamenti, auto-save)
-    await pane.getByRole("tab", { name: "Crediti e prezzi", exact: true }).click();
+    // Sub-tab Crediti e annullamenti (REG-780: niente prezzi, auto-save)
+    await pane.getByRole("tab", { name: "Crediti e annullamenti", exact: true }).click();
     await expect(pane.getByText("Crediti guida", { exact: true })).toBeVisible({ timeout: 20000 });
-    await expect(pane.getByText("Cancellazioni tardive")).toBeVisible();
+    await expect(pane.getByText("Preavviso per annullare")).toBeVisible();
+    await expect(pane.getByText("Prezzi guida")).toHaveCount(0);
 
     // Tutte le impostazioni sono auto-save: la CTA "Salva configurazione" non esiste più
     await expect(pane.getByRole("button", { name: "Salva configurazione" })).toHaveCount(0);

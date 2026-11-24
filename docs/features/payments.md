@@ -3,12 +3,23 @@
 ## What it does
 Lesson credit ledger, Stripe payment processing, payment plans, penalties, invoice generation (Fatture-in-Cloud), Stripe Connect for instructor payouts.
 
+> **REG-780 (2026-11-24): niente euro nell'interfaccia, Stripe dismesso.**
+> - La vecchia pagina «Pagamenti» (`AutoscuolePaymentsPage`) è stata tolta. `?tab=payments` e `/autoscuole/payments` portano a `?tab=settings&pane=bookings&sub=crediti`.
+> - La sotto-scheda «Crediti e annullamenti» ha solo:
+>   - l'interruttore dei crediti e quello dei crediti obbligatori;
+>   - il **preavviso minimo** (`penaltyCutoffHoursPreset`).
+> - Prezzi guida (`lessonPrice30/60`) e penale in percentuale (`penaltyPercentPreset`) non si impostano più dalla UI. I valori restano in `CompanyService.limits` e continuano a riempire gli snapshot `priceAmount`/`penaltyAmount`, che nessuna schermata mostra più come euro:
+>   - debito degli ex allievi in guide da pagare;
+>   - niente «penale €» nel dialogo di annullamento;
+>   - nell'app allievo «Addebitata» senza importo.
+> - La percentuale tornerà con i crediti a tempo (piano `plans/product/001-reg-779-guide-vs-tempo.md`, punto 5).
+
 ## Key files
 - `lib/autoscuole/payments.ts` — 68 exported functions (88KB), core payment logic
 - `lib/autoscuole/stripe-connect.ts` — instructor payout accounts
 - `lib/autoscuole/receipt.tsx` — PDF receipt generation via @react-pdf/renderer
 - `lib/integrations/fatture-in-cloud.ts` — Italian invoicing integration
-- `components/pages/Autoscuole/AutoscuolePaymentsPage.tsx` — web payment dashboard (55KB)
+- `components/pages/Autoscuole/PaymentsSettingsPane.tsx` — sotto-scheda «Crediti e annullamenti» (Impostazioni → Prenotazioni e allievi)
 
 ## Key functions
 - Credits: `adjustStudentLessonCredits()`, `refundLessonCreditIfEligible()`, `getStudentLessonCredits()`, `applyLessonCreditToExistingAppointment()`

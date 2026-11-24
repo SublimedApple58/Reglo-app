@@ -3589,7 +3589,6 @@ export function AutoscuoleStudentsPage({
             creditApplied: lesson.creditApplied,
             paymentRequired: lesson.paymentRequired,
             penaltyCutoffAt: lesson.penaltyCutoffAt ? new Date(lesson.penaltyCutoffAt) : null,
-            penaltyAmount: lesson.penaltyAmount,
             countsInHours: ["completed", "checked_in", "no_show"].includes(lesson.status),
           });
           // Preavviso dato per gli annullamenti dell'allievo (manual_cancel).

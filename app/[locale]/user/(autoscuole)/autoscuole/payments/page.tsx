@@ -6,5 +6,6 @@ export default async function AutoscuolePaymentsRoute({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  redirect(`/${locale}/user/autoscuole?tab=payments`);
+  // REG-780: la pagina Pagamenti è ritirata; crediti e annullamenti stanno nelle Impostazioni.
+  redirect(`/${locale}/user/autoscuole?tab=settings&pane=bookings&sub=crediti`);
 }

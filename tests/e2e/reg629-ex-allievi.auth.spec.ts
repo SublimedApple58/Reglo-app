@@ -110,18 +110,20 @@ test("tab «Ex allievi»: badge, saldo, riepilogo", async ({ page }) => {
   await expect(page.getByTestId("former-student-row")).toHaveCount(5);
 
   await expect(rowOf(page, "Giulia Ferrari")).toContainText("Ha eliminato l'account");
-  await expect(rowOf(page, "Giulia Ferrari")).toContainText("120,00");
-  await expect(rowOf(page, "Giulia Ferrari")).toContainText("3 guide da pagare");
+  // REG-780: niente euro, il saldo è in guide da pagare.
+  await expect(rowOf(page, "Giulia Ferrari")).toContainText("3 guide");
+  await expect(rowOf(page, "Giulia Ferrari")).toContainText("da pagare");
+  await expect(rowOf(page, "Giulia Ferrari")).not.toContainText("€");
   await expect(rowOf(page, "Marco Bianchi")).toContainText("Rimosso dall'ufficio");
   await expect(rowOf(page, "Marco Bianchi")).toContainText("In pari");
   await expect(rowOf(page, "Luca Esposito")).toContainText("Ha eliminato l'account");
-  await expect(rowOf(page, "Luca Esposito")).toContainText("135,00");
+  await expect(rowOf(page, "Luca Esposito")).toContainText("3 guide");
   // Senza nome: Sara (rimossa dall'ufficio, prezzo non indicato) e Davide (motivo perso).
   const nameless = rowOf(page, "Ex allievo senza nome");
   await expect(nameless).toHaveCount(2);
   await expect(nameless.filter({ hasText: "Rimosso dall'ufficio" })).toContainText("2 guide");
   await expect(nameless.filter({ hasText: "Uscita non registrata" })).toContainText("In pari");
-  await expect(page.getByTestId("former-summary")).toContainText("255,00");
+  await expect(page.getByTestId("former-summary")).toContainText("8 guide");
 
   // Nessun contatto in lista.
   await expect(page.getByTestId("former-students-list")).not.toContainText("@");
@@ -143,7 +145,7 @@ test("scheda ex allievo: sola lettura, pagamento registrabile", async ({ page })
   const panel = page.getByTestId("former-student-panel");
   // In dev le server action vanno in coda dietro ai caricamenti della pagina.
   await expect(panel.getByTestId("former-panel-name")).toHaveText("Giulia Ferrari", { timeout: 30_000 });
-  await expect(panel.getByTestId("former-panel-balance")).toContainText("120,00");
+  await expect(panel.getByTestId("former-panel-balance")).toContainText("3 guide");
   await expect(panel).toContainText("Cancellati");
   await expect(panel).not.toContainText("reg629.giulia");
   // Sola lettura: nessuna delle azioni della scheda allievo attivo.
@@ -155,20 +157,20 @@ test("scheda ex allievo: sola lettura, pagamento registrabile", async ({ page })
   await realisticNames(page);
   await shot(page, "02-scheda-ex-allievo", await panelClip(page));
 
-  // Registra il pagamento della penale: il saldo scende di 30 €.
+  // Registra il pagamento della penale: il saldo scende di una guida.
   await panel
     .getByTestId("former-lesson-row")
     .filter({ hasText: "Penale annullamento" })
     .getByTestId("former-mark-paid")
     .click();
-  await expect(panel.getByTestId("former-panel-balance")).toContainText("90,00", { timeout: 30_000 });
+  await expect(panel.getByTestId("former-panel-balance")).toContainText("2 guide", { timeout: 30_000 });
   await expect(panel.getByTestId("former-lesson-row")).toHaveCount(2);
   await panel.getByRole("button", { name: /Tutte/ }).click();
   await expect(panel.getByTestId("former-lesson-row").filter({ hasText: "Penale annullamento" })).toContainText("Pagata");
   await realisticNames(page);
   await shot(page, "03-scheda-pagamento-registrato", await panelClip(page));
   await page.getByRole("button", { name: "Chiudi" }).click();
-  await expect(rowOf(page, "Giulia Ferrari")).toContainText("90,00", { timeout: 30_000 });
+  await expect(rowOf(page, "Giulia Ferrari")).toContainText("2 guide", { timeout: 30_000 });
 });
 
 test("«Assegna nome» per chi l'ha perso", async ({ page }) => {

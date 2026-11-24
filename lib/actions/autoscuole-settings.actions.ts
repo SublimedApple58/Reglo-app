@@ -110,7 +110,8 @@ const CHANNELS = ["push", "whatsapp", "email"] as const;
 const DEFAULT_SLOT_FILL_CHANNELS = ["push", "whatsapp", "email"] as const;
 const DEFAULT_STUDENT_REMINDER_CHANNELS = ["push", "whatsapp", "email"] as const;
 const DEFAULT_INSTRUCTOR_REMINDER_CHANNELS = ["push", "whatsapp", "email"] as const;
-const PAYMENT_CUTOFF_PRESETS = [1, 2, 4, 6, 12, 24, 48] as const;
+// Deve restare uguale a AUTOSCUOLA_PAYMENT_CUTOFF_PRESETS (lib/autoscuole/payments.ts).
+const PAYMENT_CUTOFF_PRESETS = [1, 2, 4, 6, 12, 24, 48, 50, 72] as const;
 const PAYMENT_PENALTY_PRESETS = [25, 50, 75, 100] as const;
 const PAYMENT_NOTIFICATION_CHANNELS = ["push", "email"] as const;
 const DEFAULT_AUTO_PAYMENTS_ENABLED = false;
