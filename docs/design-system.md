@@ -235,12 +235,28 @@ esclusa).
 | Segmentato | capsula, cursore nero | `SegmentedPill` / `SegmentedControl`; `DurationField` usa lo stesso binario |
 | Chip di scelta | capsula; accesa nera | `ToggleChip` |
 | Pannelli flottanti (`CreateEventPopover`) | `rounded-clay` | `shadow-clay-overlay`, come i `Dialog` |
+| Tab bar (navigazione fra viste o sezioni) | testo + linea nera sotto | `UnderlineTabs` (REG-778): una sola in tutta l'app, vedi sotto |
 
 Restano come sono: pagine, sezioni, card contenitore, menu e loro voci, righe
 di lista, tabelle, skeleton, avatar, campioni colore, celle di calendario e
 blocchi dell'agenda. Le righe di dettaglio (`DetailRow`) con un valore lungo
 mandano a capo il valore, allineato a destra: l'etichetta tiene la sua
 larghezza (max 60%).
+
+**Tab bar: una sola (REG-778, 2026-11-24).** Ogni barra di schede orizzontali
+è `components/ui/underline-tabs.tsx` (`UnderlineTabs`): testo 14px (attiva
+600, le altre 500 grigie), linea grigia `#efefef` sotto e una linea nera di
+2px che si allarga sotto la scheda attiva in 250 ms senza rimbalzo (si
+restringe sotto quella lasciata). `fill` = schede a larghezza uguale (drawer
+allievo); senza, schede a misura di testo che a 390px scorrono tenendo in vista
+l'attiva. Con `href` le schede sono link (`aria-current`), altrimenti bottoni
+`role="tab"`. La usano: drawer allievo (`DrawerTabs`), sotto-schede delle
+Impostazioni (Prenotazioni e allievi, Promemoria, Segretaria, dettaglio
+istruttore/veicolo, viste bloccate), menu sezioni delle Impostazioni sotto
+`lg`, Road (`RoadTabs`), Finanza del backoffice. **Non** sono tab bar, e
+restano segmentati: filtri e scelte di valore (fasi allievi, periodo agenda,
+preset KPI, Lista/Cancellazioni tardive, Singolo/Multiplo, la modalità della
+stampa sulla barra scura).
 
 ### 4c. Pagina a righe del dettaglio allievo (REG-775, 2026-11-23)
 
@@ -331,7 +347,7 @@ CSS variables per animazioni in `globals.css`:
 | Table | `table.tsx` | Data table primitives |
 | Sidebar | `sidebar.tsx` (21KB) | Complex sidebar with sections, collapsible |
 | Filters | `filters.tsx` | Filter bar for data views |
-| Tabs | `reglo-tabs.tsx` | Custom tab component |
+| Tab bar | `underline-tabs.tsx` | `UnderlineTabs`, l'unica tab bar (§4b-bis) |
 | Skeleton | `skeleton.tsx` | Loading placeholder |
 | Toast/Toaster | `toast.tsx`, `toaster.tsx`, `feedback-toast.ts` | Notification toast system |
 

@@ -25,7 +25,7 @@ test.describe("Staging smoke — vehicles release", () => {
 
     // Redesign Impostazioni: "Gestisci" → tab Dettagli (ex dialog Modifica veicolo).
     await page.getByTestId("vehicle-card").first().getByRole("button", { name: "Gestisci" }).click();
-    await page.getByRole("button", { name: "Dettagli", exact: true }).click();
+    await page.getByRole("tab", { name: "Dettagli", exact: true }).click();
     // The details form exposes the Aperto/Pool/Esclusivo segmented control.
     await expect(page.getByTestId("vehicle-mode-exclusive")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId("vehicle-mode-pool")).toBeVisible();

@@ -65,6 +65,11 @@ import { TimePickerInput } from "@/components/ui/time-picker";
 import { DatePickerInput } from "@/components/ui/date-picker";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { PROTO_INPUT, PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
+import { UnderlineTabs } from "@/components/ui/underline-tabs";
+import {
+  SettingsPaneActiveContext,
+  writeSettingsUrl,
+} from "./settings/settings-url";
 
 // Import statici: i pane dell'overlay restano montati (keep-alive) e non
 // devono scaricare chunk al cambio sezione — il lazy-loading qui causava lo
@@ -400,7 +405,21 @@ function KeepAlivePane({
   const mountedRef = React.useRef(false);
   if (active || eager) mountedRef.current = true;
   if (!mountedRef.current) return null;
-  return <div className={active ? undefined : "hidden"}>{children}</div>;
+  return (
+    <SettingsPaneActiveContext.Provider value={active}>
+      <div className={active ? undefined : "hidden"}>{children}</div>
+    </SettingsPaneActiveContext.Provider>
+  );
+}
+
+/** `?pane=` → sezione valida; "students" e "payments" sono i vecchi pane fusi
+ * in "bookings" (link legacy in giro per l'app). */
+function parseConfigPane(raw: string | null | undefined): ConfigPane | null {
+  const pane = raw === "students" || raw === "payments" ? "bookings" : raw;
+  if (!pane) return null;
+  return pane === CONSORZIO_BILLING_PANE.key || CONFIG_PANE_GROUPS.flat().some((p) => p.key === pane)
+    ? (pane as ConfigPane)
+    : null;
 }
 
 const CONFIG_PANE_TITLES: Record<ConfigPane, string> = {
@@ -446,19 +465,14 @@ export function AutoscuoleResourcesPage({
       index === 0 ? [...group, CONSORZIO_BILLING_PANE] : group,
     );
   }, [secretaryOnly, consortium, roadEnabled]);
+  // REG-778: la sezione vive in `?pane=` (refresh e indietro del browser);
+  // senza indicazioni si apre su "Informazioni aziendali".
+  const urlPane = parseConfigPane(searchParams?.get("pane"));
   const [configTab, setConfigTab] = React.useState<ConfigPane>(() => {
     if (secretaryOnly) return "voice";
     // Consorziata senza Reglo: si entra su una pane aperta, mai su una bloccata.
     if (isAffiliateWithoutReglo(company?.services ?? null)) return "business";
-    // "students" (Gestione allievi) e "payments" (Fatturazione e pagamenti)
-    // sono i vecchi pane ora fusi in "bookings" (link legacy in giro per l'app).
-    const raw = searchParams?.get("pane");
-    const pane = raw === "students" || raw === "payments" ? "bookings" : raw;
-    return pane &&
-      (pane === CONSORZIO_BILLING_PANE.key ||
-        CONFIG_PANE_GROUPS.flat().some((p) => p.key === pane))
-      ? (pane as ConfigPane)
-      : "bookings";
+    return urlPane ?? "business";
   });
   const [expandedSection, setExpandedSection] = React.useState<string | null>("bookings");
   const [date] = React.useState(() => formatDateLocal(new Date()));
@@ -477,8 +491,32 @@ export function AutoscuoleResourcesPage({
 
   const goToPane = React.useCallback((pane: ConfigPane) => {
     setConfigTab(pane);
+    // Nuova sezione = nuova voce nella cronologia; la sotto-scheda la rimette
+    // la sezione stessa (useSettingsSubTab).
+    writeSettingsUrl({ pane, sub: null }, "push");
     contentScrollRef.current?.scrollTo({ top: 0 });
   }, []);
+
+  // URL → sezione quando cambia da fuori (indietro/avanti del browser, link).
+  // Solo sui cambi: al primo giro decide l'inizializzazione qui sopra.
+  const lastUrlPaneRef = React.useRef(urlPane);
+  React.useEffect(() => {
+    if (urlPane === lastUrlPaneRef.current) return;
+    lastUrlPaneRef.current = urlPane;
+    if (urlPane && !secretaryOnly) {
+      setConfigTab(urlPane);
+      contentScrollRef.current?.scrollTo({ top: 0 });
+    }
+  }, [urlPane, secretaryOnly]);
+
+  // Sezione → URL senza nuova voce: apertura senza `pane`, link legacy,
+  // ingressi forzati (solo Segretaria, consorziata senza Reglo).
+  React.useEffect(() => {
+    if (urlPane === configTab) return;
+    lastUrlPaneRef.current = configTab;
+    writeSettingsUrl({ pane: configTab, ...(urlPane ? { sub: null } : {}) }, "replace");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configTab]);
 
   // In modalità "solo Segretaria" l'atom company può caricarsi DOPO il primo
   // render (quando configTab è già stato inizializzato a "bookings"): appena
@@ -2406,11 +2444,20 @@ export function AutoscuoleResourcesPage({
           contenuto centrato nello spazio rimanente — regge ogni larghezza schermo. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
           {/* ── Sidebar ── */}
-          <div className="min-h-0 shrink-0 overflow-x-auto border-b border-[#ebebeb] px-4 py-3 lg:w-[400px] lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-10 lg:py-12">
+          <div className="min-h-0 shrink-0 lg:w-[400px] lg:overflow-y-auto lg:border-r lg:border-[#ebebeb] lg:px-10 lg:py-12">
+            {/* REG-778: sotto lg le sezioni sono una tab bar come le altre. */}
+            <UnderlineTabs
+              ariaLabel="Sezioni delle impostazioni"
+              testId="settings-pane-tabs"
+              className="px-4 lg:hidden"
+              items={paneGroups.flat().map((pane) => ({ key: pane.key, label: pane.label }))}
+              value={configTab}
+              onChange={goToPane}
+            />
             <h1 className="mb-8 hidden text-[28px] font-bold tracking-[-0.6px] text-foreground lg:block">
               Impostazioni dell&apos;account
             </h1>
-            <nav className="flex gap-1 lg:flex-col lg:gap-0.5">
+            <nav className="hidden lg:flex lg:flex-col lg:gap-0.5">
               {paneGroups.map((group, groupIndex) => (
                 <React.Fragment key={groupIndex}>
                   {groupIndex > 0 && <div className="my-1.5 hidden h-px bg-[#ebebeb] lg:mx-1 lg:block" />}

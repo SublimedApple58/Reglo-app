@@ -15,6 +15,7 @@ import {
   type Transmission,
 } from "@/lib/autoscuole/license";
 import { historySectionTitle, isQualification } from "@/lib/autoscuole/license-paths";
+import { UnderlineTabs } from "@/components/ui/underline-tabs";
 
 /**
  * REG-775 — il linguaggio della pagina Riepilogo del dettaglio allievo,
@@ -102,34 +103,8 @@ export function DrawerTabs<T extends string>({
   value: T;
   onChange: (key: T) => void;
 }) {
-  return (
-    <div className="mt-5 flex items-stretch border-b border-[#efefef]">
-      {tabs.map((tab) => {
-        const active = tab.key === value;
-        return (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => onChange(tab.key)}
-            className={cn(
-              "relative flex-1 cursor-pointer select-none whitespace-nowrap px-1 py-3 text-center text-sm transition-colors duration-200 sm:px-2",
-              active ? "font-semibold text-foreground" : "font-medium text-[#6a6a6a] hover:text-foreground",
-            )}
-          >
-            {tab.label}
-            <span
-              aria-hidden
-              className={cn(
-                "absolute inset-x-0 -bottom-px h-[2px] origin-center bg-[#222222] transition-transform duration-[250ms]",
-                EASE,
-                active ? "scale-x-100" : "scale-x-0",
-              )}
-            />
-          </button>
-        );
-      })}
-    </div>
-  );
+  // REG-778: la tab bar del drawer è diventata quella di tutta la web app.
+  return <UnderlineTabs fill className="mt-5" items={tabs} value={value} onChange={onChange} />;
 }
 
 /** Corpo della scheda: stesso margine della testata. */

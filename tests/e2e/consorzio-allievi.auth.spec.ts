@@ -90,7 +90,7 @@ test("allievo consorzio: creazione minima, codici collassati, drawer a tab", asy
   await expect(drawer.getByText("Codici contabili")).toBeVisible();
 
   // Tab Guide e Costi
-  await drawer.getByRole("button", { name: "Guide" }).click();
+  await drawer.getByRole("tab", { name: "Guide" }).click();
   await expect(drawer.getByText(/Nessuna guida col consorzio/)).toBeVisible();
   await drawer.getByRole("button", { name: "Costi" }).click();
   await expect(drawer.getByTestId("student-cost-total")).toBeVisible();

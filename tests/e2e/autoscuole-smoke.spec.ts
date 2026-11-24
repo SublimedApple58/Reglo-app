@@ -1,10 +1,26 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { markNewsSeen } from "./news-seen";
 
 const userEmail = process.env.E2E_USER_EMAIL;
 const userPassword = process.env.E2E_USER_PASSWORD;
 
 const missingCredentials = !userEmail || !userPassword;
+
+/**
+ * Un titolare con più autoscuole (su staging) dopo il login atterra su «Scegli
+ * l'autoscuola da aprire»: entra nella prima, come farebbe chiunque.
+ */
+async function enterSchoolIfAsked(page: Page) {
+  const enter = page.getByRole("button", { name: "Entra nell'autoscuola" }).first();
+  const asked = await enter
+    .waitFor({ state: "visible", timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (asked) {
+    await enter.click();
+    await page.waitForURL(/\/user\/autoscuole/, { timeout: 90_000 });
+  }
+}
 
 test.describe("Autoscuole smoke", () => {
   test.skip(
@@ -63,7 +79,8 @@ test.describe("Autoscuole smoke", () => {
     await emailInput.first().fill(userEmail!);
     await passwordInput.first().fill(userPassword!);
     await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
-    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+    await page.waitForURL((url) => !url.pathname.includes("sign-in"), { timeout: 90_000 });
+    await enterSchoolIfAsked(page);
 
     // Redesign 2026-07: la Dashboard è stata ritirata — la landing è l'Agenda.
     await page.goto("/it/user/autoscuole");
@@ -86,7 +103,8 @@ test.describe("Autoscuole smoke", () => {
     await emailInput.first().fill(userEmail!);
     await passwordInput.first().fill(userPassword!);
     await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
-    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+    await page.waitForURL((url) => !url.pathname.includes("sign-in"), { timeout: 90_000 });
+    await enterSchoolIfAsked(page);
 
     await page.goto("/it/user/autoscuole?tab=students");
     await expect(page.getByTestId("autoscuole-students-page")).toBeVisible({ timeout: 60000 });
@@ -126,7 +144,8 @@ test.describe("Autoscuole smoke", () => {
     await emailInput.first().fill(userEmail!);
     await passwordInput.first().fill(userPassword!);
     await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
-    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+    await page.waitForURL((url) => !url.pathname.includes("sign-in"), { timeout: 90_000 });
+    await enterSchoolIfAsked(page);
 
     await page.goto("/it/admin/users");
     // .first(): in dev, durante la transizione di route, Next monta per un
@@ -166,7 +185,8 @@ test.describe("Autoscuole smoke", () => {
     await emailInput.first().fill(userEmail!);
     await passwordInput.first().fill(userPassword!);
     await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
-    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+    await page.waitForURL((url) => !url.pathname.includes("sign-in"), { timeout: 90_000 });
+    await enterSchoolIfAsked(page);
 
     // Area personale: overlay + navigazione pane
     await page.goto("/it/user/autoscuole/area-personale");
@@ -192,7 +212,8 @@ test.describe("Autoscuole smoke", () => {
     await emailInput.first().fill(userEmail!);
     await passwordInput.first().fill(userPassword!);
     await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
-    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+    await page.waitForURL((url) => !url.pathname.includes("sign-in"), { timeout: 90_000 });
+    await enterSchoolIfAsked(page);
 
     await page.goto("/it/user/autoscuole/voice");
     await expect(page.getByTestId("autoscuole-voice-page")).toBeVisible({ timeout: 60000 });
@@ -233,7 +254,8 @@ test.describe("Autoscuole smoke", () => {
     await emailInput.first().fill(userEmail!);
     await passwordInput.first().fill(userPassword!);
     await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
-    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+    await page.waitForURL((url) => !url.pathname.includes("sign-in"), { timeout: 90_000 });
+    await enterSchoolIfAsked(page);
 
     // Il vecchio deep-link pane=students deve atterrare sul pane unificato
     await page.goto("/it/user/autoscuole?tab=settings&pane=students");
@@ -245,23 +267,23 @@ test.describe("Autoscuole smoke", () => {
     await expect(pane.getByText("Durata prenotazione allievo")).toBeVisible();
 
     // Sub-tab Limiti
-    await pane.getByRole("button", { name: "Limiti", exact: true }).click();
+    await pane.getByRole("tab", { name: "Limiti", exact: true }).click();
     await expect(pane.getByText("Stop alle prenotazioni last-minute")).toBeVisible();
     await expect(pane.getByText("Massimo di guide a settimana")).toBeVisible();
 
     // Sub-tab Guide
-    await pane.getByRole("button", { name: "Guide", exact: true }).click();
+    await pane.getByRole("tab", { name: "Guide", exact: true }).click();
     await expect(pane.getByText("Consenti scambi tra allievi")).toBeVisible();
     await expect(pane.getByText("Attiva guide di gruppo")).toBeVisible();
 
     // Sub-tab App allievi ("Notifica slot disponibili domani" è migrata nel
     // pane Promemoria e notifiche — verificata più sotto)
-    await pane.getByRole("button", { name: "App allievi", exact: true }).click();
+    await pane.getByRole("tab", { name: "App allievi", exact: true }).click();
     await expect(pane.getByText("Mostra note nell'app allievi")).toBeVisible();
     await expect(pane.getByText("Consenti scelta istruttore")).toBeVisible();
 
     // Sub-tab Crediti e prezzi (ex pane Fatturazione e pagamenti, auto-save)
-    await pane.getByRole("button", { name: "Crediti e prezzi", exact: true }).click();
+    await pane.getByRole("tab", { name: "Crediti e prezzi", exact: true }).click();
     await expect(pane.getByText("Crediti guida", { exact: true })).toBeVisible({ timeout: 20000 });
     await expect(pane.getByText("Cancellazioni tardive")).toBeVisible();
 
@@ -276,7 +298,7 @@ test.describe("Autoscuole smoke", () => {
       await expect(page.getByText("Impossibile salvare l'impostazione.")).toHaveCount(0);
     };
 
-    await pane.getByRole("button", { name: "Generali", exact: true }).click();
+    await pane.getByRole("tab", { name: "Generali", exact: true }).click();
 
     // 1) "Chi può prenotare dall'app": il backend pretende instructorBookingMode
     //    insieme a instructors/both — il patch deve allegarlo da solo.
@@ -335,7 +357,8 @@ test.describe("Autoscuole smoke", () => {
     await emailInput.first().fill(userEmail!);
     await passwordInput.first().fill(userPassword!);
     await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
-    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+    await page.waitForURL((url) => !url.pathname.includes("sign-in"), { timeout: 90_000 });
+    await enterSchoolIfAsked(page);
 
     await page.goto("/it/user/autoscuole?tab=settings&pane=instructors");
     const pane = page.getByTestId("instructors-pane");
@@ -353,10 +376,10 @@ test.describe("Autoscuole smoke", () => {
     // Settimana tipo: switch orari condivisi ⇄ orari indipendenti per giorno
     await expect(pane.getByText("Orari diversi per giorno")).toBeVisible();
 
-    await pane.getByRole("button", { name: "Malattia", exact: true }).click();
+    await pane.getByRole("tab", { name: "Malattia", exact: true }).click();
     await expect(pane.getByRole("button", { name: "Aggiungi assenza" })).toBeVisible();
 
-    await pane.getByRole("button", { name: "Gestione autonoma", exact: true }).click();
+    await pane.getByRole("tab", { name: "Gestione autonoma", exact: true }).click();
     await expect(pane.getByText("Orario di lavoro")).toBeVisible();
     await expect(pane.getByText("Modalità autonoma")).toBeVisible();
 

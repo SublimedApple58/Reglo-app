@@ -37,6 +37,7 @@ import {
 import { ATTIVA_REGLO_URL, SITE_URLS } from "./locked-features";
 import { DEMO_SETTINGS_PREVIEWS } from "./demo-settings";
 import { LockedInstructors } from "./LockedInstructors";
+import { UnderlineTabs } from "@/components/ui/underline-tabs";
 
 /* ── Primitivi, coi valori esatti del prototipo ──────────────────────
  *
@@ -1070,23 +1071,7 @@ export function LockedSettingsPane({
     <div>
       {/* Barra delle sotto-tab: nitida e cliccabile, come nel prototipo. */}
       {tabs ? (
-        <div className="mb-7 flex flex-wrap items-center gap-8 border-b border-[#e8e8e8]">
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setSubTab(tab.key)}
-              className={cn(
-                "-mb-px cursor-pointer select-none whitespace-nowrap border-b-[2.5px] px-px pb-3 text-[15px] transition-colors",
-                subTab === tab.key
-                  ? "border-[#111111] font-semibold text-foreground"
-                  : "border-transparent font-medium text-[#6a6a6a] hover:text-foreground",
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <UnderlineTabs className="mb-7 -mx-6 px-6 sm:mx-0 sm:px-0" items={tabs} value={subTab} onChange={setSubTab} />
       ) : null}
 
       <div className="relative min-h-[520px]">

@@ -25,8 +25,8 @@ test.describe("Card QR istruttore", () => {
     let withoutCodice = 0;
     for (let i = 0; i < count; i++) {
       await gestisci.nth(i).click();
-      await expect(page.getByRole("button", { name: "Disponibilità", exact: true })).toBeVisible({ timeout: 30_000 });
-      if (await page.getByRole("button", { name: "Codice", exact: true }).count()) {
+      await expect(page.getByRole("tab", { name: "Disponibilità", exact: true })).toBeVisible({ timeout: 30_000 });
+      if (await page.getByRole("tab", { name: "Codice", exact: true }).count()) {
         withCodice++;
         break;
       }
@@ -35,7 +35,7 @@ test.describe("Card QR istruttore", () => {
     }
     expect(withCodice, "serve almeno un istruttore in gestione autonoma").toBe(1);
     console.log(`istruttori senza scheda Codice prima di quello autonomo: ${withoutCodice}`);
-    await page.getByRole("button", { name: "Codice", exact: true }).click();
+    await page.getByRole("tab", { name: "Codice", exact: true }).click();
     await expect(codiceTab).toBeVisible();
 
     // Chiave dell'istruttore + Copia.

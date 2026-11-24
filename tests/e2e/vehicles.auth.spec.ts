@@ -29,7 +29,7 @@ async function openVehicleDetails(page: import("@playwright/test").Page, name: s
   const row = page.getByTestId("vehicle-card").filter({ hasText: name });
   await expect(row).toBeVisible();
   await row.getByRole("button", { name: "Gestisci" }).click();
-  await page.getByRole("button", { name: "Dettagli", exact: true }).click();
+  await page.getByRole("tab", { name: "Dettagli", exact: true }).click();
   await expect(page.getByTestId("vehicle-mode-open")).toBeVisible();
 }
 

@@ -16,6 +16,8 @@ import { SELECTABLE_CARD, SELECTABLE_CARD_OFF, SELECTABLE_CARD_ON } from "@/comp
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { TimePickerInput } from "@/components/ui/time-picker";
+import { UnderlineTabs } from "@/components/ui/underline-tabs";
+import { useSettingsSubTab } from "./settings/settings-url";
 import { VoiceLineTutorialModal } from "./dialogs/VoiceLineTutorialModal";
 import { VoiceInactiveState } from "./VoiceInactiveState";
 import { cn } from "@/lib/utils";
@@ -66,6 +68,7 @@ const SUB_TABS: Array<{ key: SegSubTab; label: string }> = [
   { key: "orari", label: "Orari e registrazioni" },
   { key: "istruzioni", label: "Istruzioni" },
 ];
+const SUB_TAB_KEYS = SUB_TABS.map((tab) => tab.key);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -164,7 +167,7 @@ export function VoiceSettingsPane() {
   const toast = useFeedbackToast();
 
   const [loading, setLoading] = React.useState(true);
-  const [subTab, setSubTab] = React.useState<SegSubTab>("linea");
+  const [subTab, setSubTab] = useSettingsSubTab(SUB_TAB_KEYS, "linea");
   const [savingKey, setSavingKey] = React.useState<string | null>(null);
 
   // Stato linea / feature
@@ -433,26 +436,13 @@ export function VoiceSettingsPane() {
     <div data-testid="voice-settings-pane">
       {/* ── Sub-tabs (visibili solo a linea attiva, come il proto) ── */}
       {lineaAttiva && (
-        <div className="mb-7 flex flex-wrap items-center gap-8 border-b border-[#e8e8e8]">
-          {visibleTabs.map((tab) => {
-            const active = activeSubTab === tab.key;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setSubTab(tab.key)}
-                className={cn(
-                  "-mb-px cursor-pointer select-none whitespace-nowrap border-b-[2.5px] px-px pb-3.5 text-base transition-colors",
-                  active
-                    ? "border-[#222222] font-semibold text-foreground"
-                    : "border-transparent font-medium text-[#6a6a6a] hover:text-foreground",
-                )}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
+        <UnderlineTabs
+          className="mb-7 -mx-6 px-6 sm:mx-0 sm:px-0"
+          items={visibleTabs}
+          value={activeSubTab}
+          onChange={setSubTab}
+          ariaLabel="Segretaria"
+        />
       )}
 
       {/* ══ LINEA ══ */}

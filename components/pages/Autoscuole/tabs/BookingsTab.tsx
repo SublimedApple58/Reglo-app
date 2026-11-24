@@ -1,5 +1,7 @@
 "use client";
 
+import { UnderlineTabs } from "@/components/ui/underline-tabs";
+import { useSettingsSubTab } from "@/components/pages/Autoscuole/settings/settings-url";
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown, Loader2 } from "lucide-react";
@@ -920,10 +922,13 @@ export default function BookingsTab({
   setInstructorPreferenceEnabled,
   toast,
 }: BookingsTabProps) {
-  const [subTab, setSubTab] = React.useState<SubTab>("generali");
   const company = useAtomValue(companyAtom);
   const consortium = isConsortium(company?.services ?? null);
   const subTabs = consortium ? CONSORTIUM_SUB_TABS : SUB_TABS;
+  const [subTab, setSubTab] = useSettingsSubTab(
+    subTabs.map((tab) => tab.key),
+    "generali",
+  );
 
   const isPaused = Boolean(
     examPriorityPausedUntil && new Date(examPriorityPausedUntil) > new Date(),
@@ -932,23 +937,7 @@ export default function BookingsTab({
   return (
     <div data-testid="bookings-pane">
       {/* ── Sub-tab Generali / Limiti / Guide / App allievi ── */}
-      <div className="flex flex-wrap items-center gap-8 border-b border-[#e8e8e8]">
-        {subTabs.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setSubTab(tab.key)}
-            className={cn(
-              "-mb-px cursor-pointer select-none whitespace-nowrap border-b-[2.5px] px-px pb-3 text-[15px] transition-colors",
-              subTab === tab.key
-                ? "border-[#222222] font-semibold text-foreground"
-                : "border-transparent font-medium text-[#6a6a6a] hover:text-foreground",
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <UnderlineTabs className="-mx-6 px-6 sm:mx-0 sm:px-0" items={subTabs} value={subTab} onChange={setSubTab} ariaLabel="Prenotazioni e allievi" />
 
       {/* ══ GENERALI ══ */}
       <div className={cn("divide-y divide-[#ebebeb]", subTab !== "generali" && "hidden")}>

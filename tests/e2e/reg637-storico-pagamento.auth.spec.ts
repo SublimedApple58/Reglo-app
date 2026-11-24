@@ -56,7 +56,7 @@ async function openChiara(page: Page) {
     .last();
   await riga.getByRole("button", { name: "Dettaglio" }).click();
   await expect(page.getByText(EMAIL, { exact: true }).last()).toBeVisible();
-  await page.getByRole("button", { name: "Guide", exact: true }).click();
+  await page.getByRole("tab", { name: "Guide", exact: true }).click();
   await expect(page.getByTestId("student-lesson-row").first()).toBeVisible({ timeout: 30_000 });
 }
 

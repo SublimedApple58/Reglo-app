@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { UnderlineTabs } from "@/components/ui/underline-tabs";
 import { canGoBackTo } from "./road-nav";
 
 /**
@@ -38,7 +39,10 @@ export function RoadBackLink({ href, label, className }: { href: string; label: 
   );
 }
 
-/** Tab di sezione sottolineate (stile Airbnb/Linear). A 390 px scorrono a filo schermo. */
+/**
+ * Tab di sezione sottolineate. REG-778: è la tab bar condivisa della web app;
+ * a 390 px scorre a filo schermo e tiene in vista la voce attiva.
+ */
 export function RoadTabs<T extends string>({
   items,
   value,
@@ -52,48 +56,19 @@ export function RoadTabs<T extends string>({
   onSelect?: () => void;
   render?: (item: { value: T; label: string }) => React.ReactNode;
 }) {
-  const ref = React.useRef<HTMLDivElement>(null);
-  // La voce attiva resta sempre in vista quando la barra scorre.
-  React.useEffect(() => {
-    const list = ref.current;
-    const tab = list?.querySelector<HTMLElement>('[aria-current="page"]');
-    if (!list || !tab || list.scrollWidth <= list.clientWidth) return;
-    const left = tab.offsetLeft - (list.clientWidth - tab.offsetWidth) / 2;
-    list.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
-  }, [value]);
   return (
-    <nav
-      ref={ref}
-      aria-label="Sezioni di Road"
-      data-testid="road-tabs"
-      className="-mx-4 flex gap-7 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
-    >
-      {items.map((it) => {
-        const active = it.value === value;
-        return (
-          <Link
-            key={it.value}
-            href={hrefFor(it.value)}
-            scroll={false}
-            onClick={onSelect}
-            aria-current={active ? "page" : undefined}
-            data-testid={`road-tab-${it.value}`}
-            className={cn(
-              "relative flex shrink-0 items-center gap-2 whitespace-nowrap pb-3.5 pt-3 text-[14.5px] transition-colors duration-200",
-              active ? "font-semibold text-[#111111]" : "font-medium text-[#5a5a5a] hover:text-[#111111]",
-            )}
-          >
-            {render ? render(it) : it.label}
-            {active ? (
-              <span
-                aria-hidden
-                className="road-tab-bar absolute inset-x-0 -bottom-px h-[2px] rounded-full bg-[#111111]"
-              />
-            ) : null}
-          </Link>
-        );
-      })}
-      <style>{`.road-tab-bar{animation:road-tab-in 240ms cubic-bezier(0.2,0,0,1)}@keyframes road-tab-in{from{opacity:0;transform:scaleX(.4)}to{opacity:1;transform:none}}`}</style>
-    </nav>
+    <UnderlineTabs
+      ariaLabel="Sezioni di Road"
+      testId="road-tabs"
+      className="-mx-4 px-4 sm:mx-0 sm:px-0"
+      items={items.map((it) => ({
+        key: it.value,
+        label: render ? render(it) : it.label,
+        href: hrefFor(it.value),
+        testId: `road-tab-${it.value}`,
+      }))}
+      value={value}
+      onChange={onSelect ? () => onSelect() : undefined}
+    />
   );
 }
