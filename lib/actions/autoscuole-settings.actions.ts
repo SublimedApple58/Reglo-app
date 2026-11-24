@@ -1,5 +1,6 @@
 "use server";
 
+import { weeklyLimitCountsGroupLessons } from "@/lib/autoscuole/weekly-lessons";
 import {
   LAST_MINUTE_HOURS_MAX,
   LAST_MINUTE_HOURS_MIN,
@@ -430,6 +431,8 @@ const autoscuolaSettingsPatchSchema = z
       .optional(),
     weeklyBookingLimitEnabled: z.boolean().optional(),
     weeklyBookingLimit: z.number().int().min(1).max(50).optional(),
+    // REG-781: i posti nelle guide di gruppo contano nel limite settimanale (default sì).
+    weeklyLimitCountsGroupLessons: z.boolean().optional(),
     autoBookingBlockEnabled: z.boolean().optional(),
     autoBookingBlockThreshold: z.number().int().min(1).max(50).optional(),
     examPriorityEnabled: z.boolean().optional(),
@@ -723,6 +726,7 @@ export type AutoscuolaSettingsData = {
   emptySlotNotificationTimes: string[];
   weeklyBookingLimitEnabled: boolean;
   weeklyBookingLimit: number;
+  weeklyLimitCountsGroupLessons: boolean;
   autoBookingBlockEnabled: boolean;
   autoBookingBlockThreshold: number;
   examPriorityEnabled: boolean;
@@ -1148,6 +1152,7 @@ const resolveAutoscuolaSettingsData = async (
     emptySlotNotificationTimes,
     weeklyBookingLimitEnabled,
     weeklyBookingLimit,
+    weeklyLimitCountsGroupLessons: weeklyLimitCountsGroupLessons(limits),
     autoBookingBlockEnabled,
     autoBookingBlockThreshold,
     examPriorityEnabled,
@@ -1970,6 +1975,8 @@ export async function updateAutoscuolaSettings(
       emptySlotNotificationTimes: nextEmptySlotNotificationTimes,
       weeklyBookingLimitEnabled: nextWeeklyBookingLimitEnabled,
       weeklyBookingLimit: nextWeeklyBookingLimit,
+      weeklyLimitCountsGroupLessons:
+        payload.weeklyLimitCountsGroupLessons ?? weeklyLimitCountsGroupLessons(limits),
       autoBookingBlockEnabled: nextAutoBookingBlockEnabled,
       autoBookingBlockThreshold: nextAutoBookingBlockThreshold,
       examPriorityEnabled: nextExamPriorityEnabled,
@@ -2195,6 +2202,7 @@ export async function updateAutoscuolaSettings(
         emptySlotNotificationTimes: nextLimits.emptySlotNotificationTimes,
         weeklyBookingLimitEnabled: nextLimits.weeklyBookingLimitEnabled,
         weeklyBookingLimit: nextLimits.weeklyBookingLimit,
+        weeklyLimitCountsGroupLessons: nextLimits.weeklyLimitCountsGroupLessons,
         autoBookingBlockEnabled: nextLimits.autoBookingBlockEnabled,
         autoBookingBlockThreshold: nextLimits.autoBookingBlockThreshold,
         examPriorityEnabled: nextLimits.examPriorityEnabled,
