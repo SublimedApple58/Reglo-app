@@ -14,12 +14,27 @@ Lesson credit ledger, Stripe payment processing, payment plans, penalties, invoi
 >   - nell'app allievo «Addebitata» senza importo.
 > - La percentuale tornerà con i crediti a tempo (piano `plans/product/001-reg-779-guide-vs-tempo.md`, punto 5).
 
+> **REG-783 (2026-11-24): crediti a guide o a tempo (minuti).**
+> - L'autoscuola tiene i crediti in una sola unità, `limits.lessonCreditUnit` (`"lessons"` default | `"minutes"`). Non si cambia da `updateAutoscuolaSettings`: solo con `switchLessonCreditUnit` (`lib/actions/autoscuole-credit-unit.actions.ts`), dal dialogo `CreditUnitSwitchDialog` della riga «Un credito vale».
+> - Il passaggio è una transazione: blocca impostazioni e saldi (`FOR UPDATE`), confronta l'impronta dei saldi vista in anteprima (se è cambiata rimanda `PREVIEW_CHANGED` con l'anteprima nuova), converte ogni saldo con due movimenti `unit_conversion` (−prima nell'unità vecchia, +dopo nella nuova), scrive `AutoscuolaCreditUnitSwitch`. Verso le guide il resto lo sceglie il titolare (`floor`/`ceil`/`round`).
+> - Costo di una guida: 1 a guide, la durata in minuti a tempo (`creditCost`). Si scala solo se il saldo basta tutto (niente pagamenti parziali). La guida salva `creditAmount`/`creditUnit` (null = guida pagata prima di REG-783 = 1 guida).
+> - Rimborso (`refundAppointmentCredit`, usato da annullamento, condono tardivo, «Rimuovi dallo storico», scambio): sempre nell'unità di adesso. Stessa unità → quanto aveva consumato; pagata a guide e resa a minuti → la durata al momento del rimborso; pagata a minuti e resa a guide → 1 guida (regole di Tiziano, `lesson-credit-unit.ts`). «Addebita» dopo un condono riscala quanto era stato reso.
+> - Cambio di durata di una guida pagata a minuti (`syncAppointmentCreditToDuration`, da spostamento e modifica dettagli): scala o rende la differenza; se il saldo non basta per i minuti in più non scala niente. Road non ricalcola («Prezzo e crediti restano quelli»).
+> - Scambio: chi cede riceve come in un annullamento in tempo, chi prende paga il costo pieno; con i crediti obbligatori lo scambio si rifiuta se non gli basta, altrimenti la guida resta da pagare.
+> - Ogni movimento ha `unit`; `adjustStudentLessonCredits({ unit })` rifiuta un movimento scritto in un'unità superata (ricarica da un form aperto prima del passaggio).
+> - API mobile `/api/mobile/payments/profile`: oltre a `lessonCreditsAvailable` manda `lessonCreditsUnit` e `lessonCreditsLabel` («5 ore e 30»).
+> - Noto e invariato: con «Servono crediti per prenotare» il server non blocca una prenotazione senza credito (la guida nasce senza credito e senza «da pagare»). In prod, 60 giorni al 24/11: nessun caso.
+> - Casi limite e decisioni: `plans/product/002-reg-783-crediti-minuti.md`.
+
 ## Key files
 - `lib/autoscuole/payments.ts` — 68 exported functions (88KB), core payment logic
 - `lib/autoscuole/stripe-connect.ts` — instructor payout accounts
 - `lib/autoscuole/receipt.tsx` — PDF receipt generation via @react-pdf/renderer
 - `lib/integrations/fatture-in-cloud.ts` — Italian invoicing integration
-- `components/pages/Autoscuole/PaymentsSettingsPane.tsx` — sotto-scheda «Crediti e annullamenti» (Impostazioni → Prenotazioni e allievi)
+- `components/pages/Autoscuole/PaymentsSettingsPane.tsx` — sotto-scheda «Crediti e annullamenti» (Impostazioni → Prenotazioni e allievi), con «Un credito vale»
+- `components/pages/Autoscuole/settings/CreditUnitSwitchDialog.tsx` — dialogo di passaggio guide ↔ ore (REG-783)
+- `lib/autoscuole/lesson-credit-unit.ts` — funzioni pure: costo, rimborso, conversione, testi (REG-783)
+- `lib/actions/autoscuole-credit-unit.actions.ts` — anteprima e passaggio di unità (REG-783)
 
 ## Key functions
 - Credits: `adjustStudentLessonCredits()`, `refundLessonCreditIfEligible()`, `getStudentLessonCredits()`, `applyLessonCreditToExistingAppointment()`
@@ -97,18 +112,19 @@ definizione alimenta il badge web, il contatore `manualUnpaid` della lista
 allievi e il blocco automatico delle prenotazioni per debito.
 
 ## Credit ledger reasons
-`grant`, `consume`, `refund`, `swap_refund`, `swap_consume`, `manual_grant`, `manual_revoke`
+`booking_consume`, `cancel_refund`, `swap_refund`, `swap_consume`, `manual_grant`, `manual_revoke`, `unit_conversion` e `duration_change` (REG-783). Ogni movimento ha la sua `unit`.
 
 ## DB models
 - `AutoscuolaAppointmentPayment` — Stripe intent/charge, retry count, status
 - `AutoscuolaStudentPaymentProfile` — Stripe customer + payment methods
 - `AutoscuolaStudentLessonCreditBalance` — current balance per student
-- `AutoscuolaStudentLessonCreditLedger` — immutable audit trail (reason, actor, amount)
+- `AutoscuolaStudentLessonCreditLedger` — immutable audit trail (reason, actor, amount, `unit`)
+- `AutoscuolaCreditUnitSwitch` — ogni passaggio di unità (REG-783)
 - `AutoscuolaPaymentPlan`, `AutoscuolaPaymentInstallment` — installment plans
 
 ## Connected features
 - **Appointments** — cancel refunds, confirm consumes, settlement charges
-- **Swaps** — `adjustStudentLessonCredits(swap_consume/swap_refund)`
+- **Swaps** — `refundAppointmentCredit(swap_refund)` + `consumeLessonCreditIfAvailable(swap_consume)` (REG-783)
 - **Holidays** — bulk cancel refunds via `refundLessonCreditIfEligible()`
 - **Communications** — background jobs call settlement, retry, penalty, invoice
 - **Cache** — invalidates PAYMENTS + FIC segments
