@@ -108,3 +108,32 @@ export function formatRemainder(remainderMinutes: number): string | null {
   const abs = formatDrivingMinutes(Math.abs(remainderMinutes));
   return remainderMinutes > 0 ? `${abs} in più` : `${abs} persi`;
 }
+
+const roundTo5 = (minutes: number) => Math.max(5, Math.round(minutes / 5) * 5);
+
+/**
+ * REG-788: esempi concreti per spiegare cosa succede ai minuti che avanzano
+ * passando a guide, senza termini tecnici: «2 ore e 20 → 2 guide».
+ * «Al più vicino» mostra un caso sotto e uno sopra la mezza guida.
+ */
+export function remainderPolicyExamples(
+  minutesPerLesson: number,
+): { policy: CreditRemainderPolicy; examples: string[] }[] {
+  const low = 2 * minutesPerLesson + roundTo5(minutesPerLesson / 3);
+  const high = 2 * minutesPerLesson + roundTo5((2 * minutesPerLesson) / 3);
+  const line = (amount: number, remainderPolicy: CreditRemainderPolicy) => {
+    const { amount: lessons } = convertCreditBalance({
+      amount,
+      fromUnit: "minutes",
+      toUnit: "lessons",
+      minutesPerLesson,
+      remainderPolicy,
+    });
+    return `${formatDrivingMinutes(amount)} → ${formatCredits("lessons", lessons)}`;
+  };
+  return [
+    { policy: "round", examples: [line(low, "round"), line(high, "round")] },
+    { policy: "floor", examples: [line(low, "floor")] },
+    { policy: "ceil", examples: [line(low, "ceil")] },
+  ];
+}

@@ -1,20 +1,12 @@
 "use client";
 
 import React from "react";
-import { ArrowRight } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SETTING_SELECT_TRIGGER_CLASS } from "@/components/pages/Autoscuole/settings/SettingRow";
 import {
   previewLessonCreditUnitSwitch,
   switchLessonCreditUnit,
@@ -24,36 +16,91 @@ import {
   CREDIT_MINUTES_PER_LESSON_MAX,
   CREDIT_MINUTES_PER_LESSON_MIN,
   DEFAULT_CREDIT_MINUTES_PER_LESSON,
+  remainderPolicyExamples,
   type CreditRemainderPolicy,
   type LessonCreditUnit,
 } from "@/lib/autoscuole/lesson-credit-unit";
-import { formatDrivingMinutes, minutesToHoursInput, parseHoursInput } from "@/lib/autoscuole/weekly-limit";
+import { formatDrivingMinutes } from "@/lib/autoscuole/weekly-limit";
 import { cn } from "@/lib/utils";
 
 /**
  * REG-783 — dialogo di passaggio dei crediti (guide ↔ ore).
- * Il titolare sceglie quanto vale una guida e, verso le guide, cosa fare dei
- * minuti che avanzano; l'anteprima mostra il prima → dopo di ogni allievo.
+ * REG-788 — riscritto perché si capisca al primo colpo: una frase su cosa
+ * cambia da ora; le domande (quanto vale una guida, cosa fare dei minuti che
+ * avanzano) compaiono solo se qualche allievo ha crediti da convertire, con
+ * scelte pronte e un esempio vero preso dall'anteprima dei saldi.
  * Alla conferma il server ricontrolla i saldi: se sono cambiati rimanda
- * l'anteprima nuova da riconfermare.
+ * l'anteprima nuova da riconfermare (logica di REG-783 invariata).
  */
 
+const PRESET_MINUTES = [45, 60, 90] as const;
+const EXAMPLE_ROWS = 3;
+
+// Veloce e morbida, senza rimbalzo.
+const EASE = [0.32, 0.72, 0, 1] as const;
+const REVEAL = {
+  initial: { height: 0, opacity: 0 },
+  animate: { height: "auto", opacity: 1 },
+  exit: { height: 0, opacity: 0 },
+  transition: { duration: 0.26, ease: EASE },
+};
+
+const durationWords = (minutes: number) => (minutes === 90 ? "1 ora e mezza" : formatDrivingMinutes(minutes));
+
 const REMAINDER_LABELS: Record<CreditRemainderPolicy, string> = {
-  round: "Al più vicino",
-  floor: "Per difetto",
-  ceil: "Per eccesso",
+  round: "Alla guida più vicina",
+  floor: "Si perdono",
+  ceil: "Diventano una guida",
 };
 
-const REMAINDER_HINTS = (minutesPerLesson: number): Record<CreditRemainderPolicy, string> => {
-  const half = formatDrivingMinutes(Math.round(minutesPerLesson / 2));
-  return {
-    round: `Sotto ${minutesPerLesson === 60 ? "la mezz'ora" : half} si perdono, da ${minutesPerLesson === 60 ? "mezz'ora" : half} in su diventano una guida.`,
-    floor: "I minuti che non fanno una guida intera si perdono.",
-    ceil: "I minuti che avanzano diventano una guida intera.",
-  };
-};
+function ChoiceRow({
+  selected,
+  label,
+  hint,
+  onSelect,
+  testId,
+}: {
+  selected: boolean;
+  label: string;
+  hint?: string;
+  onSelect: () => void;
+  testId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onSelect}
+      data-testid={testId}
+      className="reglo-focus-ring flex w-full cursor-pointer items-center gap-4 py-3.5 text-left"
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] font-medium text-foreground">{label}</span>
+        {hint ? <span className="mt-0.5 block text-[13px] font-medium text-[#8a8a8a]">{hint}</span> : null}
+      </span>
+      <span
+        aria-hidden
+        className={cn(
+          "size-[22px] shrink-0 rounded-full transition-[box-shadow] duration-200 ease-out",
+          selected ? "shadow-[inset_0_0_0_7px_#111111]" : "shadow-[inset_0_0_0_1.5px_#c4c4c4]",
+        )}
+      />
+    </button>
+  );
+}
 
-const VISIBLE_ROWS = 4;
+function Question({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="pt-6">
+      <div className="text-[15px] font-semibold text-foreground">{title}</div>
+      {hint ? <p className="mt-0.5 text-[13px] font-medium text-[#8a8a8a]">{hint}</p> : null}
+      <div role="radiogroup" aria-label={title} className="mt-1 divide-y divide-[#efefef]">
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export function CreditUnitSwitchDialog({
   open,
@@ -69,19 +116,20 @@ export function CreditUnitSwitchDialog({
   const toast = useFeedbackToast();
   const toMinutes = toUnit === "minutes";
   const [minutesPerLesson, setMinutesPerLesson] = React.useState(DEFAULT_CREDIT_MINUTES_PER_LESSON);
-  const [draft, setDraft] = React.useState(minutesToHoursInput(DEFAULT_CREDIT_MINUTES_PER_LESSON));
+  const [custom, setCustom] = React.useState(false);
+  const [customDraft, setCustomDraft] = React.useState("");
   const [policy, setPolicy] = React.useState<CreditRemainderPolicy>("round");
   const [preview, setPreview] = React.useState<CreditUnitSwitchPreview | null>(null);
-  const [showAll, setShowAll] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const requestRef = React.useRef(0);
+  const customInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     if (!open) return;
     setMinutesPerLesson(DEFAULT_CREDIT_MINUTES_PER_LESSON);
-    setDraft(minutesToHoursInput(DEFAULT_CREDIT_MINUTES_PER_LESSON));
+    setCustom(false);
+    setCustomDraft("");
     setPolicy("round");
-    setShowAll(false);
     setPreview(null);
   }, [open, toUnit]);
 
@@ -99,19 +147,42 @@ export function CreditUnitSwitchDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, toUnit, minutesPerLesson, policy]);
 
-  const commitMinutes = () => {
-    const parsed = parseHoursInput(draft);
-    if (parsed === null) {
-      setDraft(minutesToHoursInput(minutesPerLesson));
-      return;
-    }
-    const clamped = Math.max(CREDIT_MINUTES_PER_LESSON_MIN, Math.min(CREDIT_MINUTES_PER_LESSON_MAX, parsed));
-    setDraft(minutesToHoursInput(clamped));
-    setMinutesPerLesson(clamped);
+  // «Altro»: i minuti scritti valgono appena sono un numero nei limiti.
+  const customMinutes = React.useMemo(() => {
+    const value = Number(customDraft.trim());
+    if (!Number.isInteger(value)) return null;
+    if (value < CREDIT_MINUTES_PER_LESSON_MIN || value > CREDIT_MINUTES_PER_LESSON_MAX) return null;
+    return value;
+  }, [customDraft]);
+
+  React.useEffect(() => {
+    if (!custom || customMinutes === null) return;
+    const timer = window.setTimeout(() => setMinutesPerLesson(customMinutes), 300);
+    return () => window.clearTimeout(timer);
+  }, [custom, customMinutes]);
+
+  const pickPreset = (minutes: number) => {
+    setCustom(false);
+    setMinutesPerLesson(minutes);
   };
 
+  const pickCustom = () => {
+    setCustom(true);
+    if (!customDraft) setCustomDraft(String(minutesPerLesson));
+    window.setTimeout(() => customInputRef.current?.select(), 60);
+  };
+
+  const rows = preview?.rows ?? [];
+  const hasCredits = rows.length > 0;
+  // L'anteprima arriva un attimo dopo la scelta: finché non torna, niente conferma.
+  const stale =
+    !preview ||
+    (hasCredits &&
+      (preview.minutesPerLesson !== minutesPerLesson || (!toMinutes && preview.remainderPolicy !== policy)));
+  const customInvalid = custom && customDraft.trim() !== "" && customMinutes === null;
+
   const confirm = async () => {
-    if (!preview || saving) return;
+    if (!preview || stale || saving) return;
     setSaving(true);
     const res = await switchLessonCreditUnit({
       toUnit,
@@ -134,137 +205,166 @@ export function CreditUnitSwitchDialog({
     toast.error({ description: res.message ?? "Impossibile cambiare i crediti." });
   };
 
-  const rows = preview?.rows ?? [];
-  const visible = showAll ? rows : rows.slice(0, VISIBLE_ROWS);
+  const examples = rows.slice(0, EXAMPLE_ROWS);
+  const others = rows.length - examples.length;
+  const studentsWord = rows.length === 1 ? "1 allievo ha" : `${rows.length} allievi hanno`;
 
   return (
     <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
       <DialogContent className="max-h-[92dvh] gap-0 overflow-y-auto" data-testid="credit-unit-switch-dialog">
         <div className="pr-11">
-          <DialogTitle className="text-[19px] font-semibold leading-tight tracking-[-0.3px]">
-            {toMinutes ? "Crediti a tempo" : "Crediti a guide"}
+          <DialogTitle className="text-[21px] font-semibold leading-tight tracking-[-0.4px]">
+            {toMinutes ? "Conta i crediti in ore" : "Conta i crediti in guide"}
           </DialogTitle>
-          <DialogDescription className="mt-1.5 text-[14px] font-medium leading-normal text-[#6a6a6a]">
+          <DialogDescription className="mt-2 text-[15px] font-medium leading-[1.45] text-[#5f5f5f]">
             {toMinutes
-              ? "I crediti degli allievi passano da guide a ore. Scegli quanto vale una guida."
-              : "I crediti degli allievi passano da ore a guide. Scegli quanto vale una guida e cosa fare dei minuti che avanzano."}
+              ? "Da ora ogni guida scala la sua durata: 30 minuti, 1 ora, 1 ora e mezza."
+              : "Da ora ogni guida scala una guida dal saldo, che duri mezz'ora o due ore."}
           </DialogDescription>
         </div>
 
-        <div className="mt-5">
-          <div className="text-[15px] font-semibold text-foreground">Una guida vale</div>
-          <div className="mt-2 flex items-center gap-3">
-            <input
-              type="text"
-              inputMode="decimal"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={commitMinutes}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-              }}
-              aria-label="Ore di una guida"
-              data-testid="credit-unit-minutes-per-lesson"
-              className="h-11 w-[120px] rounded-[14px] border-0 bg-white px-[18px] text-[15px] font-medium text-foreground shadow-clay-sink outline-none transition-shadow duration-200 focus:shadow-clay-focus"
-            />
-            <span className="text-[13.5px] font-medium text-[#929292]">{formatDrivingMinutes(minutesPerLesson)}</span>
-          </div>
-        </div>
-
-        {!toMinutes && (
-          <div className="mt-5">
-            <div className="text-[15px] font-semibold text-foreground">Minuti che avanzano</div>
-            <Select value={policy} onValueChange={(value) => setPolicy(value as CreditRemainderPolicy)}>
-              <SelectTrigger
-                className={cn(SETTING_SELECT_TRIGGER_CLASS, "mt-2 w-full")}
-                data-testid="credit-unit-remainder"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(REMAINDER_LABELS) as CreditRemainderPolicy[]).map((key) => (
-                  <SelectItem key={key} value={key}>
-                    {REMAINDER_LABELS[key]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="mt-2 text-[13px] font-medium text-[#929292]">{REMAINDER_HINTS(minutesPerLesson)[policy]}</p>
-          </div>
-        )}
-
-        <div className="mt-6 flex items-baseline justify-between gap-3">
-          <div className="text-[15px] font-semibold text-foreground">Come cambiano</div>
-          <div className="text-[13px] font-medium text-[#929292]">
-            {preview
-              ? rows.length === 1
-                ? "1 allievo con crediti"
-                : `${rows.length} allievi con crediti`
-              : ""}
-          </div>
-        </div>
         {!preview ? (
-          <div className="mt-2 space-y-2">
+          <div className="space-y-2.5 pt-6" aria-hidden>
+            <Skeleton className="h-4 w-56 rounded-[6px]" />
             <Skeleton className="h-12 w-full rounded-[10px]" />
             <Skeleton className="h-12 w-full rounded-[10px]" />
           </div>
-        ) : rows.length === 0 ? (
-          <p className="mt-2 text-[13.5px] font-medium text-[#6a6a6a]">
-            Nessun allievo ha crediti: cambia solo l&apos;unità.
-          </p>
-        ) : (
-          <div className="mt-1 divide-y divide-[#efefef]" data-testid="credit-unit-rows">
-            {visible.map((row) => (
-              <div key={row.studentId} className="flex min-h-14 items-center gap-3.5 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[15px] font-medium text-foreground">{row.name}</div>
-                  {row.remainderLabel ? (
-                    <div className="mt-0.5 text-[13px] font-medium text-[#929292]">{row.remainderLabel}</div>
-                  ) : null}
+        ) : null}
+
+        <AnimatePresence initial={false}>
+          {preview && hasCredits ? (
+            <motion.div key="conversion" {...REVEAL} className="overflow-hidden" data-testid="credit-unit-conversion">
+              <Question
+                title={toMinutes ? "Le guide già caricate quanto valgono?" : "Quanto tempo vale una guida?"}
+                hint={
+                  toMinutes
+                    ? `${studentsWord} ancora guide da usare.`
+                    : `Serve a trasformare in guide le ore che ${rows.length === 1 ? "1 allievo ha" : `${rows.length} allievi hanno`} ancora.`
+                }
+              >
+                {PRESET_MINUTES.map((minutes) => (
+                  <ChoiceRow
+                    key={minutes}
+                    selected={!custom && minutesPerLesson === minutes}
+                    label={durationWords(minutes)}
+                    onSelect={() => pickPreset(minutes)}
+                    testId={`credit-unit-preset-${minutes}`}
+                  />
+                ))}
+                <div>
+                  <ChoiceRow
+                    selected={custom}
+                    label="Altro"
+                    onSelect={pickCustom}
+                    testId="credit-unit-preset-custom"
+                  />
+                  <AnimatePresence initial={false}>
+                    {custom ? (
+                      <motion.div key="custom" {...REVEAL} className="overflow-hidden">
+                        <div className="pb-3.5">
+                          <label className="flex h-12 w-[200px] items-center rounded-[14px] bg-white px-[18px] shadow-clay-sink transition-shadow duration-200 focus-within:shadow-clay-focus">
+                            <input
+                              ref={customInputRef}
+                              type="text"
+                              inputMode="numeric"
+                              value={customDraft}
+                              onChange={(e) => setCustomDraft(e.target.value.replace(/[^\d]/g, "").slice(0, 3))}
+                              aria-label="Minuti di una guida"
+                              data-testid="credit-unit-minutes-per-lesson"
+                              className="w-full min-w-0 border-0 bg-transparent text-[15px] font-medium tabular-nums text-foreground outline-none"
+                            />
+                            <span className="shrink-0 pl-2 text-[15px] font-medium text-[#8a8a8a]">minuti</span>
+                          </label>
+                          <p
+                            className={cn(
+                              "mt-2 text-[13px] font-medium",
+                              customInvalid ? "text-foreground" : "text-[#8a8a8a]",
+                            )}
+                          >
+                            {customInvalid
+                              ? "Scrivi un numero di minuti tra 15 e 240."
+                              : `Una guida vale ${formatDrivingMinutes(minutesPerLesson)}.`}
+                          </p>
+                        </div>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
                 </div>
-                <div className="whitespace-nowrap text-[15px] font-medium tabular-nums text-[#929292]">
-                  {row.beforeLabel}
+              </Question>
+
+              {!toMinutes ? (
+                <Question title="E i minuti che non fanno una guida intera?">
+                  {remainderPolicyExamples(minutesPerLesson).map((option) => (
+                    <ChoiceRow
+                      key={option.policy}
+                      selected={policy === option.policy}
+                      label={REMAINDER_LABELS[option.policy]}
+                      hint={option.examples.join(" · ")}
+                      onSelect={() => setPolicy(option.policy)}
+                      testId={`credit-unit-remainder-${option.policy}`}
+                    />
+                  ))}
+                </Question>
+              ) : null}
+
+              <div className="mt-6 rounded-[18px] bg-[#f7f7f7] px-5 py-4" data-testid="credit-unit-rows">
+                <div className="text-[13px] font-semibold text-[#5f5f5f]">Così cambiano i saldi</div>
+                <div className={cn("mt-1.5 transition-opacity duration-200", stale && "opacity-50")}>
+                  {examples.map((row) => (
+                    <div key={row.studentId} className="flex items-baseline gap-3 py-1.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[15px] font-medium text-foreground">{row.name}</div>
+                        {row.remainderLabel ? (
+                          <div className="text-[13px] font-medium text-[#8a8a8a]">{row.remainderLabel}</div>
+                        ) : null}
+                      </div>
+                      <div className="whitespace-nowrap text-[15px] font-medium tabular-nums text-[#8a8a8a]">
+                        {row.beforeLabel}
+                        <span className="px-1.5 text-[#b8b8b8]">→</span>
+                        <AnimatePresence mode="popLayout" initial={false}>
+                          <motion.span
+                            key={row.afterLabel}
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -4 }}
+                            transition={{ duration: 0.2, ease: EASE }}
+                            className="inline-block font-semibold text-foreground"
+                          >
+                            {row.afterLabel}
+                          </motion.span>
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <ArrowRight aria-hidden className="size-3.5 shrink-0 text-[#b8b8b8]" strokeWidth={2} />
-                <div className="min-w-16 whitespace-nowrap text-right text-[15px] font-semibold tabular-nums text-foreground sm:min-w-[76px]">
-                  {row.afterLabel}
-                </div>
+                {others > 0 ? (
+                  <div className="mt-1 text-[13px] font-medium text-[#8a8a8a]">
+                    {others === 1 ? "e un altro allievo" : `e altri ${others} allievi`}
+                  </div>
+                ) : null}
               </div>
-            ))}
-            {rows.length > VISIBLE_ROWS && !showAll ? (
-              <div className="pt-3.5">
-                <button
-                  type="button"
-                  onClick={() => setShowAll(true)}
-                  className="cursor-pointer text-[13.5px] font-semibold text-foreground underline decoration-[1.5px] underline-offset-4"
-                >
-                  Vedi tutti e {rows.length}
-                </button>
-              </div>
-            ) : null}
-          </div>
-        )}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
         {preview && preview.paidFutureLessons > 0 ? (
-          <p className="mt-5 text-[13px] font-medium leading-normal text-[#6a6a6a]">
+          <p className="mt-5 text-[13px] font-medium leading-normal text-[#8a8a8a]">
             {preview.paidFutureLessons === 1
               ? "La guida già pagata in agenda resta pagata."
               : `Le ${preview.paidFutureLessons} guide già pagate in agenda restano pagate.`}
             {preview.paidFutureLessons === 1 ? " Se viene annullata in tempo" : " Se una viene annullata in tempo"}
-            {toMinutes
-              ? ", all'allievo torna la sua durata: 90 minuti per una guida da 90."
-              : ", all'allievo torna una guida."}
+            {toMinutes ? ", all'allievo torna la sua durata." : ", all'allievo torna una guida."}
           </p>
         ) : null}
 
-        <div className="mt-6 flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
+        <div className="mt-7 flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" disabled={saving} onClick={() => onOpenChange(false)}>
             Annulla
           </Button>
           <Button
             type="button"
             loading={saving}
-            disabled={!preview || saving}
+            disabled={stale || saving}
             onClick={() => void confirm()}
             data-testid="credit-unit-confirm"
           >

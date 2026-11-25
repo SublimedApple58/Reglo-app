@@ -8,6 +8,7 @@ import {
   parseLessonCreditUnit,
   parseRemainderPolicy,
   refundAmount,
+  remainderPolicyExamples,
 } from "@/lib/autoscuole/lesson-credit-unit";
 
 /** REG-783: crediti guida a guide o a minuti, con le regole di Tiziano (24/11/2026). */
@@ -118,5 +119,19 @@ describe("testi", () => {
     expect(formatRemainder(30)).toBe("30 minuti in più");
     expect(formatRemainder(-15)).toBe("15 minuti persi");
     expect(formatRemainder(0)).toBeNull();
+  });
+});
+
+describe("remainderPolicyExamples (REG-788)", () => {
+  it("guida da 1 ora: 2 ore e 20 e 2 ore e 40, a parole", () => {
+    expect(remainderPolicyExamples(60)).toEqual([
+      { policy: "round", examples: ["2 ore e 20 → 2 guide", "2 ore e 40 → 3 guide"] },
+      { policy: "floor", examples: ["2 ore e 20 → 2 guide"] },
+      { policy: "ceil", examples: ["2 ore e 20 → 3 guide"] },
+    ]);
+  });
+  it("guida da 45 minuti: al più vicino scende sotto la mezza guida e sale sopra", () => {
+    const [round] = remainderPolicyExamples(45);
+    expect(round.examples).toEqual(["1 ora e 45 → 2 guide", "2 ore → 3 guide"]);
   });
 });

@@ -40,7 +40,7 @@ Lesson credit ledger, Stripe payment processing, payment plans, penalties, invoi
 - `lib/autoscuole/receipt.tsx` — PDF receipt generation via @react-pdf/renderer
 - `lib/integrations/fatture-in-cloud.ts` — Italian invoicing integration
 - `components/pages/Autoscuole/PaymentsSettingsPane.tsx` — sotto-scheda «Crediti e annullamenti» (Impostazioni → Prenotazioni e allievi), con «Un credito vale»
-- `components/pages/Autoscuole/settings/CreditUnitSwitchDialog.tsx` — dialogo di passaggio guide ↔ ore (REG-783)
+- `components/pages/Autoscuole/settings/CreditUnitSwitchDialog.tsx` — dialogo di passaggio guide ↔ ore (REG-783; testi e UI rifatti in REG-788: una frase su cosa cambia da ora, domande con scelte pronte (45 min / 1 ora / 1 ora e mezza / Altro in minuti) e arrotondamento spiegato con esempi (`remainderPolicyExamples`) solo se qualche allievo ha crediti, esempio vero dei primi 3 saldi + «e altri N allievi»)
 - `lib/autoscuole/lesson-credit-unit.ts` — funzioni pure: costo, rimborso, conversione, testi (REG-783)
 - `lib/actions/autoscuole-credit-unit.actions.ts` — anteprima e passaggio di unità (REG-783)
 
