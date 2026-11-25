@@ -10,7 +10,7 @@
 import { PrismaClient, type Prisma } from "@prisma/client";
 
 import { buildCleanTrack, needsRebuild } from "../../lib/autoscuole/road/clean-track";
-import type { RoadPoint } from "../../lib/autoscuole/road/geo";
+import { loadRoadTrack } from "../../lib/autoscuole/road/maintenance";
 
 const args = process.argv.slice(2);
 const has = (f: string) => args.includes(f);
@@ -37,9 +37,8 @@ async function main() {
   for (let i = 0; i < todo.length; i += CONCURRENCY) {
     await Promise.all(
       todo.slice(i, i + CONCURRENCY).map(async (id) => {
-        const batches = await db.roadPointBatch.findMany({ where: { sessionId: id }, orderBy: { seq: "asc" }, select: { points: true } });
-        const points = batches.flatMap((b) => (Array.isArray(b.points) ? (b.points as unknown as RoadPoint[]) : []));
-        const track = await buildCleanTrack(points);
+        // punti in ordine di tempo, come a fine guida (i lotti possono arrivare fuori ordine)
+        const track = await buildCleanTrack(await loadRoadTrack(db as never, id));
         if (track.snapped) snapped++;
         else fallback++;
         stops += track.stops.length;
