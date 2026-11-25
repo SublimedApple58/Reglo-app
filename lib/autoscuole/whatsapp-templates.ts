@@ -215,16 +215,18 @@ export const WHATSAPP_TEMPLATES = {
    * fila (vedi `creation-notice.ts`). `guide` è «la guida di giovedì 20
    * novembre alle 15:00» oppure «3 guide: giovedì 20/11 alle 15:00, …». Niente
    * istruttore (decisione di Tiziano): resta in push ed email. Nato già col
-   * piè di pagina STOP, quindi non ha una versione precedente. Approvato
-   * utility da Meta il 18/11 (letto via GET su Telnyx il 23/11, REG-771). */
+   * piè di pagina STOP. `_v1` approvato utility da Meta il 18/11 (letto via
+   * GET su Telnyx il 23/11, REG-771).
+   * `_v2` (25/11, richiesta di Federica del consorzio): via «Per modifiche o
+   * disdette contatta l'autoscuola», chiusura «Ti aspettiamo in autoscuola.»
+   * come push ed email. Finché Meta non lo approva parte la `_v1`. */
   appointment_created: {
-    name: "guida_fissata_allievo_v1",
+    name: "guida_fissata_allievo_v2",
     category: "utility",
-    approval: "approved",
+    approval: "pending",
+    previous: { name: "guida_fissata_allievo_v1", category: "utility", approval: "approved" },
     variables: ["nome", "guide"],
-    body:
-      "Ciao {{1}}, l'autoscuola ha fissato per te {{2}}. " +
-      "Per modifiche o disdette contatta l'autoscuola.",
+    body: "Ciao {{1}}, ti abbiamo fissato {{2}}. Ti aspettiamo in autoscuola.",
   },
   case_deadline: {
     name: "scadenza_documento_allievo_v3",

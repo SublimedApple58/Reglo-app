@@ -160,6 +160,8 @@ utility**, quindi tutte le righe di «Automatici» hanno un modello. I `_v2` di
 mattutino e guida spostata restano marketing su Meta e non si usano. **Quando
 Meta cambia stato o categoria a un modello, aggiornare `approval`/`category`
 qui** (lo stato si legge con `GET /v2/whatsapp/message_templates` su Telnyx).
+Dal 25/11 `guida_fissata_allievo_v2` è `pending` (chiusura «Ti aspettiamo in
+autoscuola.»): fino all'approvazione parte la `_v1`.
 
 ## Consenso
 

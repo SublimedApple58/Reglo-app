@@ -7,7 +7,11 @@ import {
   initialCreationNotice,
   isReadyToFlush,
 } from "@/lib/autoscuole/creation-notice";
-import { WHATSAPP_TEMPLATES, buildTemplateParameters } from "@/lib/autoscuole/whatsapp-templates";
+import {
+  WHATSAPP_TEMPLATES,
+  buildTemplateParameters,
+  sendableTemplateName,
+} from "@/lib/autoscuole/whatsapp-templates";
 
 /**
  * REG-758 — avviso «guida fissata». Le regole da blindare:
@@ -96,8 +100,8 @@ describe("creationNoticeText (push ed email)", () => {
     expect(creationNoticeText([thursday])).toEqual({
       title: "📅 Guida fissata",
       body:
-        "Ti è stata fissata una guida per giovedì 19 novembre alle 15:00 con Marco Rossi. " +
-        "Per modifiche o disdette contatta l'autoscuola.",
+        "Ti è stata fissata la guida di giovedì 19 novembre alle 15:00 con Marco Rossi. " +
+        "Ti aspettiamo in autoscuola.",
     });
   });
 
@@ -106,7 +110,7 @@ describe("creationNoticeText (push ed email)", () => {
     expect(text.title).toBe("📅 2 guide fissate");
     expect(text.body).toBe(
       "Ti sono state fissate 2 guide con Marco Rossi: giovedì 19 novembre alle 15:00 e " +
-        "venerdì 20 novembre alle 09:00. Per modifiche o disdette contatta l'autoscuola.",
+        "venerdì 20 novembre alle 09:00. Ti aspettiamo in autoscuola.",
     );
   });
 
@@ -146,11 +150,10 @@ describe("creationNoticeWhatsAppGuides (variabile {{2}} del template)", () => {
 
   it("il template ha le due variabili nell'ordine giusto e il testo approvato da Tiziano", () => {
     const template = WHATSAPP_TEMPLATES.appointment_created;
-    expect(template.name).toBe("guida_fissata_allievo_v1");
+    expect(template.name).toBe("guida_fissata_allievo_v2");
     expect(template.category).toBe("utility");
     expect(template.body).toBe(
-      "Ciao {{1}}, l'autoscuola ha fissato per te {{2}}. " +
-        "Per modifiche o disdette contatta l'autoscuola.",
+      "Ciao {{1}}, ti abbiamo fissato {{2}}. Ti aspettiamo in autoscuola.",
     );
     expect(
       buildTemplateParameters("appointment_created", {
@@ -182,5 +185,24 @@ describe("groupCreationNoticeBatches (inbox mobile)", () => {
     const batches = groupCreationNoticeBatches(rows);
     expect(batches[0]).toHaveLength(8);
     expect(batches[1].map((r) => r.id)).toEqual(["8"]);
+  });
+});
+
+describe("chiusura senza «modifiche o disdette» (25/11)", () => {
+  it("push ed email non invitano più a disdire", () => {
+    for (const lessons of [[thursday], [thursday, friday]]) {
+      const { body } = creationNoticeText(lessons);
+      expect(body).not.toContain("disdette");
+      expect(body.endsWith("Ti aspettiamo in autoscuola.")).toBe(true);
+    }
+  });
+
+  it("finché Meta non approva la v2 parte la v1", () => {
+    const template = WHATSAPP_TEMPLATES.appointment_created;
+    expect(template.approval).toBe("pending");
+    expect(sendableTemplateName(template)).toBe("guida_fissata_allievo_v1");
+    expect(sendableTemplateName({ ...template, approval: "approved" })).toBe(
+      "guida_fissata_allievo_v2",
+    );
   });
 });

@@ -169,7 +169,12 @@ const sharedInstructor = (lessons: NoticeLesson[]) => {
   return name ? ` con ${name}` : "";
 };
 
-const CLOSING = "Per modifiche o disdette contatta l'autoscuola.";
+/**
+ * Chiusura uguale per tutti (richiesta di Federica del consorzio, approvata da
+ * Tiziano il 25/11): prima era «Per modifiche o disdette contatta
+ * l'autoscuola.», tolta perché invitava gli allievi a disdire.
+ */
+const CLOSING = "Ti aspettiamo in autoscuola.";
 
 /** Titolo e testo di push ed email. Il nome dell'istruttore sta solo qui. */
 export function creationNoticeText(input: NoticeLesson[]): NotificationText {
@@ -181,7 +186,7 @@ export function creationNoticeText(input: NoticeLesson[]): NotificationText {
     return {
       title: group ? "📅 Guida di gruppo fissata" : "📅 Guida fissata",
       body:
-        `Ti è stata fissata una ${group ? "guida di gruppo" : "guida"} per ` +
+        `Ti è stata fissata la ${group ? "guida di gruppo" : "guida"} di ` +
         `${when}${sharedInstructor(lessons)}. ${CLOSING}`,
     };
   }
@@ -197,10 +202,11 @@ export function creationNoticeText(input: NoticeLesson[]): NotificationText {
 }
 
 /**
- * La variabile `guide` del template `guida_fissata_allievo_v1`:
- * «Ciao {{1}}, l'autoscuola ha fissato per te {{2}}. Per modifiche o disdette
- * contatta l'autoscuola.» Senza istruttore (decisione 17/11), tutto su una
- * riga (Meta rifiuta gli a capo nei parametri).
+ * La variabile `guide` dei template `guida_fissata_allievo_v2` («Ciao {{1}},
+ * ti abbiamo fissato {{2}}. Ti aspettiamo in autoscuola.») e `_v1` («Ciao
+ * {{1}}, l'autoscuola ha fissato per te {{2}}. …»): stesso valore, grammaticale
+ * in tutti e due sia con una guida sia con più. Senza istruttore (decisione
+ * 17/11), tutto su una riga (Meta rifiuta gli a capo nei parametri).
  */
 export function creationNoticeWhatsAppGuides(input: NoticeLesson[]): string {
   const lessons = byStart(input);

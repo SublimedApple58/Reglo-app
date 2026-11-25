@@ -46,6 +46,18 @@ giovedì 19/11 alle 15:00, …»), senza istruttore. Sottomesso a Meta via Telny
 `deliverWhatsApp` registra `skipped` (gli altri canali accesi partono comunque). **Quando Meta
 approva: `approval: "approved"` in `whatsapp-templates.ts`** e deploy di web e job.
 
+**`_v2` (25/11, richiesta di Federica del consorzio, per tutti):** via «Per
+modifiche o disdette contatta l'autoscuola», chiusura «Ti aspettiamo in
+autoscuola.». Testo: «Ciao {{1}}, ti abbiamo fissato {{2}}. Ti aspettiamo in
+autoscuola.» (stessa variabile `guide`, grammaticale con una o più guide).
+Sottomesso via Telnyx il 25/11 (template_id 28545463591795851). Nel registro è
+`pending` con la `_v1` approvata come `previous`: finché Meta non approva parte
+la `_v1`. **Quando Meta approva: `approval: "approved"`** e deploy di web e job.
+
+Push ed email: «Ti è stata fissata la guida di giovedì 20 novembre alle 15:00
+[con Marco Rossi]. Ti aspettiamo in autoscuola.»; più guide: «Ti sono state
+fissate 3 guide [con …]: …. Ti aspettiamo in autoscuola.»
+
 ## Files
 - `lib/autoscuole/creation-notice.ts` — regole e testi (puro, testato in `tests/unit/autoscuole/creation-notice.test.ts`)
 - `lib/autoscuole/creation-notice-queue.ts` — `creationNoticeFor`, `processAutoscuolaCreationNotices`
