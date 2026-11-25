@@ -114,6 +114,18 @@ La CI **Staging Smoke** (`.github/workflows/staging-smoke.yml`) gira a ogni push
 
 ---
 
+## 💳 Crediti guida su staging
+
+Su «Autoscuola Reglo» (`655e408a-…`) il conteggio crediti è **spento**
+(`CompanyService.limits.lessonCreditFlowEnabled = false`): in Impostazioni ›
+Prenotazioni e allievi › Crediti e annullamenti la riga **«Un credito vale»**
+(e il suo dialogo guide ↔ ore, REG-783/788) **non compare**. Nessun allievo ha
+saldo diverso da zero. Per provarla serve accendere il flag a mano (e dare
+qualche saldo), invalidare la cache Redis delle impostazioni
+(`autoscuole:v1:<companyId>:settings:version`) e poi rimettere tutto com'era.
+
+---
+
 ## 🚗 Reglo Road su staging
 
 Road nasce spento (`CompanyService.limits.roadEnabled`, vale solo `=== true`). Su
