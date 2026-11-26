@@ -63,7 +63,31 @@ export async function assertCanWriteAvailability(
     });
     ownInstructorId = own?.id ?? null;
   }
-  return canWriteAvailability(m, ownerType, ownerId, ownInstructorId) ? null : AVAILABILITY_WRITE_FORBIDDEN;
+  if (!canWriteAvailability(m, ownerType, ownerId, ownInstructorId)) return AVAILABILITY_WRITE_FORBIDDEN;
+  // REG-794: il ruolo non basta, il proprietario della disponibilità deve
+  // essere dell'autoscuola di chi scrive (prima il titolare passava con
+  // qualunque id). Le scritture salvano poi con il `companyId` di chi scrive.
+  return (await ownerBelongsToCompany(m.companyId, ownerType, ownerId)) ? null : AVAILABILITY_WRITE_FORBIDDEN;
+}
+
+async function ownerBelongsToCompany(
+  companyId: string,
+  ownerType: AvailabilityOwnerType,
+  ownerId: string,
+): Promise<boolean> {
+  if (ownerType === "instructor") {
+    return Boolean(
+      await prisma.autoscuolaInstructor.findFirst({ where: { id: ownerId, companyId }, select: { id: true } }),
+    );
+  }
+  if (ownerType === "vehicle") {
+    return Boolean(
+      await prisma.autoscuolaVehicle.findFirst({ where: { id: ownerId, companyId }, select: { id: true } }),
+    );
+  }
+  return Boolean(
+    await prisma.companyMember.findFirst({ where: { userId: ownerId, companyId }, select: { userId: true } }),
+  );
 }
 
 /** Guide fuori disponibilità: le approva lo staff, mai un allievo. */

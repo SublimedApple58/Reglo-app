@@ -60,6 +60,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Instructor Clusters**: `parseInstructorSettings()` for availabilityMode
 - → **Mobile**: `InstructorAvailabilityScreen`, `PublicationModeEditor`, booking flow in `AllievoHomeScreen`
 - → **App titolare (REG-795)**: `GET /api/autoscuole/agenda/availability` espone `getInstructorAvailabilityForAgenda` al mobile (`useSchoolAvailability`): chi cambia la forma delle fasce dell'agenda web la cambia anche all'app. Vedi `features/owner-mobile-agenda.md`
+- → **App titolare (REG-794 B1/B2)**: `instructors/[id]/availability-mode` scrive solo `settings.availabilityMode` (chi aggiunge campi a `settings` non li perde); `assertCanWriteAvailability` ora verifica anche che il proprietario sia dell'autoscuola, e vale per web e app; `availability/slots` invalida l'AGENDA come il salvataggio web
 
 ### Lezione teorica (agenda)
 - **È un** `AutoscuolaInstructorBlock` con `reason:"theory_lesson"` (nessuna migrazione, nessun modello nuovo)
