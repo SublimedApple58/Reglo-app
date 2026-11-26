@@ -37,6 +37,11 @@ type DayState = {
   ranges: TimeRange[];
   /** true = not persisted yet, projected from last published week / base */
   isTemplate: boolean;
+  /**
+   * REG-799: giorno non salvato che pubblicando prenderà questi orari (testo
+   * grigio + «Come la settimana del 30 nov» / «Come la settimana tipo»).
+   */
+  borrowed: boolean;
 };
 
 const WEEK_COUNT = 8;
@@ -96,6 +101,8 @@ export function InstructorPublicationEditor({
   const [draftOn, setDraftOn] = React.useState(true);
   const [draftRanges, setDraftRanges] = React.useState<TimeRange[]>([DEFAULT_RANGE]);
   const [savingDay, setSavingDay] = React.useState(false);
+  /** Provenienza dei giorni presi in prestito nella settimana mostrata. */
+  const [borrowLabel, setBorrowLabel] = React.useState<string | null>(null);
 
   const loadPublished = React.useCallback(async () => {
     const res = await getInstructorPublishedWeeks({
@@ -113,9 +120,11 @@ export function InstructorPublicationEditor({
   // salvava) i giorni della settimana sbagliata.
   const loadSeq = React.useRef(0);
   const loadWeek = React.useCallback(
-    async (weekYmd: string) => {
+    async (weekYmd: string, opts?: { quiet?: boolean }) => {
       const seq = ++loadSeq.current;
-      setLoading(true);
+      // quiet: dopo il salvataggio di un giorno niente scheletro, così le righe
+      // restano montate e il giorno passa da grigio a nero con la transizione.
+      if (!opts?.quiet) setLoading(true);
       setEditIdx(null);
       try {
         const from = weekYmd;
@@ -137,6 +146,7 @@ export function InstructorPublicationEditor({
         // days. REG-799: niente ripiego su una settimana pubblicata DOPO (il
         // backend non lo fa: si vedevano orari che pubblicando non arrivavano).
         const templateByDow = new Map<number, TimeRange[]>();
+        let label: string | null = null;
         const lastPublished = Array.from(published)
           .filter((w) => w < weekYmd)
           .sort()
@@ -153,8 +163,13 @@ export function InstructorPublicationEditor({
               templateByDow.set(new Date(o.date).getUTCDay(), positive(o.ranges));
             }
           }
+          if (templateByDow.size) {
+            const lp = new Date(lastPublished + "T00:00:00Z");
+            label = `Come la settimana del ${lp.getUTCDate()} ${MONTHS[lp.getUTCMonth()]}`;
+          }
         }
         if (!templateByDow.size && base) {
+          label = "Come la settimana tipo";
           if (base.rangesByDay) {
             for (const [dow, ranges] of Object.entries(base.rangesByDay)) {
               templateByDow.set(Number(dow), positive(ranges));
@@ -168,6 +183,8 @@ export function InstructorPublicationEditor({
         }
 
         if (seq !== loadSeq.current) return;
+        const isPublishedWeek = published.has(weekYmd);
+        setBorrowLabel(isPublishedWeek ? null : label);
         const start = new Date(weekYmd + "T00:00:00Z");
         setDays(
           Array.from({ length: 7 }, (_, i) => {
@@ -175,7 +192,8 @@ export function InstructorPublicationEditor({
             const dow = addDaysUTC(start, i).getUTCDay();
             const override = byDate.get(date);
             const ranges = override ?? templateByDow.get(dow) ?? [];
-            return { date, on: ranges.length > 0, ranges, isTemplate: override === undefined };
+            const isTemplate = override === undefined;
+            return { date, on: ranges.length > 0, ranges, isTemplate, borrowed: isTemplate && !isPublishedWeek && label !== null };
           }),
         );
       } finally {
@@ -242,7 +260,7 @@ export function InstructorPublicationEditor({
     }
     toast.success({ description: "Giornata salvata." });
     setEditIdx(null);
-    await loadWeek(selWeek);
+    await loadWeek(selWeek, { quiet: true });
     onChanged?.();
   };
 
@@ -337,20 +355,37 @@ export function InstructorPublicationEditor({
                       {dateObj.getUTCDate()} {MONTHS[dateObj.getUTCMonth()]}
                     </span>
                   </span>
-                  {d.on && d.ranges.length ? (
-                    <span className="ml-auto flex flex-wrap justify-end gap-1">
-                      {d.ranges.map((r, ri) => (
-                        <span key={ri} className="rounded-full border border-border bg-white px-2 py-0.5 text-[10.5px] font-semibold tabular-nums">
-                          {fmtMin(r.startMinutes)}–{fmtMin(r.endMinutes)}
-                          {locationName(r.locationId) ? (
-                            <span className="ml-1 font-medium text-muted-foreground">{locationName(r.locationId)}</span>
-                          ) : null}
-                        </span>
-                      ))}
+                  {/* REG-799: orari in nero solo se il giorno è salvato; quelli presi
+                      dalla settimana prima restano grigi con la provenienza sotto. */}
+                  <span className="ml-auto flex min-w-0 flex-col items-end text-right">
+                    <span
+                      className={cn(
+                        "text-[11.5px] font-semibold tabular-nums transition-colors duration-300 ease-out",
+                        d.borrowed ? "text-gray-400" : "text-foreground",
+                      )}
+                    >
+                      {d.on && d.ranges.length
+                        ? d.ranges.map((r, ri) => (
+                            <span key={ri}>
+                              {ri > 0 ? " · " : null}
+                              {fmtMin(r.startMinutes)}–{fmtMin(r.endMinutes)}
+                              {locationName(r.locationId) ? (
+                                <span className="font-medium"> {locationName(r.locationId)}</span>
+                              ) : null}
+                            </span>
+                          ))
+                        : "Riposo"}
                     </span>
-                  ) : (
-                    <span className="ml-auto text-[11.5px] text-muted-foreground/70">Riposo</span>
-                  )}
+                    <span
+                      className={cn(
+                        "grid transition-[grid-template-rows,opacity] duration-300 ease-out",
+                        d.borrowed && borrowLabel ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+                      )}
+                      aria-hidden={!d.borrowed}
+                    >
+                      <span className="overflow-hidden text-[10.5px] font-medium text-gray-400">{borrowLabel}</span>
+                    </span>
+                  </span>
                   <ChevronRight className={cn("size-3.5 shrink-0 text-gray-300 transition-transform", open && "rotate-90")} />
                 </button>
                 {open && (
