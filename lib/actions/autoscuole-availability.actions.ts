@@ -6351,14 +6351,11 @@ export async function publishInstructorWeek(input: z.infer<typeof publishWeekSch
       return { success: false as const, message: "La data deve essere un lunedì." };
     }
 
-    // For each day of the week: if no override exists, copy from the last published week's overrides.
-    // If no previous published week, copy from the default weekly availability.
-    const lastPublished = await prisma.autoscuolaInstructorPublishedWeek.findFirst({
-      where: { companyId, instructorId, weekStart: { lt: weekStart } },
-      orderBy: { weekStart: "desc" },
-      select: { weekStart: true },
-    });
-
+    // REG-799 (Tiziano, 26/11): ogni settimana a sé. Si pubblicano SOLO i giorni
+    // salvati in questa settimana; gli altri escono a riposo. Niente eredità
+    // dall'ultima settimana pubblicata né dalla settimana tipo. Il riposo va
+    // scritto come override vuoto: senza override il resolver ripiegherebbe
+    // sulla disponibilità predefinita e il giorno tornerebbe prenotabile.
     const existingOverrides = await prisma.autoscuolaDailyAvailabilityOverride.findMany({
       where: {
         companyId,
@@ -6374,57 +6371,12 @@ export async function publishInstructorWeek(input: z.infer<typeof publishWeekSch
       }),
     );
 
-    // Load source for missing days
-    let sourceOverrides: Array<{ date: Date; ranges: unknown }> = [];
-    let defaultAvail: AvailabilityRecord | null = null;
-
-    if (lastPublished) {
-      const lpStart = new Date(lastPublished.weekStart);
-      sourceOverrides = await prisma.autoscuolaDailyAvailabilityOverride.findMany({
-        where: {
-          companyId,
-          ownerType: "instructor",
-          ownerId: instructorId,
-          date: { gte: lpStart, lt: new Date(lpStart.getTime() + 7 * 86400000) },
-        },
-        select: { date: true, ranges: true },
-      });
-    }
-    if (!sourceOverrides.length) {
-      const weeklyAvail = await prisma.autoscuolaWeeklyAvailability.findFirst({
-        where: { companyId, ownerType: "instructor", ownerId: instructorId },
-      });
-      if (weeklyAvail) {
-        defaultAvail = defaultToAvailabilityRecord(weeklyAvail);
-      }
-    }
-
-    // Create missing overrides
+    // Missing days → day off
     for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
       const entryDate = new Date(weekStart.getTime() + dayOffset * 86400000);
       const dateStr = `${entryDate.getUTCFullYear()}-${String(entryDate.getUTCMonth() + 1).padStart(2, "0")}-${String(entryDate.getUTCDate()).padStart(2, "0")}`;
       if (existingDates.has(dateStr)) continue;
-
-      let ranges: TimeRange[] = [];
-      if (sourceOverrides.length) {
-        // Find matching day of week from source
-        const sourceDayOffset = dayOffset;
-        const sourceEntry = sourceOverrides.find((o) => {
-          const d = new Date(o.date);
-          const lpDow = (d.getUTCDay() + 6) % 7; // Mon=0
-          return lpDow === sourceDayOffset;
-        });
-        if (sourceEntry) {
-          ranges = parseRanges(sourceEntry.ranges);
-        }
-      } else if (defaultAvail) {
-        const dayOfWeek = dayOffset === 6 ? 0 : dayOffset + 1; // Convert Mon=0..Sun=6 to Sun=0..Sat=6
-        // rangesForDay honours per-day schedules (rangesByDay): with a per-day
-        // base, defaultToAvailabilityRecord leaves the flat `ranges` EMPTY, so
-        // reading it directly materialized every day as OFF (bug 2026-07-07).
-        ranges = rangesForDay(defaultAvail, dayOfWeek);
-      }
-      // Ranges empty = day off
+      const ranges: TimeRange[] = [];
 
       await prisma.autoscuolaDailyAvailabilityOverride.upsert({
         where: {

@@ -942,7 +942,6 @@ function DisponibilitaTab({
         // il titolare vede/gestisce il rail di pubblicazione (editor esistente).
         <InstructorPublicationEditor
           instructorId={instructor.id}
-          base={weekly ?? null}
           onChanged={refreshAgenda}
           locations={locationMode ? rangeLocations : null}
         />

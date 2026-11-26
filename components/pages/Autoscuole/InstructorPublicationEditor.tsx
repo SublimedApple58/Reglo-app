@@ -21,22 +21,11 @@ import {
 
 /** REG-724: `locationId` = luogo della fascia (REG-705), assente/null = tutti i luoghi. */
 type TimeRange = { startMinutes: number; endMinutes: number; locationId?: string | null };
-type BaseAvailability = {
-  daysOfWeek: number[];
-  startMinutes: number;
-  endMinutes: number;
-  ranges?: TimeRange[];
-  /** Per-weekday map — authoritative over the flat ranges when present. */
-  rangesByDay?: Record<string, TimeRange[]>;
-} | null;
-
 type DayState = {
   /** YYYY-MM-DD (UTC) */
   date: string;
   on: boolean;
   ranges: TimeRange[];
-  /** true = not persisted yet, projected from last published week / base */
-  isTemplate: boolean;
 };
 
 const WEEK_COUNT = 8;
@@ -70,12 +59,10 @@ function weekLabel(weekYmd: string) {
 
 export function InstructorPublicationEditor({
   instructorId,
-  base,
   onChanged,
   locations = null,
 }: {
   instructorId: string;
-  base: BaseAvailability;
   /** Called after publish/unpublish/day-save so the parent can refresh the agenda. */
   onChanged?: () => void;
   /** REG-724: luoghi delle fasce, solo con «Disponibilità per luogo» effettiva (null = spenta). */
@@ -131,58 +118,21 @@ export function InstructorPublicationEditor({
           for (const o of res.data) byDate.set(ymd(new Date(o.date)), positive(o.ranges));
         }
 
-        // Fallback template for days without an override: the last published
-        // week BEFORE this one, same weekday, else the base weekly availability
-        // — the SAME chain publishInstructorWeek uses to materialize missing
-        // days. REG-799: niente ripiego su una settimana pubblicata DOPO (il
-        // backend non lo fa: si vedevano orari che pubblicando non arrivavano).
-        const templateByDow = new Map<number, TimeRange[]>();
-        const lastPublished = Array.from(published)
-          .filter((w) => w < weekYmd)
-          .sort()
-          .reverse()[0];
-        if (lastPublished && byDate.size < 7) {
-          const tmpl = await getDailyAvailabilityOverrides({
-            ownerType: "instructor",
-            ownerId: instructorId,
-            from: lastPublished,
-            to: ymd(addDaysUTC(new Date(lastPublished + "T00:00:00Z"), 6)),
-          });
-          if (tmpl.success && tmpl.data) {
-            for (const o of tmpl.data) {
-              templateByDow.set(new Date(o.date).getUTCDay(), positive(o.ranges));
-            }
-          }
-        }
-        if (!templateByDow.size && base) {
-          if (base.rangesByDay) {
-            for (const [dow, ranges] of Object.entries(base.rangesByDay)) {
-              templateByDow.set(Number(dow), positive(ranges));
-            }
-          } else {
-            const baseRanges = base.ranges?.length
-              ? base.ranges
-              : [{ startMinutes: base.startMinutes, endMinutes: base.endMinutes }];
-            for (const dow of base.daysOfWeek) templateByDow.set(dow, baseRanges);
-          }
-        }
-
         if (seq !== loadSeq.current) return;
         const start = new Date(weekYmd + "T00:00:00Z");
         setDays(
           Array.from({ length: 7 }, (_, i) => {
             const date = ymd(addDaysUTC(start, i));
-            const dow = addDaysUTC(start, i).getUTCDay();
-            const override = byDate.get(date);
-            const ranges = override ?? templateByDow.get(dow) ?? [];
-            return { date, on: ranges.length > 0, ranges, isTemplate: override === undefined };
+            // REG-799: ogni settimana a sé — solo i giorni salvati qui, gli altri a riposo.
+            const ranges = byDate.get(date) ?? [];
+            return { date, on: ranges.length > 0, ranges };
           }),
         );
       } finally {
         if (seq === loadSeq.current) setLoading(false);
       }
     },
-    [instructorId, base, published],
+    [instructorId],
   );
 
   React.useEffect(() => {
@@ -420,7 +370,7 @@ export function InstructorPublicationEditor({
 
       <p className="flex items-start gap-1.5 text-[10.5px] leading-snug text-muted-foreground">
         <span className="mt-px flex size-3.5 shrink-0 items-center justify-center rounded-full border border-gray-300 text-[8px] text-gray-400">i</span>
-        Le settimane nuove partono dall&apos;ultima settimana pubblicata. Gli allievi possono prenotare solo le settimane pubblicate.
+        Ogni settimana parte vuota: si pubblicano solo i giorni salvati. Gli allievi possono prenotare solo le settimane pubblicate.
       </p>
     </div>
   );
