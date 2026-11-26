@@ -5405,6 +5405,23 @@ export async function permanentlyCancelAutoscuolaAppointment(
       return { success: false, message: "Appuntamento non trovato." };
     }
 
+    // REG-795: titolare/admin su tutte le guide dell'autoscuola, istruttore
+    // solo sulle sue (come `/cancel`), allievo mai.
+    const isOwnerOrAdmin =
+      membership.role === "admin" || isOwner(membership.autoscuolaRole);
+    if (!isOwnerOrAdmin) {
+      if (!isInstructor(membership.autoscuolaRole)) {
+        return { success: false, message: "Operazione non consentita." };
+      }
+      const ownInstructor = await getOwnInstructorProfile(
+        membership.companyId,
+        membership.userId,
+      );
+      if (!ownInstructor || appointment.instructorId !== ownInstructor.id) {
+        return { success: false, message: "Puoi eliminare solo le tue guide." };
+      }
+    }
+
     await prisma.autoscuolaAppointment.update({
       where: { id: appointment.id },
       data: {
