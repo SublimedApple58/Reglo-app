@@ -23,6 +23,24 @@ istruttore, agisce sulle guide come dal web.
 - **Mobile**: la usa `useSchoolAvailability`, al posto del ripiego su
   `availability/slots`.
 
+## Disponibilità di un istruttore gestita dal titolare (REG-794 B1+B2)
+
+- `GET|PATCH /api/autoscuole/instructors/[id]/availability-mode`, body
+  `{ availabilityMode: "default" | "publication" }`, risposta
+  `{ instructorId, availabilityMode }`. Solo titolare, istruttore titolare o
+  admin (altrimenti 403); istruttore fuori dall'autoscuola: 404. Cambia solo
+  quella chiave di `settings` e invalida l'AGENDA.
+- `availability/slots` (POST e DELETE) ora invalida l'AGENDA, così il web vede
+  subito la settimana tipo salvata dall'app. Le eccezioni (`availability/overrides`,
+  anche `recurring`) la invalidavano già.
+- Tutte le scritture di disponibilità verificano che l'istruttore (o il veicolo)
+  sia dell'autoscuola di chi scrive, oltre al ruolo. Dettagli in
+  `availability.md` → «Chi può scrivere la disponibilità».
+
+Test: `tests/integration/api/autoscuole-instructor-availability-mode.test.ts`,
+`tests/unit/autoscuole/availability-write-scope.test.ts`,
+`tests/unit/autoscuole/availability-slots-cache.test.ts`.
+
 ## Permessi del titolare sulle guide (audit)
 
 Le rotte mobile delle azioni sulle guide sono `/api/autoscuole/*`, con

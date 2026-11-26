@@ -1000,6 +1000,14 @@ export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>)
       });
     }
 
+    // REG-794: come il salvataggio web della settimana tipo
+    // (`setAutoscuolaInstructorWeeklyAvailability`), così l'agenda web vede
+    // subito le fasce salvate dall'app.
+    await invalidateAutoscuoleCache({
+      companyId: membership.companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA],
+    });
+
     return { success: true, data: { count: availability ? 1 : 0 } };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -1027,6 +1035,11 @@ export async function deleteAvailabilitySlots(input: z.infer<typeof deleteSlotsS
     // and only cancel those that no longer fit. Cancelling here would
     // destroy all appointments even when the user is just re-saving
     // the same or similar availability.
+
+    await invalidateAutoscuoleCache({
+      companyId: membership.companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA],
+    });
 
     return { success: true, data: { count: deleted.count } };
   } catch (error) {

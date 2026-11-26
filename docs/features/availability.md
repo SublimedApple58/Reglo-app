@@ -43,6 +43,12 @@ Lo switch nasce già acceso se la settimana tipo ha `rangesByDay`, quindi quello
 ## Publication mode
 Setting `availabilityMode: "publication"` on instructor JSON settings. Students can only book in published weeks. Owner/admin ignore this gate. Gating applied in `getAllAvailableSlots()`, `createBookingRequest()`, `findBestAutoscuolaSlot()`.
 
+Il titolare la legge e la cambia per un altro istruttore dall'app con
+`GET|PATCH /api/autoscuole/instructors/[id]/availability-mode` (REG-794 B1), che
+tocca solo la chiave `availabilityMode` del JSON grezzo e invalida l'AGENDA. Non
+usare `PATCH instructors/[id]` per questo: sostituisce tutto `settings`.
+`instructor-settings` resta per la propria modalità.
+
 ## Anchor-aware slot packing
 Implemented in `lib/autoscuole/slot-packing.ts` (pure helpers `computeFreeIntervalsInRange` + `computeAnchorAwareEntryPoints`).
 
@@ -88,6 +94,17 @@ autoscuola. Ora ogni scrittura passa da `assertCanWriteAvailability`
 - istruttore: le proprie fasce e i veicoli (l'app li gestisce da «Gestione»);
 - allievo: solo le proprie preferenze (`ownerType: "student"`, id = suo utente);
 - nessun altro. Errore: «Non puoi modificare questa disponibilità.»
+
+Dal REG-794 (B2) il ruolo non basta: anche il proprietario (istruttore, veicolo o
+allievo) dev'essere dell'autoscuola di chi scrive, altrimenti stesso errore.
+Prima il titolare passava con l'id di un istruttore di un'altra autoscuola.
+Test: `tests/unit/autoscuole/availability-write-scope.test.ts`.
+
+**Cache dell'agenda**: ogni scrittura invalida il segmento AGENDA. Dal REG-794
+lo fanno anche `createAvailabilitySlots`/`deleteAvailabilitySlots` (POST e
+DELETE `availability/slots`, il salvataggio della settimana tipo dall'app), come
+già `setAutoscuolaInstructorWeeklyAvailability` e le eccezioni. Test:
+`tests/unit/autoscuole/availability-slots-cache.test.ts`.
 
 Azioni coperte: `createAvailabilitySlots`, `deleteAvailabilitySlots`,
 `setWeeklyAvailabilityOverride`, `deleteWeeklyAvailabilityOverride`,
