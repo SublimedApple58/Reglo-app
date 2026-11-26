@@ -31,6 +31,11 @@ export async function GET(request: Request) {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const { searchParams } = new URL(request.url);
     const limit = Math.min(50, Math.max(1, Number(searchParams.get("limit")) || 20));
+    // I kind che questa build sa mostrare: `?supports=a&supports=b` oppure,
+    // dal mobile (REG-742, i suoi params non ripetono la chiave), `?supports=a,b`.
+    const supportedKinds = new Set(
+      searchParams.getAll("supports").flatMap((value) => value.split(",").map((kind) => kind.trim())),
+    );
 
     const companyId = membership.companyId;
     const userId = membership.userId;
@@ -374,7 +379,7 @@ export async function GET(request: Request) {
       // non più di 3 minuti l'una dall'altra, al massimo 15 dalla prima. L'id è
       // quello della push (`created_<prima guida per orario>`), così la stessa
       // notizia non compare due volte.
-      if (searchParams.getAll("supports").includes("appointment_created")) {
+      if (supportedKinds.has("appointment_created")) {
         const announced = await prisma.autoscuolaAppointment.findMany({
           where: {
             companyId,
@@ -505,7 +510,7 @@ export async function GET(request: Request) {
         // app che conoscono il kind (`?supports=student_booked`). L'id è lo
         // stesso della push, così la notizia non compare due volte.
         if (
-          searchParams.getAll("supports").includes(STUDENT_BOOKED_KIND) &&
+          supportedKinds.has(STUDENT_BOOKED_KIND) &&
           (await studentBookedNoticeOn(companyId))
         ) {
           const booked = await prisma.autoscuolaAppointment.findMany({
