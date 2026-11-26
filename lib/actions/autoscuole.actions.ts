@@ -6544,6 +6544,16 @@ export async function updateAutoscuolaAppointmentDetails(
 ) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    // REG-796: dettagli, note, voto e pagellino li modifica solo lo staff
+    // (titolare/admin, o l'istruttore sulle sue guide qui sotto). L'allievo
+    // non ha questa azione né in app né sul web.
+    if (
+      membership.role !== "admin" &&
+      !isOwner(membership.autoscuolaRole) &&
+      !isInstructor(membership.autoscuolaRole)
+    ) {
+      return { success: false, message: "Operazione non consentita." };
+    }
     const payload = updateAppointmentDetailsSchema.parse(input);
 
     const appointment = await prisma.autoscuolaAppointment.findFirst({

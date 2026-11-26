@@ -38,7 +38,7 @@ titolare passa ovunque. Ogni lettura è filtrata per `companyId`.
 | Annulla (`annul`, `cancel`) | sì, e decide l'esito del tardivo | solo le sue | |
 | Elimina (`permanent-cancel`) | sì | solo le sue | **guardia aggiunta in REG-795** |
 | Check-in / assente (`status`) | sì, senza finestra oraria | sue o da co-istruttore, da 10' prima | |
-| Dettagli, cambio istruttore, pagellino (`PATCH appointments/[id]`) | sì; cambio sulle concluse entro 30 giorni | solo le sue | |
+| Dettagli, cambio istruttore, pagellino (`PATCH appointments/[id]`) | sì; cambio sulle concluse entro 30 giorni | solo le sue | allievo escluso dal REG-796 |
 | Esito d'esame (`exam-outcome`) | sì | sì | |
 | Presenze nelle guide di gruppo | sì | sue o da co-istruttore | |
 | Malattia, ferie e blocchi per un altro istruttore | sì | solo per sé | |
@@ -48,11 +48,17 @@ Test: `tests/unit/autoscuole/owner-lesson-access.test.ts`,
 `tests/integration/api/autoscuole-agenda-availability.test.ts`,
 `tests/integration/api/autoscuole-exam-instructor.test.ts`.
 
-**Lacuna nota, fuori scope**: `updateAutoscuolaAppointmentDetails` non esclude
-l'allievo. Un account `STUDENT` che chiamasse `PATCH appointments/[id]` a mano
-potrebbe modificare note, tipo e voto di una guida della sua autoscuola.
-Dall'app l'allievo non ha questa azione. Da chiudere in un task a parte, dopo
-aver verificato chi chiama la rotta (`StudentNotesDetailScreen` mobile).
+**Allievo escluso dalla PATCH (REG-796, 26/11/2026)**: prima
+`updateAutoscuolaAppointmentDetails` non escludeva l'allievo, che chiamando a
+mano `PATCH appointments/[id]` poteva cambiare note, tipo, voto e pagellino di
+una guida della sua autoscuola. Ora risponde «Operazione non consentita» a chi
+non è titolare, admin o istruttore, prima ancora di cercare la guida.
+
+Nessun chiamante lato allievo: in app la usano solo schermate dello staff
+(`StudentNotesDetailScreen` sta nella tab Allievi e in `home/student-detail`,
+visibili solo a titolare e istruttore; Gestisci guida, Road, pagellino), sul web
+`EditAppointmentDialog`, `AutoscuoleStudentsPage` e `GroupLessonManageDialog`.
+Test: `tests/unit/autoscuole/appointment-details-access.test.ts`.
 
 ## Esami creati dal fantasma
 
