@@ -132,14 +132,15 @@ export function InstructorPublicationEditor({
         }
 
         // Fallback template for days without an override: the last published
-        // week's same weekday, else the base weekly availability — the SAME
-        // chain publishInstructorWeek uses to materialize missing days.
+        // week BEFORE this one, same weekday, else the base weekly availability
+        // — the SAME chain publishInstructorWeek uses to materialize missing
+        // days. REG-799: niente ripiego su una settimana pubblicata DOPO (il
+        // backend non lo fa: si vedevano orari che pubblicando non arrivavano).
         const templateByDow = new Map<number, TimeRange[]>();
-        const pastPublished = Array.from(published)
-          .filter((w) => w !== weekYmd)
+        const lastPublished = Array.from(published)
+          .filter((w) => w < weekYmd)
           .sort()
-          .reverse();
-        const lastPublished = pastPublished.find((w) => w < weekYmd) ?? pastPublished[0];
+          .reverse()[0];
         if (lastPublished && byDate.size < 7) {
           const tmpl = await getDailyAvailabilityOverrides({
             ownerType: "instructor",
