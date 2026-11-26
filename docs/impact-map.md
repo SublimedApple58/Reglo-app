@@ -7,6 +7,7 @@ When modifying a feature, read its connected features to verify nothing breaks.
 Each entry: **Feature** → list of features it connects to, with reason.
 
 ### Appointments
+- → **App titolare (REG-795)**: le rotte mobile delle azioni sulle guide fanno passare il titolare puro perché OWNER/INSTRUCTOR_OWNER hanno `role: "admin"`; chi cambia una guardia `isInstructor && role !== "admin"` cambia anche cosa fa il titolare dall'app. Tabella dei permessi in `features/owner-mobile-agenda.md`
 - → **Pausa tra le guide (REG-484)**: ogni guida prenotata crea subito dopo di sé un `AutoscuolaInstructorBlock` `reason="lesson_buffer"` sull'istruttore (`createLessonBufferBlock`, chiamato da `createAutoscuolaAppointment`, `createAutoscuolaAppointmentBatch`, `createBookingRequest`, `respondWaitlistOffer`). **Il blocco non segue la guida**: annullo/spostamento/rimozione lo lasciano orfano, va tolto a mano. Vedi `features/lesson-buffer.md`
 - → **Payments**: cancel refunds credits (`refundLessonCreditIfEligible`; l'annullo web `annulFutureAppointment` rende il credito via `adjustStudentLessonCredits` o azzera l'importo `waived`), confirm consumes credits, settlement charges Stripe, `coverAppointmentWithLessonCredit` applica il credito (1 guida o la durata in minuti, REG-783) a una guida da pagare
 - → **Blocchi guide annullate (REG-623)**: con `cancelledLessonBlocks` acceso, ogni annullata `manual_cancel` (o `operational_cancel` + `school_fault`) resta in agenda come blocco finché **una riga attiva dello stesso istruttore** (anche co-istruttore) non copre l'orario. Derivato, non salvato (`findCancelledLessonBlocks`): chi cambia `cancellationKind`, i motivi di `operational_cancel` o l'appartenenza alla colonna istruttore cambia anche quali blocchi compaiono. La X scrive solo `agendaDismissedAt`. REG-624: la nota dell'ufficio (`agendaNote`) passa dalla rotta **bootstrap condivisa con il mobile**, che la toglie se manca `officeNotes=1` o il ruolo non è titolare/admin (`withOfficeNotes`): chi tocca quella rotta o la sua cache non deve far trapelare la nota all'app. Vedi `features/cancelled-lesson-blocks.md`. Lo stesso filtro toglie le **note del giorno** (REG-632, `dayNotes`): vedi `features/day-notes.md`
@@ -58,6 +59,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Cache**: invalidates AGENDA
 - → **Instructor Clusters**: `parseInstructorSettings()` for availabilityMode
 - → **Mobile**: `InstructorAvailabilityScreen`, `PublicationModeEditor`, booking flow in `AllievoHomeScreen`
+- → **App titolare (REG-795)**: `GET /api/autoscuole/agenda/availability` espone `getInstructorAvailabilityForAgenda` al mobile (`useSchoolAvailability`): chi cambia la forma delle fasce dell'agenda web la cambia anche all'app. Vedi `features/owner-mobile-agenda.md`
 
 ### Lezione teorica (agenda)
 - **È un** `AutoscuolaInstructorBlock` con `reason:"theory_lesson"` (nessuna migrazione, nessun modello nuovo)

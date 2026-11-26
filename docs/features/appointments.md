@@ -128,7 +128,7 @@ Lo storico del dettaglio allievo è **cronologico, le guide più recenti in cima
 `getAutoscuolaAppointmentsFiltered` ramo **`light`** aggiunge `cancelledAt, penaltyAmount, penaltyCutoffAt, lateCancellationAction` (vista mobile "Guide annullate").
 
 ### Azioni ancora esistenti ma NON più usate dal web (le usa il mobile)
-`cancelAutoscuolaAppointment` (`manual_cancel`, usata anche dal trigger owner-notifications quando l'attore è un allievo), `deleteAutoscuolaAppointment` → `operationallyCancelAppointment` (`operational_cancel`), `permanentlyCancelAutoscuolaAppointment` (`permanent_cancel`, solo tasto "Elimina" del foglio Gestisci guida mobile — noti i limiti: nessun guard ruolo/proprietà, slot non liberati). Restano anche i flussi organizzativi automatici (`operationallyCancelAppointmentsByResource`, `cancelOpenLessonsForDeletedStudent`).
+`cancelAutoscuolaAppointment` (`manual_cancel`, usata anche dal trigger owner-notifications quando l'attore è un allievo), `deleteAutoscuolaAppointment` → `operationallyCancelAppointment` (`operational_cancel`), `permanentlyCancelAutoscuolaAppointment` (`permanent_cancel`, solo tasto "Elimina" del foglio Gestisci guida mobile; dal REG-795 titolare su tutte, istruttore solo sulle sue, allievo mai — limite noto: slot non liberati). Restano anche i flussi organizzativi automatici (`operationallyCancelAppointmentsByResource`, `cancelOpenLessonsForDeletedStudent`).
 
 ### Ore istruttore
 `getInstructorDrivingHours`/`getInstructorDrivingHoursRange` contano solo status `completed`/`checked_in`/`no_show`. Quindi: annullo futuro (`cancelled`) e rimozione `keepInHours=false` (`cancelled`) escono dalle ore; rimozione `keepInHours=true` (stato invariato) **resta** nelle ore. Vedi `features/instructor-hours.md`.

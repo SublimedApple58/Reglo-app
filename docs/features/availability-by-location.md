@@ -173,6 +173,8 @@ Anteprime e analisi approvate da Tiziano: `/tmp/hiro-anteprime/reg-705/agenda-ca
   (bug trovato dall'e2e: prima il pomeriggio spariva).
 - **Dati agenda**: a funzione accesa `getInstructorAvailabilityForAgenda` aggiunge
   `locationId` e `inWeekly` a ogni fascia.
+  Dal REG-795 la stessa funzione arriva all'app titolare da
+  `GET /api/autoscuole/agenda/availability` (vedi `owner-mobile-agenda.md`).
 - Pausa tra luoghi: il cambio non sposta guide prenotate, quindi non può violarla;
   il motore la applica ai nuovi slot.
 
