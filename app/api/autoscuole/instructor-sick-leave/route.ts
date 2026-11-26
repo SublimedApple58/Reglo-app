@@ -10,6 +10,7 @@ import {
 } from "@/lib/autoscuole/cache";
 import { operationallyCancelAppointment } from "@/lib/autoscuole/operational-cancellation";
 import { isOwner } from "@/lib/autoscuole/roles";
+import { buildLeaveWindow } from "@/lib/autoscuole/leave-window";
 
 const sickLeaveSchema = z.object({
   instructorId: z.string().uuid().optional(),
@@ -67,19 +68,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Rome-timezone-aware date parsing (business is Italian driving school).
-    // Convert "YYYY-MM-DD HH:mm Rome" → UTC Date.
-    const ROME_OFFSET_HOURS = 2; // CEST (DST); CET is +1. Using +2 to be safe — widens the window slightly.
-    const toUtcFromRome = (dateStr: string, timeStr: string) => {
-      const [y, m, d] = dateStr.split("-").map(Number);
-      const [h, min] = timeStr.split(":").map(Number);
-      return new Date(Date.UTC(y, m - 1, d, h - ROME_OFFSET_HOURS, min, 0));
-    };
-
-    const sickStart = payload.startTime
-      ? toUtcFromRome(payload.startDate, payload.startTime)
-      : toUtcFromRome(payload.startDate, "00:00");
-    const sickEnd = toUtcFromRome(payload.endDate, "23:59");
+    // REG-797: offset di Roma della data (ora legale compresa), non +2 fisso.
+    const leave = buildLeaveWindow(payload);
+    const sickStart = leave.start;
+    const sickEnd = leave.end;
 
     if (sickEnd < sickStart) {
       return NextResponse.json(
@@ -88,26 +80,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create instructor blocks for each day (using Rome-local day boundaries in UTC)
-    const [sy, sm, sd] = payload.startDate.split("-").map(Number);
-    const [ey, em, ed] = payload.endDate.split("-").map(Number);
-    const blocks: { startsAt: Date; endsAt: Date }[] = [];
-    for (
-      let d = new Date(Date.UTC(sy, sm - 1, sd));
-      d.getTime() <= Date.UTC(ey, em - 1, ed);
-      d.setUTCDate(d.getUTCDate() + 1)
-    ) {
-      const y = d.getUTCFullYear();
-      const m = d.getUTCMonth() + 1;
-      const day = d.getUTCDate();
-      const dateStr = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-      const isFirstDay = dateStr === payload.startDate && Boolean(payload.startTime);
-      const blockStart = isFirstDay && payload.startTime
-        ? toUtcFromRome(dateStr, payload.startTime)
-        : toUtcFromRome(dateStr, "00:00");
-      const blockEnd = toUtcFromRome(dateStr, "23:59");
-      blocks.push({ startsAt: blockStart, endsAt: blockEnd });
-    }
+    const blocks = leave.blocks;
 
     // Create blocks in transaction
     await prisma.$transaction(

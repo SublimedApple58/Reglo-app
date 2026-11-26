@@ -9,6 +9,7 @@ Reuses **`AutoscuolaInstructorBlock`** (no new table): one full-day block per da
 ## Key files
 - `app/api/autoscuole/instructor-sick-leave/route.ts` — malattia: writes `sick_leave` blocks + cancels lessons with reason `instructor_sick`.
 - `app/api/autoscuole/instructor-vacation/route.ts` — ferie: writes `ferie` blocks + cancels lessons with reason `instructor_vacation` (clone of sick-leave).
+- `lib/autoscuole/leave-window.ts` — **REG-797**: shared by both routes. Turns the Rome wall-clock period (date range + optional first-day `startTime`) into UTC instants with the Europe/Rome offset **of each date** (via `romeWallClockToInstant`), so blocks are 00:00–23:59 Italian time in summer and winter alike. Before REG-797 the offset was hard-coded at +2: in winter (CET +1) every block and the cancellation window were shifted one hour earlier (23:00 the day before → 22:59). Tests: `tests/unit/autoscuole/leave-window.test.ts`.
 - `lib/autoscuole/operational-cancellation.ts` — per-reason student notification copy: `instructor_sick` = "🤒 …in malattia", `instructor_vacation` = "🌴 …in ferie".
 - `lib/actions/autoscuole.actions.ts` — `listInstructorSickLeaves`/`deleteInstructorSickLeave` (reason `sick_leave`), `listInstructorFerie`/`deleteInstructorFerie` (reason `ferie`).
 - `components/pages/Autoscuole/tabs/InstructorsTab.tsx` — `MalattiaTab` + `FerieTab` (clone: same UI, ferie copy, toast instead of overlay).
