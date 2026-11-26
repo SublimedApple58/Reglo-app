@@ -49,6 +49,7 @@ export const MESSAGE_CHANNEL_KEYS = [
   "appointment_rescheduled_instructor",
   "appointment_cancelled_instructor",
   "weekly_absence",
+  "student_booked",
 ] as const;
 
 export type MessageChannelKey = (typeof MESSAGE_CHANNEL_KEYS)[number];
@@ -72,6 +73,9 @@ export const MESSAGE_AUDIENCE: Record<MessageChannelKey, "student" | "instructor
   // REG-771: l'allievo dichiara una settimana di assenza, avviso al suo
   // istruttore. Prima seguiva la vecchia scelta unica `instructorReminderChannels`.
   weekly_absence: "instructor",
+  // REG-742: un allievo prenota una guida (o si iscrive a una di gruppo),
+  // avviso al suo istruttore. Spenta finché l'autoscuola non accende un canale.
+  student_booked: "instructor",
 };
 
 /**
@@ -85,6 +89,9 @@ export const MESSAGE_ENABLED_FLAG: Partial<Record<MessageChannelKey, string>> = 
   day_before_reminder_student: "studentReminderDayBeforeEnabled",
   appointment_created: "studentCreationNoticeEnabled",
   appointment_reminder_instructor: "instructorReminderEnabled",
+  // REG-742: spenta di default (non sta in FLAG_DEFAULT_ON): ~5 avvisi al
+  // giorno per istruttore li vuole chi li chiede, non tutti.
+  student_booked: "instructorBookingNoticeEnabled",
 };
 
 /** I flag con default acceso quando assenti (gli altri sono spenti di default). */

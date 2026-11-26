@@ -321,6 +321,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Repositioning**: processes reposition queue
 - → **Appointments**: auto-checkin, auto-complete, pending review transitions
 - → **Cases & Deadlines**: processes deadline reminders
+- → **Nuova prenotazione all'istruttore (REG-742)**: `scheduleStudentBookingNotice()` (`student-booking-notice.ts`) nei punti in cui l'allievo si prende una guida (`createBookingRequest`, `respondWaitlistOffer`, `respondGroupLessonInvite`, `createAutoscuolaAppointment` con `isStudentActor`). Un NUOVO percorso di prenotazione dell'allievo deve chiamarlo; riga `student_booked` spenta di default
 - → **Avviso guida fissata (REG-758)**: la coda `creationNotice` si svuota nel job ogni minuto; ogni NUOVO punto di creazione guida non avviato dall'allievo deve chiamare `creationNoticeFor()` (vedi `features/appointment-creation-notice.md`). `notifyAutoscuolaUser` tace annullamento/spostamento/cambio luogo di una guida ancora in coda
 - → **Messaggio di benvenuto (REG-767)**: NON passa dalla cascata — è un link `wa.me` aperto da chi scrive. Testo in `limits.studentWelcomeWhatsappTemplate`, numero con `normalizeToE164`; tasto nella conferma di «Nuovo allievo»/«Aggiungi allievo» e nella scheda allievo (autoscuola e consorzio). Vedi `features/whatsapp-welcome.md`
 

@@ -8,6 +8,7 @@ import {
   CalendarClock,
   CalendarX,
   CalendarMinus,
+  CalendarPlus,
   SquareCheck,
   Check,
   Clock,
@@ -769,6 +770,15 @@ function SettingsTab({
                       {channelsFor("appointment_reminder_instructor")}
                     </RowControls>
                   }
+                />
+                {/* REG-742: spenta finché non si accende un canale. */}
+                <SettingsRow
+                  title="Nuova prenotazione"
+                  icon={CalendarPlus}
+                  dim={offRow("student_booked")}
+                  description="Quando un suo allievo prenota una guida dall'app."
+                  stackOnMobile
+                  control={channelsFor("student_booked")}
                 />
                 {/* REG-771: prima seguiva la riga «Guida spostata» degli allievi. */}
                 <SettingsRow

@@ -9,6 +9,11 @@ import { getWaitlistOffers } from "@/lib/actions/autoscuole-availability.actions
 import { canStudentUseBookingChannel } from "@/lib/autoscuole/student-booking-policy";
 import { loadStudentBookingPolicies } from "@/lib/autoscuole/student-booking-policy-loader";
 import { groupCreationNoticeBatches } from "@/lib/autoscuole/creation-notice";
+import {
+  STUDENT_BOOKED_KIND,
+  STUDENT_BOOKED_SOURCES,
+  studentBookedNoticeOn,
+} from "@/lib/autoscuole/student-booking-notice";
 
 /**
  * Server-side notification aggregator.
@@ -493,6 +498,48 @@ export async function GET(request: Request) {
             },
             createdAt: absence.createdAt.toISOString(),
           });
+        }
+
+        // REG-742: guide prenotate dai suoi allievi (app, posto liberato,
+        // iscrizione a un gruppo). Solo dove la riga è accesa, e solo per le
+        // app che conoscono il kind (`?supports=student_booked`). L'id è lo
+        // stesso della push, così la notizia non compare due volte.
+        if (
+          searchParams.getAll("supports").includes(STUDENT_BOOKED_KIND) &&
+          (await studentBookedNoticeOn(companyId))
+        ) {
+          const booked = await prisma.autoscuolaAppointment.findMany({
+            where: {
+              companyId,
+              instructorId: instructor.id,
+              bookingSource: { in: [...STUDENT_BOOKED_SOURCES] },
+              status: { notIn: ["cancelled", "proposal"] },
+              createdAt: { gte: since },
+            },
+            select: {
+              id: true,
+              startsAt: true,
+              createdAt: true,
+              groupLessonId: true,
+              student: { select: { id: true, name: true } },
+            },
+            orderBy: { createdAt: "desc" },
+            take: limit,
+          });
+          for (const appt of booked) {
+            notifications.push({
+              id: `${STUDENT_BOOKED_KIND}_${appt.id}`,
+              kind: STUDENT_BOOKED_KIND,
+              data: {
+                appointmentId: appt.id,
+                startsAt: appt.startsAt.toISOString(),
+                studentId: appt.student?.id ?? null,
+                studentName: appt.student?.name?.trim() || "Un allievo",
+                isGroupLesson: Boolean(appt.groupLessonId),
+              },
+              createdAt: appt.createdAt.toISOString(),
+            });
+          }
         }
       }
 

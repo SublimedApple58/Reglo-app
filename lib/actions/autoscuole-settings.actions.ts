@@ -355,6 +355,8 @@ const autoscuolaSettingsPatchSchema = z
     studentReminderDayBeforeTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     /** REG-758: avviso «guida fissata» all'allievo. Spento di default. */
     studentCreationNoticeEnabled: z.boolean().optional(),
+    /** REG-742: avviso all'istruttore quando un allievo prenota. Spento di default. */
+    instructorBookingNoticeEnabled: z.boolean().optional(),
     /** REG-767: testo di presa in carico per WhatsApp. Null o vuoto = default. */
     studentWelcomeWhatsappTemplate: z
       .string()
@@ -1936,6 +1938,8 @@ export async function updateAutoscuolaSettings(
         payload.studentReminderDayBeforeTime ?? (typeof limits.studentReminderDayBeforeTime === "string" ? limits.studentReminderDayBeforeTime : "19:00"),
       studentCreationNoticeEnabled:
         payload.studentCreationNoticeEnabled ?? (limits.studentCreationNoticeEnabled === true),
+      instructorBookingNoticeEnabled:
+        payload.instructorBookingNoticeEnabled ?? (limits.instructorBookingNoticeEnabled === true),
       // REG-767: le righe passate sovrascrivono, le altre restano (o ereditano).
       channelsByMessage: payload.channelsByMessage
         ? {

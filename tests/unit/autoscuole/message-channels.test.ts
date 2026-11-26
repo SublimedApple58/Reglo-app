@@ -62,7 +62,9 @@ describe("effectiveMessageChannels", () => {
 describe("per la pagina", () => {
   it("dà una lista per ogni comunicazione del catalogo", () => {
     const all = messageChannelsForSettings({});
-    expect(Object.keys(all)).toHaveLength(12);
+    expect(Object.keys(all)).toHaveLength(13);
+    // REG-742: «Nuova prenotazione» degli istruttori è spenta di default
+    expect(all.student_booked).toEqual([]);
     // REG-771: la riga istruttori dello spostamento parte con solo l'App
     expect(all.appointment_rescheduled_instructor).toEqual(["push"]);
     expect(all.appointment_cancelled_instructor).toEqual(["push"]);
@@ -77,12 +79,14 @@ describe("per la pagina", () => {
       appointment_rescheduled_instructor,
       appointment_cancelled_instructor,
       weekly_absence,
+      student_booked,
       ...rest
     } = whatsappReadyByMessage();
     expect(Object.values(rest).every(Boolean)).toBe(true);
     expect(appointment_rescheduled_instructor).toBe(false);
     expect(appointment_cancelled_instructor).toBe(false);
     expect(weekly_absence).toBe(false);
+    expect(student_booked).toBe(false);
   });
 
   it("REG-771: la riga istruttori dello spostamento è indipendente da quella degli allievi", () => {

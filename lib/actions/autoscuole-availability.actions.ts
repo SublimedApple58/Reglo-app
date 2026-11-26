@@ -34,6 +34,7 @@ import {
   PUSH_ONLY,
 } from "@/lib/autoscuole/notify";
 import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
+import { scheduleStudentBookingNotice } from "@/lib/autoscuole/student-booking-notice";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
   prepareAppointmentPaymentSnapshot,
@@ -2799,6 +2800,8 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
 
       const request = await upsertBookingRequest("matched");
       await invalidateAgendaAndPaymentsCache(membership.companyId);
+      // REG-742: avviso all'istruttore (riga «Nuova prenotazione», spenta di default).
+      scheduleStudentBookingNotice(appointment.id);
 
       return { success: true, data: { matched: true, appointment, request } };
     }
@@ -4747,6 +4750,8 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
     });
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
+    // REG-742: il posto liberato preso dall'allievo è una guida nuova per l'istruttore.
+    scheduleStudentBookingNotice(appointment.appointment.id);
 
     return {
       success: true,
@@ -5734,6 +5739,8 @@ export async function respondGroupLessonInvite(
     });
 
     await invalidateAgendaAndPaymentsCache(companyId);
+    // REG-742: iscrizione alla guida di gruppo, avviso all'istruttore del gruppo.
+    scheduleStudentBookingNotice(result.id);
     return { success: true as const, data: { accepted: true, appointmentId: result.id } };
   } catch (error) {
     return { success: false as const, message: formatError(error) };

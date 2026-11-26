@@ -26,6 +26,7 @@ import { clampEvaluationScore } from "@/lib/autoscuole/evaluation-sheet";
 import { requireServiceAccess } from "@/lib/service-access";
 import { notifyAutoscuolaCaseStatusChange } from "@/lib/autoscuole/communications";
 import { BOOKING_SOURCE, staffBookingSource } from "@/lib/autoscuole/booking-source";
+import { scheduleStudentBookingNotice } from "@/lib/autoscuole/student-booking-notice";
 import { creationNoticeFor } from "@/lib/autoscuole/creation-notice-queue";
 import { broadcastWaitlistOffer, buildAvailabilityResolver, getStudentBookingBlockStatus, cancelGroupLessonParticipantAppointment } from "@/lib/actions/autoscuole-availability.actions";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
@@ -4372,6 +4373,8 @@ export async function createAutoscuolaAppointment(
     });
 
     await invalidateAgendaAndPaymentsCache(companyId);
+    // REG-742: l'allievo si è prenotato da solo (rotta appointments).
+    if (isStudentActor) scheduleStudentBookingNotice(appointment.id);
 
     // Serialize Decimal fields for client component compatibility
     const serializedAppointment = {

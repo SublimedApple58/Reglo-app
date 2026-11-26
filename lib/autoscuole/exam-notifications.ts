@@ -241,3 +241,36 @@ export const locationChangedText = (
 
 const capitalize = (value: string) =>
   value.length ? value[0].toUpperCase() + value.slice(1) : value;
+
+// ---------------------------------------------------------------------------
+// REG-742: guida prenotata da un allievo, avviso al suo istruttore.
+// Data corta («lun 12 ott»): l'istruttore la legge sulla notifica a colpo
+// d'occhio, come nel mock del ticket.
+// ---------------------------------------------------------------------------
+
+/** «lun 12 ott» */
+export const formatDateShort = (when: Date) =>
+  when.toLocaleDateString("it-IT", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: TIMEZONE,
+  });
+
+export const studentBookedText = (input: {
+  studentName: string;
+  startsAt: Date;
+  isGroupLesson: boolean;
+}): NotificationText => {
+  const when = `${formatDateShort(input.startsAt)} alle ${formatTimeShort(input.startsAt)}`;
+  if (input.isGroupLesson) {
+    return {
+      title: "Nuovo iscritto alla guida di gruppo",
+      body: `${input.studentName} si è iscritto alla guida di gruppo di ${when}.`,
+    };
+  }
+  return {
+    title: "Nuova guida prenotata",
+    body: `${input.studentName} ha prenotato una guida per ${when}.`,
+  };
+};

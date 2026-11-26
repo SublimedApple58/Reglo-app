@@ -126,6 +126,12 @@ REG-771 (23/11): niente righe «prese in prestito».
 - **Assenza settimanale** (`weekly_absence`, `app/api/autoscuole/weekly-absence`):
   riga sua tra gli Istruttori (App ed Email). Prima seguiva la vecchia scelta
   globale `instructorReminderChannels` ∩ App e non compariva in pagina.
+- **Nuova prenotazione** (REG-742, `student_booked`, `lib/autoscuole/student-booking-notice.ts`):
+  riga sua tra gli Istruttori (App ed Email), con flag `instructorBookingNoticeEnabled`
+  **spento di default** (accesa riga per riga, come «Guida fissata»). Avvisa
+  l'istruttore della guida quando l'allievo se la prende: prenotazione da app
+  (`student_self`), posto liberato (`slot_fill`), iscrizione a un gruppo
+  (`group_lesson`, testo suo). Dettagli in `notifications.md`.
 - Nessun avviso agli istruttori legge più una riga degli allievi. L'unico che
   usa ancora `instructorReminderChannels` (via `getConfiguredChannels`) è
   `swap_instructor_notify` («Richieste di sostituzione», solo app, fisso).

@@ -89,6 +89,7 @@ l'inbox mobile ricostruisce il sottotitolo da lì, non dal testo del push.
 - `communications.ts` — all reminders (appointment, morning, case deadline, payment)
 - `creation-notice-queue.ts` — «guida fissata» raggruppata (REG-758, via job `autoscuole-reminders`)
 - `exam-ready-nudge.ts` — nudge titolare `exam_ready_nudge` (cron lunedì 09:00 via `trigger/autoscuole-reminders.ts`)
+- `student-booking-notice.ts` — «Nuova prenotazione» all'istruttore (REG-742), chiamato via `scheduleStudentBookingNotice()` (dentro `after()`) da `createBookingRequest`, `respondWaitlistOffer`, `respondGroupLessonInvite` (`autoscuole-availability.actions.ts`) e da `createAutoscuolaAppointment` quando prenota l'allievo
 
 ## Recovery queries (notification kind → DB query)
 | Kind | DB query |
@@ -106,6 +107,7 @@ l'inbox mobile ricostruisce il sottotitolo da lì, non dal testo del push.
 | `exam_ready_nudge` | `getExamReadyNudgeForCompany()` — `CompanyMember` PRATICA `examReady` da >14gg MENO chi ha esame futuro (solo ruoli owner) |
 | `exam_scheduled` | `AutoscuolaAppointment` `type='esame'` futuri con `createdAt >= since` (REG-604) |
 | `appointment_created` | `AutoscuolaAppointment` `creationNotice='sent'`, `createdAt >= since`, raggruppate come la coda (REG-758). **Solo se il client manda `?supports=appointment_created`** |
+| `student_booked` | Istruttore: `AutoscuolaAppointment` sue con `bookingSource` in `student_self`/`slot_fill`/`group_lesson`, non annullate né proposte, `createdAt >= since`, solo se la riga è accesa (REG-742). Id `student_booked_{appointmentId}`, lo stesso della push. **Solo se il client manda `?supports=student_booked`** |
 
 ## Web settings (pane "Promemoria e notifiche")
 
@@ -114,7 +116,7 @@ l'inbox mobile ricostruisce il sottotitolo da lì, non dal testo del push.
   - **Canali su ogni riga** (`settings/ChannelToggles.tsx`, icone a un colore: App = telefono col puntino, WhatsApp = logo ufficiale, Email; righe mai toccate = solo App; nere accese, grigie spente; dove WhatsApp non ha un modello approvato o non è collegato l'icona non c'è e le altre si stringono a destra, così Email resta nell'ultima colonna (REG-771); legenda in alto con il nome dei canali: WhatsApp solo se collegato per l'autoscuola). Ogni comunicazione parte su tutti e soli i canali accesi; tutti spenti = spenta (vedi `communications.md`). Il parametro della riga (minuti, orario) sta accanto ai canali.
   - A chi arrivano lo dice la scheda: le due `SettingsSection` sono senza titolo (REG-772; prima «Ai tuoi allievi» / «Ai tuoi istruttori», REG-771).
   - **Allievi** — Promemoria: prima della guida (minuti), la mattina (orario), il giorno prima (orario); Avvisi sulle guide: guida fissata (REG-758), annullata, spostata, cambio di luogo, esame fissato; **Solo nell'app** (icona app fissa + «Solo app»): «Posti liberi per domani» (`emptySlotNotificationEnabled/Target/Times`; acceso, sotto ha tre `SettingsDetailRow` (REG-772): «A chi» come testo con freccina, «Orari» come testo (`TimePickerInput variant="text"`, «Togli» nel pannello se ne resta più d'uno, «Aggiungi» al posto del + tratteggiato) e il link «Invia ora per domani» → `triggerEmptySlotNotification`) e una riga descrittiva per le offerte fisse (posto liberato, inviti di gruppo: `OFFER_CHANNELS`).
-  - **Istruttori**: promemoria prima della guida (minuti; tutti i canali spenti = «non inviare»), guida spostata (REG-771, `appointment_rescheduled_instructor`, App ed Email), guida annullata (REG-771, `appointment_cancelled_instructor`: oggi solo il ritiro di un allievo da una guida di gruppo), assenza settimanale (REG-771, `weekly_absence`, App ed Email), richieste di sostituzione (solo app, fisse).
+  - **Istruttori**: promemoria prima della guida (minuti; tutti i canali spenti = «non inviare»), **nuova prenotazione** (REG-742, `student_booked`, App ed Email, spenta di default), guida spostata (REG-771, `appointment_rescheduled_instructor`, App ed Email), guida annullata (REG-771, `appointment_cancelled_instructor`: oggi solo il ritiro di un allievo da una guida di gruppo), assenza settimanale (REG-771, `weekly_absence`, App ed Email), richieste di sostituzione (solo app, fisse).
   - La riga allievi «Guida spostata» vale anche per gli scambi di guida tra due allievi (REG-771).
 - **Manuale** (era «A mano», REG-771 bis): «Messaggio di benvenuto» (`WhatsAppWelcomeSection`, vedi `whatsapp-welcome.md`; con l'ancora `#messaggio-di-benvenuto` si apre direttamente questa scheda) e la riga «Invia un comunicato ›» che apre `ComunicatoDialog` dalla pagina.
 - **Allievi** e **Istruttori** usano `SettingsDensity value="compact"` (`settings-rows.tsx`): righe 12px sopra e sotto, gruppi più vicini.
@@ -122,7 +124,7 @@ l'inbox mobile ricostruisce il sottotitolo da lì, non dal testo del push.
 Comportamento e chiavi dei limits invariati rispetto a prima del redesign.
 
 ## Checklist for adding a new notification kind
-1. **Backend push**: add `sendAutoscuolaPushToUsers()` call with `data.kind` in the action file
+1. **Backend push**: chiama `notifyAutoscuolaUser()` (mai `sendAutoscuolaPushToUsers()` diretto: lo blocca `notify-guard.test.ts`); se la comunicazione è configurabile aggiungi la riga al catalogo `message-channels.ts` (chiave, pubblico, eventuale flag) e in pagina
 2. **Recovery**: add query to `app/api/autoscuole/notifications/route.ts`
 3. **Mobile types**: add kind + data type to `reglo-mobile/src/types/notifications.ts`
 4. **Mobile overlay**: add handler in `reglo-mobile/src/components/NotificationOverlay.tsx`
@@ -147,6 +149,7 @@ Comportamento e chiavi dei limits invariati rispetto a prima del redesign.
 | `broadcast` / `test_push` | Various | fire-and-forget |
 | `appointment_created` | Student | `creationNotice='sent'`, id stabile `created_{prima guida}` — vedi [appointment-creation-notice.md](appointment-creation-notice.md) |
 | `exam_ready_nudge` | Owner (OWNER + INSTRUCTOR_OWNER) | `getExamReadyNudgeForCompany()`, id stabile `exam_ready_nudge_{companyId}` |
+| `student_booked` | Instructor (della guida) | guide prese dall'allievo dopo `since`, id stabile `student_booked_{appointmentId}`; `data`: `appointmentId`, `startsAt`, `studentId`, `studentName`, `isGroupLesson` (REG-742) |
 
 ## Connected features
 - **ALL features** — every feature sends push
