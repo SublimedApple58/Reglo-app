@@ -2723,8 +2723,3 @@ export async function setSignupStartPhase(
     return { success: false as const, message: formatError(error) };
   }
 }
-
-/** Vecchio interruttore (acceso = Teoria, spento = In attesa): passa da `setSignupStartPhase`. */
-export async function setAutoAssignQuizOnSignup(input: { enabled: boolean }) {
-  return setSignupStartPhase({ phase: input.enabled ? "TEORIA" : "AWAITING" });
-}

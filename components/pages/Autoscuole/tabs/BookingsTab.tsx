@@ -28,6 +28,7 @@ import { ToggleChip } from "@/components/ui/toggle-chip";
 import { useAtomValue } from "jotai";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { SignupStartPhaseSection } from "@/components/pages/Autoscuole/settings/SignupStartPhaseSection";
 import PaymentsSettingsPane from "@/components/pages/Autoscuole/PaymentsSettingsPane";
 import {
   LICENSE_PATH_BUCKETS as LICENSE_PATH_BUCKET_KEYS,
@@ -51,8 +52,6 @@ import {
   nationalHolidayDateLabel,
 } from "@/lib/autoscuole/national-holidays";
 import {
-  getQuizSeatsContext,
-  setAutoAssignQuizOnSignup,
 } from "@/lib/actions/autoscuole-settings.actions";
 
 /** I quattro campi che compongono «Prenotazione degli allievi dall'app». */
@@ -382,99 +381,6 @@ function NationalHolidaysCard({
           })}
         </div>
       )}
-    </div>
-  );
-}
-
-/** Modalità registrazione allievi — non presente nei mock ma parte della web
- * app: assegnazione automatica della licenza quiz alla registrazione.
- * Salva subito alla pressione del toggle. Nascosta senza fase TEORIA. */
-function RegistrationSection() {
-  const toast = useFeedbackToast();
-  type Ctx = {
-    quizSeats: number;
-    used: number;
-    available: number;
-    phasesEnabled: ("TEORIA" | "PRATICA")[];
-    autoAssignQuizOnSignup: boolean;
-  };
-  const [ctx, setCtx] = React.useState<Ctx | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [saving, setSaving] = React.useState(false);
-
-  const refresh = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await getQuizSeatsContext();
-      if (res.success) setCtx(res.data);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  if (!loading && (!ctx || !ctx.phasesEnabled.includes("TEORIA"))) {
-    return null;
-  }
-
-  const enabled = ctx?.autoAssignQuizOnSignup ?? false;
-  const available = ctx?.available ?? 0;
-  const used = ctx?.used ?? 0;
-  const quizSeats = ctx?.quizSeats ?? 0;
-
-  const handleToggle = async () => {
-    if (saving || loading) return;
-    setSaving(true);
-    try {
-      const res = await setAutoAssignQuizOnSignup({ enabled: !enabled });
-      if (!res.success) {
-        toast.error({ description: res.message ?? "Impossibile aggiornare." });
-        return;
-      }
-      toast.success({ description: res.message ?? "Modalità aggiornata." });
-      await refresh();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="py-6">
-      <SettingRow
-        title="Assegnazione automatica della licenza quiz"
-        description={
-          enabled
-            ? "I nuovi allievi ricevono subito una licenza quiz (se disponibile) e partono direttamente in fase Teoria."
-            : "I nuovi allievi entrano in stato 'In attesa di attivazione'. Devi assegnare la licenza manualmente per farli partire dalla teoria."
-        }
-        checked={enabled}
-        onToggle={() => void handleToggle()}
-        control={
-          saving || loading ? <LoadingDots className="shrink-0 text-[#929292]" /> : undefined
-        }
-      />
-      {!enabled && available > 0 && (
-        <p className="mt-2.5 max-w-[680px] text-xs font-medium leading-relaxed text-amber-700">
-          Attivando l&apos;auto-assegnazione, gli allievi attualmente in attesa riceveranno
-          automaticamente una licenza (fino a {available} posti liberi, ordine cronologico
-          di registrazione).
-        </p>
-      )}
-      <div className="mt-5 flex max-w-[320px] items-center justify-between rounded-[12px] border border-[#e8e8e8] px-4 py-3">
-        <span className="text-[13px] font-medium text-[#6a6a6a]">Licenze quiz</span>
-        <span className="text-[13px] font-semibold tabular-nums text-foreground">
-          {loading ? (
-            <Loader2 className="size-4 animate-spin text-[#929292]" />
-          ) : (
-            <>
-              {used} <span className="font-medium text-[#929292]">/ {quizSeats}</span> usate
-            </>
-          )}
-        </span>
-      </div>
     </div>
   );
 }
@@ -1426,7 +1332,7 @@ export default function BookingsTab({
           />
         </div>
 
-        <RegistrationSection />
+        <SignupStartPhaseSection />
       </div>
 
       {/* ══ CREDITI E PREZZI ══ */}
