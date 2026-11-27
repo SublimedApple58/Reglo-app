@@ -174,6 +174,7 @@ import { FadeIn } from "@/components/ui/fade-in";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { AutoscuoleLateCancellationsPanel } from "./AutoscuoleLateCancellationsPanel";
 import { NeverAccessedListMark } from "./NeverAccessedNudge";
+import { StudentAvailabilitySection, useStudentAvailabilityForStaff } from "./StudentAvailabilitySection";
 import { isLessonUnpaid } from "@/lib/autoscuole/lesson-unpaid";
 import { formatLessonDuration } from "@/lib/autoscuole/lesson-duration";
 import { useAtomValue as useAtomValueRoad } from "jotai";
@@ -1687,6 +1688,8 @@ export function AutoscuoleStudentsPage({
     () => students.find((student) => student.id === selectedStudentId) ?? null,
     [selectedStudentId, students],
   );
+  // REG-802: disponibilità dell'allievo aperto (sezione in sola lettura).
+  const staffAvailability = useStudentAvailabilityForStaff(selectedStudentId);
 
   // Tab Road: l'istruttore di ogni guida, per l'elenco sotto «Tutti i percorsi».
   const instructorByLesson = React.useMemo(
@@ -3443,6 +3446,11 @@ export function AutoscuoleStudentsPage({
               )}
             </DetailSection>
           ) : null}
+
+          {/* REG-802: disponibilità indicate dall'allievo (sola lettura). */}
+          {affiliate || !selectedStudent || !staffAvailability.ready ? null : (
+            <StudentAvailabilitySection data={staffAvailability.data} firstName={selectedStudent.firstName} />
+          )}
 
           {/* Luoghi (REG-705) o luogo di default (REG-392): precompila il
               Luogo quando si prenota una guida per questo allievo. */}
