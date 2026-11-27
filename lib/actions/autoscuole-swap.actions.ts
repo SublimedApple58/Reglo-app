@@ -5,6 +5,11 @@ import {
   studentCanTakeLocation,
 } from "@/lib/autoscuole/location-booking";
 import { OFFER_CHANNELS } from "@/lib/autoscuole/channel-cascade";
+import {
+  defaultToAvailabilityRecord,
+  isRecordCoveringMinutes,
+  type AvailabilityRecord,
+} from "@/lib/autoscuole/availability-record";
 import { z } from "zod";
 import { prisma } from "@/db/prisma";
 import {
@@ -73,8 +78,6 @@ const formatItalianTime = (date: Date) =>
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-type TimeRange = { startMinutes: number; endMinutes: number };
-type AvailabilityRecord = { daysOfWeek: number[]; ranges: TimeRange[] };
 
 const WEEKDAY_TO_INDEX: Record<string, number> = {
   Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
@@ -114,34 +117,20 @@ const minutesFromDate = (date: Date) => {
 
 const SLOT_MINUTES = 30;
 
-const defaultToAvailabilityRecord = (
-  record: { daysOfWeek: number[]; ranges: unknown },
-): AvailabilityRecord => ({
-  daysOfWeek: record.daysOfWeek,
-  ranges: Array.isArray(record.ranges)
-    ? record.ranges.filter(
-        (r): r is TimeRange =>
-          typeof r === "object" &&
-          r !== null &&
-          typeof (r as TimeRange).startMinutes === "number" &&
-          typeof (r as TimeRange).endMinutes === "number",
-      )
-    : [],
-});
-
 const isAvailabilityCovering = (
   availability: AvailabilityRecord | null | undefined,
   startsAt: Date,
   endsAt: Date | null,
 ) => {
+  // REG-802: helper condiviso — legge `rangesByDay` e ricade sui campi piatti
+  // `startMinutes/endMinutes(2)` quando `ranges` è vuoto (la copia locale non lo faceva).
   if (!availability) return false;
-  const dayOfWeek = dayOfWeekFromDate(startsAt);
-  if (!availability.daysOfWeek.includes(dayOfWeek)) return false;
-  const startMin = minutesFromDate(startsAt);
   const endDate = endsAt ?? new Date(startsAt.getTime() + SLOT_MINUTES * 60 * 1000);
-  const endMin = minutesFromDate(endDate);
-  return availability.ranges.some(
-    (r) => r.endMinutes > r.startMinutes && startMin >= r.startMinutes && endMin <= r.endMinutes,
+  return isRecordCoveringMinutes(
+    availability,
+    dayOfWeekFromDate(startsAt),
+    minutesFromDate(startsAt),
+    minutesFromDate(endDate),
   );
 };
 

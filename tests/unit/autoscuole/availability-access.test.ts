@@ -1,5 +1,6 @@
 import {
   canApproveAvailabilityOverride,
+  canReadAvailability,
   canWriteAvailability,
 } from "@/lib/autoscuole/availability-access";
 
@@ -42,5 +43,22 @@ describe("canApproveAvailabilityOverride", () => {
     expect(canApproveAvailabilityOverride(owner)).toBe(true);
     expect(canApproveAvailabilityOverride(instructor)).toBe(true);
     expect(canApproveAvailabilityOverride(student)).toBe(false);
+  });
+});
+
+describe("canReadAvailability (REG-802)", () => {
+  it("titolare, istruttore titolare e istruttore: leggono tutto, anche gli allievi", () => {
+    for (const m of [owner, instructorOwner, instructor]) {
+      expect(canReadAvailability(m, "student", "u-x")).toBe(true);
+      expect(canReadAvailability(m, "instructor", "i-1")).toBe(true);
+      expect(canReadAvailability(m, undefined, undefined)).toBe(true);
+    }
+  });
+
+  it("allievo: solo le proprie preferenze", () => {
+    expect(canReadAvailability(student, "student", "u-student")).toBe(true);
+    expect(canReadAvailability(student, "student", "u-altro")).toBe(false);
+    expect(canReadAvailability(student, "instructor", "i-1")).toBe(false);
+    expect(canReadAvailability(student, undefined, undefined)).toBe(false);
   });
 });

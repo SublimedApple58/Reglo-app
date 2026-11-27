@@ -22,7 +22,7 @@ Group instructors with shared settings, student assignment, autonomous booking m
 - `appBookingActors`: who can book
 - `bookingCutoffTime`: minutes from midnight
 - `weeklyBookingLimit`: max per week
-- `restrictedTimeRange`: no-booking window
+- `restrictedTimeRange` («Riempi le fasce più vuote»): **priorità morbida**, non un divieto — se le disponibilità dell'allievo in quel giorno toccano la fascia, l'app mostra solo gli slot dentro la fascia quando ce ne sono, altrimenti tutti (`lib/autoscuole/restricted-window.ts`, per giorno dal REG-802)
 - Lesson policy limits per type
 
 ## DB models

@@ -58,6 +58,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Notifications**: publication triggers `availability_published` push
 - → **Cache**: invalidates AGENDA
 - → **Instructor Clusters**: `parseInstructorSettings()` for availabilityMode
+- → **Disponibilità allievo (REG-802)**: motore (`createBookingRequest`), slot liberi e calendario (fascia prioritaria per giorno), proposte all'istruttore (`slot-matcher`), lista d'attesa e scambi leggono le fasce dell'allievo SOLO con `rangesForDay` / `isRecordCoveringMinutes` di `lib/autoscuole/availability-record.ts`: chi aggiunge un lettore non legga `ranges`/`daysOfWeek` piatti (con `rangesByDay` sono vuoti). Letture: `canReadAvailability` (allievo solo le sue). Vedi `features/availability.md`
 - → **Mobile**: `InstructorAvailabilityScreen`, `PublicationModeEditor`, booking flow in `AllievoHomeScreen`
 - → **App titolare (REG-795)**: `GET /api/autoscuole/agenda/availability` espone `getInstructorAvailabilityForAgenda` al mobile (`useSchoolAvailability`): chi cambia la forma delle fasce dell'agenda web la cambia anche all'app. Vedi `features/owner-mobile-agenda.md`
 - → **App titolare (REG-794 B1/B2)**: `instructors/[id]/availability-mode` scrive solo `settings.availabilityMode` (chi aggiunge campi a `settings` non li perde); `assertCanWriteAvailability` ora verifica anche che il proprietario sia dell'autoscuola, e vale per web e app; `availability/slots` invalida l'AGENDA come il salvataggio web

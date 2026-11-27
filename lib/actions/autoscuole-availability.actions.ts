@@ -15,7 +15,13 @@ import {
   sanitizeRangeLocations,
   sanitizeScheduleByDayLocations,
 } from "@/lib/autoscuole/range-locations";
-import { assertCanWriteAvailability, canApproveAvailabilityOverride, AVAILABILITY_WRITE_FORBIDDEN } from "@/lib/autoscuole/availability-access";
+import {
+  assertCanWriteAvailability,
+  canApproveAvailabilityOverride,
+  canReadAvailability,
+  AVAILABILITY_READ_FORBIDDEN,
+  AVAILABILITY_WRITE_FORBIDDEN,
+} from "@/lib/autoscuole/availability-access";
 import { OFFER_CHANNELS } from "@/lib/autoscuole/channel-cascade";
 import { randomUUID } from "crypto";
 import { after } from "next/server";
@@ -67,6 +73,15 @@ import {
   withLocationName,
 } from "@/lib/autoscuole/location-booking";
 import { isWithinRestrictedWindow, pickRestrictedWindowSlots } from "@/lib/autoscuole/restricted-window";
+import {
+  defaultToAvailabilityRecord,
+  narrowToDay,
+  overlapsWindowOnDay,
+  parseRanges,
+  rangesForDay,
+  type AvailabilityRecord,
+  type TimeRange,
+} from "@/lib/autoscuole/availability-record";
 import { assignMotoForStudent, eligibleForMotoGroup, hasFreeExactMoto, groupMotoFollowCarRequired, type FleetVehicle } from "@/lib/autoscuole/group-moto";
 import { findFreeGroupFollowCar } from "@/lib/autoscuole/group-follow-assign";
 import {
@@ -404,76 +419,9 @@ const getSlotEnd = (start: Date, durationMinutes: number) => {
 
 // ── Override resolution helpers ─────────────────────────
 
-/** `locationId` (REG-705): luogo della fascia; assente = tutti i luoghi. */
-export type TimeRange = { startMinutes: number; endMinutes: number; locationId?: string | null };
-
-type AvailabilityRecord = {
-  daysOfWeek: number[];
-  ranges: TimeRange[];
-  // When present, ranges differ per weekday (0=Sun..6=Sat) and take precedence
-  // over the flat `ranges` field. `rangesForDay()` is the single read accessor.
-  rangesByDay?: Record<number, TimeRange[]>;
-};
-
-const parseRanges = (raw: unknown): TimeRange[] => {
-  if (!Array.isArray(raw)) return [];
-  return raw.filter(
-    (e): e is TimeRange =>
-      typeof e === "object" && e !== null &&
-      typeof e.startMinutes === "number" && typeof e.endMinutes === "number",
-  );
-};
-
-// Parse the `rangesByDay` JSON ({ "1": [...], ... }) into a {dayOfWeek: ranges}
-// map, keeping only days that have at least one valid range. Returns null when
-// absent/empty so callers fall back to the shared `ranges`.
-const parseRangesByDay = (raw: unknown): Record<number, TimeRange[]> | null => {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const map: Record<number, TimeRange[]> = {};
-  let any = false;
-  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    const day = Number(k);
-    if (!Number.isInteger(day) || day < 0 || day > 6) continue;
-    const ranges = parseRanges(v).filter((r) => r.endMinutes > r.startMinutes);
-    if (ranges.length) {
-      map[day] = ranges;
-      any = true;
-    }
-  }
-  return any ? map : null;
-};
-
-// Single accessor for "what ranges apply on this weekday" — handles both the
-// per-day model and the legacy shared model transparently.
-const rangesForDay = (a: AvailabilityRecord, dayOfWeek: number): TimeRange[] => {
-  if (a.rangesByDay) return a.rangesByDay[dayOfWeek] ?? [];
-  return a.daysOfWeek.includes(dayOfWeek) ? a.ranges : [];
-};
-
-// Narrow a (possibly per-day) record down to a single date's effective ranges,
-// shaped exactly like the legacy resolved record so every existing consumer
-// (isOwnerAvailable / isAvailabilityCovering copies) keeps working unchanged.
-const narrowToDay = (a: AvailabilityRecord, dayOfWeek: number): AvailabilityRecord => {
-  const ranges = rangesForDay(a, dayOfWeek);
-  return { daysOfWeek: ranges.length ? [dayOfWeek] : [], ranges };
-};
-
-const defaultToAvailabilityRecord = (record: { daysOfWeek: number[]; startMinutes: number; endMinutes: number; startMinutes2?: number | null; endMinutes2?: number | null; ranges?: unknown; rangesByDay?: unknown }): AvailabilityRecord => {
-  const rangesByDay = parseRangesByDay(record.rangesByDay);
-  if (rangesByDay) {
-    // daysOfWeek = days that actually have ranges; flat `ranges` left empty (the
-    // per-day map is authoritative and read via rangesForDay()).
-    return { daysOfWeek: Object.keys(rangesByDay).map(Number).sort((a, b) => a - b), ranges: [], rangesByDay };
-  }
-  const ranges = record.ranges ? parseRanges(record.ranges) : [];
-  if (!ranges.length) {
-    ranges.push({ startMinutes: record.startMinutes, endMinutes: record.endMinutes });
-    if (record.startMinutes2 != null && record.endMinutes2 != null && record.endMinutes2 > record.startMinutes2) {
-      ranges.push({ startMinutes: record.startMinutes2, endMinutes: record.endMinutes2 });
-    }
-  }
-  return { daysOfWeek: record.daysOfWeek, ranges };
-};
+// REG-802: gli helper puri della disponibilità risolta (parse, `rangesForDay`,
+// `narrowToDay`, `defaultToAvailabilityRecord`) stanno in
+// `lib/autoscuole/availability-record.ts`, condivisi con slot-matcher e scambi.
 
 /**
  * Returns the Monday (ISO week start) for a given date in Europe/Rome timezone.
@@ -1052,6 +1000,10 @@ export async function getAvailabilitySlots(input: z.infer<typeof getSlotsSchema>
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = getSlotsSchema.parse(input);
+    // REG-802: l'allievo legge solo le sue fasce (vedi availability-access).
+    if (!canReadAvailability(membership, payload.ownerType, payload.ownerId)) {
+      return { success: false, message: AVAILABILITY_READ_FORBIDDEN };
+    }
 
     const isoFor = (p: CalendarDateParts) =>
       `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
@@ -1221,6 +1173,10 @@ export async function getDefaultAvailability(input: z.infer<typeof getDefaultAva
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = getDefaultAvailabilitySchema.parse(input);
+    // REG-802: l'allievo legge solo le sue preferenze (vedi availability-access).
+    if (!canReadAvailability(membership, payload.ownerType, payload.ownerId)) {
+      return { success: false, message: AVAILABILITY_READ_FORBIDDEN };
+    }
 
     const record = await prisma.autoscuolaWeeklyAvailability.findFirst({
       where: {
@@ -2221,10 +2177,13 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         if (forcedMinutes % 15 !== 0) return null;
         candidateStarts = [forcedStart];
       } else {
-        if (!studentAvailability || !studentAvailability.daysOfWeek.includes(dayOfWeek)) {
+        // REG-802: le fasce del giorno, sia per le righe condivise sia per
+        // quelle per giorno (`rangesByDay`, dove `ranges` è vuoto apposta).
+        const studentDayRanges = studentAvailability ? rangesForDay(studentAvailability, dayOfWeek) : [];
+        if (!studentDayRanges.length) {
           return null;
         }
-        for (const range of studentAvailability.ranges) {
+        for (const range of studentDayRanges) {
           let start = range.startMinutes;
           let end = range.endMinutes;
           if (preferredWindow) {
@@ -3371,6 +3330,8 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       : null;
 
     // Restricted time range: check if student has availability overlapping with the restricted range
+    // REG-802: guarda le fasce dell'allievo nel giorno richiesto (con le fasce
+    // per giorno `ranges` è vuoto); senza fasce quel giorno vale la settimana.
     let restrictToTimeRange = false;
     let restrictedStartMin = 0;
     let restrictedEndMin = 0;
@@ -3379,13 +3340,12 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       const [reH, reM] = clusterSettings.restrictedTimeRangeEnd.split(":").map(Number);
       restrictedStartMin = rsH * 60 + rsM;
       restrictedEndMin = reH * 60 + reM;
-      // Check if any of the student's declared availability ranges overlap with the restricted range
-      const hasOverlap = studentAvailability.ranges.some(
-        (r) => r.startMinutes < restrictedEndMin && r.endMinutes > restrictedStartMin,
+      restrictToTimeRange = overlapsWindowOnDay(
+        studentAvailability,
+        getDayOfWeekFromDateParts(dateParts),
+        restrictedStartMin,
+        restrictedEndMin,
       );
-      if (hasOverlap) {
-        restrictToTimeRange = true;
-      }
     }
 
     if (!student) {
@@ -3893,21 +3853,19 @@ export async function getDateAvailabilityMap(
       : null;
 
     // Restricted time range: check if student has availability overlapping with the restricted range
-    let restrictToTimeRange = false;
+    // REG-802: la decisione è per giorno (vedi `restrictOnDay` nel ciclo).
     let restrictedStartMin = 0;
     let restrictedEndMin = 0;
-    if (clusterSettings.restrictedTimeRangeEnabled && studentAvailability) {
+    const restrictedWindowActive = Boolean(clusterSettings.restrictedTimeRangeEnabled && studentAvailability);
+    if (restrictedWindowActive) {
       const [rsH, rsM] = clusterSettings.restrictedTimeRangeStart.split(":").map(Number);
       const [reH, reM] = clusterSettings.restrictedTimeRangeEnd.split(":").map(Number);
       restrictedStartMin = rsH * 60 + rsM;
       restrictedEndMin = reH * 60 + reM;
-      const hasOverlap = studentAvailability.ranges.some(
-        (r) => r.startMinutes < restrictedEndMin && r.endMinutes > restrictedStartMin,
-      );
-      if (hasOverlap) {
-        restrictToTimeRange = true;
-      }
     }
+    const restrictOnDay = (dayOfWeek: number) =>
+      restrictedWindowActive &&
+      overlapsWindowOnDay(studentAvailability, dayOfWeek, restrictedStartMin, restrictedEndMin);
 
     if (!student) {
       return { success: false, message: "Allievo non valido." };
@@ -4103,6 +4061,7 @@ export async function getDateAvailabilityMap(
       const dateStart = toTimeZoneDate(dateParts, 0, 0);
       const dateEnd = toTimeZoneDate(addDaysToDateParts(dateParts, 1), 0, 0);
       const dayOfWeek = getDayOfWeekFromDateParts(dateParts);
+      const restrictToTimeRange = restrictOnDay(dayOfWeek);
 
       // Holiday → mark unavailable, skip scan
       if (holidaySet.has(key)) {

@@ -37,6 +37,13 @@ Write: `createAvailabilitySlots()` (mobile) **e** `setAutoscuolaInstructorWeekly
 - spento → giorni attivi a chip + fasce condivise (UI invariata), salva senza `scheduleByDay` → `rangesByDay = NULL`;
 - acceso → lista dei 7 giorni con toggle e fasce indipendenti (stesso modello della `DefaultAvailabilityEditor` mobile), salva `scheduleByDay` → `rangesByDay`.
 Lo switch nasce già acceso se la settimana tipo ha `rangesByDay`, quindi quello che l'istruttore imposta da app si vede e si modifica dal web. Collassare a orari condivisi è **lossy**: vincono le fasce del primo giorno attivo (lo dice un toast). Auto-save a ogni modifica, come prima. Il riepilogo in lista raggruppa i giorni con le stesse fasce (`groupDaysByRanges`), e il tab Calendario legge il default **del giorno** (`rangesForWeekday`), non più le fasce piatte. Nessuna migrazione: la colonna `rangesByDay` esisteva già.
+**Lettori allineati alle fasce per giorno (REG-802, 27/11/2026).** Gli helper puri ora stanno in `lib/autoscuole/availability-record.ts` (`parseRanges`, `parseRangesByDay`, `rangesForDay`, `narrowToDay`, `defaultToAvailabilityRecord`, `isRecordCoveringMinutes`, `overlapsWindowOnDay`, `allRangesOf`), importati da `autoscuole-availability.actions.ts`, `slot-matcher.ts` e `autoscuole-swap.actions.ts` (prima erano privati nel file `"use server"` e copiati altrove). Con `rangesByDay` il campo piatto `ranges` del record risolto è **vuoto apposta**: chi legge le fasce di un giorno deve passare da `rangesForDay`. Cinque lettori delle disponibilità **allievo** non lo facevano; erano innocui solo perché l'app allievo scriveva ancora il modello condiviso:
+- `createBookingRequest` (percorso del motore, senza `selectedStartsAt`): leggeva `ranges` → con le fasce per giorno zero orari candidati;
+- `getAllAvailableSlots` / `getDateAvailabilityMap` («Riempi le fasce più vuote»): la sovrapposizione con la fascia prioritaria ora si decide **per giorno** (`overlapsWindowOnDay`); se quel giorno l'allievo non ha fasce si guarda la settimana, che è esattamente il comportamento di prima per le righe legacy;
+- `findBestAutoscuolaSlot` (proposte all'istruttore): usava solo `startMinutes/endMinutes`, cioè la **prima fascia**; ora candida tutte le fasce del giorno (`candidateStartsForRanges`). Cambio voluto anche per le righe legacy mattina+pomeriggio: prima il pomeriggio non veniva mai proposto;
+- scambi `available_only`: la copia locale di `isAvailabilityCovering` non leggeva `rangesByDay` né ricadeva sui campi piatti; ora usa `isRecordCoveringMinutes`.
+Restano invariati (già corretti): lista d'attesa (`respondWaitlistOffer`, `getWaitlistOffers`, `broadcastWaitlistOffer`) e il job dei posti liberi in `communications.ts` (guarda solo il giorno, e i writer tengono `daysOfWeek` = giorni attivi). Test: `tests/unit/autoscuole/availability-record.test.ts`.
+
 - `AutoscuolaAvailabilitySlot` — published bookable slots (open/booked)
 - `AutoscuolaInstructorPublishedWeek` — unique on companyId + instructorId + weekStart
 
@@ -121,6 +128,10 @@ disponibilità deve chiamare `assertCanWriteAvailability`.** E2E:
 > solo la prima fascia e salvando cancellerebbe la seconda. In prod 0 righe così su
 > 444 (solo seed dev: Giulia, Luca, Chiara). L'app legge `getDefaultAvailability`,
 > che le ricostruisce.
+
+## Chi può leggere la disponibilità (REG-802)
+
+`getAvailabilitySlots` (GET `availability/slots`) e `getDefaultAvailability` (GET `availability/default`) passano da `canReadAvailability` (`availability-access.ts`, pura): titolare, admin e istruttori leggono tutto nella propria autoscuola (gli istruttori devono vedere le disponibilità degli allievi); l'**allievo** solo le proprie (`ownerType: "student"`, id = suo utente). Prima un allievo poteva leggere le preferenze orarie di qualunque altro allievo, o tutte omettendo `ownerType`. Errore: «Non puoi vedere questa disponibilità.» L'app allievo legge solo le sue (Impostazioni › Disponibilità), quindi nessun client esistente cambia. Test in `tests/unit/autoscuole/availability-access.test.ts`.
 
 ## Connected features
 - **Booking Engine** — slot-matcher reads all availability data; publication filter gates booking

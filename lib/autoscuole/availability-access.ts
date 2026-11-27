@@ -49,6 +49,28 @@ export function canWriteAvailability(
   return false;
 }
 
+export const AVAILABILITY_READ_FORBIDDEN = "Non puoi vedere questa disponibilità.";
+
+/**
+ * REG-802 — chi può LEGGERE una disponibilità (settimana tipo e fasce).
+ * Pura. Le letture restano sempre nell'autoscuola di chi legge (`companyId`
+ * della membership); qui si chiude solo il caso dell'allievo, che prima poteva
+ * leggere le preferenze orarie di qualunque altro allievo (o tutte, senza
+ * `ownerType`). Titolare, admin e istruttori leggono tutto: gli istruttori
+ * devono vedere le disponibilità degli allievi.
+ */
+export function canReadAvailability(
+  m: Pick<AvailabilityWriter, "role" | "autoscuolaRole" | "userId">,
+  ownerType: AvailabilityOwnerType | null | undefined,
+  ownerId: string | null | undefined,
+): boolean {
+  if (isAvailabilityManager(m)) return true;
+  if (m.autoscuolaRole === "STUDENT") {
+    return ownerType === "student" && ownerId === m.userId;
+  }
+  return true;
+}
+
 /** `null` se può scrivere, altrimenti il messaggio d'errore. */
 export async function assertCanWriteAvailability(
   m: AvailabilityWriter,

@@ -15,6 +15,7 @@ import {
   resolveVehiclesForInstructor,
 } from "@/lib/autoscuole/vehicle-resolution";
 import { vehicleServesLicense } from "@/lib/autoscuole/license";
+import { defaultToAvailabilityRecord, rangesForDay } from "@/lib/autoscuole/availability-record";
 import {
   loadInstructorLocatedBusy,
   loadStudentLocationContext,
@@ -200,6 +201,22 @@ const buildCandidateStarts = (
     .map((m) => toTimeZoneDate(dayParts, Math.floor(m / 60), m % 60));
 };
 
+/**
+ * REG-802: partenze candidate su tutte le fasce del giorno (prima solo la
+ * prima). Unione senza doppioni, in ordine di orario.
+ */
+const candidateStartsForRanges = (
+  dayParts: CalendarDateParts,
+  ranges: Array<{ startMinutes: number; endMinutes: number }>,
+  durationMinutes: number,
+) => {
+  const byTime = new Map<number, Date>();
+  for (const range of ranges) {
+    for (const d of buildCandidateStarts(dayParts, range, durationMinutes)) byTime.set(d.getTime(), d);
+  }
+  return [...byTime.keys()].sort((a, b) => a - b).map((t) => byTime.get(t)!);
+};
+
 const buildAppointmentMaps = (
   appointments: Array<
     BusyAppointment & {
@@ -328,6 +345,9 @@ export async function findBestAutoscuolaSlot(
     ]);
 
   if (!studentAvailability) return null;
+  // REG-802: fasce dell'allievo per giorno (righe condivise e `rangesByDay`).
+  // Prima si usava solo la prima fascia (`startMinutes/endMinutes`).
+  const studentRecord = defaultToAvailabilityRecord(studentAvailability);
   const limits = (autoscuolaService?.limits ?? {}) as Record<string, unknown>;
   const smVehiclesEnabled = limits.vehiclesEnabled !== false;
   if (!activeInstructors.length) return null;
@@ -459,7 +479,8 @@ export async function findBestAutoscuolaSlot(
   for (let offset = 0; offset <= maxDays; offset += 1) {
     const dayParts = addDaysToDateParts(preferredDateParts, offset);
     const dayOfWeek = getDayOfWeekFromDateParts(dayParts);
-    if (!studentAvailability.daysOfWeek.includes(dayOfWeek)) continue;
+    const studentDayRanges = rangesForDay(studentRecord, dayOfWeek);
+    if (!studentDayRanges.length) continue;
 
     const rangeStart = toTimeZoneDate(dayParts, 0, 0);
     const rangeEnd = toTimeZoneDate(addDaysToDateParts(dayParts, 1), 0, 0);
@@ -483,15 +504,7 @@ export async function findBestAutoscuolaSlot(
     );
     const studentIntervals = appointmentMaps.intervals.get(input.studentId);
 
-    const window = {
-      startMinutes: studentAvailability.startMinutes,
-      endMinutes: studentAvailability.endMinutes,
-    };
-    const candidateStarts = buildCandidateStarts(
-      dayParts,
-      window,
-      input.durationMinutes,
-    );
+    const candidateStarts = candidateStartsForRanges(dayParts, studentDayRanges, input.durationMinutes);
     if (!candidateStarts.length) continue;
 
     let bestForDay: AutoscuolaSlotMatchResult | null = null;
