@@ -14,7 +14,10 @@ export type RoadLesson = {
   status: string;
   student: { id: string; name: string | null } | null;
   instructor: { id: string; name: string; color: string | null; phone?: string | null } | null;
-  vehicle: { id: string; name: string; plate: string | null } | null;
+  /** `licenseCategory` dal REG-753: AM/A1/A2/A = guida in moto. */
+  vehicle: { id: string; name: string; plate: string | null; licenseCategory?: string } | null;
+  /** REG-753: l'auto al seguito di una guida moto (null se non prenotata o in auto). */
+  followVehicle?: { id: string; name: string; plate: string | null } | null;
   /** Chiave variante colore dell'auto 3D (vedi car-colors.ts). */
   carColor: CarColorKey;
 };

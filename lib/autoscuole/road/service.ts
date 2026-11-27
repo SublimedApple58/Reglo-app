@@ -58,7 +58,8 @@ import {
  *
  * Regole:
  * - tutto spento se `limits.roadEnabled !== true` (si accende dal backoffice);
- * - v1 solo guide singole in auto: niente gruppi, esami, moto;
+ * - solo guide singole: niente gruppi né esami. Le moto singole (REG-753) sì,
+ *   con l'istruttore nell'auto al seguito; i birilli no (area chiusa, a piedi);
  * - «Termina guida» chiude la sessione e segna SUBITO la guida `completed`;
  * - l'allievo vede percorso e segnalazioni solo con `studentNotesEnabled`.
  */
@@ -108,13 +109,15 @@ type EligibilityInput = {
   vehicle: { licenseCategory: string } | null;
   studentId: string | null;
 };
-/** v1: solo guide singole in auto (niente gruppi, esami, moto). */
+/**
+ * Guide singole in auto e, da REG-753, in moto (l'istruttore segue nell'auto al
+ * seguito col telefono). Fuori gruppi, esami e le moto «birilli» (area chiusa).
+ */
 export function isRoadEligibleLesson(a: EligibilityInput) {
   if (!a.studentId) return false;
   if (a.groupLessonId) return false;
   if (a.type === "esame" || a.type === "group_lesson") return false;
-  if (a.motoLessonType) return false;
-  if (a.vehicle && MOTO_CATEGORIES.has(a.vehicle.licenseCategory)) return false;
+  if (a.motoLessonType === "birilli") return false;
   return true;
 }
 
@@ -133,11 +136,21 @@ const appointmentSelect = {
   student: { select: { id: true, name: true } },
   instructor: { select: { id: true, name: true, color: true, phone: true, userId: true } },
   vehicle: { select: { id: true, name: true, plate: true, licenseCategory: true, color: true } },
+  // REG-753: l'auto al seguito delle guide moto.
+  appointmentVehicles: {
+    where: { role: "follow" },
+    select: { vehicle: { select: { id: true, name: true, plate: true } } },
+  },
 } satisfies Prisma.AutoscuolaAppointmentSelect;
 type AppointmentRow = Prisma.AutoscuolaAppointmentGetPayload<{ select: typeof appointmentSelect }>;
 
 const lessonEnd = (a: { startsAt: Date; endsAt: Date | null }) =>
   a.endsAt ?? new Date(a.startsAt.getTime() + 60 * 60 * 1000);
+
+function followVehicleOf(a: AppointmentRow) {
+  const v = a.appointmentVehicles?.[0]?.vehicle;
+  return v ? { id: v.id, name: v.name, plate: v.plate } : null;
+}
 
 function lessonDTO(a: AppointmentRow) {
   return {
@@ -149,7 +162,11 @@ function lessonDTO(a: AppointmentRow) {
     instructor: a.instructor
       ? { id: a.instructor.id, name: a.instructor.name, color: a.instructor.color, phone: a.instructor.phone }
       : null,
-    vehicle: a.vehicle ? { id: a.vehicle.id, name: a.vehicle.name, plate: a.vehicle.plate } : null,
+    vehicle: a.vehicle
+      ? { id: a.vehicle.id, name: a.vehicle.name, plate: a.vehicle.plate, licenseCategory: a.vehicle.licenseCategory }
+      : null,
+    // REG-753: guida in moto, l'istruttore la segue in quest'auto (se prenotata).
+    followVehicle: followVehicleOf(a),
     // Chiave della variante colore dell'auto 3D (veicolo → tinta istruttore → bianco).
     carColor: resolveCarColor(a.vehicle?.color, a.instructor?.color),
   };
@@ -1398,7 +1415,10 @@ export async function getRoadLive() {
       : [];
 
     // Auto in sede: veicoli attivi non impegnati adesso, con la prossima guida.
-    const busyVehicleIds = new Set(active.map((s) => s.appointment.vehicleId).filter(Boolean) as string[]);
+    // REG-753: con una moto in Road anche l'auto al seguito è in strada.
+    const busyVehicleIds = new Set(
+      active.flatMap((s) => [s.appointment.vehicleId, followVehicleOf(s.appointment)?.id]).filter(Boolean) as string[],
+    );
     const vehicles = await prisma.autoscuolaVehicle
       .findMany({
         // v1 solo auto: le moto non compaiono tra le «auto in sede».

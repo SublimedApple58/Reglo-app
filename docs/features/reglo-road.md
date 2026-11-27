@@ -6,7 +6,8 @@ Piano e decisioni di prodotto: `plans/road/001-reglo-road.md`. Anteprime approva
 
 ## Regole di prodotto
 - **Interruttore**: `CompanyService.limits.roadEnabled` (nasce spento, vale solo `=== true`), si accende **solo dal backoffice** (drawer «Gestisci» di `BackofficeCompaniesPage.tsx`). Esposto read-only in `AutoscuolaSettingsData.roadEnabled` (`GET /api/autoscuole/settings`).
-- **v1 solo guide singole in auto**: niente gruppi (`groupLessonId`), esami, moto (`motoLessonType` o veicolo AM/A1/A2/A). Vedi `isRoadEligibleLesson`.
+- **Solo guide singole**: niente gruppi (`groupLessonId`) né esami. Vedi `isRoadEligibleLesson`.
+- **Moto singole (REG-753, 27/11/2026)**: ammesse (veicolo AM/A1/A2/A); l'istruttore segue nell'auto al seguito col telefono, quindi GPS, km e segnalazioni sono quelli dell'auto. Fuori le moto `motoLessonType = "birilli"` (area chiusa). La guida (`Lesson`) porta `vehicle.licenseCategory` (la mobile ci riconosce la moto) e `followVehicle` (`{id,name,plate}` dalla riga `role="follow"` di `AutoscuolaAppointmentVehicle`, o `null`). «Auto in sede» conta impegnata anche l'auto al seguito di una sessione aperta. Road libero (`/road/free`) resta solo auto.
 - **Ingresso**: l'invito si apre 15 min prima dell'inizio (`ROAD_ENTRY_OPENS_MIN`); entrare porta la guida a `checked_in`.
 - **«Termina guida»** = sessione chiusa **e guida `completed` subito**.
 - **Allievo**: vede percorso e segnalazioni (a guida finita) solo se è attivo `limits.studentNotesEnabled` («Mostra note e percorsi nell'app allievi»).
