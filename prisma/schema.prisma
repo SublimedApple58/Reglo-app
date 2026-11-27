@@ -439,6 +439,13 @@ model CompanyMember {
   /// Chi scrive passa SEMPRE da `lib/actions/autoscuole-license-paths.actions.ts`,
   /// che aggiorna riga e specchio nella stessa transazione.
   activeLicensePathId       String?                @db.Uuid
+  /// REG-802: quando l'allievo ha confermato le sue disponibilità (fasce per
+  /// giorno) dall'app. Null = mai confermate col modello nuovo (anche se ha una
+  /// riga legacy). Le disponibilità stanno in `AutoscuolaWeeklyAvailability`.
+  availabilityConfirmedAt   DateTime?              @db.Timestamp(6)
+  /// REG-802: «Configura in seguito» sullo step Disponibilità (solo chi non è
+  /// ancora in fase guide). Fino a questa data lo step non si ripropone.
+  availabilityPromptSnoozedUntil DateTime?         @db.Timestamp(6)
   createdAt                 DateTime               @default(now()) @db.Timestamp(6)
   updatedAt                 DateTime               @updatedAt
 

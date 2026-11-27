@@ -142,6 +142,9 @@ export async function POST(request: Request) {
           password: passwordHash,
           role: "user",
           activeCompanyId: company.id,
+          // REG-802: la registrazione chiede già nome, email e cellulare, quindi
+          // il profilo è completo: niente «primo accesso normale» dopo.
+          profileCompletedAt: new Date(),
           ...whatsAppConsentFields(parsed.whatsappConsent, "app_registrazione"),
         },
       });

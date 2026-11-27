@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { STUDENT_BAND_KEYS, type StudentBandKey } from "@/lib/autoscuole/student-availability";
 
 // Schema for signing users in
 export const signInFormSchema = z.object({
@@ -104,6 +105,16 @@ export const firstAccessCompleteSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data di nascita non valida')
     .refine(isAdultishBirthDate, 'Controlla la data di nascita'),
+  // REG-802: disponibilità a fasce scelte nello step prima del riepilogo.
+  // Facoltative: le app senza lo step non le mandano.
+  availability: z
+    .object({
+      days: z.record(
+        z.string().regex(/^[0-6]$/),
+        z.array(z.enum(STUDENT_BAND_KEYS as [StudentBandKey, ...StudentBandKey[]])).max(STUDENT_BAND_KEYS.length),
+      ),
+    })
+    .optional(),
 });
 
 // Schema for updating the user profile

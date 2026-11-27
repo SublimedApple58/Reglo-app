@@ -6,7 +6,7 @@ L'autoscuola può creare un allievo con **solo telefono + password**, senza emai
 
 ## Modello
 - `User.loginPhone` — numero con cui l'utente **accede**, sempre E.164 (`+393331234567`), `@unique`. Distinto da `User.phone` (recapito: non unico, in prod spesso senza prefisso). Valorizzato solo per gli account creati con l'accesso col telefono; gli account esistenti non lo hanno.
-- `User.birthDate` (`DATE`) e `User.profileCompletedAt` — per l'onboarding del primo accesso (non ancora usati).
+- `User.birthDate` (`DATE`) e `User.profileCompletedAt` — per l'onboarding del primo accesso. Dal REG-802 `profileCompletedAt` null = «prima volta in app» anche per gli account email+password (backfill per chi usa già l'app; vedi `student-availability-onboarding.md`). `first-access/complete` accetta anche `availability: { days }`.
 - Migrazione `20261111090000_user_login_phone`: solo colonne nullable + indice unico.
 - Email: resta il **segnaposto** `allievo+<uuid>@no-app.reglo.local` di `lib/users/placeholder-email.ts` finché l'allievo non ne mette una sua.
 

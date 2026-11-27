@@ -6,6 +6,7 @@ import { getOrCreateInstructorForUser } from "@/lib/autoscuole/instructors";
 import { isInstructor } from "@/lib/autoscuole/roles";
 import { resolveCoverPhotoUrls } from "@/lib/autoscuole/location-cover";
 import { describeMemberMaintenance } from "@/lib/maintenance";
+import { getStudentOnboarding } from "@/lib/autoscuole/student-availability-store";
 
 export async function GET(request: Request) {
   const token = parseBearerToken(request.headers.get("authorization"));
@@ -86,6 +87,13 @@ export async function GET(request: Request) {
     instructorId = instructor.id;
   }
 
+  // REG-802: cosa manca all'allievo (primo accesso normale, cellulare,
+  // disponibilità). Le app vecchie ignorano il campo.
+  const onboarding = await getStudentOnboarding(user, activeMembership).catch((error) => {
+    console.error("[me] onboarding", error);
+    return null;
+  });
+
   let photoUrl: string | null = null;
   if (user.image) {
     try {
@@ -121,6 +129,7 @@ export async function GET(request: Request) {
       companies,
       maintenance:
         companies.find((entry) => entry.id === user.activeCompanyId)?.maintenance ?? null,
+      onboarding,
     },
   });
 }

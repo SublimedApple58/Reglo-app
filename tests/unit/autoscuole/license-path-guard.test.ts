@@ -44,6 +44,9 @@ const AMMESSI: Record<string, string> = {
   "scripts/seed-reg629.ts":
     "fixture solo-dev degli e2e REG-629 (ex allievi): crea da zero membro E riga del " +
     "percorso con gli stessi valori, non modifica un percorso esistente",
+  "scripts/seed-reg802.ts":
+    "fixture solo-dev del REG-802 (onboarding allievo): crea da zero membro E riga del " +
+    "percorso con gli stessi valori, non modifica un percorso esistente",
 };
 
 const SORGENTI = ["lib", "app", "scripts"];
