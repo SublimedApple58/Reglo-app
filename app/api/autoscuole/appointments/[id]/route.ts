@@ -20,6 +20,8 @@ export async function PATCH(
     followVehicleId: payload.followVehicleId,
     instructorId: payload.instructorId,
     durationMin: payload.durationMin,
+    // REG-753: Road passa una guida moto «birilli» a «strada» prima di partire.
+    motoLessonType: payload.motoLessonType,
   });
   return NextResponse.json(res, { status: res.success ? 200 : 400 });
 }
