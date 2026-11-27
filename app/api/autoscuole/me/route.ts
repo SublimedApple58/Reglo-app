@@ -3,6 +3,7 @@ import { prisma } from "@/db/prisma";
 import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
 import { requireServiceAccess } from "@/lib/service-access";
 import { formatError } from "@/lib/utils";
+import { resolveSignupStartPhase } from "@/lib/autoscuole/signup-start-phase";
 
 export async function GET() {
   try {
@@ -61,7 +62,9 @@ export async function GET() {
           (p): p is "TEORIA" | "PRATICA" => p === "TEORIA" || p === "PRATICA",
         )
       : ["PRATICA"];
-    const autoAssignQuizOnSignup = Boolean(limits.autoAssignQuizOnSignup);
+    // REG-815: derivato dalla fase di partenza (l'app conosce solo questo campo).
+    const autoAssignQuizOnSignup =
+      resolveSignupStartPhase(limits as Record<string, unknown>) === "TEORIA";
 
     const phase = membership.studentPhase ?? "PRATICA";
     const hasQuizAccess = Boolean(membership.quizSeatGrantedAt);

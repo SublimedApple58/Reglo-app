@@ -9,44 +9,10 @@ import { releaseEmailIfOrphaned } from "@/lib/account-deletion";
 import { issueMobileToken } from "@/lib/mobile-auth";
 import { formatError } from "@/lib/utils";
 import { getSignedAssetUrl } from "@/lib/storage/r2";
-import type { ServiceLimits } from "@/lib/services";
 import { resolveSignupInviteCode } from "@/lib/autoscuole/signup-invite";
 import { validateStudentPhone } from "@/lib/autoscuole/student-onboarding";
 import { clientIp, hitRateLimit } from "@/lib/auth/rate-limit";
-
-/**
- * Decide which student phase and quiz seat status a new sign-up should land in,
- * based on the autoscuola configuration (`phasesEnabled`, `autoAssignQuizOnSignup`,
- * `quizSeats`) and the live count of seats already consumed.
- *
- *   TEORIA disabled  → PRATICA (legacy default, no quiz seat)
- *   TEORIA enabled + auto-assign OFF → AWAITING
- *   TEORIA enabled + auto-assign ON + free seat → TEORIA + seat granted
- *   TEORIA enabled + auto-assign ON + no free seat → AWAITING (soft degrade)
- */
-function decideOnboardingPhase(
-  limits: ServiceLimits | null,
-  seatsConsumed: number,
-): { studentPhase: "TEORIA" | "PRATICA" | "AWAITING"; grantSeat: boolean } {
-  const phasesEnabled = Array.isArray(limits?.phasesEnabled)
-    ? limits!.phasesEnabled
-    : ["PRATICA"];
-  if (!phasesEnabled.includes("TEORIA")) {
-    return { studentPhase: "PRATICA", grantSeat: false };
-  }
-  const autoAssign = Boolean(limits?.autoAssignQuizOnSignup);
-  if (!autoAssign) {
-    return { studentPhase: "AWAITING", grantSeat: false };
-  }
-  const quizSeats =
-    typeof limits?.quizSeats === "number" && Number.isFinite(limits.quizSeats)
-      ? Math.max(0, Math.floor(limits.quizSeats))
-      : 0;
-  if (seatsConsumed < quizSeats) {
-    return { studentPhase: "TEORIA", grantSeat: true };
-  }
-  return { studentPhase: "AWAITING", grantSeat: false };
-}
+import { decideSignupPhase } from "@/lib/autoscuole/signup-start-phase";
 
 export async function POST(request: Request) {
   try {
@@ -129,7 +95,7 @@ export async function POST(request: Request) {
       // Resolve the phase + quiz seat state INSIDE the transaction so that
       // a concurrent registration on the same autoscuola cannot race past the
       // quizSeats limit (we read the live counter atomically with the create).
-      const limits = (autoscuoleService.limits ?? null) as ServiceLimits | null;
+      const limits = (autoscuoleService.limits ?? null) as Record<string, unknown> | null;
       const seatsConsumed = await tx.companyMember.count({
         where: {
           companyId: company.id,
@@ -137,14 +103,15 @@ export async function POST(request: Request) {
           quizSeatGrantedAt: { not: null },
         },
       });
-      const decision = decideOnboardingPhase(limits, seatsConsumed);
+      // REG-815: la fase di partenza la sceglie l'autoscuola (In attesa / Teoria / Foglio rosa).
+      const decision = decideSignupPhase(limits, seatsConsumed);
 
       // REG-424 — license path mode. "fixed_default": the school assigns the
       // license centrally, so seed the company default now (the mobile REG-410
       // gate then never shows — needsLicensePath needs a NULL license — and the
       // owner changes it by hand if needed). "student_choice" (default): leave it
       // NULL so the gate prompts the student to pick it themselves.
-      const rawLimits = (limits as Record<string, unknown> | null) ?? null;
+      const rawLimits = limits;
       const licensePathMode =
         rawLimits?.licensePathMode === "fixed_default" ? "fixed_default" : "student_choice";
       const seededLicense =

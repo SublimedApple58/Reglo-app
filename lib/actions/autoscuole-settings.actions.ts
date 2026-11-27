@@ -36,6 +36,12 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
 import { notifyStudentPhaseChange } from "@/lib/autoscuole/student-phase-notifications";
 import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
+import {
+  SIGNUP_START_PHASES,
+  autoAssignFor,
+  resolveSignupStartPhase,
+  type SignupStartPhase,
+} from "@/lib/autoscuole/signup-start-phase";
 import { formatError } from "@/lib/utils";
 import { getChannelReach } from "@/lib/autoscuole/channel-reach";
 import { requireServiceAccess } from "@/lib/service-access";
@@ -2419,6 +2425,8 @@ type QuizSeatsContext = {
   phasesEnabled: ("TEORIA" | "PRATICA")[];
   quizSeats: number;
   autoAssignQuizOnSignup: boolean;
+  /** REG-815: fase di partenza di chi si registra dall'app. */
+  signupStartPhase: SignupStartPhase;
   used: number;
   available: number;
 };
@@ -2442,7 +2450,9 @@ async function loadQuizSeatsContext(companyId: string): Promise<QuizSeatsContext
       ? Math.max(0, Math.floor(limits.quizSeats as number))
       : 0;
 
-  const autoAssignQuizOnSignup = Boolean(limits.autoAssignQuizOnSignup);
+  // REG-815: il vecchio interruttore è derivato dalla fase di partenza.
+  const signupStartPhase = resolveSignupStartPhase(limits);
+  const autoAssignQuizOnSignup = autoAssignFor(signupStartPhase);
 
   const used = await prisma.companyMember.count({
     where: {
@@ -2457,6 +2467,7 @@ async function loadQuizSeatsContext(companyId: string): Promise<QuizSeatsContext
     phasesEnabled,
     quizSeats,
     autoAssignQuizOnSignup,
+    signupStartPhase,
     used,
     available: Math.max(0, quizSeats - used),
   };
@@ -2481,6 +2492,7 @@ export async function getQuizSeatsContext() {
         available: ctx.available,
         phasesEnabled: ctx.phasesEnabled,
         autoAssignQuizOnSignup: ctx.autoAssignQuizOnSignup,
+        signupStartPhase: ctx.signupStartPhase,
       },
     };
   } catch (error) {
@@ -2583,29 +2595,30 @@ export async function grantQuizSeat(input: z.infer<typeof grantQuizSeatSchema>) 
   }
 }
 
-const setAutoAssignQuizOnSignupSchema = z.object({
-  enabled: z.boolean(),
+const setSignupStartPhaseSchema = z.object({
+  phase: z.enum(SIGNUP_START_PHASES),
 });
 
 /**
- * Toggles the per-autoscuola `autoAssignQuizOnSignup` flag in the
- * CompanyService.AUTOSCUOLE limits JSON.
+ * REG-815 — fase di partenza di chi si registra dall'app (In attesa / Teoria /
+ * Foglio rosa), in `CompanyService.limits.signupStartPhase`. Tiene allineato il
+ * vecchio `autoAssignQuizOnSignup` (vero solo con Teoria).
  *
- * On OFF→ON transition: also performs an immediate FIFO promotion of the
- * currently AWAITING students up to the number of free seats.
+ * Passando a Teoria da un altro valore, come faceva l'interruttore: gli allievi
+ * In attesa vengono promossi subito, dal più vecchio, finché ci sono posti quiz.
+ * Passare a In attesa o a Foglio rosa non sposta nessuno.
  *
- * Requires TEORIA to be one of the autoscuola's enabled phases — otherwise
- * the flag has no meaning.
+ * Serve la fase Teoria attiva: senza, chi si registra parte già in Foglio rosa.
  */
-export async function setAutoAssignQuizOnSignup(
-  input: z.infer<typeof setAutoAssignQuizOnSignupSchema>,
+export async function setSignupStartPhase(
+  input: z.infer<typeof setSignupStartPhaseSchema>,
 ) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     if (!canManageSettings(membership.role, membership.autoscuolaRole)) {
       throw new Error("Operazione non consentita.");
     }
-    const payload = setAutoAssignQuizOnSignupSchema.parse(input);
+    const payload = setSignupStartPhaseSchema.parse(input);
 
     const ctx = await loadQuizSeatsContext(membership.companyId);
     if (!ctx.phasesEnabled.includes("TEORIA")) {
@@ -2628,9 +2641,8 @@ export async function setAutoAssignQuizOnSignup(
         message: "Servizio AUTOSCUOLE non configurato per questa autoscuola.",
       };
     }
-    const wasEnabled = Boolean(
-      (service.limits as Record<string, unknown> | null)?.autoAssignQuizOnSignup,
-    );
+    const previous = resolveSignupStartPhase(service.limits as Record<string, unknown> | null);
+    const toTheory = payload.phase === "TEORIA" && previous !== "TEORIA";
 
     let promoted = 0;
     let promotedUserIds: string[] = [];
@@ -2642,12 +2654,13 @@ export async function setAutoAssignQuizOnSignup(
         data: {
           limits: {
             ...currentLimits,
-            autoAssignQuizOnSignup: payload.enabled,
+            signupStartPhase: payload.phase,
+            autoAssignQuizOnSignup: autoAssignFor(payload.phase),
           } as Prisma.InputJsonValue,
         },
       });
 
-      if (payload.enabled && !wasEnabled && ctx.available > 0) {
+      if (toTheory && ctx.available > 0) {
         // FIFO promotion: read the oldest AWAITING members, up to the
         // number of free seats, and grant them a seat + move to TEORIA.
         const candidates = await tx.companyMember.findMany({
@@ -2680,6 +2693,12 @@ export async function setAutoAssignQuizOnSignup(
       }
     });
 
+    // I limiti sono in cache (5 min): l'app deve leggere subito il valore nuovo.
+    await invalidateAutoscuoleCache({
+      companyId: membership.companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.SETTINGS],
+    });
+
     // Celebratory push for each promoted student — fire-and-forget.
     for (const promotedUserId of promotedUserIds) {
       void notifyStudentPhaseChange({
@@ -2692,18 +2711,20 @@ export async function setAutoAssignQuizOnSignup(
 
     return {
       success: true as const,
-      data: {
-        enabled: payload.enabled,
-        promoted,
-      },
+      data: { phase: payload.phase, promoted },
       message:
-        payload.enabled && promoted > 0
-          ? `Auto-assegnazione attiva. Promossi ${promoted} allievi in attesa.`
-          : payload.enabled
-            ? "Auto-assegnazione attiva."
-            : "Auto-assegnazione disattivata.",
+        promoted > 0
+          ? promoted === 1
+            ? "Salvato. Un allievo in attesa è passato in Teoria."
+            : `Salvato. ${promoted} allievi in attesa sono passati in Teoria.`
+          : "Salvato.",
     };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
+}
+
+/** Vecchio interruttore (acceso = Teoria, spento = In attesa): passa da `setSignupStartPhase`. */
+export async function setAutoAssignQuizOnSignup(input: { enabled: boolean }) {
+  return setSignupStartPhase({ phase: input.enabled ? "TEORIA" : "AWAITING" });
 }

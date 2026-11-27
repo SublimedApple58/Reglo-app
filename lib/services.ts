@@ -87,6 +87,13 @@ export type ServiceLimits = {
    */
   autoAssignQuizOnSignup?: boolean;
   /**
+   * REG-815 — fase di partenza di chi si registra dall'app: In attesa, Teoria
+   * (licenza quiz se libera) o Foglio rosa. Sostituisce `autoAssignQuizOnSignup`,
+   * che resta allineato (vero solo con TEORIA) e fa da ripiego se questo manca.
+   * Conta solo con 'TEORIA' in `phasesEnabled`. Vedi lib/autoscuole/signup-start-phase.ts.
+   */
+  signupStartPhase?: "AWAITING" | "TEORIA" | "PRATICA";
+  /**
    * Reglo Aula — lezioni di teoria in aula (slide + quiz live).
    * Quando true la company vede il modulo Aula. Default false.
    * Vedi docs/features/reglo-aula.md.

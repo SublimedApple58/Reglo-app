@@ -1,5 +1,6 @@
 "use client";
 
+import { resolveSignupStartPhase } from "@/lib/autoscuole/signup-start-phase";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   Car,
@@ -181,7 +182,7 @@ function AutoscuolaDrawerContent({
     typeof limits.quizSeats === "number" && Number.isFinite(limits.quizSeats)
       ? Math.max(0, Math.floor(limits.quizSeats))
       : 0;
-  const autoAssignQuizOnSignup = Boolean(limits.autoAssignQuizOnSignup);
+  const signupStartPhase = resolveSignupStartPhase(limits as Record<string, unknown>);
   const aulaEnabled = Boolean(limits.aulaEnabled);
   const roadEnabled = limits.roadEnabled === true;
   const secretaryOnly = Boolean(limits.secretaryOnly);
@@ -218,6 +219,8 @@ function AutoscuolaDrawerContent({
         phasesEnabled: next as ("TEORIA" | "PRATICA")[],
         // When TEORIA is removed, auto-assign loses meaning — reset it.
         autoAssignQuizOnSignup: next.includes("TEORIA") ? prev.autoAssignQuizOnSignup : false,
+        // REG-815: senza Teoria anche la fase di partenza non conta più.
+        signupStartPhase: next.includes("TEORIA") ? prev.signupStartPhase : undefined,
       };
     });
   };
@@ -892,7 +895,11 @@ function AutoscuolaDrawerContent({
             </p>
           )}
           <p className="mt-3 text-[11px] text-muted-foreground">
-            Suggerimento: il valore <strong>autoAssignQuizOnSignup</strong> ({autoAssignQuizOnSignup ? "ON" : "OFF"}) si gestisce dalla web app del titolare.
+            Chi si registra dall&apos;app parte da{" "}
+            <strong>
+              {signupStartPhase === "TEORIA" ? "Teoria" : signupStartPhase === "PRATICA" ? "Foglio rosa" : "In attesa"}
+            </strong>
+            : si sceglie dalla web app del titolare.
           </p>
         </section>
       )}
