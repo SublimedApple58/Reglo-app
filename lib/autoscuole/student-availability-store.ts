@@ -11,21 +11,40 @@ import {
 } from "@/lib/autoscuole/availability-record";
 import {
   STUDENT_AVAILABILITY_BANDS,
+  STUDENT_RANGE_RULES,
+  availabilityInputToRanges,
   rowToBandsByDay,
+  rowToRangesByDay,
   snoozeUntilFrom,
   studentAvailabilityStepMode,
-  weeklyRowFromBands,
+  weeklyRowFromRanges,
+  type StudentAvailabilityInput,
   type StudentAvailabilityStepMode,
   type StudentBandsByDay,
+  type StudentRangesByDay,
 } from "@/lib/autoscuole/student-availability";
+import { normalizeBookingSlotDurations } from "@/lib/autoscuole/lesson-policy";
 import { buildOnboardingSteps, type StudentOnboarding } from "@/lib/autoscuole/student-onboarding";
 import { isPlaceholderEmail } from "@/lib/users/placeholder-email";
 
 export type StudentAvailabilityPayload = {
   /** Le fasce possibili, con orari: l'app non le conosce a memoria. */
   bands: Array<{ key: string; label: string; startMinutes: number; endMinutes: number }>;
-  /** "0"=Dom … "6"=Sab → fasce scelte (solo i giorni con almeno una fascia). */
+  /**
+   * "0"=Dom … "6"=Sab → fasce scelte (solo i giorni con almeno una fascia).
+   * Per le app fino al REG-802: un orario preciso qui è arrotondato alla fascia.
+   */
   days: StudentBandsByDay;
+  /** REG-813 — gli intervalli veri per giorno, in minuti (fonte per l'app nuova). */
+  ranges: StudentRangesByDay;
+  /** REG-813 — regole di «Un orario preciso» (`minDurationMinutes` = guida più breve). */
+  rules: {
+    minMinutes: number;
+    maxMinutes: number;
+    stepMinutes: number;
+    maxPerDay: number;
+    minDurationMinutes: number;
+  };
   /** Quando l'allievo le ha confermate dall'app (null = mai, anche con riga legacy). */
   confirmedAt: string | null;
   /** True se esiste una settimana tipo con almeno una fascia (anche legacy). */
@@ -44,11 +63,26 @@ export const weeklyRowHasRanges = (row: WeeklyRowFromDb | null | undefined): boo
   return allRangesOf(record).some((r) => r.endMinutes > r.startMinutes);
 };
 
+/** Guida più breve prenotabile nell'autoscuola: sotto non ha senso dirsi liberi. */
+export async function getStudentMinRangeMinutes(companyId: string): Promise<number> {
+  const service = await prisma.companyService.findFirst({
+    where: { companyId, serviceKey: "AUTOSCUOLE" },
+    select: { limits: true },
+  });
+  const limits = (service?.limits ?? {}) as Record<string, unknown>;
+  return Math.max(STUDENT_RANGE_RULES.stepMinutes, normalizeBookingSlotDurations(limits.bookingSlotDurations)[0]);
+}
+
+/** Fasce o intervalli mandati dall'app → intervalli canonici per questa autoscuola. */
+export async function resolveStudentAvailabilityInput(companyId: string, input: StudentAvailabilityInput) {
+  return availabilityInputToRanges(input, await getStudentMinRangeMinutes(companyId));
+}
+
 export async function getStudentAvailability(
   companyId: string,
   userId: string,
 ): Promise<StudentAvailabilityPayload> {
-  const [row, member] = await Promise.all([
+  const [row, member, minDurationMinutes] = await Promise.all([
     prisma.autoscuolaWeeklyAvailability.findFirst({
       where: { companyId, ownerType: "student", ownerId: userId },
     }),
@@ -56,27 +90,30 @@ export async function getStudentAvailability(
       where: { companyId_userId: { companyId, userId } },
       select: { availabilityConfirmedAt: true },
     }),
+    getStudentMinRangeMinutes(companyId),
   ]);
   return {
     bands: bandsPayload(),
     days: rowToBandsByDay(row),
+    ranges: rowToRangesByDay(row),
+    rules: { ...STUDENT_RANGE_RULES, minDurationMinutes },
     confirmedAt: member?.availabilityConfirmedAt?.toISOString() ?? null,
     hasAvailability: weeklyRowHasRanges(row),
   };
 }
 
 /**
- * Salva le fasce dell'allievo (riga per giorno) e segna la conferma; azzera
- * l'eventuale «Configura in seguito». Chi chiama valida prima che ci sia
- * almeno una fascia.
+ * Salva gli intervalli dell'allievo (riga per giorno) e segna la conferma;
+ * azzera l'eventuale «Configura in seguito». Chi chiama passa intervalli già
+ * canonici (`resolveStudentAvailabilityInput`), con almeno un giorno.
  */
 export async function saveStudentAvailability(
   companyId: string,
   userId: string,
-  days: StudentBandsByDay,
+  ranges: StudentRangesByDay,
   now: Date = new Date(),
 ): Promise<StudentAvailabilityPayload> {
-  const row = weeklyRowFromBands(days);
+  const row = weeklyRowFromRanges(ranges);
   if (!row) throw new Error("Scegli almeno una fascia.");
   await prisma.$transaction([
     prisma.autoscuolaWeeklyAvailability.upsert({

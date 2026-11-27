@@ -19,30 +19,37 @@ const WEEK: Array<[string, string]> = [
 
 type Bands = StudentAvailabilityPayload["bands"];
 
-const ordered = (keys: readonly string[] | undefined, bands: Bands) =>
-  bands.filter((b) => keys?.includes(b.key));
+type Range = { startMinutes: number; endMinutes: number };
 
-/** «Sera», «Mattina e pomeriggio», «Tutto il giorno». */
-const bandsLabel = (keys: readonly string[] | undefined, bands: Bands) => {
-  const list = ordered(keys, bands);
-  if (!list.length) return null;
-  if (list.length === bands.length) return "Tutto il giorno";
-  const labels = list.map((b) => b.label);
+const h = (m: number) => (m % 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}` : `${m / 60}`);
+
+/** «15–17», «8–13, 18–21». */
+const hoursLabel = (ranges: readonly Range[]) => ranges.map((r) => `${h(r.startMinutes)}–${h(r.endMinutes)}`).join(", ");
+
+/**
+ * «Sera», «Mattina e pomeriggio», «Tutto il giorno» quando gli orari coincidono
+ * con delle fasce intere; null per «un orario preciso» (REG-813), che si legge
+ * solo dalle ore.
+ */
+const bandsLabel = (ranges: readonly Range[], bands: Bands) => {
+  const inside = bands.filter((b) =>
+    ranges.some((r) => r.startMinutes <= b.startMinutes && r.endMinutes >= b.endMinutes),
+  );
+  const merged: Range[] = [];
+  for (const b of inside) {
+    const last = merged[merged.length - 1];
+    if (last && last.endMinutes === b.startMinutes) last.endMinutes = b.endMinutes;
+    else merged.push({ startMinutes: b.startMinutes, endMinutes: b.endMinutes });
+  }
+  const same =
+    merged.length === ranges.length &&
+    merged.every((m, i) => m.startMinutes === ranges[i].startMinutes && m.endMinutes === ranges[i].endMinutes);
+  if (!same || !inside.length) return null;
+  if (inside.length === bands.length) return "Tutto il giorno";
+  const labels = inside.map((b) => b.label);
   return labels.length === 1
     ? labels[0]
     : `${labels.slice(0, -1).join(", ")} e ${labels[labels.length - 1].toLowerCase()}`;
-};
-
-/** «18–21», «8–13, 18–21» (fasce attaccate fuse). */
-const hoursLabel = (keys: readonly string[] | undefined, bands: Bands) => {
-  const out: Array<[number, number]> = [];
-  for (const b of ordered(keys, bands)) {
-    const last = out[out.length - 1];
-    if (last && last[1] === b.startMinutes) last[1] = b.endMinutes;
-    else out.push([b.startMinutes, b.endMinutes]);
-  }
-  const h = (m: number) => (m % 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}` : `${m / 60}`);
-  return out.map(([s, e]) => `${h(s)}–${h(e)}`).join(", ");
 };
 
 const dateLabel = (iso: string) =>
@@ -72,8 +79,8 @@ export function useStudentAvailabilityForStaff(studentId: string | null) {
 }
 
 /**
- * REG-802 — «Disponibilità» nel drawer allievo: le fasce che l'allievo ha
- * indicato dall'app, giorno per giorno, in sola lettura. Non vincolano le
+ * REG-802 — «Disponibilità» nel drawer allievo: gli orari che l'allievo ha
+ * indicato (fasce o, dal REG-813, un orario preciso) dall'app, giorno per giorno, in sola lettura. Non vincolano le
  * prenotazioni; decidono chi riceve gli avvisi dei posti liberi.
  */
 export function StudentAvailabilitySection({
@@ -84,9 +91,9 @@ export function StudentAvailabilitySection({
   firstName: string;
 }) {
   const has = Boolean(data?.hasAvailability);
-  const days = data?.days ?? {};
+  const ranges = data?.ranges ?? {};
   const bands = data?.bands ?? [];
-  const count = WEEK.filter(([k]) => (days[k]?.length ?? 0) > 0).length;
+  const count = WEEK.filter(([k]) => (ranges[k]?.length ?? 0) > 0).length;
   const who = firstName.trim() || "l'allievo";
 
   return (
@@ -104,7 +111,8 @@ export function StudentAvailabilitySection({
         <DetailRows>
           {has ? (
             WEEK.map(([key, day]) => {
-              const label = bandsLabel(days[key], bands);
+              const dayRanges = ranges[key] ?? [];
+              const label = bandsLabel(dayRanges, bands);
               return (
                 <DetailRow
                   key={key}
@@ -113,8 +121,10 @@ export function StudentAvailabilitySection({
                     label ? (
                       <span>
                         <span className="font-semibold text-foreground">{label}</span>
-                        <span className="text-[#6a6a6a]"> · {hoursLabel(days[key], bands)}</span>
+                        <span className="text-[#6a6a6a]"> · {hoursLabel(dayRanges)}</span>
                       </span>
+                    ) : dayRanges.length ? (
+                      <span className="font-semibold text-foreground">{hoursLabel(dayRanges)}</span>
                     ) : (
                       <span className="text-[#b0b0b0]">—</span>
                     )
