@@ -704,7 +704,6 @@ async function sendOwnerInvite(input: {
       to: email,
       companyName: primaryCompanyName ?? school.name,
       inviteUrl,
-      mobileInviteUrl: null,
       invitedByName: input.invitedByName,
     });
   } catch {

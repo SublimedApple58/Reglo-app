@@ -151,6 +151,8 @@ export async function getStudentOnboarding(
         studentPhase: string | null;
         activeLicensePathId: string | null;
         availabilityPromptSnoozedUntil: Date | null;
+        selfRegistered?: boolean | null;
+        licenseCategory?: string | null;
       }
     | null
     | undefined,
@@ -163,5 +165,7 @@ export async function getStudentOnboarding(
     hasPhone: Boolean(user.phone?.trim()),
     hasRealEmail: !isPlaceholderEmail(user.email),
     availabilityMode,
+    // Stessa regola di `needsLicensePath` in `/api/autoscuole/me`.
+    needsLicensePath: member.selfRegistered === true && !member.licenseCategory,
   });
 }

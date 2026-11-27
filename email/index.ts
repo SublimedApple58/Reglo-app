@@ -131,13 +131,11 @@ export const sendCompanyInviteEmail = async ({
   to,
   companyName,
   inviteUrl,
-  mobileInviteUrl,
   invitedByName,
 }: {
   to: string;
   companyName: string;
   inviteUrl: string;
-  mobileInviteUrl?: string | null;
   invitedByName?: string | null;
 }) => {
   await sendDynamicEmail({
@@ -153,11 +151,8 @@ export const sendCompanyInviteEmail = async ({
       "",
       "Da qui prenoti le guide, segui il percorso e ricevi i promemoria dell'autoscuola. Ti bastano un minuto e una password.",
     ].join("\n"),
-    cta: {
-      label: mobileInviteUrl ? "Entra in autoscuola" : "Accetta l'invito",
-      url: mobileInviteUrl ?? inviteUrl,
-    },
-    fallbackLink: mobileInviteUrl ? { label: "apri nel browser", url: inviteUrl } : null,
+    // REG-812: l'invito si accetta dal web (il link che apriva l'app non c'è più).
+    cta: { label: "Accetta l'invito", url: inviteUrl },
     footerNote: "Se non aspettavi questo invito, puoi ignorare l'email.",
   });
 };

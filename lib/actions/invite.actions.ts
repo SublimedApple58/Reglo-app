@@ -25,10 +25,6 @@ import { isRedirectError } from 'next/dist/client/components/redirect-error';
 
 const INVITE_TTL_DAYS = 7;
 
-const buildMobileInviteUrl = (token: string) => {
-  return `${SERVER_URL}/api/mobile/invites/${token}/open`;
-};
-
 export async function createCompanyInvite(
   input: z.infer<typeof createCompanyInviteSchema>
 ) {
@@ -107,25 +103,13 @@ export async function createCompanyInvite(
           },
         });
 
-    const autoscuolaService = await prisma.companyService.findFirst({
-      where: {
-        companyId: payload.companyId,
-        serviceKey: 'AUTOSCUOLE',
-        status: 'ACTIVE',
-      },
-      select: { id: true },
-    });
 
     const inviteUrl = `${SERVER_URL}/${routing.defaultLocale}/invite/${invite.token}`;
-    const mobileInviteUrl = autoscuolaService
-      ? buildMobileInviteUrl(invite.token)
-      : null;
 
     await sendCompanyInviteEmail({
       to: email,
       companyName: membership.company.name,
       inviteUrl,
-      mobileInviteUrl,
       invitedByName: session?.user?.name ?? null,
     });
 
@@ -182,23 +166,11 @@ export async function resendCompanyInvite(
     });
 
     const inviteUrl = `${SERVER_URL}/${routing.defaultLocale}/invite/${updatedInvite.token}`;
-    const autoscuolaService = await prisma.companyService.findFirst({
-      where: {
-        companyId: invite.companyId,
-        serviceKey: 'AUTOSCUOLE',
-        status: 'ACTIVE',
-      },
-      select: { id: true },
-    });
-    const mobileInviteUrl = autoscuolaService
-      ? buildMobileInviteUrl(updatedInvite.token)
-      : null;
 
     await sendCompanyInviteEmail({
       to: invite.email,
       companyName: invite.company.name,
       inviteUrl,
-      mobileInviteUrl,
       invitedByName: session?.user?.name ?? null,
     });
 

@@ -10,6 +10,10 @@
  *   dall'autoscuola con email e password, mai entrato in app) → «primo accesso
  *   normale»: nome, email (solo da confermare), cellulare.
  * - Profilo completo ma senza cellulare → solo il cellulare (era il PhoneGate).
+ * - Percorso patente (REG-812): chi si è registrato da solo e non ha ancora
+ *   scelto patente e cambio → step `license`, salvato da
+ *   `PATCH /api/autoscuole/me/license-path`. Le app precedenti non conoscono lo
+ *   step, lo saltano e mostrano il loro blocco nelle tab (`needsLicensePath`).
  * - Disponibilità: vedi `studentAvailabilityStepMode` (bloccante in fase guide,
  *   rimandabile prima, assente per chi ha finito).
  *
@@ -22,7 +26,7 @@
 import type { StudentAvailabilityStepMode } from "@/lib/autoscuole/student-availability";
 import { normalizeToE164 } from "@/lib/phone-e164";
 
-export type OnboardingStepKey = "name" | "email" | "phone" | "availability";
+export type OnboardingStepKey = "name" | "email" | "phone" | "license" | "availability";
 export type OnboardingStep = { key: OnboardingStepKey; required: boolean };
 export type StudentOnboarding = { steps: OnboardingStep[] } | null;
 
@@ -32,6 +36,12 @@ export const buildOnboardingSteps = (input: {
   /** Email vera (non segnaposto `@no-app.reglo.local`): solo allora si conferma. */
   hasRealEmail: boolean;
   availabilityMode: StudentAvailabilityStepMode;
+  /**
+   * REG-812: allievo registrato da solo che non ha ancora scelto patente e
+   * cambio (era il blocco REG-410 dentro le tab). Viene PRIMA delle
+   * disponibilità: prima si sa che patente fa, poi quando può guidare.
+   */
+  needsLicensePath?: boolean;
 }): StudentOnboarding => {
   const steps: OnboardingStep[] = [];
   if (!input.profileCompleted) {
@@ -41,6 +51,7 @@ export const buildOnboardingSteps = (input: {
   } else if (!input.hasPhone) {
     steps.push({ key: "phone", required: true });
   }
+  if (input.needsLicensePath) steps.push({ key: "license", required: true });
   if (input.availabilityMode !== "none") {
     steps.push({ key: "availability", required: input.availabilityMode === "required" });
   }

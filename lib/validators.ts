@@ -26,18 +26,19 @@ export const signUpFormSchema = z
 // Schema for student self-registration via school code
 export const studentRegisterSchema = z
   .object({
-    name: z.string().min(3, 'Name must be at least 3 characters'),
-    email: z.string().email('Invalid email address'),
-    password: z.string().min(6, 'Password must be at least 6 characters'),
-    confirmPassword: z.string().min(6, 'Confirm password must be at least 6 characters'),
-    schoolCode: z.string().length(6, 'School code must be exactly 6 characters'),
-    phone: z.string().min(6, 'Phone number is required'),
+    // REG-812: messaggi in italiano, l'app li mostra così come sono.
+    name: z.string().trim().min(3, 'Scrivi nome e cognome.'),
+    email: z.string().trim().email("Controlla l'email: non sembra valida."),
+    password: z.string().min(6, 'La password deve avere almeno 6 caratteri.'),
+    confirmPassword: z.string().min(6, 'La password deve avere almeno 6 caratteri.'),
+    schoolCode: z.string().trim().length(6, 'Il codice di invito ha 6 caratteri.'),
+    phone: z.string().trim().min(6, 'Scrivi il tuo numero di cellulare.'),
     // REG-500: consenso agli avvisi di servizio su WhatsApp, dato in
     // registrazione. Le app precedenti non lo mandano: resta implicito.
     whatsappConsent: z.boolean().optional(),
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords don't match",
+    message: 'Le due password non coincidono.',
     path: ['confirmPassword'],
   });
 

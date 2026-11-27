@@ -11,6 +11,8 @@ import { formatError } from "@/lib/utils";
 import { getSignedAssetUrl } from "@/lib/storage/r2";
 import type { ServiceLimits } from "@/lib/services";
 import { resolveSignupInviteCode } from "@/lib/autoscuole/signup-invite";
+import { validateStudentPhone } from "@/lib/autoscuole/student-onboarding";
+import { clientIp, hitRateLimit } from "@/lib/auth/rate-limit";
 
 /**
  * Decide which student phase and quiz seat status a new sign-up should land in,
@@ -49,7 +51,28 @@ function decideOnboardingPhase(
 export async function POST(request: Request) {
   try {
     const payload = await request.json();
-    const parsed = studentRegisterSchema.parse(payload);
+    // REG-812: un messaggio solo, in italiano (prima uscivano tutti insieme e in inglese).
+    const checked = studentRegisterSchema.safeParse(payload);
+    if (!checked.success) {
+      return NextResponse.json(
+        { success: false, message: checked.error.issues[0]?.message ?? "Controlla i dati inseriti." },
+        { status: 400 },
+      );
+    }
+    const parsed = checked.data;
+
+    if (!(await hitRateLimit(`signup:ip:${clientIp(request)}`, 20, 15 * 60))) {
+      return NextResponse.json(
+        { success: false, message: "Troppi tentativi. Riprova tra qualche minuto." },
+        { status: 429 },
+      );
+    }
+
+    // Stessa regola dell'onboarding (REG-802): con +39 almeno 9 cifre.
+    const phoneCheck = validateStudentPhone(parsed.phone);
+    if (!phoneCheck.ok) {
+      return NextResponse.json({ success: false, message: phoneCheck.message }, { status: 400 });
+    }
 
     // Shared field: company, instructor (REG-451) or location (REG-706) code.
     // Lookup company → instructor → location: an instructor code assigns the
@@ -65,7 +88,7 @@ export async function POST(request: Request) {
 
     if (!company) {
       return NextResponse.json(
-        { success: false, message: "Codice di invito non valido" },
+        { success: false, message: "Questo codice non esiste. Controlla di averlo scritto bene." },
         { status: 404 },
       );
     }
@@ -85,7 +108,7 @@ export async function POST(request: Request) {
 
     if (!autoscuoleService) {
       return NextResponse.json(
-        { success: false, message: "Questa autoscuola non è attiva" },
+        { success: false, message: "Questa autoscuola non è attiva." },
         { status: 403 },
       );
     }
@@ -95,7 +118,7 @@ export async function POST(request: Request) {
     const emailFree = await releaseEmailIfOrphaned(parsed.email);
     if (!emailFree) {
       return NextResponse.json(
-        { success: false, message: "Esiste già un account con questa email" },
+        { success: false, message: "Esiste già un account con questa email." },
         { status: 409 },
       );
     }

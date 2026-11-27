@@ -27,6 +27,15 @@ describe("buildOnboardingSteps (REG-802)", () => {
     expect(buildOnboardingSteps({ ...done, hasPhone: false })?.steps).toEqual([{ key: "phone", required: true }]);
   });
 
+  it("registrato da solo senza patente: patente prima delle disponibilità (REG-812)", () => {
+    expect(
+      buildOnboardingSteps({ ...done, needsLicensePath: true, availabilityMode: "optional" })?.steps,
+    ).toEqual([
+      { key: "license", required: true },
+      { key: "availability", required: false },
+    ]);
+  });
+
   it("solo disponibilità rimandabile", () => {
     expect(buildOnboardingSteps({ ...done, availabilityMode: "optional" })?.steps).toEqual([
       { key: "availability", required: false },

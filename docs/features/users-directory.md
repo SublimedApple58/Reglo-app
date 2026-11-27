@@ -9,7 +9,8 @@ Gestione degli utenti della company (titolari, istruttori, allievi) dalla sezion
 | `lib/actions/user.actions.ts` | `getCompanyUsers`, `createCompanyUser`, `updateUser`, `deleteUser`, `signUpUser` |
 | `lib/actions/invite.actions.ts` | `createCompanyInvite`, `acceptCompanyInvite*` (web), `inviteAutoscuolaStudent` |
 | `lib/account-deletion.ts` | `deleteAndAnonymizeUserAccount`, `releaseEmailIfOrphaned` |
-| `app/api/mobile/invites/[token]/accept/route.ts` | Accept invito da mobile (modalità accesso o registrazione) |
+| `app/api/mobile/invites/[token]/open/route.ts` | Solo redirect alla pagina web dell'invito, per le mail già spedite (REG-812: l'accept da app e le rotte `accept`/`context`/`create` sono state tolte) |
+| `app/api/mobile/auth/student-register/check/route.ts` | REG-812: controllo del codice di invito e dell'email prima della registrazione a passi |
 | `app/api/mobile/auth/student-register/route.ts` | Registrazione allievo self-service con codice scuola |
 | `components/pages/AdminUsers/*` | UI Directory: tabella, dialog crea utente, dialog invito |
 
@@ -22,8 +23,7 @@ Gestione degli utenti della company (titolari, istruttori, allievi) dalla sezion
 1. `createCompanyUser` (Directory → Crea utente)
 2. `signUpUser` (signup pubblico titolare)
 3. `acceptCompanyInviteAndRegister` (accept invito web, modalità registrazione)
-4. `POST /api/mobile/invites/[token]/accept` (modalità `register`)
-5. `POST /api/mobile/auth/student-register` (registrazione allievo con codice scuola)
+4. `POST /api/mobile/auth/student-register` (registrazione allievo con codice scuola)
 
 Un account con almeno una membership NON viene mai toccato: lì l'errore "Esiste già un account con questa email" è legittimo (per gli inviti l'utente esistente usa la modalità accesso).
 
