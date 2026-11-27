@@ -197,12 +197,12 @@ describe("chiusura senza «modifiche o disdette» (25/11)", () => {
     }
   });
 
-  it("finché Meta non approva la v2 parte la v1", () => {
+  it("la v2 è approvata e parte lei; la v1 resta come ripiego", () => {
     const template = WHATSAPP_TEMPLATES.appointment_created;
-    expect(template.approval).toBe("pending");
-    expect(sendableTemplateName(template)).toBe("guida_fissata_allievo_v1");
-    expect(sendableTemplateName({ ...template, approval: "approved" })).toBe(
-      "guida_fissata_allievo_v2",
+    expect(template.approval).toBe("approved");
+    expect(sendableTemplateName(template)).toBe("guida_fissata_allievo_v2");
+    expect(sendableTemplateName({ ...template, approval: "pending" })).toBe(
+      "guida_fissata_allievo_v1",
     );
   });
 });

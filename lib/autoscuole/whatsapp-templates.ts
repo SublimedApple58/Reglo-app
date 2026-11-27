@@ -219,11 +219,12 @@ export const WHATSAPP_TEMPLATES = {
    * GET su Telnyx il 23/11, REG-771).
    * `_v2` (25/11, richiesta di Federica del consorzio): via «Per modifiche o
    * disdette contatta l'autoscuola», chiusura «Ti aspettiamo in autoscuola.»
-   * come push ed email. Finché Meta non lo approva parte la `_v1`. */
+   * come push ed email. Approvato utility da Meta il 27/11 (letto via GET su
+   * Telnyx); la `_v1` resta come ripiego. */
   appointment_created: {
     name: "guida_fissata_allievo_v2",
     category: "utility",
-    approval: "pending",
+    approval: "approved",
     previous: { name: "guida_fissata_allievo_v1", category: "utility", approval: "approved" },
     variables: ["nome", "guide"],
     body: "Ciao {{1}}, ti abbiamo fissato {{2}}. Ti aspettiamo in autoscuola.",

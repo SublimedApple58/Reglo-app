@@ -50,9 +50,9 @@ approva: `approval: "approved"` in `whatsapp-templates.ts`** e deploy di web e j
 modifiche o disdette contatta l'autoscuola», chiusura «Ti aspettiamo in
 autoscuola.». Testo: «Ciao {{1}}, ti abbiamo fissato {{2}}. Ti aspettiamo in
 autoscuola.» (stessa variabile `guide`, grammaticale con una o più guide).
-Sottomesso via Telnyx il 25/11 (template_id 28545463591795851). Nel registro è
-`pending` con la `_v1` approvata come `previous`: finché Meta non approva parte
-la `_v1`. **Quando Meta approva: `approval: "approved"`** e deploy di web e job.
+Sottomesso via Telnyx il 25/11 (template_id 28545463591795851), **approvato
+utility da Meta il 27/11** e attivo nel registro; la `_v1` resta come
+`previous`.
 
 Push ed email: «Ti è stata fissata la guida di giovedì 20 novembre alle 15:00
 [con Marco Rossi]. Ti aspettiamo in autoscuola.»; più guide: «Ti sono state
