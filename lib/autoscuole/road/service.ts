@@ -59,7 +59,8 @@ import {
  * Regole:
  * - tutto spento se `limits.roadEnabled !== true` (si accende dal backoffice);
  * - solo guide singole: niente gruppi né esami. Le moto singole (REG-753) sì,
- *   con l'istruttore nell'auto al seguito; i birilli no (area chiusa, a piedi);
+ *   con l'istruttore nell'auto al seguito; una moto «birilli» resta idonea: è
+ *   l'app a chiedere di passarla a «strada» (PATCH della guida) prima di partire;
  * - «Termina guida» chiude la sessione e segna SUBITO la guida `completed`;
  * - l'allievo vede percorso e segnalazioni solo con `studentNotesEnabled`.
  */
@@ -111,13 +112,13 @@ type EligibilityInput = {
 };
 /**
  * Guide singole in auto e, da REG-753, in moto (l'istruttore segue nell'auto al
- * seguito col telefono). Fuori gruppi, esami e le moto «birilli» (area chiusa).
+ * seguito col telefono). Fuori gruppi ed esami. Le moto «birilli» restano
+ * idonee: l'app chiede di passarle a «strada» all'avvio.
  */
 export function isRoadEligibleLesson(a: EligibilityInput) {
   if (!a.studentId) return false;
   if (a.groupLessonId) return false;
   if (a.type === "esame" || a.type === "group_lesson") return false;
-  if (a.motoLessonType === "birilli") return false;
   return true;
 }
 
@@ -167,6 +168,8 @@ function lessonDTO(a: AppointmentRow) {
       : null,
     // REG-753: guida in moto, l'istruttore la segue in quest'auto (se prenotata).
     followVehicle: followVehicleOf(a),
+    // REG-753: «birilli» | «strada» | null; con «birilli» l'app chiede di passare a strada.
+    motoLessonType: a.motoLessonType,
     // Chiave della variante colore dell'auto 3D (veicolo → tinta istruttore → bianco).
     carColor: resolveCarColor(a.vehicle?.color, a.instructor?.color),
   };

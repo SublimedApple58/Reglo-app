@@ -18,6 +18,8 @@ export type RoadLesson = {
   vehicle: { id: string; name: string; plate: string | null; licenseCategory?: string } | null;
   /** REG-753: l'auto al seguito di una guida moto (null se non prenotata o in auto). */
   followVehicle?: { id: string; name: string; plate: string | null } | null;
+  /** REG-753: tipo guida moto («birilli» → l'app chiede di passare a «strada» prima di partire). */
+  motoLessonType?: string | null;
   /** Chiave variante colore dell'auto 3D (vedi car-colors.ts). */
   carColor: CarColorKey;
 };
