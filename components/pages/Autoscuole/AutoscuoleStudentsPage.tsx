@@ -1274,7 +1274,8 @@ export function AutoscuoleStudentsPage({
     used: number;
     available: number;
     phasesEnabled: ("TEORIA" | "PRATICA")[];
-    autoAssignQuizOnSignup: boolean;
+    /** REG-815: fase di partenza di chi si registra dall'app. */
+    signupStartPhase: "AWAITING" | "TEORIA" | "PRATICA";
   };
   const [quizCtx, setQuizCtx] = React.useState<QuizCtx | null>(null);
   const [grantSavingId, setGrantSavingId] = React.useState<string | null>(null);
@@ -1288,7 +1289,7 @@ export function AutoscuoleStudentsPage({
         used: res.data.used,
         available: res.data.available,
         phasesEnabled: res.data.phasesEnabled,
-        autoAssignQuizOnSignup: res.data.autoAssignQuizOnSignup,
+        signupStartPhase: res.data.signupStartPhase,
       });
     }
   }, []);
@@ -2409,13 +2410,15 @@ export function AutoscuoleStudentsPage({
       ...emptyCreateForm,
       licenseCategory: licenseDefaults.licenseCategory,
       transmission: licenseDefaults.transmission,
-      // Fase di partenza: rispecchia la self-registration mobile — se la
-      // Teoria è attiva parte da Teoria (posti permettendo) o In attesa.
-      studentPhase: theoryPhaseEnabled
-        ? quizCtx && quizCtx.autoAssignQuizOnSignup && quizCtx.available > 0
-          ? "TEORIA"
-          : "AWAITING"
-        : "PRATICA",
+      // Fase di partenza: la stessa di chi si registra dall'app (REG-815,
+      // Impostazioni › App allievi). Teoria senza posti quiz → In attesa.
+      studentPhase: !theoryPhaseEnabled
+        ? "PRATICA"
+        : !quizCtx
+          ? "AWAITING"
+          : quizCtx.signupStartPhase === "TEORIA" && quizCtx.available <= 0
+            ? "AWAITING"
+            : quizCtx.signupStartPhase,
     });
     setCreateOpen(true);
   }, [emptyCreateForm, licenseDefaults, quizCtx, theoryPhaseEnabled]);
@@ -4253,9 +4256,11 @@ export function AutoscuoleStudentsPage({
                     <div>
                       <p className="text-sm font-semibold text-foreground">Licenze Quiz Teoria</p>
                       <p className="text-[12px] font-medium text-[#929292]">
-                        {quizCtx.autoAssignQuizOnSignup
-                          ? "Assegnazione automatica alla registrazione attiva"
-                          : "Assegnazione manuale: gli allievi nuovi entrano in attesa"}
+                        {quizCtx.signupStartPhase === "TEORIA"
+                          ? "Chi si registra dall'app riceve subito una licenza"
+                          : quizCtx.signupStartPhase === "PRATICA"
+                            ? "Chi si registra dall'app parte in Foglio rosa, senza licenza"
+                            : "Chi si registra dall'app entra in attesa: le licenze le assegni tu"}
                       </p>
                     </div>
                   </div>

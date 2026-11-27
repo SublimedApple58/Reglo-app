@@ -14,6 +14,7 @@ Differenzia gli allievi in **AWAITING** → **TEORIA** → **PRATICA** → **PAT
   - `phasesEnabled: ('TEORIA' | 'PRATICA')[]` — fasi attive del percorso. Default `['PRATICA']` (legacy). Almeno una è obbligatoria.
   - `quizSeats: number` — licenze acquistate. Default `0`. Contatore di seat consumati derivato dalla `COUNT` su `CompanyMember.quizSeatGrantedAt IS NOT NULL`. Solo crescente.
   - `autoAssignQuizOnSignup: boolean` — se `true`, ogni neo-iscritto riceve un seat alla registrazione (se disponibile) e parte in TEORIA. Default `false`.
+  - `signupStartPhase: 'AWAITING' | 'TEORIA' | 'PRATICA'` (REG-815) — fase di partenza di chi si registra dall'app. Sostituisce `autoAssignQuizOnSignup`, che resta allineato (vero solo con `TEORIA`) e fa da ripiego se questo campo manca (acceso = TEORIA, spento = AWAITING). Conta solo con `'TEORIA'` in `phasesEnabled`. Logica pura in `lib/autoscuole/signup-start-phase.ts`.
 - Indici: `(companyId, studentPhase)` + `(companyId, quizSeatGrantedAt)` per dashboard titolare e counter.
 - La data esame teoria continua a riusare `AutoscuolaCase.theoryExamAt` (no duplicazione).
 
@@ -54,13 +55,19 @@ Migrazioni:
 ```
 seatsConsumed = COUNT(CompanyMember WHERE quizSeatGrantedAt != null)
 
+start = signupStartPhase            # se manca: autoAssignQuizOnSignup ? TEORIA : AWAITING
+
 if 'TEORIA' not in phasesEnabled:
   phase = PRATICA (legacy), no seat
-elif autoAssignQuizOnSignup and seatsConsumed < quizSeats:
+elif start == PRATICA:
+  phase = PRATICA (foglio rosa), no seat
+elif start == TEORIA and seatsConsumed < quizSeats:
   phase = TEORIA, seat granted (quizSeatGrantedAt = now)
 else:
-  phase = AWAITING, no seat
+  phase = AWAITING, no seat          # anche TEORIA senza posti liberi
 ```
+
+La regola è `decideSignupPhase` in `lib/autoscuole/signup-start-phase.ts` (test: `tests/unit/autoscuole/signup-start-phase.test.ts`).
 
 `phaseClassifiedAt = now` sempre, per non far apparire il badge "Conferma fase" sull'allievo appena creato.
 
@@ -77,12 +84,18 @@ Owner-only. Guard in ordine:
 
 Effetto: `quizSeatGrantedAt = now`, `studentPhase = TEORIA`, `phaseClassifiedAt = now`. **I seat sono "a vita"**: non c'è action di revoca.
 
-## Toggle auto-assegnazione (`setAutoAssignQuizOnSignup`)
+## Fase di partenza di chi si registra (`setSignupStartPhase`, REG-815)
 
-Owner-only. Aggiorna `limits.autoAssignQuizOnSignup`. Sulla transizione **OFF → ON**, in transaction:
+Owner-only. Impostazioni › Prenotazioni e allievi › App allievi, sezione «Chi si registra dall'app parte da» (`components/pages/Autoscuole/settings/SignupStartPhaseSection.tsx`): scelta singola In attesa / Teoria / Foglio rosa, salva subito. Ha preso il posto dell'interruttore «Assegnazione automatica della licenza quiz» (`setAutoAssignQuizOnSignup`, rimosso). Nascosta senza fase Teoria.
+
+Scrive `limits.signupStartPhase` e tiene allineato `limits.autoAssignQuizOnSignup`; poi invalida la cache SETTINGS. Passando **a Teoria** da un altro valore, in transaction:
 
 1. Calcola `freeSeats = quizSeats - seatsConsumed`
 2. Promuove FIFO i primi `freeSeats` studenti in `AWAITING` (ordinati per `createdAt ASC`) → fase TEORIA + seat consumato
+
+Passare a In attesa o a Foglio rosa non sposta nessun allievo esistente. Foglio rosa non consuma licenze quiz.
+
+Il dialog «Crea account allievo» (`AutoscuoleStudentsPage`) preseleziona la stessa fase (Teoria senza posti → In attesa); il titolare può cambiarla caso per caso. `/api/autoscuole/me` continua a esporre `autoAssignQuizOnSignup`, derivato.
 
 ## Disattivazione TEORIA dal backoffice
 

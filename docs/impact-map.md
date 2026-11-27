@@ -352,7 +352,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → Mostly self-contained (Twilio/Telnyx webhooks, knowledge base, call records)
 
 ### Quiz Teoria
-- → **Settings**: posti quiz (`quizSeats`, `phasesEnabled`, `autoAssignQuizOnSignup`) in CompanyService.limits. Il legacy `quizEnabled` è stato rimosso dal JSON in migration `20260514000001`.
+- → **Settings**: posti quiz (`quizSeats`, `phasesEnabled`, `signupStartPhase` con ripiego su `autoAssignQuizOnSignup`) in CompanyService.limits. Il legacy `quizEnabled` è stato rimosso dal JSON in migration `20260514000001`.
 - → **Cache**: QUIZ segment, invalidated on answer/complete
 - → **Backoffice**: card "Quiz Teoria — Gestione licenze" + card "Fasi attive del percorso" (BackofficeCompaniesPage). Dialog di risoluzione `BackofficeResolveTeoriaDeactivationDialog` quando si disattiva TEORIA con allievi attivi.
 - → **Mobile**: QuizHomeScreen, QuizSessionScreen, QuizResultsScreen (3 screens). Tab visibile **solo se `studentPhase === TEORIA` AND `hasQuizAccess === true`**.
@@ -392,7 +392,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Esito esame**: un esame registrato **idoneo** porta l'allievo a `PATENTATO` in automatico (`setExamOutcome` → `phaseAfterExamOutcome`), azzerando `examReady` e togliendolo dal picker mobile dell'istruttore. Togliere l'esito NON riporta indietro la fase. Vedi `docs/features/exam-outcome.md`.
 - → **Consorzio**: la scheda autoscuola filtra gli allievi per fase (Tutti / In pratica / Patentati) e il drawer permette di marcarli `PATENTATO` riusando `ChangeStudentPhaseDialog`. Sul consorzio le fasi raggiungibili sono solo PRATICA e PATENTATO (`phasesEnabled` assente ⇒ fallback `["PRATICA"]`). Marcare `PATENTATO` azzera `examReady` e toglie l'allievo dal picker mobile dell'istruttore; l'agenda web resta libera. Vedi `docs/features/consorzio.md`.
 - → **Backoffice**: gestione licenze + fasi attive + dialog di risoluzione disattivazione TEORIA (`getQuizSeatsUsage`, `getTeoriaAffectedStudents`, `deactivateTeoriaWithResolution`).
-- → **Student Registration**: `POST /api/mobile/auth/student-register` decide fase + seat in transaction in base a `phasesEnabled` + `autoAssignQuizOnSignup` + seat disponibili.
+- → **Student Registration**: `POST /api/mobile/auth/student-register` decide fase + seat in transaction in base a `phasesEnabled` + `signupStartPhase` (REG-815, ripiego su `autoAssignQuizOnSignup`) + seat disponibili.
 - → **Codici per luogo (REG-706)**: `student-register` risolve il codice con `resolveSignupInviteCode` (autoscuola → istruttore → luogo); un codice luogo assegna il luogo all'allievo (principale + `CompanyMemberLocation`). **Chi genera un nuovo tipo di codice per la registrazione deve passare da `isSignupCodeTaken`** (unicità tra tabelle). Vedi `features/availability-by-location.md`.
 
 ### Percorso patente — auto-selezione self-registered (REG-410)
