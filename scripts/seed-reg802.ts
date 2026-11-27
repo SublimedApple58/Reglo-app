@@ -9,6 +9,8 @@
  * - `reg802.teoria@e2e.reglo.test` — Luca Ferri, profilo completo e con
  *   cellulare, in TEORIA, senza disponibilità → solo lo step Disponibilità,
  *   RIMANDABILE.
+ * - Marta Galli, creata col solo telefono (+39 333 000 0803), mai attivata →
+ *   «Primo accesso» dal numero.
  *
  * Password = quella del titolare di prova.
  *
@@ -23,9 +25,13 @@ const prisma = new PrismaClient();
 const cleanupOnly = process.argv.includes("--cleanup");
 const PRATICA = "reg802.pratica@e2e.reglo.test";
 const TEORIA = "reg802.teoria@e2e.reglo.test";
+const PHONE_ONLY = "+393330000803";
 
 async function cleanup() {
-  const users = await prisma.user.findMany({ where: { email: { in: [PRATICA, TEORIA] } }, select: { id: true } });
+  const users = await prisma.user.findMany({
+    where: { OR: [{ email: { in: [PRATICA, TEORIA] } }, { loginPhone: PHONE_ONLY }] },
+    select: { id: true },
+  });
   for (const user of users) {
     await prisma.autoscuolaWeeklyAvailability.deleteMany({ where: { ownerType: "student", ownerId: user.id } });
     await prisma.companyMember.updateMany({ where: { userId: user.id }, data: { activeLicensePathId: null } });
@@ -101,7 +107,28 @@ async function main() {
       transmission: "manual",
     },
   });
-  console.log(`→ creati ${PRATICA} (PRATICA) e ${TEORIA} (TEORIA) in ${companyId}`);
+  const marta = await prisma.user.create({
+    data: {
+      email: `allievo+reg802-${Date.now()}@no-app.reglo.local`,
+      name: "Marta Galli",
+      loginPhone: PHONE_ONLY,
+      phone: PHONE_ONLY,
+      role: "user",
+      activeCompanyId: companyId,
+    },
+  });
+  await prisma.companyMember.create({
+    data: {
+      companyId,
+      userId: marta.id,
+      role: "member",
+      autoscuolaRole: "STUDENT",
+      studentPhase: "PRATICA",
+      licenseCategory: "B",
+      transmission: "manual",
+    },
+  });
+  console.log(`→ creati ${PRATICA} (PRATICA), ${TEORIA} (TEORIA) e Marta (${PHONE_ONLY}, primo accesso) in ${companyId}`);
 }
 
 main()
