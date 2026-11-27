@@ -42,7 +42,7 @@ Lo switch nasce già acceso se la settimana tipo ha `rangesByDay`, quindi quello
 - `getAllAvailableSlots` / `getDateAvailabilityMap` («Riempi le fasce più vuote»): la sovrapposizione con la fascia prioritaria ora si decide **per giorno** (`overlapsWindowOnDay`); se quel giorno l'allievo non ha fasce si guarda la settimana, che è esattamente il comportamento di prima per le righe legacy;
 - `findBestAutoscuolaSlot` (proposte all'istruttore): usava solo `startMinutes/endMinutes`, cioè la **prima fascia**; ora candida tutte le fasce del giorno (`candidateStartsForRanges`). Cambio voluto anche per le righe legacy mattina+pomeriggio: prima il pomeriggio non veniva mai proposto;
 - scambi `available_only`: la copia locale di `isAvailabilityCovering` non leggeva `rangesByDay` né ricadeva sui campi piatti; ora usa `isRecordCoveringMinutes`.
-Restano invariati (già corretti): lista d'attesa (`respondWaitlistOffer`, `getWaitlistOffers`, `broadcastWaitlistOffer`) e il job dei posti liberi in `communications.ts` (guarda solo il giorno, e i writer tengono `daysOfWeek` = giorni attivi). Test: `tests/unit/autoscuole/availability-record.test.ts`.
+Restano invariati (già corretti): lista d'attesa (`respondWaitlistOffer`, `getWaitlistOffers`, `broadcastWaitlistOffer`) e il job dei posti liberi in `communications.ts` (guarda solo il giorno, e i writer tengono `daysOfWeek` = giorni attivi). Test: `tests/unit/autoscuole/availability-record.test.ts` (helper) e `tests/unit/autoscuole/slot-matcher-student-ranges.test.ts` (proposte all'istruttore con prisma finto: fasce per giorno e pomeriggio delle righe legacy; falliscono col codice di prima).
 
 - `AutoscuolaAvailabilitySlot` — published bookable slots (open/booked)
 - `AutoscuolaInstructorPublishedWeek` — unique on companyId + instructorId + weekStart
@@ -131,7 +131,7 @@ disponibilità deve chiamare `assertCanWriteAvailability`.** E2E:
 
 ## Chi può leggere la disponibilità (REG-802)
 
-`getAvailabilitySlots` (GET `availability/slots`) e `getDefaultAvailability` (GET `availability/default`) passano da `canReadAvailability` (`availability-access.ts`, pura): titolare, admin e istruttori leggono tutto nella propria autoscuola (gli istruttori devono vedere le disponibilità degli allievi); l'**allievo** solo le proprie (`ownerType: "student"`, id = suo utente). Prima un allievo poteva leggere le preferenze orarie di qualunque altro allievo, o tutte omettendo `ownerType`. Errore: «Non puoi vedere questa disponibilità.» L'app allievo legge solo le sue (Impostazioni › Disponibilità), quindi nessun client esistente cambia. Test in `tests/unit/autoscuole/availability-access.test.ts`.
+`getAvailabilitySlots` (GET `availability/slots`) e `getDefaultAvailability` (GET `availability/default`) passano da `canReadAvailability` (`availability-access.ts`, pura): titolare, admin e istruttori leggono tutto nella propria autoscuola (gli istruttori devono vedere le disponibilità degli allievi); l'**allievo** solo le proprie (`ownerType: "student"`, id = suo utente). Prima un allievo poteva leggere le preferenze orarie di qualunque altro allievo, o tutte omettendo `ownerType`. Errore: «Non puoi vedere questa disponibilità.» L'app allievo legge solo le sue (Impostazioni › Disponibilità), quindi nessun client esistente cambia. Test: `tests/unit/autoscuole/availability-access.test.ts` (regola pura) e `tests/unit/autoscuole/availability-read-scope.test.ts` (azioni).
 
 ## Connected features
 - **Booking Engine** — slot-matcher reads all availability data; publication filter gates booking
