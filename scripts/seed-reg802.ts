@@ -1,6 +1,6 @@
 /**
  * REG-802 — allievi di prova per l'onboarding (primo accesso normale, cellulare,
- * disponibilità), SOLO su dev. Nell'autoscuola attiva del titolare di prova:
+ * disponibilità), SOLO su dev o staging (mai prod). Nell'autoscuola attiva del titolare di prova:
  *
  * - `reg802.pratica@e2e.reglo.test` — Sara Conti, creata dall'autoscuola con
  *   email e password, mai entrata in app (`profileCompletedAt` null), senza
@@ -17,6 +17,7 @@
  *   DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config \
  *     npx tsx scripts/seed-reg802.ts            # crea (prima ripulisce)
  *   ... scripts/seed-reg802.ts --cleanup        # toglie tutto
+ *   ... scripts/seed-reg802.ts --company <id>   # staging: autoscuola esplicita
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -44,14 +45,17 @@ async function cleanup() {
 }
 
 async function main() {
-  if (!/\.env\.dev$/.test(process.env.DOTENV_CONFIG_PATH ?? "")) {
-    throw new Error("seed-reg802 gira solo su dev (DOTENV_CONFIG_PATH=.env.dev).");
+  if (!/\.env\.(dev|staging)$/.test(process.env.DOTENV_CONFIG_PATH ?? "")) {
+    throw new Error("seed-reg802 gira solo su dev o staging (DOTENV_CONFIG_PATH=.env.dev|.env.staging).");
   }
   const owner = await prisma.user.findUniqueOrThrow({
     where: { email: "titolare@reglo.it" },
     select: { password: true, activeCompanyId: true },
   });
-  const companyId = owner.activeCompanyId;
+  // `--company <id>`: su staging il titolare è in due autoscuole e l'attiva cambia
+  // (STAGING.md): si sceglie quella della demo invece di seguire activeCompanyId.
+  const flag = process.argv.indexOf("--company");
+  const companyId = flag > 0 ? process.argv[flag + 1] : owner.activeCompanyId;
   if (!companyId) throw new Error("Il titolare di prova non ha un'autoscuola attiva.");
 
   console.log(`→ ripuliti ${await cleanup()} utenti di prova`);
