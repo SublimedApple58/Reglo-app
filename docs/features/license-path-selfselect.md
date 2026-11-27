@@ -77,3 +77,7 @@ Setting a livello autoscuola `licensePathMode: 'fixed_default' | 'student_choice
 
 ## Nota prodotto (REG-410)
 Il **tipo di cambio** è una scelta **obbligatoria** e prominente al pari della categoria (nessun default; la conferma è bloccata finché non sono scelti sia categoria sia cambio) — decisione di Tiziano 2026-08-28.
+
+## REG-812 (27/11/2026)
+
+In app il «gate» non è più una schermata dentro le tab: è lo step `license` dell'onboarding (`lib/autoscuole/student-onboarding.ts`), prima delle disponibilità. Regola, rotta di salvataggio e backstop sulla prenotazione non cambiano. Vedi `student-availability-onboarding.md`.

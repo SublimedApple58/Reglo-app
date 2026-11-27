@@ -63,3 +63,10 @@
 - **Student phase / percorsi patente**: il criterio dello step (`student-phase.md`, `license-paths.md`). Chi cambia le fasi o lo specchio del percorso guardi `isInDrivingPhase`.
 - **Allievo col telefono / Primo accesso**: `profileCompletedAt` e la disponibilità nel `complete` (`allievo-telefono.md`).
 - **Mobile**: `/api/mobile/me` `onboarding`, nuove rotte `me/availability*`, `me/onboarding`.
+
+## REG-812 — step `license` e registrazione a passi (27/11/2026)
+
+- `buildOnboardingSteps` può aggiungere `{ key: "license", required: true }` (input `needsLicensePath` = `selfRegistered && !licenseCategory`, calcolato in `getStudentOnboarding`), sempre **prima** di `availability`. Lo salva la rotta già esistente `PATCH /api/autoscuole/me/license-path`; `POST /api/autoscuole/me/onboarding` non lo riceve. Le app precedenti ignorano lo step e mostrano il loro blocco nelle tab (`needsLicensePath` di `/api/autoscuole/me` non cambia).
+- `POST /api/mobile/auth/student-register/check`: `{ schoolCode }` → autoscuola (nome, logo), istruttore o luogo del codice, `asksLicensePath`; `{ email }` → `{ emailAvailable }` (sola lettura). Limite per IP (`hitRateLimit`).
+- `student-register`: un solo messaggio d'errore per volta, in italiano; cellulare validato con `validateStudentPhone`; limite per IP.
+- Tolte le rotte dell'invito da app (`/api/mobile/invites/create`, `[token]/accept`, `[token]/context`); `[token]/open` resta come redirect alla pagina web dell'invito per le mail già spedite. La mail di invito porta solo al web.
