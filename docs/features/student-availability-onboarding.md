@@ -1,6 +1,6 @@
 # Disponibilità dell'allievo a fasce + onboarding in app (REG-802)
 
-> Stato (27/11/2026): backend fatto e provato su dev, branch `feat/reg-802-onboarding-allievo`. App (onboarding, step Disponibilità, Profilo, dettaglio allievo staff) e web (drawer allievo) da fare. Piano e decisioni di Tiziano: `/tmp/hiro-anteprime/reg-802/piano.md` (§10). Doc mobile gemella: `reglo-mobile/docs/features/` (da scrivere con l'app).
+> Stato (27/11/2026): backend, web (drawer allievo) e app fatti e provati su dev (simulatore + e2e), branch `feat/reg-802-onboarding-allievo` su entrambi i repo. Backend su staging; prod e OTA solo col via. Piano e decisioni di Tiziano: `/tmp/hiro-anteprime/reg-802/piano.md` (§10). Doc mobile gemella: `reglo-mobile/docs/features/` (da scrivere con l'app).
 
 ## Cosa fa
 - L'allievo indica, **giorno per giorno** (lun–dom), tre fasce fisse: **Mattina 8–13, Pomeriggio 13–18, Sera 18–21** («posso venerdì pomeriggio e lunedì sera»). Prima l'app permetteva una fascia sola uguale per tutti i giorni.
@@ -44,14 +44,19 @@
 | `POST /api/autoscuole/me/availability/snooze` | «Configura in seguito»; **409** in fase guide |
 | `POST /api/autoscuole/me/onboarding` | `{ firstName?, lastName?, phone?, availability? }`: ricontrolla gli step dovuti e pretende i dati di quelli obbligatori; nome → `User.name` (+ `syncInstructorName`), cellulare E.164 (`validateStudentPhone`: con +39 almeno 9 cifre), disponibilità come il PUT; risponde `{ onboarding }` ricalcolato |
 | `POST /api/mobile/auth/first-access/complete` | accetta anche `availability: { days }` (step prima del riepilogo); un errore lì non blocca l'attivazione |
-| `GET /api/autoscuole/availability/default?ownerType=student&ownerId=…` | lettura staff (sola lettura); l'allievo solo le sue (`canReadAvailability`) |
+| `GET /api/autoscuole/students/:id/availability` | lettura staff (titolare, istruttori, admin della stessa autoscuola) già in fasce, con `confirmedAt`: `getStudentAvailabilityForStaff` (`lib/actions/autoscuole-student-availability.actions.ts`). La usano il dettaglio allievo dell'app e il drawer web |
+| `GET /api/autoscuole/availability/default?ownerType=student&ownerId=…` | lettura grezza in minuti (`scheduleByDay`); l'allievo solo le sue (`canReadAvailability`) |
+
+## Web — drawer allievo
+`components/pages/Autoscuole/StudentAvailabilitySection.tsx`: sezione «Disponibilità» in sola lettura (un giorno per riga, fascia in grassetto + orari, «—» per i giorni liberi, «N giorni» a destra, piede «Indicate da Sara il 27 novembre 2026. Non vincolano le prenotazioni: servono a proporre orari adatti e ad avvisare dei posti liberi.»; vuota: «Non ancora indicate» con la spiegazione). Testi neutri (il genere dell'allievo non si sa). `useStudentAvailabilityForStaff` nella pagina: la sezione entra in `DetailSections` solo con la risposta dell'allievo aperto (un figlio vuoto lascerebbe un separatore). Non nella vista ridotta (affiliate).
 
 ## Conversione delle esistenti
 `scripts/reg-802-convert-student-availability.ts` — a vuoto di default, `--apply` per scrivere. Copia le fasce delle righe legacy su ogni giorno attivo in `rangesByDay` (senza perdita, idempotente, solo dove `rangesByDay` è vuoto) e stampa quanti allievi incontreranno lo step (bloccante / rimandabile). Su staging e prod **solo col via di Tiziano**, dopo `migrate`.
 
 ## Prove
-- Unit: `tests/unit/autoscuole/student-availability.test.ts`, `student-onboarding.test.ts`, `availability-record.test.ts`, `slot-matcher-student-ranges.test.ts`, `availability-read-scope.test.ts`.
-- Dev (27/11): `scripts/seed-reg802.ts` crea Sara Conti (`reg802.pratica@e2e.reglo.test`, PRATICA, mai entrata) e Luca Ferri (`reg802.teoria@e2e.reglo.test`, TEORIA) nell'autoscuola del titolare di prova (password del titolare; `--cleanup` per toglierli). Provato: step attesi in `/me`, rinvio rifiutato in fase guide e accettato in teoria, completamento con errori (numero corto, disponibilità mancante) e riuscito, letture staff e divieto tra allievi, `instructor-bookings/suggest` che propone lunedì 18:00 e venerdì 14:00 per «lunedì sera + venerdì pomeriggio».
+- Unit: `tests/unit/autoscuole/student-availability.test.ts`, `student-onboarding.test.ts`, `availability-record.test.ts`, `slot-matcher-student-ranges.test.ts`, `availability-read-scope.test.ts`, `student-availability-staff.test.ts`.
+- E2E: `tests/e2e/reg802-disponibilita-drawer.auth.spec.ts` (onboarding da API di Sara + drawer pieno e vuoto; seed e pulizia da sé).
+- Dev (27/11): `scripts/seed-reg802.ts` crea Marta Galli (solo telefono `+39 333 000 0803`, da attivare col Primo accesso), Sara Conti (`reg802.pratica@e2e.reglo.test`, PRATICA, mai entrata) e Luca Ferri (`reg802.teoria@e2e.reglo.test`, TEORIA) nell'autoscuola del titolare di prova (password del titolare; `--cleanup` per toglierli). Provato: step attesi in `/me`, rinvio rifiutato in fase guide e accettato in teoria, completamento con errori (numero corto, disponibilità mancante) e riuscito, letture staff e divieto tra allievi, `instructor-bookings/suggest` che propone lunedì 18:00 e venerdì 14:00 per «lunedì sera + venerdì pomeriggio».
 
 ## Connessioni
 - **Availability / Booking engine / Swaps / lista d'attesa**: leggono la riga con `rangesForDay` (`availability.md`).
