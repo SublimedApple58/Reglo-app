@@ -14,6 +14,7 @@
  * della lista d'attesa e gli scambi.
  */
 
+import { z } from "zod";
 import {
   defaultToAvailabilityRecord,
   rangesForDay,
@@ -119,6 +120,111 @@ export const rowToBandsByDay = (row: WeeklyAvailabilityRow | null | undefined): 
   return out;
 };
 
+// ── Orari precisi (REG-813) ───────────────────────────────────────────────
+
+/**
+ * REG-813 — oltre alle tre fasce rapide l'allievo può indicare «un orario
+ * preciso»: fino a due intervalli al giorno, a passi di 30 minuti, fra le 6 e
+ * le 22. In `rangesByDay` finiscono comunque minuti: le fasce sono solo una
+ * scorciatoia dell'interfaccia (Pomeriggio = 13–18).
+ */
+export const STUDENT_RANGE_RULES = {
+  minMinutes: 6 * 60,
+  maxMinutes: 22 * 60,
+  stepMinutes: 30,
+  maxPerDay: 2,
+} as const;
+
+/** Giorno ("0"=Dom … "6"=Sab) → intervalli in minuti, ordinati e non sovrapposti. */
+export type StudentRangesByDay = Record<string, Array<{ startMinutes: number; endMinutes: number }>>;
+
+/** Quello che l'app manda: le fasce (app fino al REG-802) oppure gli intervalli. */
+export type StudentAvailabilityInput = {
+  days?: Record<string, readonly string[]>;
+  ranges?: Record<string, ReadonlyArray<{ startMinutes: number; endMinutes: number }>>;
+};
+
+const dayKeySchema = z.string().regex(/^[0-6]$/);
+export const studentAvailabilityInputSchema = z.object({
+  days: z
+    .record(dayKeySchema, z.array(z.enum(STUDENT_BAND_KEYS as [StudentBandKey, ...StudentBandKey[]])).max(STUDENT_BAND_KEYS.length))
+    .optional(),
+  ranges: z
+    .record(
+      dayKeySchema,
+      z.array(z.object({ startMinutes: z.number().int(), endMinutes: z.number().int() })).max(8),
+    )
+    .optional(),
+});
+
+const mergeRanges = (ranges: ReadonlyArray<{ startMinutes: number; endMinutes: number }>) => {
+  const sorted = ranges
+    .filter((r) => r.endMinutes > r.startMinutes)
+    .map((r) => ({ startMinutes: r.startMinutes, endMinutes: r.endMinutes }))
+    .sort((a, b) => a.startMinutes - b.startMinutes);
+  const out: Array<{ startMinutes: number; endMinutes: number }> = [];
+  for (const r of sorted) {
+    const last = out[out.length - 1];
+    if (last && r.startMinutes <= last.endMinutes) last.endMinutes = Math.max(last.endMinutes, r.endMinutes);
+    else out.push(r);
+  }
+  return out;
+};
+
+/**
+ * Intervalli mandati dall'app → forma canonica: arrotondati al passo, tagliati
+ * ai limiti, fusi se si toccano o si sovrappongono; via quelli più corti della
+ * guida più breve (`minDurationMinutes`). Indulgente apposta: le righe vecchie
+ * con orari fuori passo che l'app rimanda senza toccarle non devono bloccare
+ * il salvataggio. L'unico errore è avere più di due intervalli in un giorno.
+ */
+export const normalizeRangesByDay = (
+  input: StudentAvailabilityInput["ranges"],
+  minDurationMinutes: number = STUDENT_RANGE_RULES.stepMinutes,
+): { ok: true; ranges: StudentRangesByDay } | { ok: false; message: string } => {
+  const { minMinutes, maxMinutes, stepMinutes, maxPerDay } = STUDENT_RANGE_RULES;
+  const snap = (m: number) => Math.min(maxMinutes, Math.max(minMinutes, Math.round(m / stepMinutes) * stepMinutes));
+  const out: StudentRangesByDay = {};
+  for (const [k, list] of Object.entries(input ?? {})) {
+    const day = Number(k);
+    if (!Number.isInteger(day) || day < 0 || day > 6 || String(day) !== k) continue;
+    const merged = mergeRanges(
+      (list ?? []).map((r) => ({ startMinutes: snap(r.startMinutes), endMinutes: snap(r.endMinutes) })),
+    ).filter((r) => r.endMinutes - r.startMinutes >= minDurationMinutes);
+    if (merged.length > maxPerDay) {
+      return { ok: false, message: "Puoi indicare al massimo due orari al giorno." };
+    }
+    if (merged.length) out[k] = merged;
+  }
+  return { ok: true, ranges: out };
+};
+
+/** Fasce o intervalli mandati dall'app → intervalli canonici (o il motivo del no). */
+export const availabilityInputToRanges = (
+  input: StudentAvailabilityInput,
+  minDurationMinutes?: number,
+): { ok: true; ranges: StudentRangesByDay } | { ok: false; message: string } => {
+  const result = input.ranges
+    ? normalizeRangesByDay(input.ranges, minDurationMinutes)
+    : { ok: true as const, ranges: bandsToRangesByDay(normalizeBandsByDay(input.days ?? {})) as StudentRangesByDay };
+  if (result.ok && !Object.keys(result.ranges).length) {
+    return { ok: false, message: "Scegli almeno una fascia." };
+  }
+  return result;
+};
+
+/** Settimana tipo salvata → intervalli veri per giorno (fusi e ordinati), senza arrotondare alle fasce. */
+export const rowToRangesByDay = (row: WeeklyAvailabilityRow | null | undefined): StudentRangesByDay => {
+  if (!row) return {};
+  const record = defaultToAvailabilityRecord(row);
+  const out: StudentRangesByDay = {};
+  for (const day of WEEKDAYS) {
+    const ranges = mergeRanges(rangesForDay(record, day));
+    if (ranges.length) out[String(day)] = ranges;
+  }
+  return out;
+};
+
 /**
  * Campi da scrivere sulla riga `AutoscuolaWeeklyAvailability` dell'allievo.
  * `rangesByDay` è la fonte; i campi piatti prendono il primo giorno attivo
@@ -126,9 +232,9 @@ export const rowToBandsByDay = (row: WeeklyAvailabilityRow | null | undefined): 
  * giorni attivi, così anche i lettori che guardano solo il giorno (il job dei
  * posti liberi di domani) restano giusti.
  */
-export const weeklyRowFromBands = (days: StudentBandsByDay) => {
-  const rangesByDay = bandsToRangesByDay(days);
+export const weeklyRowFromRanges = (rangesByDay: StudentRangesByDay) => {
   const activeDays = Object.keys(rangesByDay)
+    .filter((k) => rangesByDay[k]?.length)
     .map(Number)
     .sort((a, b) => a - b);
   if (!activeDays.length) return null;
@@ -143,6 +249,9 @@ export const weeklyRowFromBands = (days: StudentBandsByDay) => {
     rangesByDay,
   };
 };
+
+export const weeklyRowFromBands = (days: StudentBandsByDay) =>
+  weeklyRowFromRanges(bandsToRangesByDay(days) as StudentRangesByDay);
 
 // ── Quando chiedere le disponibilità (onboarding) ─────────────────────────
 

@@ -1,31 +1,24 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { requireServiceAccess } from "@/lib/service-access";
 import { formatError } from "@/lib/utils";
-import {
-  STUDENT_BAND_KEYS,
-  hasAnyBand,
-  normalizeBandsByDay,
-  type StudentBandKey,
-} from "@/lib/autoscuole/student-availability";
+import { studentAvailabilityInputSchema } from "@/lib/autoscuole/student-availability";
 import {
   getStudentAvailability,
+  resolveStudentAvailabilityInput,
   saveStudentAvailability,
 } from "@/lib/autoscuole/student-availability-store";
 
 /**
  * REG-802 — disponibilità dell'allievo a fasce, sempre le SUE (autoscuola attiva).
  *
- *   GET → { bands, days, confirmedAt, hasAvailability }
- *   PUT { days: { "1": ["evening"], "5": ["afternoon"] } } → stessa forma
+ *   GET → { bands, days, ranges, rules, confirmedAt, hasAvailability }
+ *   PUT { ranges: { "1": [{ startMinutes: 900, endMinutes: 1020 }] } } → stessa forma
+ *   PUT { days: { "1": ["evening"] } }   (app fino al REG-802, solo fasce)
  *
- * Giorni "0"=Dom … "6"=Sab; fasce `morning` | `afternoon` | `evening`. Serve
- * almeno una fascia. Lo staff le legge da `availability/default` (sola lettura).
+ * Giorni "0"=Dom … "6"=Sab. REG-813: `ranges` sono gli orari veri (fasce
+ * rapide o «un orario preciso», fino a due al giorno, passi da 30 minuti);
+ * `days` resta per le app vecchie. Serve almeno un orario. Lo staff le legge da `availability/default` (sola lettura).
  */
-const bandKey = z.enum(STUDENT_BAND_KEYS as [StudentBandKey, ...StudentBandKey[]]);
-const putSchema = z.object({
-  days: z.record(z.string().regex(/^[0-6]$/), z.array(bandKey).max(STUDENT_BAND_KEYS.length)),
-});
 
 const studentOnly = () =>
   NextResponse.json(
@@ -48,15 +41,12 @@ export async function PUT(request: Request) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     if (membership.autoscuolaRole !== "STUDENT") return studentOnly();
-    const { days } = putSchema.parse(await request.json());
-    const normalized = normalizeBandsByDay(days);
-    if (!hasAnyBand(normalized)) {
-      return NextResponse.json(
-        { success: false, message: "Scegli almeno una fascia." },
-        { status: 400 },
-      );
+    const input = studentAvailabilityInputSchema.parse(await request.json());
+    const resolved = await resolveStudentAvailabilityInput(membership.companyId, input);
+    if (!resolved.ok) {
+      return NextResponse.json({ success: false, message: resolved.message }, { status: 400 });
     }
-    const data = await saveStudentAvailability(membership.companyId, membership.userId, normalized);
+    const data = await saveStudentAvailability(membership.companyId, membership.userId, resolved.ranges);
     return NextResponse.json({ success: true, data });
   } catch (error) {
     return NextResponse.json({ success: false, message: formatError(error) }, { status: 400 });

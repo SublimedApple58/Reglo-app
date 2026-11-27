@@ -9,8 +9,10 @@ import {
 import { clientIp, hitRateLimit } from "@/lib/auth/rate-limit";
 import { buildMobileAuthPayload } from "@/lib/mobile-auth-payload";
 import { firstAccessCompleteSchema } from "@/lib/validators";
-import { hasAnyBand, normalizeBandsByDay } from "@/lib/autoscuole/student-availability";
-import { saveStudentAvailability } from "@/lib/autoscuole/student-availability-store";
+import {
+  resolveStudentAvailabilityInput,
+  saveStudentAvailability,
+} from "@/lib/autoscuole/student-availability-store";
 
 /** «Primo accesso», ultimo passo: salva i dati, attiva l'account e apre la sessione. */
 export async function POST(request: Request) {
@@ -46,8 +48,7 @@ export async function POST(request: Request) {
   // REG-802: le disponibilità dello step prima del riepilogo, nell'autoscuola
   // dell'allievo. Un errore qui non blocca l'attivazione: senza disponibilità
   // l'app le richiede con l'onboarding al primo `/me`.
-  const days = availability ? normalizeBandsByDay(availability.days) : null;
-  if (user && days && hasAnyBand(days)) {
+  if (user && availability) {
     const member = await prisma.companyMember.findFirst({
       where: {
         userId,
@@ -58,9 +59,12 @@ export async function POST(request: Request) {
       select: { companyId: true },
     });
     if (member) {
-      await saveStudentAvailability(member.companyId, userId, days).catch((error) => {
+      try {
+        const resolved = await resolveStudentAvailabilityInput(member.companyId, availability);
+        if (resolved.ok) await saveStudentAvailability(member.companyId, userId, resolved.ranges);
+      } catch (error) {
         console.error("[first-access] availability", error);
-      });
+      }
     }
   }
 

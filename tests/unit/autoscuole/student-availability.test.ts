@@ -1,4 +1,8 @@
 import {
+  availabilityInputToRanges,
+  normalizeRangesByDay,
+  rowToRangesByDay,
+  weeklyRowFromRanges,
   bandsToRangesByDay,
   isInDrivingPhase,
   normalizeBandsByDay,
@@ -129,5 +133,60 @@ describe("modo dello step Disponibilità", () => {
   });
   it("patentato: mai", () => {
     expect(studentAvailabilityStepMode({ ...base, studentPhase: "PATENTATO" })).toBe("none");
+  });
+});
+
+describe("REG-813 — orari precisi", () => {
+  const r = (a: number, b: number) => ({ startMinutes: a, endMinutes: b });
+
+  it("«libero solo dalle 15 alle 17» resta 15–17, andata e ritorno", () => {
+    const res = normalizeRangesByDay({ "1": [r(h(15), h(17))] }, 60);
+    expect(res).toEqual({ ok: true, ranges: { "1": [r(h(15), h(17))] } });
+    const row = weeklyRowFromRanges(res.ok ? res.ranges : {})!;
+    expect(rowToRangesByDay(row)).toEqual({ "1": [r(h(15), h(17))] });
+    // Il motore: una guida 15–16 sì, 16:30–17:30 no.
+    const record = defaultToAvailabilityRecord(row);
+    expect(isRecordCoveringMinutes(record, 1, h(15), h(16))).toBe(true);
+    expect(isRecordCoveringMinutes(record, 1, h(16) + 30, h(17) + 30)).toBe(false);
+    // Le app vecchie la vedono come «Pomeriggio»? No: copre meno di metà fascia.
+    expect(rowToBandsByDay(row)).toEqual({});
+  });
+
+  it("arrotonda al passo, taglia ai limiti, fonde gli intervalli che si toccano", () => {
+    const res = normalizeRangesByDay({
+      "2": [r(h(5), h(9) + 10), r(h(9), h(11)), r(h(20), h(23))],
+    });
+    expect(res).toEqual({ ok: true, ranges: { "2": [r(h(6), h(11)), r(h(20), h(22))] } });
+  });
+
+  it("via gli intervalli più corti della guida più breve e i giorni non validi", () => {
+    const res = normalizeRangesByDay({ "3": [r(h(15), h(15) + 30)], "9": [r(h(8), h(10))], "4": [] }, 60);
+    expect(res).toEqual({ ok: true, ranges: {} });
+  });
+
+  it("più di due orari in un giorno: errore", () => {
+    const res = normalizeRangesByDay({ "1": [r(h(8), h(9)), r(h(10), h(11)), r(h(12), h(13))] });
+    expect(res.ok).toBe(false);
+  });
+
+  it("l'app vecchia manda le fasce, la nuova gli intervalli; vuoto = errore", () => {
+    expect(availabilityInputToRanges({ days: { "5": ["afternoon"] } })).toEqual({
+      ok: true,
+      ranges: { "5": [r(h(13), h(18))] },
+    });
+    expect(availabilityInputToRanges({ ranges: { "5": [r(h(15), h(17))] } }, 60)).toEqual({
+      ok: true,
+      ranges: { "5": [r(h(15), h(17))] },
+    });
+    expect(availabilityInputToRanges({ days: {} }).ok).toBe(false);
+    expect(availabilityInputToRanges({ ranges: { "1": [] } }).ok).toBe(false);
+  });
+
+  it("una fascia salvata dall'app vecchia torna come intervallo identico", () => {
+    const row = weeklyRowFromBands({ "3": ["morning", "afternoon"], "6": ["morning", "evening"] })!;
+    expect(rowToRangesByDay(row)).toEqual({
+      "3": [r(h(8), h(18))],
+      "6": [r(h(8), h(13)), r(h(18), h(21))],
+    });
   });
 });

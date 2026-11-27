@@ -63,3 +63,15 @@
 - **Student phase / percorsi patente**: il criterio dello step (`student-phase.md`, `license-paths.md`). Chi cambia le fasi o lo specchio del percorso guardi `isInDrivingPhase`.
 - **Allievo col telefono / Primo accesso**: `profileCompletedAt` e la disponibilità nel `complete` (`allievo-telefono.md`).
 - **Mobile**: `/api/mobile/me` `onboarding`, nuove rotte `me/availability*`, `me/onboarding`.
+
+## REG-813 — «Un orario preciso» (27/11)
+Le tre fasce erano troppo larghe: chi è libero solo dalle 15 alle 17 non poteva dirlo. Ora sono una **scorciatoia** e l'allievo può indicare, giorno per giorno, anche **un orario preciso**: fino a **due intervalli al giorno**, a **passi di 30 minuti**, fra le **6 e le 22**, lunghi almeno quanto la guida più breve dell'autoscuola (`bookingSlotDurations`).
+
+- **Nessuna migrazione e nessuna conversione**: `rangesByDay` conteneva già minuti; le righe salvate a fasce restano valide così come sono (8–13 è un intervallo come un altro). Motore, lista d'attesa e scambi non cambiano (leggono con `rangesForDay` e vogliono la guida tutta dentro l'intervallo: con 15–17 una guida 15–16 sì, 16:30–17:30 no).
+- **Regole pure** (`lib/autoscuole/student-availability.ts`): `STUDENT_RANGE_RULES`, `normalizeRangesByDay` (arrotonda al passo, taglia ai limiti, fonde gli intervalli che si toccano, toglie i troppo corti; unico errore: più di due in un giorno; indulgente apposta con le righe vecchie fuori passo), `availabilityInputToRanges` (fasce o intervalli → intervalli canonici), `rowToRangesByDay` (lettura senza arrotondare), `weeklyRowFromRanges`, schema `studentAvailabilityInputSchema`.
+- **Store** (`student-availability-store.ts`): la risposta aggiunge `ranges` (orari veri per giorno) e `rules` (`minMinutes`, `maxMinutes`, `stepMinutes`, `maxPerDay`, `minDurationMinutes`); `resolveStudentAvailabilityInput(companyId, input)` + `saveStudentAvailability(companyId, userId, ranges)`.
+- **API**: `PUT me/availability`, `POST me/onboarding` (`availability`) e `first-access/complete` (`availability`) accettano `{ ranges }` (app nuova) oppure `{ days }` (app fino al REG-802). `days` resta nella risposta per le app vecchie: lì un orario preciso è arrotondato alla fascia (≥ metà) o non compare.
+- **Web** (`StudentAvailabilitySection`): la riga mostra «Pomeriggio · 13–18» quando gli orari coincidono con fasce intere, altrimenti solo le ore («15–17:30, 18:30–20:30»).
+- **Non toccato**: l'avviso dei posti liberi di domani (guarda il giorno; c'è già l'impostazione «a tutti / solo ai disponibili»), per decisione di Tiziano.
+- **Rilascio**: backend prima dell'OTA (l'app nuova manda `ranges`).
+- Test: `tests/unit/autoscuole/student-availability.test.ts` (blocco «REG-813 — orari precisi»).

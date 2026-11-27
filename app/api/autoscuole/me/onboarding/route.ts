@@ -5,14 +5,10 @@ import { requireServiceAccess } from "@/lib/service-access";
 import { formatError } from "@/lib/utils";
 import { validateStudentPhone } from "@/lib/autoscuole/student-onboarding";
 import { syncInstructorName } from "@/lib/sync-instructor-name";
-import {
-  STUDENT_BAND_KEYS,
-  hasAnyBand,
-  normalizeBandsByDay,
-  type StudentBandKey,
-} from "@/lib/autoscuole/student-availability";
+import { studentAvailabilityInputSchema } from "@/lib/autoscuole/student-availability";
 import {
   getStudentOnboarding,
+  resolveStudentAvailabilityInput,
   saveStudentAvailability,
 } from "@/lib/autoscuole/student-availability-store";
 
@@ -23,20 +19,17 @@ import {
  * stessi di `onboarding` in `/api/mobile/me`) e pretende i dati di quelli
  * obbligatori.
  *
- *   POST { firstName?, lastName?, phone?, availability?: { days } }
+ *   POST { firstName?, lastName?, phone?, availability?: { ranges } | { days } }
  *   → { onboarding }   (null quando non manca più niente)
  *
  * Il profilo si segna completo (`User.profileCompletedAt`) quando c'erano gli
  * step del profilo. L'email non si cambia da qui: si chiede al supporto.
  */
-const bandKey = z.enum(STUDENT_BAND_KEYS as [StudentBandKey, ...StudentBandKey[]]);
 const bodySchema = z.object({
   firstName: z.string().trim().min(1).max(80).optional(),
   lastName: z.string().trim().min(1).max(80).optional(),
   phone: z.string().trim().max(32).optional(),
-  availability: z
-    .object({ days: z.record(z.string().regex(/^[0-6]$/), z.array(bandKey).max(STUDENT_BAND_KEYS.length)) })
-    .optional(),
+  availability: studentAvailabilityInputSchema.optional(),
 });
 
 const fail = (message: string, status = 400) =>
@@ -71,9 +64,12 @@ export async function POST(request: Request) {
       return fail("Scrivi il tuo numero di cellulare.");
     }
 
-    const days = body.availability ? normalizeBandsByDay(body.availability.days) : null;
-    if (days && !hasAnyBand(days)) return fail("Scegli almeno una fascia.");
-    if (isDue("availability")?.required && !days) return fail("Indica quando puoi fare guida.");
+    const resolved = body.availability
+      ? await resolveStudentAvailabilityInput(membership.companyId, body.availability)
+      : null;
+    if (resolved && !resolved.ok) return fail(resolved.message);
+    const ranges = resolved?.ok ? resolved.ranges : null;
+    if (isDue("availability")?.required && !ranges) return fail("Indica quando puoi fare guida.");
 
     const profileStep = Boolean(isDue("name"));
     if (name || phone || profileStep) {
@@ -87,7 +83,7 @@ export async function POST(request: Request) {
       });
       if (name) await syncInstructorName(membership.userId, name);
     }
-    if (days) await saveStudentAvailability(membership.companyId, membership.userId, days);
+    if (ranges) await saveStudentAvailability(membership.companyId, membership.userId, ranges);
 
     const fresh = await prisma.user.findUnique({
       where: { id: membership.userId },
