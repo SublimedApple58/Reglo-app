@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { prisma } from "@/db/prisma";
 import { clientIp, hitRateLimit } from "@/lib/auth/rate-limit";
+import { buildSignupInstructor } from "@/lib/autoscuole/signup-instructor";
 import { resolveSignupInviteCode } from "@/lib/autoscuole/signup-invite";
 import { isEntryClosedByMaintenance, MAINTENANCE_PUBLIC_MESSAGE } from "@/lib/maintenance";
 import { getSignedAssetUrl } from "@/lib/storage/r2";
@@ -13,7 +14,8 @@ import { getSignedAssetUrl } from "@/lib/storage/r2";
  * scrive e rifà gli stessi controlli).
  *
  *   { schoolCode } → l'autoscuola del codice (nome, logo), l'eventuale
- *                    istruttore o luogo, e se chiederà la patente all'allievo
+ *                    istruttore (nome, foto, colore: REG-818) o luogo, e se
+ *                    chiederà la patente all'allievo
  *   { email }      → l'email è libera?
  *
  * Senza sessione: limite di tentativi per IP (i codici sono di 6 caratteri).
@@ -74,7 +76,7 @@ export async function POST(request: Request) {
     invite.assignedInstructorId
       ? prisma.autoscuolaInstructor.findUnique({
           where: { id: invite.assignedInstructorId },
-          select: { name: true },
+          select: { name: true, color: true, user: { select: { image: true, imageAvatar: true } } },
         })
       : null,
     invite.locationId
@@ -88,12 +90,17 @@ export async function POST(request: Request) {
     logoUrl = await getSignedAssetUrl(company.logoKey).catch(() => null);
   }
 
+  // REG-818: la conferma mostra l'istruttore del codice (foto o iniziali).
+  const instructorCard = await buildSignupInstructor(instructor, getSignedAssetUrl);
+
   const limits = (service.limits ?? null) as Record<string, unknown> | null;
   return NextResponse.json({
     success: true,
     data: {
       company: { name: company.name, logoUrl },
+      // `instructorName` resta per le app già installate (REG-812).
       instructorName: instructor?.name ?? null,
+      instructor: instructorCard,
       locationName: location?.name ?? null,
       // REG-424: con la patente fissa l'allievo non la sceglie.
       asksLicensePath: limits?.licensePathMode !== "fixed_default",

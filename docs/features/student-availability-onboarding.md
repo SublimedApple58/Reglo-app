@@ -67,7 +67,7 @@
 ## REG-812 — step `license` e registrazione a passi (27/11/2026)
 
 - `buildOnboardingSteps` può aggiungere `{ key: "license", required: true }` (input `needsLicensePath` = `selfRegistered && !licenseCategory`, calcolato in `getStudentOnboarding`), sempre **prima** di `availability`. Lo salva la rotta già esistente `PATCH /api/autoscuole/me/license-path`; `POST /api/autoscuole/me/onboarding` non lo riceve. Le app precedenti ignorano lo step e mostrano il loro blocco nelle tab (`needsLicensePath` di `/api/autoscuole/me` non cambia).
-- `POST /api/mobile/auth/student-register/check`: `{ schoolCode }` → autoscuola (nome, logo), istruttore o luogo del codice, `asksLicensePath`; `{ email }` → `{ emailAvailable }` (sola lettura). Limite per IP (`hitRateLimit`).
+- `POST /api/mobile/auth/student-register/check`: `{ schoolCode }` → autoscuola (nome, logo), istruttore o luogo del codice, `asksLicensePath`; per un codice istruttore anche `instructor: { name, photoUrl, color }` (REG-818, `lib/autoscuole/signup-instructor.ts`: copia avatar 512 px della foto profilo, null senza foto; `instructorName` resta per le app vecchie); `{ email }` → `{ emailAvailable }` (sola lettura). Limite per IP (`hitRateLimit`).
 - `student-register`: un solo messaggio d'errore per volta, in italiano; cellulare validato con `validateStudentPhone`; limite per IP.
 - Tolte le rotte dell'invito da app (`/api/mobile/invites/create`, `[token]/accept`, `[token]/context`); `[token]/open` resta come redirect alla pagina web dell'invito per le mail già spedite. La mail di invito porta solo al web.
 
